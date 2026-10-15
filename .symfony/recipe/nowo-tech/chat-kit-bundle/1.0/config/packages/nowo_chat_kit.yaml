@@ -1,0 +1,8 @@
+# Chat Kit Bundle — default configuration
+# See docs/CONFIGURATION.md for all options.
+
+nowo_chat_kit:
+    default_profile: default
+    profiles:
+        default:
+            enabled: true

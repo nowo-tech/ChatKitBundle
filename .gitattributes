@@ -1,0 +1,4 @@
+# Exclude from git archive (used by GitHub/Packagist for dist packages).
+# Without this, the demo folder would be included when someone installs the bundle.
+/demo export-ignore
+/.cursor export-ignore

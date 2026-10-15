@@ -1,0 +1,33 @@
+{% extends 'base.html.twig' %}
+
+{% block body %}
+<div class="container py-4">
+    <h1 class="h3 mb-2">{{ 'demo.heading'|trans }}</h1>
+    <p class="lead">{{ 'demo.lead'|trans }}</p>
+    <p class="text-muted">{{ 'demo.body'|trans({ '%profile%': default_profile }) }}</p>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h2 class="h5">{{ 'demo.planned.title'|trans }}</h2>
+                    <ul class="mb-0">
+                        {% for key in ['dms', 'channels', 'support', 'realtime', 'presence', 'buzz', 'push', 'theming'] %}
+                            <li>{{ ('demo.planned.' ~ key)|trans }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h2 class="h6">{{ 'demo.status.title'|trans }}</h2>
+                    <p class="small mb-2">{{ 'demo.status.body'|trans }}</p>
+                    <code id="nowo-chat-token" class="small">…</code>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

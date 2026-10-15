@@ -1,0 +1,63 @@
+name: chat-kit-bundle-demo-symfony-8
+
+services:
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chat-kit-demo-symfony8-php
+    working_dir: /app
+    ports:
+      - "${PORT:-8147}:80"
+    volumes:
+      - .:/app
+      - ../..:/var/chat-kit-bundle
+      - ./docker/frankenphp/Caddyfile.dev:/etc/frankenphp/Caddyfile.dev
+      - ./docker/php-dev.ini:/usr/local/etc/php/conf.d/99-dev.ini:ro
+      - composer-cache:/root/.composer/cache
+    environment:
+      - COMPOSER_ALLOW_SUPERUSER=1
+      - APP_ENV=dev
+      - APP_DEBUG=1
+      - APP_SECRET=${APP_SECRET:-demo-secret}
+      - FRANKENPHP_MODE=${FRANKENPHP_MODE:-worker}
+      - DEFAULT_URI=${DEFAULT_URI:-http://localhost:8147}
+      - DATABASE_URL=${DATABASE_URL:-mysql://app:app@db:3306/app?serverVersion=8.0&charset=utf8mb4}
+    # Mitigate Docker/WSL DNS failures resolving repo.packagist.org (composer curl error 6).
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - chat-kit-demo-network
+
+  db:
+    image: mysql:8.0
+    container_name: chat-kit-demo-symfony8-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: app
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+    volumes:
+      - mysql_data:/var/lib/mysql
+    expose:
+      - "3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uapp", "-papp"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - chat-kit-demo-network
+
+volumes:
+  composer-cache:
+    driver: local
+  mysql_data:
+
+networks:
+  chat-kit-demo-network:
+    driver: bridge

@@ -1,0 +1,15 @@
+{% extends 'base.html.twig' %}
+
+{% block body %}
+<div class="container py-4" style="max-width: 32rem">
+    <h1 class="h4 mb-3">{{ 'demo.login.nav'|trans }}</h1>
+    <p class="text-muted small">{{ 'demo.login.hint'|trans }}</p>
+    {% if login_error %}
+        <div class="alert alert-danger">{{ login_error.messageKey|trans(login_error.messageData, 'security') }}</div>
+    {% endif %}
+    {% if app.user %}
+        <div class="alert alert-success">{{ 'demo.login.signed_in'|trans({ '%user%': app.user.userIdentifier }) }}</div>
+    {% endif %}
+    {{ include('demo/_form.html.twig', { form: login_form }) }}
+</div>
+{% endblock %}

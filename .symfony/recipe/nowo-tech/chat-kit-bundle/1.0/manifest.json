@@ -1,0 +1,8 @@
+{
+    "bundles": {
+        "Nowo\\ChatKitBundle\\NowoChatKitBundle": ["all"]
+    },
+    "copy-from-recipe": {
+        "config/": "%CONFIG_DIR%/"
+    }
+}

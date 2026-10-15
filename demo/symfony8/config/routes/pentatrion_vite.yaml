@@ -1,0 +1,7 @@
+# Profiler panel only. The /build proxy is omitted: this demo ships compiled
+# assets (`pnpm run build`) and FrankenPHP serves public/build via file_server.
+when@dev:
+    _profiler_vite:
+        path: /_profiler/vite
+        defaults:
+            _controller: Pentatrion\ViteBundle\Controller\ProfilerController::info

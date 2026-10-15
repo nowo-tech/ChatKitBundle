@@ -1,0 +1,28 @@
+demo:
+  title: 'Chat Kit Bundle'
+  brand: 'Chat Kit'
+  heading: 'Chat Kit Bundle'
+  lead: 'Chat flotante estilo LinkedIn para Symfony: mensajes directos, canales y bandeja de soporte.'
+  body: 'Demo esqueleto: el bundle está instalado y configurado (perfil por defecto: %profile%). El dock flotante se añade en las siguientes iteraciones.'
+  language: Idioma
+  logout: 'Cerrar sesión'
+  planned:
+    title: 'Funcionalidades previstas'
+    dms: 'Mensajes directos entre usuarios'
+    channels: 'Canales de proyecto / sala'
+    support: 'Bandeja de soporte para agentes'
+    realtime: 'Entrega en tiempo real con Mercure'
+    presence: 'Presencia, indicador de escritura y confirmaciones de lectura'
+    buzz: 'Zumbido, sonidos configurables y emoji'
+    push: 'Web Push cuando la aplicación no está abierta'
+    theming: 'Marcado Twig <template> personalizable y tokens CSS --nowo-chat-*'
+  status:
+    title: 'Entrada del navegador'
+    body: 'Vite compila la entrada TypeScript del bundle; token de tema de ejemplo:'
+  login:
+    nav: 'Iniciar sesión'
+    hint: 'Usuarios en memoria alice, bob y support — contraseña «password».'
+    username: Usuario
+    password: Contraseña
+    submit: 'Iniciar sesión'
+    signed_in: 'Sesión iniciada como %user%.'

@@ -1,0 +1,20 @@
+---
+description: Tests and quality rules
+globs:
+  - "tests/**/*.php"
+  - "src/Resources/assets/**/*.test.ts"
+  - "phpunit.xml*"
+  - "vitest.config.*"
+alwaysApply: false
+---
+
+When changing behavior, prefer adding or updating the nearest relevant test.
+
+Prefer:
+- one focused test
+- minimal fixture changes
+- preserving the existing testing style
+- test updates close to the changed behavior
+
+Do not introduce new testing frameworks unless explicitly requested.
+Do not rewrite unrelated tests.

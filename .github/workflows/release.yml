@@ -1,0 +1,218 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Get tag name
+        id: tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Get tag message
+        id: tag_message
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          TAG_MESSAGE=$(git tag -l --format='%(contents)' "$TAG_NAME" 2>/dev/null || echo "")
+          if [ -z "$TAG_MESSAGE" ]; then
+            TAG_MESSAGE="Release $TAG_NAME"
+          fi
+          {
+            echo "MESSAGE<<EOF"
+            echo "$TAG_MESSAGE"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG_NAME#v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Get changelog entry
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          CHANGELOG_FILE="docs/CHANGELOG.md"
+
+          if [ -f "$CHANGELOG_FILE" ]; then
+            VERSION_ESCAPED=$(echo "$VERSION" | sed 's/\./\\./g')
+            CHANGELOG_ENTRY=$(awk "/^## \[$VERSION_ESCAPED\]/ {flag=1; next} /^## \[?[0-9]/ {flag=0} flag" "$CHANGELOG_FILE" 2>/dev/null || echo "")
+
+            if [ -n "$CHANGELOG_ENTRY" ]; then
+              echo "HAS_CHANGELOG=true" >> $GITHUB_OUTPUT
+              {
+                echo "ENTRY<<EOF"
+                echo "$CHANGELOG_ENTRY"
+                echo "EOF"
+              } >> $GITHUB_OUTPUT
+            else
+              echo "HAS_CHANGELOG=false" >> $GITHUB_OUTPUT
+              echo "Warning: No changelog entry found for version $VERSION" >&2
+            fi
+          else
+            echo "HAS_CHANGELOG=false" >> $GITHUB_OUTPUT
+            echo "Warning: CHANGELOG file not found at $CHANGELOG_FILE" >&2
+          fi
+
+      - name: Check if release exists and update if needed
+        id: check-existing
+        uses: actions/github-script@v9
+        env:
+          TAG_NAME: ${{ steps.tag.outputs.TAG_NAME }}
+        with:
+          script: |
+            const tagName = process.env.TAG_NAME || '';
+
+            if (!tagName) {
+              throw new Error('TAG_NAME environment variable is not set');
+            }
+
+            try {
+              const { data: existingRelease } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: tagName
+              });
+
+              const hasChangelog = (existingRelease.body || '').includes('## Changelog');
+              core.setOutput('exists', 'true');
+              core.setOutput('release_id', existingRelease.id.toString());
+              core.setOutput('has_changelog', hasChangelog ? 'true' : 'false');
+              console.log('Release ' + tagName + ' already exists (ID: ' + existingRelease.id + '), will update');
+            } catch (error) {
+              if (error.status === 404) {
+                core.setOutput('exists', 'false');
+                console.log('Release ' + tagName + ' does not exist (404), will create new one');
+              } else {
+                console.log('Error checking existing release:', error.message);
+                core.setOutput('exists', 'false');
+              }
+            }
+
+      - name: Update existing release
+        if: steps.check-existing.outputs.exists == 'true'
+        uses: actions/github-script@v9
+        env:
+          TAG_NAME: ${{ steps.tag.outputs.TAG_NAME }}
+          TAG_MESSAGE: ${{ steps.tag_message.outputs.MESSAGE }}
+          CHANGELOG_ENTRY: ${{ steps.changelog.outputs.ENTRY }}
+          HAS_CHANGELOG: ${{ steps.changelog.outputs.HAS_CHANGELOG }}
+          RELEASE_ID: ${{ steps.check-existing.outputs.release_id }}
+        with:
+          script: |
+            const releaseId = parseInt(process.env.RELEASE_ID || '0');
+            const tagName = String(process.env.TAG_NAME || '').trim();
+            const tagMessage = String(process.env.TAG_MESSAGE || '').trim();
+            const changelogEntry = String(process.env.CHANGELOG_ENTRY || '').trim();
+            const hasChangelog = process.env.HAS_CHANGELOG === 'true';
+            const isPrerelease = tagName.includes('-alpha') || tagName.includes('-beta') || tagName.includes('-rc');
+
+            if (!tagName || !releaseId) {
+              throw new Error('TAG_NAME and RELEASE_ID are required');
+            }
+
+            let releaseBody = tagMessage;
+            if (hasChangelog && changelogEntry) {
+              releaseBody = tagMessage + '\n\n## Changelog\n\n' + changelogEntry;
+            }
+
+            try {
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: releaseId,
+                body: releaseBody,
+                prerelease: isPrerelease
+              });
+              console.log('✅ Updated release ' + tagName + ' with changelog');
+            } catch (error) {
+              console.error('❌ Error updating release ' + tagName + ':', error.message);
+              throw error;
+            }
+
+      - name: Create Release
+        if: steps.check-existing.outputs.exists != 'true'
+        uses: actions/github-script@v9
+        env:
+          TAG_NAME: ${{ steps.tag.outputs.TAG_NAME }}
+          TAG_MESSAGE: ${{ steps.tag_message.outputs.MESSAGE }}
+          CHANGELOG_ENTRY: ${{ steps.changelog.outputs.ENTRY }}
+          HAS_CHANGELOG: ${{ steps.changelog.outputs.HAS_CHANGELOG }}
+        with:
+          script: |
+            const tagName = String(process.env.TAG_NAME || '').trim();
+            const tagMessage = String(process.env.TAG_MESSAGE || '').trim();
+            const changelogEntry = String(process.env.CHANGELOG_ENTRY || '').trim();
+            const hasChangelog = process.env.HAS_CHANGELOG === 'true';
+            const isPrerelease = tagName.includes('-alpha') || tagName.includes('-beta') || tagName.includes('-rc');
+
+            if (!tagName) {
+              throw new Error('TAG_NAME is required');
+            }
+
+            let releaseBody = tagMessage;
+            if (hasChangelog && changelogEntry) {
+              releaseBody = tagMessage + '\n\n## Changelog\n\n' + changelogEntry;
+            }
+
+            try {
+              await github.rest.repos.createRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: tagName,
+                name: 'Release ' + tagName,
+                body: releaseBody,
+                draft: false,
+                prerelease: isPrerelease,
+                // Avoid racing sync-releases.yml notes; we ship docs/CHANGELOG.md ourselves.
+                generate_release_notes: false
+              });
+              console.log('✅ Created release ' + tagName + ' with changelog');
+            } catch (error) {
+              // Race with sync-releases.yml on the same tag push: treat as update.
+              const status = (error && error.status) || (error.response && error.response.status);
+              const errData = (error && error.response && error.response.data) || {};
+              const errors = Array.isArray(errData.errors) ? errData.errors : [];
+              const isAlreadyExists = status === 422 && (
+                errors.some(e => e && e.code === 'already_exists' && e.field === 'tag_name') ||
+                (errData.message && String(errData.message).includes('already_exists'))
+              );
+
+              if (isAlreadyExists) {
+                console.log('Release ' + tagName + ' already exists (422), fetching by tag and updating...');
+                const { data: existing } = await github.rest.repos.getReleaseByTag({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  tag: tagName
+                });
+                await github.rest.repos.updateRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  release_id: existing.id,
+                  body: releaseBody,
+                  prerelease: isPrerelease
+                });
+                console.log('✅ Updated existing release ' + tagName + ' with changelog');
+              } else {
+                console.error('❌ Error creating release ' + tagName + ':', error.message);
+                throw error;
+              }
+            }
+
+# Maintainer: Héctor Franco Aceituno (@HecFranco)
+# Organization: nowo-tech (https://github.com/nowo-tech)

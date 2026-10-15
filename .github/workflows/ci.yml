@@ -1,0 +1,284 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  COMPOSER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  COMPOSER_MAX_PARALLEL_HTTP: 4
+
+jobs:
+  git-hygiene:
+    name: Git history (no Cursor co-author)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check for Cursor co-author trailers (REQ-GIT-001)
+        run: |
+          chmod +x .scripts/check-no-cursor-coauthor.sh
+          ./.scripts/check-no-cursor-coauthor.sh HEAD
+
+      - name: Translation key parity (REQ-I18N-002)
+        run: python3 .scripts/check-translation-key-parity.py
+
+  # REQ-SF-002: Symfony 7.4+ and 8.x (7.4, 8.0, 8.1, 8.2). 8.2 is 8.2.x-dev until the Nov 2026 stable.
+  test:
+    name: PHP ${{ matrix.php }} - Symfony ${{ matrix.symfony }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        php: ['8.3', '8.4', '8.5']
+        symfony: ['7.4', '8.0', '8.1', '8.2']
+        exclude:
+          - php: '8.3'
+            symfony: '8.0'
+          - php: '8.3'
+            symfony: '8.1'
+          - php: '8.3'
+            symfony: '8.2'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: json
+          coverage: pcov
+          tools: composer:v2
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php-${{ matrix.php }}-symfony-${{ matrix.symfony }}-composer-${{ hashFiles('**/composer.json') }}
+          restore-keys: |
+            ${{ runner.os }}-php-${{ matrix.php }}-symfony-${{ matrix.symfony }}-composer-
+            ${{ runner.os }}-php-${{ matrix.php }}-composer-
+
+      # Symfony 8.x requires php >=8.4.1; Composer treats "8.4" as 8.4.0 and rejects it.
+      - name: Override platform for Symfony 8 (requires PHP 8.4.1+)
+        if: startsWith(matrix.symfony, '8.')
+        run: composer config platform.php 8.4.1
+
+      # Symfony 8.2 is under development (8.2.x-dev) until November 2026.
+      - name: Allow Symfony 8.2 development packages
+        if: matrix.symfony == '8.2'
+        run: |
+          composer config minimum-stability dev
+          composer config prefer-stable true
+
+      - name: Install dependencies with Symfony ${{ matrix.symfony }}
+        run: |
+          chmod +x .scripts/retry.sh
+          composer require \
+            "symfony/config:^${{ matrix.symfony }}" \
+            "symfony/dependency-injection:^${{ matrix.symfony }}" \
+            "symfony/framework-bundle:^${{ matrix.symfony }}" \
+            "symfony/http-kernel:^${{ matrix.symfony }}" \
+            --no-interaction --no-update
+          composer require --dev \
+            "symfony/asset:^${{ matrix.symfony }}" \
+            "symfony/twig-bundle:^${{ matrix.symfony }}" \
+            "symfony/yaml:^${{ matrix.symfony }}" \
+            --no-interaction --no-update
+          ./.scripts/retry.sh -- composer update --with-all-dependencies --no-interaction --prefer-dist --no-progress
+      - name: Composer audit (Critical/High)
+        run: composer audit --locked
+
+
+      - name: Run tests
+        env:
+          SYMFONY_DEPRECATIONS_HELPER: max[direct]=0
+        run: composer test
+
+      - name: Run tests with coverage (PHP 8.3 + Symfony 7.4 only)
+        if: matrix.php == '8.3' && matrix.symfony == '7.4'
+        env:
+          SYMFONY_DEPRECATIONS_HELPER: max[direct]=0
+        run: composer test-coverage
+
+  code-style:
+    name: Code Style
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') }}
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2, cs2pr
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php-8.4-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-8.4-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Fix code style
+        run: composer cs-fix
+
+      - name: Check for changes
+        id: verify-changed-files
+        run: |
+          if [ -n "$(git status --porcelain -- '*.php')" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit changes
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -u -- '*.php'
+          git commit -m "Apply PHP CS Fixer fixes [skip ci]"
+          git push
+
+  code-style-check:
+    name: Code Style Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2, cs2pr
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php-8.4-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-8.4-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Check code style
+        run: composer cs-check
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: ${{ !cancelled() }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json
+          coverage: pcov
+          tools: composer:v2
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php-8.4-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-8.4-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Run tests with coverage
+        run: composer test-coverage
+
+      - name: Validate coverage file
+        run: |
+          if [ ! -f coverage.xml ]; then
+            echo "ERROR: coverage.xml was not generated"
+            exit 1
+          fi
+          echo "coverage.xml generated"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+
+  typescript:
+    name: TypeScript tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run TypeScript tests with coverage
+        run: pnpm run test:coverage

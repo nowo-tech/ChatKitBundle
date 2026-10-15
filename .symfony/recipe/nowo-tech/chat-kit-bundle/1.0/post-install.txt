@@ -1,0 +1,12 @@
+Chat Kit Bundle has been installed!
+
+The following file has been created:
+  - config/packages/nowo_chat_kit.yaml (configuration: default_profile + profiles)
+
+Next steps:
+1. Publish assets: php bin/console assets:install
+2. Load the browser entry with the named asset package:
+   <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
+
+The 1.0 development line is a skeleton: the floating chat dock, routes and Doctrine
+mapping are added in upcoming releases. See docs/INSTALLATION.md and docs/CONFIGURATION.md.

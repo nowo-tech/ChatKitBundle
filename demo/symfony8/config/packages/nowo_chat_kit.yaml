@@ -1,0 +1,8 @@
+# NowoChatKitBundle demo configuration (REQ-CFG-001: default_profile + profiles).
+nowo_chat_kit:
+    default_profile: default
+    profiles:
+        default:
+            enabled: true
+        support:
+            enabled: true

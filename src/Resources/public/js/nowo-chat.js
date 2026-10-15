@@ -1,0 +1,1 @@
+var NowoChat=(function(e){Object.defineProperty(e,Symbol.toStringTag,{value:`Module`});var t=`1.0.0-dev`,n=`--nowo-chat-`;function r(e){let t=e.trim().replace(/^-+/,``);if(t===``)throw Error(`Theme token name must not be empty.`);return`${n}${t}`}return e.CSS_TOKEN_PREFIX=n,e.VERSION=t,e.cssToken=r,e})({});

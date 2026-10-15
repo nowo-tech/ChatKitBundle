@@ -1,0 +1,35 @@
+{
+	order mercure after encode
+	skip_install_trust
+}
+
+# Worker mode: app boots once, handles requests in memory. ChatKitBundle is designed for it
+# (no extra config). For production, consider limiting requests per worker when possible; see
+# docs/INSTALLATION.md § FrankenPHP.
+:80 {
+	root * /app/public
+	encode zstd br gzip
+	mercure {
+		anonymous
+	}
+
+	# Built Pentatrion Vite assets (pnpm run build). Do not send /build to PHP —
+	# the ViteBundle /build proxy expects a running `vite` dev server.
+	handle /build/* {
+		file_server
+	}
+
+	php_server {
+		hot_reload
+		worker {
+			file /app/public/index.php
+			# Do not use bare `watch` (./**/*.php): Symfony dumps var/cache/**/*.php
+			# and those writes restart workers mid-boot ("kernel" synthetic).
+			watch /app/config/**/*.{php,yaml,yml,env}
+			watch /app/src/**/*.php
+			watch /app/templates/**/*.twig
+			watch /app/translations/**/*.{php,yaml,yml}
+			watch /var/chat-kit-bundle/src/**/*.{php,twig,yaml,yml,js}
+		}
+	}
+}

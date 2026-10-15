@@ -1,0 +1,28 @@
+demo:
+  title: 'Chat Kit Bundle'
+  brand: 'Chat Kit'
+  heading: 'Chat Kit Bundle'
+  lead: 'Floating LinkedIn-style chat for Symfony: direct messages, channels and a support inbox.'
+  body: 'Skeleton demo: the bundle is installed and configured (default profile: %profile%). The floating dock is added in the next iterations.'
+  language: Language
+  logout: 'Sign out'
+  planned:
+    title: 'Planned features'
+    dms: 'Direct messages between users'
+    channels: 'Project / room channels'
+    support: 'Support inbox for agents'
+    realtime: 'Realtime delivery via Mercure'
+    presence: 'Presence, typing indicators and read receipts'
+    buzz: 'Buzz, configurable sounds and emoji'
+    push: 'Web Push when the app is not open'
+    theming: 'Customizable Twig <template> markup and --nowo-chat-* CSS tokens'
+  status:
+    title: 'Browser entry'
+    body: 'The bundle TypeScript entry is compiled by Vite; example theme token:'
+  login:
+    nav: 'Sign in'
+    hint: 'In-memory users alice, bob and support — password “password”.'
+    username: Username
+    password: Password
+    submit: 'Sign in'
+    signed_in: 'Signed in as %user%.'

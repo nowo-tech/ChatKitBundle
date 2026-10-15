@@ -1,0 +1,61 @@
+# Local environment files (do not commit local secrets)
+/.env
+/.env.dev
+/.env.local
+/.env.local.php
+/.env.*.local
+
+# Symfony secrets generated for local/prod environments
+/config/secrets/prod/prod.decrypt.private.php
+
+# Dependencies and build output
+/vendor/
+/public/bundles/
+/public/assets/
+/assets/vendor/
+/node_modules/
+/public/build/
+
+# pnpm local store (REQ-GITIGNORE-003)
+/.pnpm-store
+
+# Runtime caches and temporary files
+/var/
+/phpunit.xml
+/.phpunit.cache/
+
+# SQLite leftovers (REQ-DEMO-011: MySQL only)
+*.db
+*.sqlite
+*.sqlite3
+
+# Archives / compressed
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+
+###> symfony/framework-bundle ###
+/.env.local
+/.env.local.php
+/.env.*.local
+/config/secrets/prod/prod.decrypt.private.php
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+###< phpunit/phpunit ###
+
+###> pentatrion/vite-bundle ###
+/node_modules/
+/public/build/
+###< pentatrion/vite-bundle ###
+
+# Auto-generated Symfony config dump (do not commit)
+/config/reference.php

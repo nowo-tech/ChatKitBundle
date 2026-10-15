@@ -1,0 +1,38 @@
+# Rebuild committed frontend assets when Dependabot bumps npm dependencies.
+name: Dependabot rebuild assets
+
+on: pull_request
+
+jobs:
+  dependabot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend assets
+        run: pnpm run build
+
+      - name: Commit rebuilt assets
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: "[dependabot-skip] Rebuild frontend assets"
+          branch: ${{ github.head_ref }}
