@@ -33,6 +33,7 @@ final class TwigPathsPassTest extends TestCase
             self::assertSame(['prependPath', [$project.'/templates/bundles/NowoChatKitBundle', 'NowoChatKitBundle']], $calls[0]);
             self::assertSame('addPath', $calls[1][0]);
             self::assertStringEndsWith('/Resources/views', $calls[1][1][0]);
+            self::assertSame(['addPath', [$calls[1][1][0], '!NowoChatKitBundle']], $calls[2]);
         } finally {
             (new Filesystem())->remove($project);
         }

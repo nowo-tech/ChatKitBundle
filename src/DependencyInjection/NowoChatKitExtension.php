@@ -38,7 +38,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     public function prepend(ContainerBuilder $container): void
     {
         /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>}>} $config */
-        $config = (new Processor())->processConfiguration(new Configuration(), $container->getExtensionConfig(Configuration::ALIAS) ?: [[]]);
+        $config = (new Processor())->processConfiguration(new Configuration(), $this->prependableConfigs($container));
         $profile = $config['profiles'][$config['default_profile']];
         $this->prependDoctrine($container, $config['default_profile'], $profile['user_class']);
 
@@ -92,6 +92,25 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
         $loader->load('services.php');
         $container->setAlias('nowo_chat_kit.cache', $profile['cache_pool']);
+    }
+
+    /**
+     * The raw configs with only what prepend() needs (user class, limits): other keys may hold %env()% values,
+     * which are resolved later, in load(), never at prepend time.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function prependableConfigs(ContainerBuilder $container): array
+    {
+        $configs = [];
+        foreach ($container->getExtensionConfig(Configuration::ALIAS) as $config) {
+            foreach ($config['profiles'] ?? [] as $name => $profile) {
+                $config['profiles'][$name] = array_intersect_key(\is_array($profile) ? $profile : [], ['user_class' => true, 'limits' => true]);
+            }
+            $configs[] = $config;
+        }
+
+        return [] === $configs ? [[]] : $configs;
     }
 
     /**

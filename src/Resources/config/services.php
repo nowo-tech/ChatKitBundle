@@ -66,7 +66,8 @@ return static function (ContainerConfigurator $container): void {
     $services->get(ChatPushDispatcher::class)
         ->arg('$urlTemplate', param('nowo_chat_kit.push_url'))
         ->arg('$icon', param('nowo_chat_kit.push_icon'))
-        ->tag('messenger.message_handler');
+        // Signed (JSON + HMAC) when the application signs its Messenger messages.
+        ->tag('messenger.message_handler', ['sign' => true]);
     $services->get(ChatNotifier::class)
         ->arg('$pushEnabled', param('nowo_chat_kit.push'))
         ->arg('$bus', interface_exists(MessageBusInterface::class) ? service('messenger.default_bus')->nullOnInvalid() : null);

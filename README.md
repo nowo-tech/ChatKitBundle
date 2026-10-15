@@ -12,23 +12,20 @@
 
 This bundle is **FrankenPHP worker mode friendly**. See [docs/FRANKENPHP-WORKER-AUDIT.md](docs/FRANKENPHP-WORKER-AUDIT.md).
 
-> **Status:** `1.0.x-dev` skeleton. The package infrastructure (configuration, asset package, QA, CI, demo) is in place; the chat features listed below are being migrated into the bundle and are **planned**, not yet shipped.
-
 ## Features
 
-Planned for the first stable release:
-
-- **Direct messages** between users of the host application
-- **Channels** bound to host resources (projects, rooms) with membership resolved by the host
-- **Support inbox** — users write to "Support"; agents answer from a shared inbox
-- **Realtime** delivery through **Mercure** (FrankenPHP built-in hub or standalone)
-- **Presence**, **typing** indicators and **read receipts**
-- **Buzz**, configurable **sounds**, **emoji** picker and cross-tab sync
-- **Web Push** notifications only when the application is not open
-- **Customizable markup**: every UI fragment is a Twig-rendered `<template>` you can override
-- **Theme tokens**: CSS custom properties `--nowo-chat-*` on `.nowo-chat-` components
-- **Host extension points**: an access / reachability provider interface (who may talk to whom) and a user display provider interface (names, avatars, profile URLs)
-- Named configuration **profiles** (`default_profile` + `profiles`)
+- **Direct messages** between people your application allows to talk (you decide: same team, same project, anyone…)
+- **Channels**: one group conversation per resource of your application (project, room, team) — `project:<uuid>`-style keys from your own provider
+- **Support inbox**: every user has a thread with "Support"; your support agents answer, resolve and moderate
+- **Realtime** through **Mercure** (FrankenPHP's built-in hub or standalone) with private per-user topics — polling fallback when it is off
+- **Presence** (online dot, reciprocal opt-out), **typing** indicator and **read receipts** (✓✓ / "Seen by")
+- **Edit and delete** your own messages within 15 minutes, **emoji reactions**, **buzz**, configurable **sounds**, **emoji picker**, light **Markdown** (sanitised on the server)
+- **Web Push** only when the application is not open in any tab (your push stack, through one interface)
+- LinkedIn-style **floating dock**: windows that survive navigation and stay in step across browser tabs; full-screen sheet on phones
+- **Customisable markup**: every piece of the UI is a Twig `<template>` the TypeScript clones — override any block
+- **Theme tokens** (`--nowo-chat-*`, light / dark defaults) and **Symfony UX Icons** (Tabler by default, any set)
+- Rate limits, CSRF, IDOR-safe (foreign UUID → 404), no-store responses, retention purge, GDPR export / erasure hooks
+- **FrankenPHP worker mode** friendly; 7 locales (en, es, fr, de, it, pt, nl)
 
 ## Installation
 
@@ -49,20 +46,38 @@ return [
 
 - PHP `>=8.3 <8.6`
 - Symfony 7.4, 8.0, and 8.1+
-- Planned optional integrations: Doctrine ORM (persistence), Mercure (realtime), Messenger (async fan-out), `minishlink/web-push` (push)
+- Doctrine ORM, SecurityBundle, TwigBundle, Symfony UX Icons
+- Optional: `symfony/mercure-bundle` (realtime), Symfony Messenger (async push), a Web Push library behind `ChatPushSenderInterface`
 
-## Configuration
+## Quick start
+
+1. Configure the profile (your user entity implements `Nowo\ChatKitBundle\Model\ChatUserInterface`):
 
 ```yaml
 # config/packages/nowo_chat_kit.yaml
 nowo_chat_kit:
-    default_profile: default
     profiles:
         default:
-            enabled: true
+            user_class: App\Entity\User
 ```
 
-See [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+2. Import the routes, create the tables (`doctrine:migrations:diff`), and implement the two required contracts —
+   `ChatDirectoryInterface` (users and contacts) and `ChatAccessPolicyInterface` (who can talk to whom):
+
+```yaml
+# config/routes/nowo_chat_kit.yaml
+nowo_chat_kit:
+    resource: '@NowoChatKitBundle/Resources/config/routes.php'
+    prefix: /chat
+```
+
+3. Render the dock once in your signed-in layout:
+
+```twig
+{{ include('@NowoChatKitBundle/dock.html.twig') }}
+```
+
+Full guide: [docs/INSTALLATION.md](docs/INSTALLATION.md) · options: [docs/CONFIGURATION.md](docs/CONFIGURATION.md) · contracts, templates, theme, JS: [docs/USAGE.md](docs/USAGE.md).
 
 ## Demo
 
@@ -92,7 +107,7 @@ See [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md).
 
 ### Additional documentation
 
-- [Architecture and planned features](docs/ARCHITECTURE.md)
+- [Architecture](docs/ARCHITECTURE.md)
 - [PSR evaluation](docs/PSR.md)
 - [Coverage policy](docs/COVERAGE.md)
 - [Demo FrankenPHP](docs/DEMO-FRANKENPHP.md)
@@ -113,8 +128,8 @@ make qa
 
 | Language | Latest reported |
 | --- | --- |
-| PHP | 100% lines (skeleton; `make test-coverage`) |
-| TypeScript | 100% lines (skeleton; `pnpm run test:coverage`) |
+| PHP | 100% lines (`make test-coverage`) |
+| TypeScript | 100% lines (`pnpm run test:coverage`) |
 
 ## License
 

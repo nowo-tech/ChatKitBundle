@@ -9,7 +9,8 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 /**
  * Registers the `@NowoChatKitBundle` Twig namespace; `templates/bundles/NowoChatKitBundle/` in the application
- * is prepended so overrides win (REQ-TWIG-001 / REQ-TWIG-002).
+ * is prepended so overrides win (REQ-TWIG-001 / REQ-TWIG-002); `@!NowoChatKitBundle` always points at the bundle's own
+ * templates, so an override can extend the original.
  */
 final class TwigPathsPass implements CompilerPassInterface
 {
@@ -28,8 +29,12 @@ final class TwigPathsPass implements CompilerPassInterface
             // @igor-ignore - Compile-time DI definition wiring; runs once at container build
             $definition->addMethodCall('prependPath', [$override, self::TWIG_NAMESPACE]);
         }
+        $views = \dirname(__DIR__, 2).'/Resources/views';
         // @igor-ignore - Compile-time DI definition wiring; runs once at container build
-        $definition->addMethodCall('addPath', [\dirname(__DIR__, 2).'/Resources/views', self::TWIG_NAMESPACE]);
+        $definition->addMethodCall('addPath', [$views, self::TWIG_NAMESPACE]);
+        // `@!NowoChatKitBundle/…`: the original template, for overrides that extend it.
+        // @igor-ignore - Compile-time DI definition wiring; runs once at container build
+        $definition->addMethodCall('addPath', [$views, '!'.self::TWIG_NAMESPACE]);
     }
 
     private function loaderId(ContainerBuilder $container): ?string

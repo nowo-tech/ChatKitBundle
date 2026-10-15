@@ -616,7 +616,9 @@ export class ChatDock implements ThreadHost {
     if (this.isMobile()) {
       for (const view of this.windows.values()) {
         view.element.hidden = false;
-        this.dock.append(view.element);
+        if (view.element.parentElement !== this.dock) {
+          this.dock.append(view.element);
+        }
       }
       this.overflow.hidden = true;
       return;
@@ -638,11 +640,11 @@ export class ChatDock implements ThreadHost {
       }
       available -= width;
       view.element.hidden = false;
-      anchor.after(view.element);
+      placeAfter(anchor, view.element);
       anchor = view.element;
     }
     this.overflow.hidden = hidden.length === 0;
-    anchor.after(this.overflow);
+    placeAfter(anchor, this.overflow);
     this.overflowBtn.textContent = t(this.config.i18n, 'more_tabs', { count: hidden.length });
     this.overflowMenu.replaceChildren(
       ...hidden.map((uuid) => {
@@ -925,5 +927,15 @@ export class ChatDock implements ThreadHost {
         ),
       ),
     );
+  }
+}
+
+/**
+ * Moves `element` right after `anchor` only when it is not there already: re-inserting a node resets the scroll
+ * position of everything inside it (an open thread would jump back to its first message).
+ */
+function placeAfter(anchor: Element, element: Element): void {
+  if (anchor.nextElementSibling !== element) {
+    anchor.after(element);
   }
 }

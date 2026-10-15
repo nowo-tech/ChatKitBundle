@@ -1,65 +1,31 @@
-# Architecture and planned features
+# Architecture
 
-This document describes the target design of **Chat Kit Bundle**. Items are **planned** until listed in [CHANGELOG.md](CHANGELOG.md).
+## Layers
 
-## Table of contents
+| Layer | Namespace / path | Role |
+| --- | --- | --- |
+| Model | `Model`, `Entity`, `Enum`, `Repository` | `ChatUserInterface` (your user), conversations, participants (read cursors, mute), messages (Markdown + sanitised HTML, tombstones, buzz), reactions, user settings |
+| Contracts | `Contract` | What the application provides: directory, access policy, channels, realtime, push |
+| Security | `Security` | `ChatAccess` (per-request memo over the contracts, `ResetInterface`), `ChatVoter` (view, send, moderate, resolve, edit, delete, react) |
+| Domain | `Service` | `ChatService` (lifecycle), `ChatMarkdownRenderer` (escape-first), `ChatPresenter` (JSON shapes) |
+| Realtime | `Realtime` | `ChatNotifier` → `ChatRecipients` (30 s cache) → `ChatPublisher` → `ChatRealtimeInterface`; `ChatPresence` (heartbeats in a PSR-6 pool) |
+| Push | `Push` | `DeliverChatPushMessage` → `ChatPushDispatcher` (recipient selection) → `ChatPushSenderInterface` |
+| HTTP | `Controller`, `Http` | JSON API; guards throw `ChatApiException`, rendered as JSON |
+| View | `Twig`, `Resources/views` | `nowo_chat_dock_config()`, `nowo_chat_icons()`, the `<template>` markup |
+| Browser | `Resources/assets/src` | TypeScript dock cloning the templates; IIFE build in `Resources/public/js` |
 
-- [Goals](#goals)
-- [Conversation types](#conversation-types)
-- [Realtime](#realtime)
-- [Presence, typing and read receipts](#presence-typing-and-read-receipts)
-- [Buzz, sounds and emoji](#buzz-sounds-and-emoji)
-- [Web Push](#web-push)
-- [Front end](#front-end)
-- [Host extension points](#host-extension-points)
-- [FrankenPHP worker mode](#frankenphp-worker-mode)
+## Request flow (send)
 
-## Goals
+1. `POST /api/conversations/{uuid}/messages` → CSRF, action and send limiters → `ChatVoter::SEND`.
+2. `ChatService::send()` cleans and renders the Markdown, stores the message, moves the author's read cursor.
+3. `ChatNotifier::messageCreated()` publishes a viewer-neutral event to every recipient's private topic and queues
+   `DeliverChatPushMessage` for the others.
+4. Each open dock merges the event (no reload), plays a sound when the conversation is not in front, and shares it
+   with the user's other tabs (BroadcastChannel).
 
-- A floating, LinkedIn-style chat dock that any Symfony application can drop into its layout.
-- The host keeps ownership of users, permissions and branding; the bundle owns conversations and messages.
-- Works without a JavaScript framework; markup and styles are fully overridable.
+## Design rules
 
-## Conversation types
-
-| Type | Description |
-| --- | --- |
-| Direct message | One-to-one conversation between two users allowed to reach each other. |
-| Channel | Conversation bound to a host resource (project, room); members resolved by the host. |
-| Support | Users write to "Support"; any agent can answer from a shared inbox. |
-
-## Realtime
-
-Messages, presence, typing and read-receipt events are published to a **Mercure** hub (the FrankenPHP built-in hub or a standalone hub) on per-user private topics. The browser keeps one `EventSource` per tab and shares state across tabs.
-
-## Presence, typing and read receipts
-
-- Presence: online / away / offline, derived from heartbeats with a TTL.
-- Typing: debounced "is typing" events, never persisted.
-- Read receipts: last-read message per participant, shown as "seen".
-
-## Buzz, sounds and emoji
-
-- Buzz: a rate-limited attention signal with a subtle visual shake.
-- Sounds: configurable per event (new message, buzz), user-level mute.
-- Emoji: lightweight picker, no external CDN.
-
-## Web Push
-
-Push notifications are sent only when the application is **not** open in any tab of the user (cross-tab visibility tracking), using standard Web Push with VAPID keys provided through environment variables.
-
-## Front end
-
-- TypeScript sources under `src/Resources/assets/`, built with Vite into `src/Resources/public/js/nowo-chat.js` and served through the `nowo_chat_kit` asset package.
-- Stimulus-compatible identifiers prefixed `nowo-chat`.
-- UI fragments are Twig-rendered `<template>` elements (override from `templates/bundles/NowoChatKitBundle/`).
-- Theme tokens: CSS custom properties `--nowo-chat-*`; class prefix `.nowo-chat-`.
-
-## Host extension points
-
-- **Access / reachability provider** — who may contact whom, channel membership, support agents.
-- **User display provider** — name, avatar, initials, profile URL.
-
-## FrankenPHP worker mode
-
-Services are stateless between requests; per-request data lives in the request or is reset through `kernel.reset`. See [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md).
+- The application decides who exists and who may talk to whom; the bundle never queries the user table directly.
+- Every API read re-checks access; only the realtime recipient list is cached (30 s).
+- No request state in services without `ResetInterface` (FrankenPHP worker mode).
+- Text reaches the DOM through `textContent`; only the server-sanitised message HTML uses `innerHTML` (lint rule).

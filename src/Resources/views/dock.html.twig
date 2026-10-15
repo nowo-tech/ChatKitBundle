@@ -16,7 +16,7 @@
     {% endblock %}
     {% block nowo_chat_root %}
         <div class="nowo-chat" data-nowo-chat-config="{{ nowo_chat_config|json_encode|e('html_attr') }}" data-testid="chat-dock">
-            {{ include('@NowoChatKitBundle/_templates.html.twig') }}
+            {{ include('@NowoChatKitBundle/_templates.html.twig', {nowo_chat_locale: nowo_chat_config.locale}) }}
         </div>
     {% endblock %}
 {% endif %}

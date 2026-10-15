@@ -68,6 +68,16 @@ final class BundleBootTest extends TestCase
         self::assertSame('Nowo\\ChatKitBundle\\Entity', $orm['mappings']['NowoChatKitBundle']['prefix']);
     }
 
+    public function testPrependIgnoresEnvValuesItDoesNotNeed(): void
+    {
+        $container = $this->containerWith('doctrine');
+        $container->loadFromExtension('nowo_chat_kit', ['profiles' => ['default' => ['user_class' => TestUser::class, 'retention_days' => '%env(int:CHAT_RETENTION_DAYS)%']]]);
+
+        (new NowoChatKitExtension())->prepend($container);
+
+        self::assertSame([ChatUserInterface::class => TestUser::class], $container->getExtensionConfig('doctrine')[0]['orm']['resolve_target_entities']);
+    }
+
     public function testPrependRequiresAUserClassWithDoctrine(): void
     {
         $container = $this->containerWith('doctrine');
