@@ -892,6 +892,15 @@ export class ThreadView {
     edit.hidden = !(usable && message.mine && inWindow && this.summary.canSend);
     remove.hidden = !(usable && ((message.mine && inWindow) || (config.isAgent && this.summary.kind !== 'direct')));
     actions.hidden = react.hidden && edit.hidden && remove.hidden;
+    // Touch screens have no hover: tapping a message shows its actions (one message at a time).
+    article.addEventListener('click', (event) => {
+      if ((event.target as Element).closest('a, button, form') !== null) {
+        return;
+      }
+      const active = !article.classList.contains('is-active');
+      this.log.querySelectorAll('.nowo-chat-msg.is-active').forEach((other) => other.classList.remove('is-active'));
+      article.classList.toggle('is-active', active);
+    });
     react.addEventListener('click', () => this.openReactions(message, react));
     edit.addEventListener('click', () => this.startEdit(message, article));
     remove.addEventListener('click', () => this.confirmDelete(message, article));

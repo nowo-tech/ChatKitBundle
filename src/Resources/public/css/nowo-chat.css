@@ -1365,16 +1365,21 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   order: -1;
 }
 .nowo-chat-msg:hover .nowo-chat-msg__actions,
-.nowo-chat-msg:focus-within .nowo-chat-msg__actions {
+.nowo-chat-msg:focus-within .nowo-chat-msg__actions,
+.nowo-chat-msg.is-active .nowo-chat-msg__actions {
   opacity: 1;
 }
 .nowo-chat-msg__actions .nowo-chat-icon-btn {
   width: 26px;
   height: 26px;
 }
+/* Touch screens: the actions of the message the user tapped (no hover). */
 @media (hover: none) {
   .nowo-chat-msg__actions {
-    opacity: 1;
+    pointer-events: none;
+  }
+  .nowo-chat-msg.is-active .nowo-chat-msg__actions {
+    pointer-events: auto;
   }
 }
 
@@ -1417,6 +1422,8 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 }
 .nowo-chat-reaction-bar {
   position: absolute;
+  /* Opens towards the middle of the window: leftwards next to others' messages, rightwards next to own ones. */
+  right: 0;
   bottom: calc(100% + 4px);
   z-index: 3;
   display: flex;
@@ -1428,7 +1435,8 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
 }
 .nowo-chat-msg--mine .nowo-chat-reaction-bar {
-  right: 0;
+  right: auto;
+  left: 0;
 }
 .nowo-chat-reaction-bar__item {
   width: 30px;

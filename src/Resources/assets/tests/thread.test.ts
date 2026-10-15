@@ -587,7 +587,23 @@ describe('ThreadView', () => {
       expect(article(mine.id).querySelector('.nowo-chat-bubble--deleted')?.textContent).toBe('Deleted');
     });
 
-    it('applies updates from elsewhere, but not over an open editor; unknown ids are ignored', async () => {
+    it('tapping a message shows its actions, one message at a time', async () => {
+      const first = msg({ html: '<p>uno <a href="https://x.test">link</a></p>' });
+      const second = msg();
+      const { article } = await loaded([first, second]);
+      (article(first.id).querySelector('.nowo-chat-bubble') as HTMLElement).click();
+      expect(article(first.id).classList.contains('is-active')).toBe(true);
+      (article(second.id).querySelector('.nowo-chat-bubble') as HTMLElement).click();
+      expect(article(first.id).classList.contains('is-active')).toBe(false);
+      expect(article(second.id).classList.contains('is-active')).toBe(true);
+      (article(second.id).querySelector('.nowo-chat-bubble') as HTMLElement).click();
+      expect(article(second.id).classList.contains('is-active')).toBe(false);
+      (article(first.id).querySelector('a') as HTMLAnchorElement).dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      // Links keep their own behaviour.
+      expect(article(first.id).classList.contains('is-active')).toBe(false);
+    });
+
+        it('applies updates from elsewhere, but not over an open editor; unknown ids are ignored', async () => {
       const mine = msg({ mine: true, authorUuid: 'me' });
       const { action, article, view, host } = await loaded([mine]);
       view.update({ ...mine, id: 99_999 });
