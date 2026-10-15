@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 REQUIRED_LOCALES = ("en", "es", "it", "fr", "pt", "de", "nl")
-DOMAIN = "nowo_chat_kit"
+DOMAIN = "NowoChatKitBundle"  # REQ-I18N-003
 TRANS_DIR = Path(__file__).resolve().parents[1] / "src" / "Resources" / "translations"
 
 

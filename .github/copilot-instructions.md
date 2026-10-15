@@ -28,7 +28,7 @@ Follow these rules when contributing PHP, TypeScript, Twig, and documentation to
 
 ## Bundle-specific conventions
 
-- Twig namespace: `@NowoChatKit`; translation domain: `nowo_chat_kit`.
+- Twig namespace: `@NowoChatKitBundle`; translation domain: `NowoChatKitBundle` (REQ-TWIG-002 / REQ-I18N-003); `nowo_chat_kit` is only the config root key.
 - Asset package: `nowo_chat_kit` (`base_path: /bundles/nowochatkit`); load `asset('js/nowo-chat.js', 'nowo_chat_kit')`.
 - CSS classes `.nowo-chat-*`, CSS custom properties `--nowo-chat-*`, JS / Stimulus identifiers `nowo-chat*`.
 - Users and permissions come from host provider interfaces; never trust a user id sent by the browser.
