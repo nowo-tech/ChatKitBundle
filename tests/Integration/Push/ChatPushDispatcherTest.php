@@ -105,7 +105,7 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
         $chat->participant($support, $agent);
         $this->em->flush();
         $chat->send($agent, $support, 'fixed');
-        self::assertSame('Administradores', $sender->sent[$ana->getChatPublicId()]['title'], 'Spanish, from the agent side');
+        self::assertSame('Soporte', $sender->sent[$ana->getChatPublicId()]['title'], 'Spanish, from the agent side');
         $chat->send($ana, $support, 'thanks');
         self::assertSame('Ana', $sender->sent[$agent->getChatPublicId()]['title']);
     }

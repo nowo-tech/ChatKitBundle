@@ -23,6 +23,7 @@ use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Symfony\UX\Icons\IconRendererInterface;
 
 /*
  * Service definitions for NowoChatKitBundle. The application aliases ChatDirectoryInterface and
@@ -72,7 +73,10 @@ return static function (ContainerConfigurator $container): void {
     $services->get(ChatService::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'));
     $services->get(ChatDockExtension::class)
-        ->arg('$reactions', param('nowo_chat_kit.reactions'));
+        ->arg('$reactions', param('nowo_chat_kit.reactions'))
+        ->arg('$iconSet', param('nowo_chat_kit.icon_set'))
+        ->arg('$icons', param('nowo_chat_kit.icons'))
+        ->arg('$iconRenderer', service(IconRendererInterface::class)->nullOnInvalid());
     $services->get(ChatPurgeCommand::class)
         ->arg('$retentionDays', param('nowo_chat_kit.retention_days'));
 };

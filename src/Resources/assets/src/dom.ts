@@ -1,0 +1,88 @@
+/**
+ * DOM helpers for the dock (no framework; text always goes through textContent). The markup comes from the
+ * Twig <template> elements (Templates); h() only builds small dynamic pieces (badges, chips, avatars).
+ */
+
+type Child = Node | string | null | undefined | false;
+
+export function h<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  attrs: Record<string, string | number | boolean | null | undefined> = {},
+  ...children: Child[]
+): HTMLElementTagNameMap[K] {
+  const element = document.createElement(tag);
+  for (const [name, value] of Object.entries(attrs)) {
+    if (value === null || value === undefined || value === false) {
+      continue;
+    }
+    if (name === 'class') {
+      element.className = String(value);
+    } else if (name === 'text') {
+      element.textContent = String(value);
+    } else {
+      element.setAttribute(name, value === true ? '' : String(value));
+    }
+  }
+  for (const child of children) {
+    if (child !== null && child !== undefined && child !== false) {
+      element.append(typeof child === 'string' ? document.createTextNode(child) : child);
+    }
+  }
+  return element;
+}
+
+/** Built-in icons (24×24, stroke). `icon_set: ux_icon` replaces them with the application's UX Icons. */
+const ICONS: Record<string, string> = {
+  chat: '<path d="M4 5h16v11H8l-4 4V5Z" />',
+  compose: '<path d="M4 20h4L19 9l-4-4L4 16v4Z" /><path d="m13.5 6.5 4 4" />',
+  chevronUp: '<path d="m6 15 6-6 6 6" />',
+  chevronDown: '<path d="m6 9 6 6 6-6" />',
+  close: '<path d="M6 6l12 12M18 6 6 18" />',
+  send: '<path d="M4 12 20 4l-6 16-3-7-7-1Z" />',
+  back: '<path d="M15 6 9 12l6 6" />',
+  arrowDown: '<path d="M12 5v14M6 13l6 6 6-6" />',
+  search: '<circle cx="11" cy="11" r="6" /><path d="m20 20-4.5-4.5" />',
+  hash: '<path d="M5 9h14M5 15h14M10 4 8 20M16 4l-2 16" />',
+  lifebuoy: '<circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3.5" /><path d="m6.3 6.3 3.2 3.2M14.5 14.5l3.2 3.2M17.7 6.3l-3.2 3.2M9.5 14.5l-3.2 3.2" />',
+  retry: '<path d="M20 12a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" />',
+  buzz: '<path d="M13 3 5 14h6l-1 7 8-11h-6l1-7Z" />',
+  smile: '<circle cx="12" cy="12" r="8.5" /><path d="M8.5 14.5c1 1.2 2.1 1.8 3.5 1.8s2.5-.6 3.5-1.8" /><path d="M9 10h.01M15 10h.01" />',
+  check: '<path d="m5 12 4.5 4.5L19 7" />',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16v4Z" />',
+  trash: '<path d="M5 7h14M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" />',
+};
+
+/** Decorative inline SVG (aria-hidden) from the built-in set; the accessible name lives on the button. */
+export function builtinIcon(name: string, size = 18): SVGSVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  for (const [attribute, value] of Object.entries({
+    viewBox: '0 0 24 24',
+    width: String(size),
+    height: String(size),
+    fill: 'none',
+    stroke: 'currentColor',
+    'stroke-width': '1.8',
+    'stroke-linecap': 'round',
+    'stroke-linejoin': 'round',
+    'aria-hidden': 'true',
+    focusable: 'false',
+  })) {
+    svg.setAttribute(attribute, value);
+  }
+  // eslint-disable-next-line no-restricted-syntax -- fixed SVG path strings from the ICONS map above
+  svg.innerHTML = ICONS[name] ?? '';
+  return svg;
+}
+
+export function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
+ * Unread badge: the visible number is decorative; screen readers get the sentence ("Unread messages: 3")
+ * as text — an aria-label on a generic span is not reliably announced.
+ */
+export function setBadge(badge: HTMLElement, count: number, label: string): void {
+  badge.hidden = count <= 0;
+  badge.replaceChildren(h('span', { 'aria-hidden': 'true', text: count > 99 ? '99+' : String(count) }), h('span', { class: 'nowo-chat-sr-only', text: label }));
+}

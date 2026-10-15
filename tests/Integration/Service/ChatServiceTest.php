@@ -143,9 +143,9 @@ final class ChatServiceTest extends DatabaseTestCase
         self::assertSame(TestChannelProvider::KEY, $channelRow['channelKey']);
 
         $support = $chat->openSupport($ana);
-        self::assertSame('Administrators', $presenter->conversation($support, $ana, null, null, true)['title']);
+        self::assertSame('Support', $presenter->conversation($support, $ana, null, null, true)['title']);
         self::assertSame('Ana', $presenter->conversation($support, $agent, null, null, true, viewerIsAgent: true)['title']);
-        self::assertSame('Administrators', $presenter->conversation($support, $ana, null, null, true, viewerIsAgent: true)['title'], 'an agent viewing their own thread');
+        self::assertSame('Support', $presenter->conversation($support, $ana, null, null, true, viewerIsAgent: true)['title'], 'an agent viewing their own thread');
 
         $message = $presenter->message($last, $luis, ['👍' => ['x']]);
         self::assertTrue($message['mine']);

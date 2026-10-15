@@ -11,7 +11,7 @@ export default defineConfig({
     outDir: 'src/Resources/public/js',
     emptyOutDir: false,
     lib: {
-      entry: resolve(__dirname, 'src/Resources/assets/src/index.ts'),
+      entry: resolve(__dirname, 'src/Resources/assets/src/iife.ts'),
       name: 'NowoChat',
       formats: ['iife'],
       fileName: () => 'nowo-chat.js',

@@ -44,7 +44,7 @@ final readonly class ChatPresenter
                 $peer?->getChatEmail() ?? '',
                 $peer?->getChatInitials() ?? '?',
             ],
-            $conversation->isChannel() => ['#'.($channel->label ?? ''), $this->trans('chat.project_channel'), '#'],
+            $conversation->isChannel() => ['#'.($channel->label ?? ''), $this->trans('chat.channel'), '#'],
             default => $this->supportTitle($conversation, $viewer, $viewerIsAgent),
         };
 
@@ -107,7 +107,7 @@ final readonly class ChatPresenter
             return [$owner->getChatDisplayName(), $this->trans('chat.support_thread'), $owner->getChatInitials()];
         }
 
-        return [$this->trans('chat.administrators'), $this->trans('chat.administrators_hint'), '★'];
+        return [$this->trans('chat.support_title'), $this->trans('chat.support_hint'), '★'];
     }
 
     private function trans(string $key): string

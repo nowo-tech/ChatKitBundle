@@ -30,6 +30,8 @@ final class ConfigurationTest extends TestCase
             'push_icon' => null,
             'cache_pool' => 'cache.app',
             'reactions' => ['👍', '❤️', '😂', '😮', '😢', '🎉'],
+            'icon_set' => 'ux_icon',
+            'icons' => Configuration::DEFAULT_ICONS,
             'presence_ttl' => 90,
             'limits' => [
                 'send_per_minute' => 30,

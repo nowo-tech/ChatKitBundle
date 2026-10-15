@@ -170,7 +170,7 @@ final class ChatApiTest extends DatabaseTestCase
 
         $support = $this->postJson('/chat/api/support', [], $csrf)['conversation'];
         self::assertSame('support', $support['kind']);
-        self::assertSame('Administrators', $support['title']);
+        self::assertSame('Support', $support['title']);
         $this->postJson('/chat/api/conversations/'.$support['uuid'].'/messages', ['body' => 'Broken export'], $csrf);
         $this->postJson('/chat/api/conversations/'.$support['uuid'].'/resolve', [], $csrf);
         $this->assertStatus(404, 'only agents resolve');

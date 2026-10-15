@@ -86,7 +86,7 @@ final readonly class ChatPushDispatcher
         $authorName = $author?->getChatDisplayName() ?? $this->translator->trans('chat.deleted_user', [], 'NowoChatKitBundle', $locale);
         $title = match (true) {
             $conversation->isChannel() => '#'.($this->access->channel((string) $conversation->getChannelKey())->label ?? '').' · '.$authorName,
-            $conversation->isSupport() && $author?->getId() !== $conversation->getSupportOwner()?->getId() => $this->translator->trans('chat.administrators', [], 'NowoChatKitBundle', $locale),
+            $conversation->isSupport() && $author?->getId() !== $conversation->getSupportOwner()?->getId() => $this->translator->trans('chat.support_title', [], 'NowoChatKitBundle', $locale),
             default => $authorName,
         };
         $body = $message->isBuzz()

@@ -1,0 +1,244 @@
+{#
+ # Markup of the floating dock, as <template> elements the dock script clones and fills through `data-part`
+ # hooks (text always via textContent). Restyle with the --nowo-chat-* CSS tokens or redefine any block in
+ # templates/bundles/NowoChatKitBundle/_templates.html.twig ({% extends '@!NowoChatKitBundle/_templates.html.twig' %}).
+ # Keep the data-part / data-icon / data-filter attributes. An empty `data-icon` span gets the built-in SVG;
+ # put your own SVG inside it to replace the icon.
+ #}
+{% trans_default_domain 'NowoChatKitBundle' %}
+{% macro icon_button(icon, label, part, class = '') %}
+    <button type="button" class="nowo-chat-icon-btn {{ class }}" data-part="{{ part }}" aria-label="{{ label }}" title="{{ label }}"><span data-icon="{{ icon }}"></span></button>
+{% endmacro %}
+{% import _self as ui %}
+
+{% block nowo_chat_template_dock %}
+    <template data-nowo-chat-template="dock">
+        <div class="nowo-chat-dock">
+            <section class="nowo-chat-panel" data-part="panel" aria-label="{{ 'chat.launcher'|trans }}">
+                <div class="nowo-chat-panel__header">
+                    <button type="button" class="nowo-chat-launcher" data-part="launcher" aria-expanded="false" aria-controls="nowo-chat-panel-body">
+                        <span class="nowo-chat-launcher__icon"><span data-icon="chat" data-icon-size="20"></span></span>
+                        <span class="nowo-chat-launcher__label">{{ 'chat.launcher'|trans }}</span>
+                        <span class="nowo-chat-badge" data-part="launcher-badge" hidden></span>
+                        <span class="nowo-chat-launcher__chevron" data-part="launcher-chevron"></span>
+                    </button>
+                    {{ ui.icon_button('compose', 'chat.new_message'|trans, 'compose', 'nowo-chat-panel__compose') }}
+                    {{ ui.icon_button('close', 'chat.close'|trans, 'close-panel', 'nowo-chat-panel__close') }}
+                </div>
+                <p class="nowo-chat-status" role="status" data-part="status" hidden></p>
+                <div class="nowo-chat-panel__body" id="nowo-chat-panel-body" data-part="panel-body">
+                    <div class="nowo-chat-panel__list">
+                        <div class="nowo-chat-search-wrap">
+                            <span data-icon="search" data-icon-size="16"></span>
+                            <input type="search" class="nowo-chat-search" data-part="search" placeholder="{{ 'chat.search'|trans }}" aria-label="{{ 'chat.search'|trans }}" autocomplete="off">
+                        </div>
+                        <div class="nowo-chat-filters" role="group" aria-label="{{ 'chat.filter_label'|trans }}" data-part="filters">
+                            <button type="button" class="nowo-chat-chip" aria-pressed="true" data-filter="all">{{ 'chat.filter_all'|trans }}</button>
+                            <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="unread">{{ 'chat.filter_unread'|trans }}</button>
+                            <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="channel">{{ 'chat.filter_channels'|trans }}</button>
+                            <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="support">{{ 'chat.filter_support'|trans }}</button>
+                        </div>
+                        <ul class="nowo-chat-list" role="list" data-part="list"></ul>
+                    </div>
+                    <div class="nowo-chat-picker" data-part="picker" hidden>
+                        <div class="nowo-chat-picker__bar">
+                            {{ ui.icon_button('back', 'chat.back'|trans, 'picker-back', 'nowo-chat-picker__back') }}
+                            <p class="nowo-chat-picker__title">{{ 'chat.new_message'|trans }}</p>
+                        </div>
+                        <div class="nowo-chat-search-wrap">
+                            <span data-icon="search" data-icon-size="16"></span>
+                            <input type="search" class="nowo-chat-search" data-part="picker-input" placeholder="{{ 'chat.search_people'|trans }}" aria-label="{{ 'chat.search_people'|trans }}" autocomplete="off">
+                        </div>
+                        <div class="nowo-chat-picker__results" data-part="picker-results"></div>
+                    </div>
+                </div>
+            </section>
+            {# Disclosure (button + list), not an ARIA menu: Tab moves through the hidden conversations, Esc closes. #}
+            <div class="nowo-chat-overflow" data-part="overflow" hidden>
+                <button type="button" class="nowo-chat-overflow__btn" data-part="overflow-btn" aria-controls="nowo-chat-overflow-list" aria-expanded="false"></button>
+                <ul class="nowo-chat-overflow__menu" id="nowo-chat-overflow-list" data-part="overflow-menu" hidden></ul>
+            </div>
+        </div>
+    </template>
+{% endblock %}
+
+{% block nowo_chat_template_row %}
+    {# One conversation in the list. #}
+    <template data-nowo-chat-template="row">
+        <li>
+            <button type="button" class="nowo-chat-row" data-part="row">
+                <span data-part="avatar"></span>
+                <span class="nowo-chat-row__text">
+                    <span class="nowo-chat-row__top">
+                        <span class="nowo-chat-row__title" data-part="title"></span>
+                        <span class="nowo-chat-row__tag" data-part="tag" hidden>{{ 'chat.support_thread'|trans }}</span>
+                        <time class="nowo-chat-row__time" data-part="time"></time>
+                    </span>
+                    <span class="nowo-chat-row__bottom">
+                        <span class="nowo-chat-row__preview" data-part="preview"></span>
+                        <span class="nowo-chat-badge" data-part="badge" hidden></span>
+                    </span>
+                </span>
+            </button>
+        </li>
+    </template>
+{% endblock %}
+
+{% block nowo_chat_template_list_state %}
+    {# Loading, empty and "no results" states of the list. #}
+    <template data-nowo-chat-template="list-state">
+        <li class="nowo-chat-list__state">
+            <p class="nowo-chat-list__empty-title" data-part="title"></p>
+            <p data-part="body" hidden></p>
+            <button type="button" class="nowo-chat-list__start" data-part="start" hidden>{{ 'chat.start_chat'|trans }}</button>
+        </li>
+    </template>
+{% endblock %}
+
+{% block nowo_chat_template_picker %}
+    {# People picker: a section (optional heading) and a row. #}
+    <template data-nowo-chat-template="picker-section">
+        <div class="nowo-chat-picker__section">
+            <p class="nowo-chat-picker__heading" data-part="heading" hidden></p>
+            <div data-part="items"></div>
+        </div>
+    </template>
+    <template data-nowo-chat-template="picker-row">
+        <button type="button" class="nowo-chat-row" data-part="row">
+            <span data-part="avatar"></span>
+            <span class="nowo-chat-row__text">
+                <span class="nowo-chat-row__title" data-part="title"></span>
+                <span class="nowo-chat-row__preview" data-part="preview"></span>
+            </span>
+        </button>
+    </template>
+    <template data-nowo-chat-template="picker-state"><p class="nowo-chat-list__state" data-part="text"></p></template>
+{% endblock %}
+
+{% block nowo_chat_template_overflow_item %}
+    <template data-nowo-chat-template="overflow-item">
+        <li>
+            <button type="button" class="nowo-chat-overflow__item" data-part="row">
+                <span data-part="avatar"></span>
+                <span data-part="title"></span>
+            </button>
+        </li>
+    </template>
+{% endblock %}
+
+{% block nowo_chat_template_window %}
+    {# One conversation window: header, thread and composer. #}
+    <template data-nowo-chat-template="window">
+        <section class="nowo-chat-window" role="dialog">
+            <header class="nowo-chat-window__header">
+                {{ ui.icon_button('back', 'chat.back'|trans, 'back', 'nowo-chat-window__back') }}
+                <button type="button" class="nowo-chat-window__identity" data-part="identity" aria-expanded="true">
+                    <span class="nowo-chat-window__avatar" data-part="avatar"></span>
+                    <span class="nowo-chat-window__names">
+                        <span class="nowo-chat-window__title" data-part="title"></span>
+                        <span class="nowo-chat-window__subtitle" data-part="subtitle"></span>
+                    </span>
+                    <span class="nowo-chat-badge" data-part="badge" hidden></span>
+                </button>
+                <span class="nowo-chat-window__actions">
+                    {{ ui.icon_button('check', 'chat.resolve'|trans, 'resolve', 'nowo-chat-window__resolve') }}
+                    {{ ui.icon_button('buzz', 'chat.buzz'|trans, 'buzz', 'nowo-chat-window__buzz') }}
+                    {{ ui.icon_button('chevronDown', 'chat.minimise'|trans, 'minimise') }}
+                    {{ ui.icon_button('close', 'chat.close'|trans, 'close') }}
+                </span>
+            </header>
+            <div class="nowo-chat-window__main">
+                <div class="nowo-chat-window__body" data-part="body">
+                    {# Not a live region: new messages are announced once by the `live` part. #}
+                    <div class="nowo-chat-thread" role="log" aria-live="off" aria-label="{{ 'chat.messages_label'|trans }}" data-part="log"></div>
+                </div>
+                <button type="button" class="nowo-chat-jump" data-part="jump" hidden></button>
+                <p class="nowo-chat-typing" aria-live="polite" data-part="typing" hidden></p>
+                <p class="nowo-chat-notice" data-part="notice" hidden></p>
+                <form class="nowo-chat-composer" data-part="composer" novalidate>
+                    <div class="nowo-chat-composer__field">
+                        <textarea class="nowo-chat-composer__input" data-part="input" rows="1" placeholder="{{ 'chat.composer_placeholder'|trans }}" aria-label="{{ 'chat.composer_placeholder'|trans }}"></textarea>
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__emoji" data-part="emoji-toggle" data-nowo-chat-emoji-toggle aria-label="{{ 'chat.emoji'|trans }}" title="{{ 'chat.emoji'|trans }}" aria-expanded="false"><span data-icon="smile"></span></button>
+                    </div>
+                    <button type="submit" class="nowo-chat-composer__send" data-part="send" aria-label="{{ 'chat.send'|trans }}" title="{{ 'chat.send'|trans }}"><span data-icon="send"></span></button>
+                    <p class="nowo-chat-composer__hint">{{ 'chat.composer_hint'|trans }}</p>
+                    <span class="nowo-chat-composer__counter" data-part="counter" hidden></span>
+                    <span class="nowo-chat-sr-only" aria-live="polite" data-part="counter-announce"></span>
+                </form>
+            </div>
+            <div class="nowo-chat-sr-only nowo-chat-window__live" aria-live="polite" aria-atomic="true" data-part="live"></div>
+        </section>
+    </template>
+{% endblock %}
+
+{% block nowo_chat_template_messages %}
+    {# A message: bubble, reactions, meta, and the hover actions (react, edit, delete). #}
+    <template data-nowo-chat-template="message">
+        <article class="nowo-chat-msg">
+            <span data-part="avatar"></span>
+            <div class="nowo-chat-msg__content">
+                <p class="nowo-chat-msg__author" data-part="author" hidden></p>
+                <div class="nowo-chat-bubble" data-part="bubble"></div>
+                <div class="nowo-chat-reactions" data-part="reactions" role="group" aria-label="{{ 'chat.reactions_label'|trans }}" hidden></div>
+                <span class="nowo-chat-msg__meta">
+                    <time data-part="time"></time>
+                    <span data-part="edited" hidden> · {{ 'chat.edited'|trans }}</span>
+                    <span class="nowo-chat-msg__receipt" data-part="receipt" hidden></span>
+                </span>
+            </div>
+            <div class="nowo-chat-msg__actions" data-part="actions">
+                {{ ui.icon_button('smile', 'chat.react'|trans, 'react') }}
+                {{ ui.icon_button('edit', 'chat.edit'|trans, 'edit') }}
+                {{ ui.icon_button('trash', 'chat.delete'|trans, 'delete') }}
+            </div>
+        </article>
+    </template>
+    {# Inline editor that replaces the bubble while editing. #}
+    <template data-nowo-chat-template="edit-form">
+        <form class="nowo-chat-edit" novalidate>
+            <textarea class="nowo-chat-edit__input" data-part="input" rows="2" aria-label="{{ 'chat.edit'|trans }}"></textarea>
+            <span class="nowo-chat-edit__actions">
+                <button type="button" class="nowo-chat-edit__cancel" data-part="cancel">{{ 'chat.cancel'|trans }}</button>
+                <button type="submit" class="nowo-chat-edit__save" data-part="save">{{ 'chat.save'|trans }}</button>
+            </span>
+        </form>
+    </template>
+    {# Inline confirmation before deleting. #}
+    <template data-nowo-chat-template="delete-confirm">
+        <span class="nowo-chat-confirm" role="group" aria-label="{{ 'chat.delete_confirm'|trans }}">
+            <span class="nowo-chat-confirm__text">{{ 'chat.delete_confirm'|trans }}</span>
+            <button type="button" class="nowo-chat-confirm__yes" data-part="confirm">{{ 'chat.delete'|trans }}</button>
+            <button type="button" class="nowo-chat-confirm__no" data-part="cancel">{{ 'chat.cancel'|trans }}</button>
+        </span>
+    </template>
+    {# A message sent from here, not yet confirmed by the server. #}
+    <template data-nowo-chat-template="pending">
+        <article class="nowo-chat-msg nowo-chat-msg--mine nowo-chat-msg--pending">
+            <div class="nowo-chat-msg__content">
+                <div class="nowo-chat-bubble" data-part="bubble"></div>
+                <span class="nowo-chat-msg__meta" data-part="status"></span>
+            </div>
+        </article>
+    </template>
+    <template data-nowo-chat-template="buzz-line">
+        <p class="nowo-chat-buzz-line"><span data-icon="buzz" data-icon-size="14"></span> <span data-part="text"></span></p>
+    </template>
+    <template data-nowo-chat-template="day"><p class="nowo-chat-day" data-part="text"></p></template>
+    <template data-nowo-chat-template="unseen"><p class="nowo-chat-unseen">{{ 'chat.new_messages'|trans }}</p></template>
+    <template data-nowo-chat-template="seen"><p class="nowo-chat-seen" data-part="text"></p></template>
+    <template data-nowo-chat-template="thread-state"><p class="nowo-chat-thread__loading" data-part="text"></p></template>
+    <template data-nowo-chat-template="thread-empty">
+        <div class="nowo-chat-thread__empty">
+            <span data-part="avatar"></span>
+            <p class="nowo-chat-thread__empty-title" data-part="title"></p>
+            <p data-part="hint"></p>
+        </div>
+    </template>
+{% endblock %}
+
+{% block nowo_chat_icons %}
+    {# icon_set: ux_icon — the application's UX Icons replace the built-in SVG (same names as data-icon). #}
+    {% for name, svg in nowo_chat_icons() %}
+        <template data-nowo-chat-icon="{{ name }}">{{ svg }}</template>
+    {% endfor %}
+{% endblock %}

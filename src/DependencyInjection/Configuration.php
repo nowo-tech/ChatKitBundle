@@ -22,6 +22,27 @@ final class Configuration implements ConfigurationInterface
 
     public const DEFAULT_PROFILE = 'default';
 
+    /** Dock icon → Symfony UX Icons name (Tabler set), used with `icon_set: ux_icon`. */
+    public const array DEFAULT_ICONS = [
+        'chat' => 'tabler:message-circle',
+        'compose' => 'tabler:edit',
+        'chevronUp' => 'tabler:chevron-up',
+        'chevronDown' => 'tabler:chevron-down',
+        'close' => 'tabler:x',
+        'send' => 'tabler:send',
+        'back' => 'tabler:arrow-left',
+        'arrowDown' => 'tabler:arrow-down',
+        'search' => 'tabler:search',
+        'hash' => 'tabler:hash',
+        'lifebuoy' => 'tabler:lifebuoy',
+        'retry' => 'tabler:refresh',
+        'buzz' => 'tabler:bolt',
+        'smile' => 'tabler:mood-smile',
+        'check' => 'tabler:check',
+        'edit' => 'tabler:pencil',
+        'trash' => 'tabler:trash',
+    ];
+
     /**
      * Builds the `nowo_chat_kit` tree.
      */
@@ -86,6 +107,17 @@ final class Configuration implements ConfigurationInterface
                                 ->info('Emojis offered as message reactions.')
                                 ->scalarPrototype()->end()
                                 ->defaultValue(['👍', '❤️', '😂', '😮', '😢', '🎉'])
+                            ->end()
+                            ->enumNode('icon_set')
+                                ->info('ux_icon: Symfony UX Icons with the "icons" map (default); svg_inline: the built-in SVG only.')
+                                ->values(['ux_icon', 'svg_inline'])
+                                ->defaultValue('ux_icon')
+                            ->end()
+                            ->arrayNode('icons')
+                                ->info('UX Icons name per dock icon (merged over the Tabler defaults). An icon UX Icons cannot render falls back to the built-in SVG.')
+                                ->useAttributeAsKey('name')
+                                ->scalarPrototype()->end()
+                                ->defaultValue(self::DEFAULT_ICONS)
                             ->end()
                             ->integerNode('presence_ttl')
                                 ->info('Seconds a heartbeat keeps a user online.')

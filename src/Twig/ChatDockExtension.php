@@ -19,7 +19,10 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Symfony\Component\Translation\TranslatorBagInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
+use Symfony\UX\Icons\Exception\IconNotFoundException;
+use Symfony\UX\Icons\IconRendererInterface;
 use Twig\Extension\AbstractExtension;
+use Twig\Markup;
 use Twig\TwigFunction;
 
 /**
@@ -31,7 +34,8 @@ final class ChatDockExtension extends AbstractExtension
     private const string PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 
     /**
-     * @param list<string> $reactions
+     * @param list<string>          $reactions
+     * @param array<string, string> $icons     dock icon → UX Icons name (icon_set: ux_icon)
      */
     public function __construct(
         private readonly Security $security,
@@ -44,12 +48,18 @@ final class ChatDockExtension extends AbstractExtension
         private readonly ChatUserSettingsRepository $settings,
         private readonly array $reactions = [],
         private readonly int $pollMs = 4000,
+        private readonly string $iconSet = 'ux_icon',
+        private readonly array $icons = [],
+        private readonly ?IconRendererInterface $iconRenderer = null,
     ) {
     }
 
     public function getFunctions(): array
     {
-        return [new TwigFunction('nowo_chat_dock_config', $this->config(...))];
+        return [
+            new TwigFunction('nowo_chat_dock_config', $this->config(...)),
+            new TwigFunction('nowo_chat_icons', $this->icons(...)),
+        ];
     }
 
     /**
@@ -103,6 +113,29 @@ final class ChatDockExtension extends AbstractExtension
             'isAgent' => $this->access->isSupportAgent($user),
             'i18n' => $this->strings($locale),
         ];
+    }
+
+    /**
+     * Rendered SVG per dock icon when `icon_set: ux_icon` (and symfony/ux-icons is installed); empty otherwise,
+     * so the dock keeps its built-in SVG. The SVG markup comes from the application's own icon set.
+     *
+     * @return array<string, Markup>
+     */
+    public function icons(): array
+    {
+        if ('ux_icon' !== $this->iconSet || !$this->iconRenderer instanceof IconRendererInterface) {
+            return [];
+        }
+        $rendered = [];
+        foreach ($this->icons as $name => $icon) {
+            try {
+                $rendered[$name] = new Markup($this->iconRenderer->renderIcon($icon, ['aria-hidden' => 'true', 'focusable' => 'false']), 'UTF-8');
+            } catch (IconNotFoundException) {
+                // Not in the application's icon set: the dock keeps the built-in SVG for this one.
+            }
+        }
+
+        return $rendered;
     }
 
     /**

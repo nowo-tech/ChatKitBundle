@@ -9,6 +9,8 @@ use Doctrine\ORM\Tools\SchemaTool;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\TestCase;
 use Psr\Cache\CacheItemPoolInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Twig\Environment;
 
 /**
  * Boots the test kernel on in-memory SQLite with the full schema (bundle entities + test user).
@@ -53,6 +55,16 @@ abstract class DatabaseTestCase extends TestCase
         \assert($service instanceof $id);
 
         return $service;
+    }
+
+    protected function twig(): Environment
+    {
+        $container = $this->kernel->getContainer()->get('test.service_container');
+        \assert($container instanceof ContainerInterface);
+        $twig = $container->get('twig');
+        \assert($twig instanceof Environment);
+
+        return $twig;
     }
 
     protected function tearDown(): void

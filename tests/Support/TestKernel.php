@@ -27,6 +27,7 @@ use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigura
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Kernel;
 use Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator;
+use Symfony\UX\Icons\UXIconsBundle;
 use Twig\Environment;
 
 /**
@@ -58,6 +59,7 @@ final class TestKernel extends Kernel
         yield new SecurityBundle();
         yield new TwigBundle();
         yield new DoctrineBundle();
+        yield new UXIconsBundle();
         yield new NowoChatKitBundle();
     }
 
@@ -97,7 +99,9 @@ final class TestKernel extends Kernel
             'providers' => ['test_users' => ['entity' => ['class' => TestUser::class, 'property' => 'publicId']]],
             'firewalls' => ['main' => ['lazy' => true, 'provider' => 'test_users']],
         ]);
-        $container->extension('twig', ['strict_variables' => true]);
+        $container->extension('twig', ['strict_variables' => true, 'auto_reload' => true]);
+        // Only `send` and `x` exist: the other dock icons fall back to the built-in SVG.
+        $container->extension('ux_icons', ['icon_dir' => __DIR__.'/icons', 'iconify' => ['enabled' => false]]);
         $container->extension('doctrine', [
             'dbal' => ['driver' => 'pdo_sqlite', 'memory' => true],
             'orm' => [

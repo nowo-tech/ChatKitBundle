@@ -1,29 +1,63 @@
 /**
- * Nowo Chat Kit — browser entry point (skeleton).
- *
- * The floating chat dock (Stimulus controllers prefixed `nowo-chat`, realtime client,
- * presence, typing, read receipts, sounds, emoji picker and Web Push) is migrated here
- * in later iterations. For now the entry only exposes the package version and the
- * CSS custom-property prefix shared with the Twig templates.
+ * Nowo Chat Kit — browser entry point. The IIFE build (`nowo-chat.js`) mounts the dock on every
+ * `[data-nowo-chat-config]` element rendered by `@NowoChatKitBundle/dock.html.twig`, after first paint, and again
+ * after Turbo page swaps. Applications with their own bundler can import `ChatDock` / `mount` from the source.
  */
+import { ChatDock } from './dock';
+import type { ChatConfig } from './types';
+
+export { ChatDock } from './dock';
+export type { ChatConfig } from './types';
 
 /** Package version of the browser bundle. */
 export const VERSION = '1.0.0-dev';
 
-/** Prefix used by every CSS custom property (theme token) of the dock. */
+/** Prefix of every CSS custom property (theme token) of the dock. */
 export const CSS_TOKEN_PREFIX = '--nowo-chat-';
 
-/**
- * Builds the CSS custom-property name for a theme token.
- *
- * @param token - Token name in kebab-case, e.g. `accent` or `bubble-radius`.
- * @returns The custom-property name, e.g. `--nowo-chat-accent`.
- */
-export function cssToken(token: string): string {
-  const normalized = token.trim().replace(/^-+/, '');
-  if (normalized === '') {
-    throw new Error('Theme token name must not be empty.');
-  }
+const mounted = new WeakMap<HTMLElement, ChatDock>();
 
-  return `${CSS_TOKEN_PREFIX}${normalized}`;
+/** Mounts the dock on one root (idempotent); returns null when the root has no valid configuration. */
+export function mount(root: HTMLElement): ChatDock | null {
+  const existing = mounted.get(root);
+  if (existing !== undefined) {
+    return existing;
+  }
+  let config: ChatConfig;
+  try {
+    config = JSON.parse(root.dataset.nowoChatConfig ?? '') as ChatConfig;
+  } catch {
+    return null;
+  }
+  const dock = new ChatDock(root, config);
+  mounted.set(root, dock);
+  void dock.start();
+  return dock;
+}
+
+/** Stops the dock of a root (connection, timers, listeners). */
+export function unmount(root: HTMLElement): void {
+  mounted.get(root)?.destroy();
+  mounted.delete(root);
+}
+
+/** Mounts every dock root in the document, when the browser is idle (the page paints first). */
+export function mountAll(scope: ParentNode = document): void {
+  const run = (): void => scope.querySelectorAll<HTMLElement>('[data-nowo-chat-config]').forEach((root) => mount(root));
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(run, { timeout: 1500 });
+  } else {
+    window.setTimeout(run, 200);
+  }
+}
+
+/** Auto start for the IIFE build: document ready, Turbo visits, and cleanup before Turbo swaps the body. */
+export function autoStart(): void {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => mountAll(), { once: true });
+  } else {
+    mountAll();
+  }
+  document.addEventListener('turbo:load', () => mountAll());
+  document.addEventListener('turbo:before-render', () => document.querySelectorAll<HTMLElement>('[data-nowo-chat-config]').forEach(unmount));
 }

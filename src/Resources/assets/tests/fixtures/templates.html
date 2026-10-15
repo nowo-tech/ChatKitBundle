@@ -1,0 +1,216 @@
+
+    <template data-nowo-chat-template="dock">
+        <div class="nowo-chat-dock">
+            <section class="nowo-chat-panel" data-part="panel" aria-label="Messaging">
+                <div class="nowo-chat-panel__header">
+                    <button type="button" class="nowo-chat-launcher" data-part="launcher" aria-expanded="false" aria-controls="nowo-chat-panel-body">
+                        <span class="nowo-chat-launcher__icon"><span data-icon="chat" data-icon-size="20"></span></span>
+                        <span class="nowo-chat-launcher__label">Messaging</span>
+                        <span class="nowo-chat-badge" data-part="launcher-badge" hidden></span>
+                        <span class="nowo-chat-launcher__chevron" data-part="launcher-chevron"></span>
+                    </button>
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__compose" data-part="compose" aria-label="New message" title="New message"><span data-icon="compose"></span></button>
+
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__close" data-part="close-panel" aria-label="Close" title="Close"><span data-icon="close"></span></button>
+
+                </div>
+                <p class="nowo-chat-status" role="status" data-part="status" hidden></p>
+                <div class="nowo-chat-panel__body" id="nowo-chat-panel-body" data-part="panel-body">
+                    <div class="nowo-chat-panel__list">
+                        <div class="nowo-chat-search-wrap">
+                            <span data-icon="search" data-icon-size="16"></span>
+                            <input type="search" class="nowo-chat-search" data-part="search" placeholder="Search conversations" aria-label="Search conversations" autocomplete="off">
+                        </div>
+                        <div class="nowo-chat-filters" role="group" aria-label="Filter conversations" data-part="filters">
+                            <button type="button" class="nowo-chat-chip" aria-pressed="true" data-filter="all">All</button>
+                            <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="unread">Unread</button>
+                            <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="channel">Channels</button>
+                            <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="support">Support</button>
+                        </div>
+                        <ul class="nowo-chat-list" role="list" data-part="list"></ul>
+                    </div>
+                    <div class="nowo-chat-picker" data-part="picker" hidden>
+                        <div class="nowo-chat-picker__bar">
+                                <button type="button" class="nowo-chat-icon-btn nowo-chat-picker__back" data-part="picker-back" aria-label="Back" title="Back"><span data-icon="back"></span></button>
+
+                            <p class="nowo-chat-picker__title">New message</p>
+                        </div>
+                        <div class="nowo-chat-search-wrap">
+                            <span data-icon="search" data-icon-size="16"></span>
+                            <input type="search" class="nowo-chat-search" data-part="picker-input" placeholder="Search people" aria-label="Search people" autocomplete="off">
+                        </div>
+                        <div class="nowo-chat-picker__results" data-part="picker-results"></div>
+                    </div>
+                </div>
+            </section>
+                        <div class="nowo-chat-overflow" data-part="overflow" hidden>
+                <button type="button" class="nowo-chat-overflow__btn" data-part="overflow-btn" aria-controls="nowo-chat-overflow-list" aria-expanded="false"></button>
+                <ul class="nowo-chat-overflow__menu" id="nowo-chat-overflow-list" data-part="overflow-menu" hidden></ul>
+            </div>
+        </div>
+    </template>
+
+        <template data-nowo-chat-template="row">
+        <li>
+            <button type="button" class="nowo-chat-row" data-part="row">
+                <span data-part="avatar"></span>
+                <span class="nowo-chat-row__text">
+                    <span class="nowo-chat-row__top">
+                        <span class="nowo-chat-row__title" data-part="title"></span>
+                        <span class="nowo-chat-row__tag" data-part="tag" hidden>Support</span>
+                        <time class="nowo-chat-row__time" data-part="time"></time>
+                    </span>
+                    <span class="nowo-chat-row__bottom">
+                        <span class="nowo-chat-row__preview" data-part="preview"></span>
+                        <span class="nowo-chat-badge" data-part="badge" hidden></span>
+                    </span>
+                </span>
+            </button>
+        </li>
+    </template>
+
+        <template data-nowo-chat-template="list-state">
+        <li class="nowo-chat-list__state">
+            <p class="nowo-chat-list__empty-title" data-part="title"></p>
+            <p data-part="body" hidden></p>
+            <button type="button" class="nowo-chat-list__start" data-part="start" hidden>Start a conversation</button>
+        </li>
+    </template>
+
+        <template data-nowo-chat-template="picker-section">
+        <div class="nowo-chat-picker__section">
+            <p class="nowo-chat-picker__heading" data-part="heading" hidden></p>
+            <div data-part="items"></div>
+        </div>
+    </template>
+    <template data-nowo-chat-template="picker-row">
+        <button type="button" class="nowo-chat-row" data-part="row">
+            <span data-part="avatar"></span>
+            <span class="nowo-chat-row__text">
+                <span class="nowo-chat-row__title" data-part="title"></span>
+                <span class="nowo-chat-row__preview" data-part="preview"></span>
+            </span>
+        </button>
+    </template>
+    <template data-nowo-chat-template="picker-state"><p class="nowo-chat-list__state" data-part="text"></p></template>
+
+    <template data-nowo-chat-template="overflow-item">
+        <li>
+            <button type="button" class="nowo-chat-overflow__item" data-part="row">
+                <span data-part="avatar"></span>
+                <span data-part="title"></span>
+            </button>
+        </li>
+    </template>
+
+        <template data-nowo-chat-template="window">
+        <section class="nowo-chat-window" role="dialog">
+            <header class="nowo-chat-window__header">
+                    <button type="button" class="nowo-chat-icon-btn nowo-chat-window__back" data-part="back" aria-label="Back" title="Back"><span data-icon="back"></span></button>
+
+                <button type="button" class="nowo-chat-window__identity" data-part="identity" aria-expanded="true">
+                    <span class="nowo-chat-window__avatar" data-part="avatar"></span>
+                    <span class="nowo-chat-window__names">
+                        <span class="nowo-chat-window__title" data-part="title"></span>
+                        <span class="nowo-chat-window__subtitle" data-part="subtitle"></span>
+                    </span>
+                    <span class="nowo-chat-badge" data-part="badge" hidden></span>
+                </button>
+                <span class="nowo-chat-window__actions">
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-window__resolve" data-part="resolve" aria-label="Mark resolved" title="Mark resolved"><span data-icon="check"></span></button>
+
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-window__buzz" data-part="buzz" aria-label="Buzz" title="Buzz"><span data-icon="buzz"></span></button>
+
+                        <button type="button" class="nowo-chat-icon-btn " data-part="minimise" aria-label="Minimise" title="Minimise"><span data-icon="chevronDown"></span></button>
+
+                        <button type="button" class="nowo-chat-icon-btn " data-part="close" aria-label="Close" title="Close"><span data-icon="close"></span></button>
+
+                </span>
+            </header>
+            <div class="nowo-chat-window__main">
+                <div class="nowo-chat-window__body" data-part="body">
+                                        <div class="nowo-chat-thread" role="log" aria-live="off" aria-label="Messages" data-part="log"></div>
+                </div>
+                <button type="button" class="nowo-chat-jump" data-part="jump" hidden></button>
+                <p class="nowo-chat-typing" aria-live="polite" data-part="typing" hidden></p>
+                <p class="nowo-chat-notice" data-part="notice" hidden></p>
+                <form class="nowo-chat-composer" data-part="composer" novalidate>
+                    <div class="nowo-chat-composer__field">
+                        <textarea class="nowo-chat-composer__input" data-part="input" rows="1" placeholder="Write a message…" aria-label="Write a message…"></textarea>
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__emoji" data-part="emoji-toggle" data-nowo-chat-emoji-toggle aria-label="Emoji" title="Emoji" aria-expanded="false"><span data-icon="smile"></span></button>
+                    </div>
+                    <button type="submit" class="nowo-chat-composer__send" data-part="send" aria-label="Send" title="Send"><span data-icon="send"></span></button>
+                    <p class="nowo-chat-composer__hint">Enter to send · Shift+Enter for a new line</p>
+                    <span class="nowo-chat-composer__counter" data-part="counter" hidden></span>
+                    <span class="nowo-chat-sr-only" aria-live="polite" data-part="counter-announce"></span>
+                </form>
+            </div>
+            <div class="nowo-chat-sr-only nowo-chat-window__live" aria-live="polite" aria-atomic="true" data-part="live"></div>
+        </section>
+    </template>
+
+        <template data-nowo-chat-template="message">
+        <article class="nowo-chat-msg">
+            <span data-part="avatar"></span>
+            <div class="nowo-chat-msg__content">
+                <p class="nowo-chat-msg__author" data-part="author" hidden></p>
+                <div class="nowo-chat-bubble" data-part="bubble"></div>
+                <div class="nowo-chat-reactions" data-part="reactions" role="group" aria-label="Reactions" hidden></div>
+                <span class="nowo-chat-msg__meta">
+                    <time data-part="time"></time>
+                    <span data-part="edited" hidden> · edited</span>
+                    <span class="nowo-chat-msg__receipt" data-part="receipt" hidden></span>
+                </span>
+            </div>
+            <div class="nowo-chat-msg__actions" data-part="actions">
+                    <button type="button" class="nowo-chat-icon-btn " data-part="react" aria-label="React" title="React"><span data-icon="smile"></span></button>
+
+                    <button type="button" class="nowo-chat-icon-btn " data-part="edit" aria-label="Edit" title="Edit"><span data-icon="edit"></span></button>
+
+                    <button type="button" class="nowo-chat-icon-btn " data-part="delete" aria-label="Delete" title="Delete"><span data-icon="trash"></span></button>
+
+            </div>
+        </article>
+    </template>
+        <template data-nowo-chat-template="edit-form">
+        <form class="nowo-chat-edit" novalidate>
+            <textarea class="nowo-chat-edit__input" data-part="input" rows="2" aria-label="Edit"></textarea>
+            <span class="nowo-chat-edit__actions">
+                <button type="button" class="nowo-chat-edit__cancel" data-part="cancel">Cancel</button>
+                <button type="submit" class="nowo-chat-edit__save" data-part="save">Save</button>
+            </span>
+        </form>
+    </template>
+        <template data-nowo-chat-template="delete-confirm">
+        <span class="nowo-chat-confirm" role="group" aria-label="Delete this message?">
+            <span class="nowo-chat-confirm__text">Delete this message?</span>
+            <button type="button" class="nowo-chat-confirm__yes" data-part="confirm">Delete</button>
+            <button type="button" class="nowo-chat-confirm__no" data-part="cancel">Cancel</button>
+        </span>
+    </template>
+        <template data-nowo-chat-template="pending">
+        <article class="nowo-chat-msg nowo-chat-msg--mine nowo-chat-msg--pending">
+            <div class="nowo-chat-msg__content">
+                <div class="nowo-chat-bubble" data-part="bubble"></div>
+                <span class="nowo-chat-msg__meta" data-part="status"></span>
+            </div>
+        </article>
+    </template>
+    <template data-nowo-chat-template="buzz-line">
+        <p class="nowo-chat-buzz-line"><span data-icon="buzz" data-icon-size="14"></span> <span data-part="text"></span></p>
+    </template>
+    <template data-nowo-chat-template="day"><p class="nowo-chat-day" data-part="text"></p></template>
+    <template data-nowo-chat-template="unseen"><p class="nowo-chat-unseen">New messages</p></template>
+    <template data-nowo-chat-template="seen"><p class="nowo-chat-seen" data-part="text"></p></template>
+    <template data-nowo-chat-template="thread-state"><p class="nowo-chat-thread__loading" data-part="text"></p></template>
+    <template data-nowo-chat-template="thread-empty">
+        <div class="nowo-chat-thread__empty">
+            <span data-part="avatar"></span>
+            <p class="nowo-chat-thread__empty-title" data-part="title"></p>
+            <p data-part="hint"></p>
+        </div>
+    </template>
+
+                <template data-nowo-chat-icon="close"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"></path></svg></template>
+            <template data-nowo-chat-icon="send"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M4 12 20 4l-6 16-3-7z"></path></svg></template>
+    
