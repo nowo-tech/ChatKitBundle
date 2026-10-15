@@ -182,6 +182,7 @@
             <div class="nowo-chat-msg__content">
                 <p class="nowo-chat-msg__author" data-part="author" hidden></p>
                 <div class="nowo-chat-bubble" data-part="bubble"></div>
+                <div class="nowo-chat-previews" data-part="previews" hidden></div>
                 <div class="nowo-chat-reactions" data-part="reactions" role="group" aria-label="{{ 'chat.reactions_label'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" hidden></div>
                 <span class="nowo-chat-msg__meta">
                     <time data-part="time"></time>
@@ -195,6 +196,14 @@
                 {{ ui.icon_button('trash', 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'delete') }}
             </div>
         </article>
+    </template>
+    {# Card for a link the viewer may see (issue, document …), from the application's preview provider. #}
+    <template data-nowo-chat-template="link-preview">
+        <a class="nowo-chat-preview" target="_blank" rel="noopener">
+            <span class="nowo-chat-preview__badge" data-part="badge" hidden></span>
+            <span class="nowo-chat-preview__title" data-part="title"></span>
+            <span class="nowo-chat-preview__subtitle" data-part="subtitle" hidden></span>
+        </a>
     </template>
     {# Inline editor that replaces the bubble while editing. #}
     <template data-nowo-chat-template="edit-form">

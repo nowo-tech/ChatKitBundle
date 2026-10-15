@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Tests\Unit\Twig;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
@@ -40,6 +41,7 @@ final class ChatDockExtensionIconsTest extends TestCase
             new ChatAccess($this->createStub(ChatAccessPolicyInterface::class), $this->createStub(ChatChannelProviderInterface::class), $this->createStub(ChatDirectoryInterface::class)),
             $this->createStub(ChatChannelProviderInterface::class),
             $this->createStub(ChatUserSettingsRepository::class),
+            new NullLinkPreviewProvider(),
             iconSet: $iconSet,
             icons: ['send' => 'tabler:send'],
             iconRenderer: $renderer,

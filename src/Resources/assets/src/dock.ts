@@ -12,7 +12,7 @@ import { playOnce } from './sounds';
 import { clearChatStorage, DockStore, DraftStore, type SyncEvent, ThreadCache } from './state';
 import { part, Templates, text } from './templates';
 import { plain, ThreadView, type ThreadHost } from './thread';
-import type { ChatConfig, ChatMessage, Contact, ConversationSummary, RealtimeEvent, SupportContext } from './types';
+import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, RealtimeEvent, SupportContext } from './types';
 
 type Filter = 'all' | 'unread' | 'channel' | 'support';
 
@@ -50,6 +50,9 @@ export class ChatDock implements ThreadHost {
   private live = false;
   private wasLive = false;
   private statusTimer: number | undefined;
+  /** Link previews already asked for (null: nothing to show), shared by every window. */
+  private readonly previews = new Map<string, Promise<LinkPreview | null>>();
+  private previewBatch: { urls: string[]; resolve: (map: Record<string, LinkPreview>) => void } | null = null;
   /** Conversation uuid → "typing…" timer for the list rows. */
   private readonly listTyping = new Map<string, number>();
 
@@ -154,6 +157,39 @@ export class ChatDock implements ThreadHost {
     this.conversations.set(summary.uuid, summary);
     this.windows.get(summary.uuid)?.applySummary(summary);
     this.renderList();
+  }
+
+  /** Preview of a link for this viewer, batched (one request per tick, at most 10 links) and cached. */
+  linkPreview(url: string): Promise<LinkPreview | null> {
+    let pending = this.previews.get(url);
+    if (pending === undefined) {
+      const batch = this.previewBatch ?? this.startPreviewBatch();
+      batch.urls.push(url);
+      pending = new Promise<Record<string, LinkPreview>>((resolve) => {
+        const previous = batch.resolve;
+        batch.resolve = (map) => {
+          previous(map);
+          resolve(map);
+        };
+      }).then((map) => map[url] ?? null);
+      this.previews.set(url, pending);
+    }
+    return pending;
+  }
+
+  private startPreviewBatch(): { urls: string[]; resolve: (map: Record<string, LinkPreview>) => void } {
+    const batch = { urls: [] as string[], resolve: (_map: Record<string, LinkPreview>): void => undefined };
+    this.previewBatch = batch;
+    queueMicrotask(() => {
+      this.previewBatch = null;
+      const chunks: string[][] = [];
+      for (let i = 0; i < batch.urls.length; i += 10) {
+        chunks.push(batch.urls.slice(i, i + 10));
+      }
+      void Promise.all(chunks.map((urls) => this.api.linkPreviews(urls).catch(() => ({}))))
+        .then((maps) => batch.resolve(Object.assign({}, ...maps)));
+    });
+    return batch;
   }
 
   isMobile(): boolean {

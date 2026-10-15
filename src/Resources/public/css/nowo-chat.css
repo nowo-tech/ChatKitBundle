@@ -1602,3 +1602,61 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat-window.is-minimised .nowo-chat-window__context {
   display: none;
 }
+
+/* Link previews (cards the application resolves per viewer). */
+.nowo-chat-previews {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 100%;
+  margin: 4px 0 0;
+}
+.nowo-chat-previews[hidden] {
+  display: none;
+}
+.nowo-chat-preview {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 2px 8px;
+  max-width: 260px;
+  padding: 6px 10px;
+  border: 1px solid var(--nowo-chat-border);
+  border-left: 3px solid var(--nowo-chat-accent);
+  border-radius: 8px;
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+  font-size: 0.8125rem;
+  text-decoration: none;
+}
+.nowo-chat-preview:hover,
+.nowo-chat-preview:focus-visible {
+  background: var(--nowo-chat-surface-muted);
+}
+.nowo-chat-preview__badge {
+  grid-row: 1;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--nowo-chat-accent) 14%, transparent);
+  color: var(--nowo-chat-accent-strong);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+.nowo-chat-preview__title {
+  grid-column: 2;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nowo-chat-preview__badge[hidden] + .nowo-chat-preview__title {
+  grid-column: 1 / -1;
+}
+.nowo-chat-preview__subtitle {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--nowo-chat-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

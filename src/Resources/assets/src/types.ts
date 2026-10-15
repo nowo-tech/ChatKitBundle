@@ -92,6 +92,7 @@ export interface ChatConfig {
     channel: string;
     support: string;
     supportInbox: string;
+    linkPreviews: string;
     /** `__uuid__` is replaced with the conversation UUID (and `__message__` with a message UUID). */
     conversation: string;
     messages: string;
@@ -106,7 +107,15 @@ export interface ChatConfig {
   };
   prefs: { sound: SoundName; buzz: boolean; presence: boolean };
   isAgent: boolean;
+  /** The application resolves link previews (issue cards …). */
+  linkPreviews: boolean;
   i18n: Record<string, string>;
+}
+
+export interface LinkPreview {
+  title: string;
+  subtitle: string;
+  badge: string;
 }
 
 /** Where a support request comes from ("Report this problem" links). */

@@ -5,8 +5,10 @@ declare(strict_types=1);
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Push\ChatPushDispatcher;
 use Nowo\ChatKitBundle\Push\NullChatPushSender;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
@@ -50,6 +52,7 @@ return static function (ContainerConfigurator $container): void {
 
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);
+    $services->alias(ChatLinkPreviewProviderInterface::class, NullLinkPreviewProvider::class);
     $services->set(NullChatRealtime::class);
     if (interface_exists(HubInterface::class)) {
         $services->alias(ChatRealtimeInterface::class, MercureChatRealtime::class);

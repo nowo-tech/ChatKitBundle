@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Controller;
 
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -13,6 +14,7 @@ use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Http\ChatApiException;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatContact;
+use Nowo\ChatKitBundle\Model\ChatLinkPreview;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
@@ -67,6 +69,7 @@ final class ChatApiController extends AbstractController
         private readonly ChatRecipients $recipients,
         private readonly ChatRealtimeInterface $realtime,
         private readonly ChatSupportInbox $supportInbox,
+        private readonly ChatLinkPreviewProviderInterface $linkPreviews,
         #[Autowire(service: 'limiter.nowo_chat_send')]
         private readonly RateLimiterFactoryInterface $sendLimiter,
         #[Autowire(service: 'limiter.nowo_chat_action')]
@@ -167,6 +170,24 @@ final class ChatApiController extends AbstractController
         $context = $this->payload($request)['context'] ?? null;
 
         return $this->json(['conversation' => $this->present($this->chat->openSupport($user, \is_array($context) ? $context : null), $user)]);
+    }
+
+    /** Previews of the given links for the caller (`?url[]=…`, at most 10; invisible ones are left out). */
+    #[Route('/link-previews', name: 'link_previews', methods: ['GET'])]
+    public function linkPreviews(Request $request): JsonResponse
+    {
+        $user = $this->reader();
+        $urls = [];
+        $given = $request->query->all()['url'] ?? [];
+        foreach (\is_array($given) ? $given : [] as $url) {
+            if (\is_string($url) && \strlen($url) <= 500 && 1 === preg_match('~^(/(?!/)|https?://)~i', $url)) {
+                $urls[$url] = $url;
+            }
+        }
+        $urls = \array_slice(array_values($urls), 0, 10);
+        $previews = [] === $urls ? [] : $this->linkPreviews->previews($user, $urls);
+
+        return $this->json(['previews' => array_map(static fn (ChatLinkPreview $preview): array => $preview->toArray(), array_intersect_key($previews, array_flip($urls)))]);
     }
 
     /** Support agents' inbox (`?status=open|resolved|mine|all&q=`); 404 for everyone else. */

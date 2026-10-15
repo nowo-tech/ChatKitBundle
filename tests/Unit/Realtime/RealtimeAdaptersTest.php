@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Unit\Realtime;
 
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
+use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Model\ChatLinkPreview;
 use Nowo\ChatKitBundle\Push\NullChatPushSender;
 use Nowo\ChatKitBundle\Realtime\ChatPublisher;
 use Nowo\ChatKitBundle\Realtime\ChatTopics;
@@ -39,6 +41,9 @@ final class RealtimeAdaptersTest extends TestCase
         self::assertNull($channels->contextChannel($user, new Request()));
         self::assertFalse($channels->canUse($user, $channel));
         self::assertSame([], $channels->members($channel));
+
+        self::assertSame([], (new NullLinkPreviewProvider())->previews($user, ['/a']));
+        self::assertSame(['title' => 'T', 'subtitle' => '', 'badge' => ''], (new ChatLinkPreview('T'))->toArray());
 
         $called = false;
         (new NullChatPushSender())->send([$user], static function () use (&$called): array {

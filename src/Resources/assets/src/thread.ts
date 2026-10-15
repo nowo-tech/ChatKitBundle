@@ -8,7 +8,7 @@ import { h, prefersReducedMotion, setBadge } from './dom';
 import { emojiPicker, insertAtCaret } from './emoji';
 import { dayLabel, isNewDay, startsGroup, t, timeLabel } from './format';
 import { part, text, type Templates } from './templates';
-import type { ChatConfig, ChatMessage, ConversationSummary, PendingMessage, Reader } from './types';
+import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader } from './types';
 
 export interface ThreadHost {
   config: ChatConfig;
@@ -24,6 +24,8 @@ export interface ThreadHost {
   isMobile(): boolean;
   /** An agent resolved a support thread: refresh its summary everywhere. */
   conversationChanged(summary: ConversationSummary): void;
+  /** Card for a link, as the viewer may see it (null: none). */
+  linkPreview(url: string): Promise<LinkPreview | null>;
 }
 
 const TYPING_SEND_EVERY_MS = 3_000;
@@ -875,7 +877,35 @@ export class ThreadView {
 
     this.renderReactions(article, message);
     this.wireActions(article, message);
+    this.loadPreviews(article, message);
     return article;
+  }
+
+  /** Cards for the links of a message (the application decides what the viewer may see). */
+  private loadPreviews(article: HTMLElement, message: ChatMessage): void {
+    const holder = part(article, 'previews');
+    holder.hidden = true;
+    if (!this.host.config.linkPreviews || message.deleted) {
+      return;
+    }
+    const urls = [...new Set([...part(article, 'bubble').querySelectorAll<HTMLAnchorElement>('a[href]')].map((link) => link.getAttribute('href') ?? ''))].filter((url) => url !== '').slice(0, 3);
+    for (const url of urls) {
+      void this.host.linkPreview(url).then((preview) => {
+        if (preview !== null) {
+          holder.append(this.previewCard(url, preview));
+          holder.hidden = false;
+        }
+      });
+    }
+  }
+
+  private previewCard(url: string, preview: LinkPreview): HTMLElement {
+    const card = this.host.templates.clone<HTMLAnchorElement>('link-preview');
+    card.href = url;
+    text(card, 'title', preview.title);
+    text(card, 'subtitle', preview.subtitle);
+    text(card, 'badge', preview.badge);
+    return card;
   }
 
   private renderReactions(article: HTMLElement, message: ChatMessage): void {

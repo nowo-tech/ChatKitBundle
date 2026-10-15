@@ -43,6 +43,7 @@ function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock
     templates: templates(),
     minimise: vi.fn(), close: vi.fn(), saveDraft: vi.fn(), draft: vi.fn().mockReturnValue('borrador'),
     messagesChanged: vi.fn(), read: vi.fn(), isMobile: vi.fn().mockReturnValue(false), conversationChanged: vi.fn(),
+    linkPreview: vi.fn().mockResolvedValue(null),
   };
   const view = new ThreadView(host, summary(over));
   document.body.append(view.element);
@@ -440,6 +441,30 @@ describe('ThreadView', () => {
     expect(document.activeElement).toBe(support.q('.nowo-chat-window__identity'));
   });
 
+
+  it('shows link previews the application returns, up to three per message', async () => {
+    const links = '<p><a href="/issues/1">a</a> <a href="/issues/2">b</a> <a href="/issues/1">again</a> <a href="/x">c</a> <a href="/y">d</a></p>';
+    const message = msg({ html: links });
+    const gone = msg({ html: '', deleted: true });
+    const { view, host, q } = setup({}, { messages: vi.fn().mockResolvedValue({ messages: [message, gone], hasMore: false, readUpTo: null, readers: [] }) }, { linkPreviews: true });
+    (host.linkPreview as Mock).mockImplementation(async (url: string) => (url === '/issues/1' ? { title: 'Checkout crash', subtitle: 'Acme · error', badge: 'Open' } : null));
+    await view.load();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect((host.linkPreview as Mock).mock.calls.map((call) => call[0])).toEqual(['/issues/1', '/issues/2', '/x']);
+    const card = q<HTMLAnchorElement>('.nowo-chat-preview');
+    expect(card.getAttribute('href')).toBe('/issues/1');
+    expect(card.textContent).toContain('Checkout crash');
+    expect(card.querySelector<HTMLElement>('[data-part="badge"]')?.textContent).toBe('Open');
+    expect(view.element.querySelectorAll('.nowo-chat-preview')).toHaveLength(1);
+    expect(view.element.querySelector<HTMLElement>(`[data-id="${gone.id}"] [data-part="previews"]`)?.hidden).toBe(true);
+  });
+
+  it('asks for no previews when the application has none', async () => {
+    const { view, host } = setup({}, { messages: vi.fn().mockResolvedValue({ messages: [msg({ html: '<p><a href="/x">x</a></p>' })], hasMore: false, readUpTo: null, readers: [] }) });
+    await view.load();
+    expect(host.linkPreview).not.toHaveBeenCalled();
+  });
 
   it('shows where a support request comes from', () => {
     const { q, view } = setup({ kind: 'support', supportStatus: 'open', supportContext: { url: '/projects/x/issues/9', label: 'Issue #9' } });

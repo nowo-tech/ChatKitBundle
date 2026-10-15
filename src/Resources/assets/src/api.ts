@@ -1,5 +1,5 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
-import type { ChatConfig, ChatMessage, Contact, ConversationSummary, Reactions, Reader, SupportContext } from './types';
+import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, Reactions, Reader, SupportContext } from './types';
 
 export class ChatApiError extends Error {
   readonly status: number;
@@ -73,6 +73,13 @@ export class ChatApi {
 
   async react(uuid: string, messageUuid: string, emoji: string): Promise<Reactions> {
     return (await this.post<{ reactions: Reactions }>(this.messageUrl('reactions', uuid, messageUuid), { emoji })).reactions;
+  }
+
+  async linkPreviews(urls: string[]): Promise<Record<string, LinkPreview>> {
+    const query = urls.map((url) => `url[]=${encodeURIComponent(url)}`).join('&');
+    const { previews } = await this.get<{ previews: Record<string, LinkPreview> | unknown[] }>(`${this.config.endpoints.linkPreviews}?${query}`);
+    // PHP encodes an empty map as [].
+    return Array.isArray(previews) ? {} : previews;
   }
 
   async markRead(uuid: string, messageId: number): Promise<void> {

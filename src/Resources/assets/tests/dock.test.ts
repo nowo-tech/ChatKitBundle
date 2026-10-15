@@ -17,6 +17,7 @@ const api = {
   resolve: vi.fn(),
   realtime: vi.fn(),
   presence: vi.fn(),
+  linkPreviews: vi.fn(),
 };
 let realtimeHandlers: { onEvent: (event: RealtimeEvent) => void; onState: (connected: boolean) => void } | null = null;
 const playOnce = vi.fn();
@@ -54,7 +55,7 @@ const i18n: Record<string, string> = {
 };
 
 const config = (over: Partial<ChatConfig> = {}): ChatConfig => ({
-  userUuid: 'me', csrf: 't', locale: 'en', contextChannel: null, pollMs: 4000, maxLength: 4000, editWindowSeconds: 900, reactions: ['👍'],
+  userUuid: 'me', csrf: 't', locale: 'en', contextChannel: null, pollMs: 4000, maxLength: 4000, editWindowSeconds: 900, reactions: ['👍'], linkPreviews: false,
   endpoints: {} as ChatConfig['endpoints'], i18n, prefs: { sound: 'pop', buzz: true, presence: true }, isAgent: false, ...over,
 });
 
@@ -479,6 +480,22 @@ describe('ChatDock', () => {
     await vi.waitFor(() => expect(q('.nowo-chat-launcher .nowo-chat-badge').hidden).toBe(true));
     dock.destroy();
     otherTab.close();
+  });
+
+  it('batches link previews per tick, ten links per request, cached, failures as none', async () => {
+    const { dock } = mount([]);
+    api.linkPreviews.mockImplementation(async (urls: string[]) => Object.fromEntries(urls.filter((url) => url.endsWith('ok')).map((url) => [url, { title: url, subtitle: '', badge: '' }])));
+    const urls = Array.from({ length: 12 }, (_, i) => `/i/${i}${i < 2 ? '/ok' : ''}`);
+    const results = await Promise.all(urls.map((url) => dock.linkPreview(url)));
+    expect(api.linkPreviews).toHaveBeenCalledTimes(2);
+    expect(api.linkPreviews.mock.calls[0]?.[0]).toHaveLength(10);
+    expect(results[0]).toEqual({ title: '/i/0/ok', subtitle: '', badge: '' });
+    expect(results[5]).toBeNull();
+    // Cached: no new request.
+    expect(await dock.linkPreview('/i/0/ok')).toEqual({ title: '/i/0/ok', subtitle: '', badge: '' });
+    expect(api.linkPreviews).toHaveBeenCalledTimes(2);
+    api.linkPreviews.mockRejectedValueOnce(new Error('down'));
+    expect(await dock.linkPreview('/other')).toBeNull();
   });
 
   it('marks online peers from the presence heartbeat', async () => {

@@ -11,6 +11,7 @@ const config = {
     channel: '/channel',
     message: '/conv/__uuid__/messages/__message__',
     reactions: '/conv/__uuid__/messages/__message__/reactions',
+    linkPreviews: '/previews',
     support: '/support',
     conversation: '/conv/__uuid__',
     messages: '/conv/__uuid__/messages',
@@ -65,6 +66,10 @@ describe('chat api client', () => {
     expect(await api.resolve('c')).toEqual({ uuid: 'x' });
     await api.realtime();
     expect(await api.presence(true)).toEqual(['u']);
+    vi.stubGlobal('fetch', respond({ previews: { '/a b': { title: 'A', subtitle: '', badge: '' } } }));
+    expect(await api.linkPreviews(['/a b', '/c'])).toEqual({ '/a b': { title: 'A', subtitle: '', badge: '' } });
+    vi.stubGlobal('fetch', respond({ previews: [] }));
+    expect(await api.linkPreviews(['/z'])).toEqual({});
   });
 
   it('raises a typed error with the server code, or "error" without a body', async () => {

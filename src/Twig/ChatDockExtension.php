@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Twig;
 
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Controller\ChatApiController;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
@@ -46,6 +48,7 @@ final class ChatDockExtension extends AbstractExtension
         private readonly ChatAccess $access,
         private readonly ChatChannelProviderInterface $channels,
         private readonly ChatUserSettingsRepository $settings,
+        private readonly ChatLinkPreviewProviderInterface $linkPreviews,
         private readonly array $reactions = [],
         private readonly int $pollMs = 4000,
         private readonly string $iconSet = 'ux_icon',
@@ -95,6 +98,7 @@ final class ChatDockExtension extends AbstractExtension
                 'channel' => $this->urls->generate('nowo_chat_api_open_channel'),
                 'support' => $this->urls->generate('nowo_chat_api_open_support'),
                 'supportInbox' => $this->urls->generate('nowo_chat_api_support_inbox'),
+                'linkPreviews' => $this->urls->generate('nowo_chat_api_link_previews'),
                 'conversation' => $this->pattern('nowo_chat_api_conversation'),
                 'messages' => $this->pattern('nowo_chat_api_messages'),
                 'message' => $this->pattern('nowo_chat_api_edit', ['messageUuid' => self::PLACEHOLDER], '__message__'),
@@ -112,6 +116,7 @@ final class ChatDockExtension extends AbstractExtension
                 'presence' => $settings->isPresenceVisible(),
             ],
             'isAgent' => $this->access->isSupportAgent($user),
+            'linkPreviews' => !$this->linkPreviews instanceof NullLinkPreviewProvider,
             'i18n' => $this->strings($locale),
         ];
     }

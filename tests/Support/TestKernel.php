@@ -8,6 +8,7 @@ use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
@@ -16,6 +17,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestAccessPolicy;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestLinkPreviewProvider;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
@@ -121,7 +123,7 @@ final class TestKernel extends Kernel
         ));
 
         $services = $container->services()->defaults()->autowire()->public();
-        foreach ([TestDirectory::class, TestAccessPolicy::class, TestChannelProvider::class, RecordingRealtime::class, RecordingPushSender::class] as $class) {
+        foreach ([TestDirectory::class, TestAccessPolicy::class, TestChannelProvider::class, RecordingRealtime::class, RecordingPushSender::class, TestLinkPreviewProvider::class] as $class) {
             $services->set($class);
         }
         $services->alias(ChatDirectoryInterface::class, TestDirectory::class);
@@ -129,6 +131,7 @@ final class TestKernel extends Kernel
         $services->alias(ChatChannelProviderInterface::class, TestChannelProvider::class);
         $services->alias(ChatRealtimeInterface::class, RecordingRealtime::class);
         $services->alias(ChatPushSenderInterface::class, RecordingPushSender::class);
+        $services->alias(ChatLinkPreviewProviderInterface::class, TestLinkPreviewProvider::class);
         $services->alias(self::ASSET_PACKAGES_ALIAS, 'assets.packages');
         $services->alias(self::ENTITY_MANAGER_ALIAS, 'doctrine.orm.entity_manager');
     }

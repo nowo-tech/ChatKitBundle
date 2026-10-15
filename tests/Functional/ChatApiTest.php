@@ -199,6 +199,22 @@ final class ChatApiTest extends DatabaseTestCase
         $this->assertStatus(404, 'strangers cannot open threads with agents either');
     }
 
+    public function testLinkPreviewsPerViewer(): void
+    {
+        $ana = $this->user('Ana');
+        $stranger = $this->user('Stranger Eve');
+        self::assertTrue($this->login($ana)['linkPreviews']);
+
+        $query = '?url[]=/projects/acme/issues/7&url[]=javascript:alert(1)&url[]=//evil.test/x&url[]=https://elsewhere.test/a&url[]=/projects/acme/issues/7';
+        self::assertSame(['/projects/acme/issues/7' => ['title' => 'Acme · 7', 'subtitle' => 'Issue', 'badge' => 'open']], $this->getJson('/chat/api/link-previews'.$query)['previews']);
+        self::assertSame([], $this->getJson('/chat/api/link-previews')['previews']);
+        self::assertSame([], $this->getJson('/chat/api/link-previews?url=/projects/acme/issues/7')['previews'], 'url must be a list');
+        self::assertSame([], $this->getJson('/chat/api/link-previews?url[]='.str_repeat('a', 600))['previews']);
+
+        $this->login($stranger);
+        self::assertSame([], $this->getJson('/chat/api/link-previews'.$query)['previews'], 'nothing the viewer cannot see');
+    }
+
     public function testRateLimitsAndOversizedBodies(): void
     {
         $ana = $this->user('Ana');

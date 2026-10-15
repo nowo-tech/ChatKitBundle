@@ -156,6 +156,7 @@
             <div class="nowo-chat-msg__content">
                 <p class="nowo-chat-msg__author" data-part="author" hidden></p>
                 <div class="nowo-chat-bubble" data-part="bubble"></div>
+                <div class="nowo-chat-previews" data-part="previews" hidden></div>
                 <div class="nowo-chat-reactions" data-part="reactions" role="group" aria-label="Reactions" hidden></div>
                 <span class="nowo-chat-msg__meta">
                     <time data-part="time"></time>
@@ -172,6 +173,13 @@
 
             </div>
         </article>
+    </template>
+        <template data-nowo-chat-template="link-preview">
+        <a class="nowo-chat-preview" target="_blank" rel="noopener">
+            <span class="nowo-chat-preview__badge" data-part="badge" hidden></span>
+            <span class="nowo-chat-preview__title" data-part="title"></span>
+            <span class="nowo-chat-preview__subtitle" data-part="subtitle" hidden></span>
+        </a>
     </template>
         <template data-nowo-chat-template="edit-form">
         <form class="nowo-chat-edit" novalidate>
