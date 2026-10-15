@@ -1364,10 +1364,15 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat-msg--mine .nowo-chat-msg__actions {
   order: -1;
 }
-.nowo-chat-msg:hover .nowo-chat-msg__actions,
 .nowo-chat-msg:focus-within .nowo-chat-msg__actions,
 .nowo-chat-msg.is-active .nowo-chat-msg__actions {
   opacity: 1;
+}
+/* Hover only where there is one (a tap leaves a "sticky" hover on touch screens). */
+@media (hover: hover) {
+  .nowo-chat-msg:hover .nowo-chat-msg__actions {
+    opacity: 1;
+  }
 }
 .nowo-chat-msg__actions .nowo-chat-icon-btn {
   width: 26px;
