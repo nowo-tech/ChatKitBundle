@@ -12,6 +12,7 @@ const config = {
     message: '/conv/__uuid__/messages/__message__',
     reactions: '/conv/__uuid__/messages/__message__/reactions',
     linkPreviews: '/previews',
+    page: '/chat/__uuid__',
     support: '/support',
     conversation: '/conv/__uuid__',
     messages: '/conv/__uuid__/messages',

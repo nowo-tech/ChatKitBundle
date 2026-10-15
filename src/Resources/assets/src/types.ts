@@ -93,6 +93,8 @@ export interface ChatConfig {
     support: string;
     supportInbox: string;
     linkPreviews: string;
+    /** Full-page view of a conversation (`__uuid__`). */
+    page: string;
     /** `__uuid__` is replaced with the conversation UUID (and `__message__` with a message UUID). */
     conversation: string;
     messages: string;

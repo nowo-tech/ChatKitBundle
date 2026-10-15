@@ -38,7 +38,7 @@ function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock
     ...apiOver,
   };
   const host: ThreadHost = {
-    config: { i18n, userUuid: 'me', locale: 'en', maxLength: 50, editWindowSeconds: 900, reactions: ['👍', '🎉'], isAgent: false, ...configOver } as ChatConfig,
+    config: { i18n, endpoints: { page: '/chat/__uuid__' }, userUuid: 'me', locale: 'en', maxLength: 50, editWindowSeconds: 900, reactions: ['👍', '🎉'], isAgent: false, ...configOver } as ChatConfig,
     api: api as unknown as ChatApi,
     templates: templates(),
     minimise: vi.fn(), close: vi.fn(), saveDraft: vi.fn(), draft: vi.fn().mockReturnValue('borrador'),
@@ -98,7 +98,7 @@ describe('ThreadView', () => {
     expect(document.activeElement).toBe(q('.nowo-chat-composer__input'));
 
     q('.nowo-chat-window__identity').click();
-    q<HTMLButtonElement>('.nowo-chat-window__actions .nowo-chat-icon-btn:nth-child(3)').click();
+    q<HTMLButtonElement>('[data-part="minimise"]').click();
     expect(host.minimise).toHaveBeenCalledWith('c1', true);
     view.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
     view.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));

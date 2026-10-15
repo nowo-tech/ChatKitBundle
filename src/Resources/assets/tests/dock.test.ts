@@ -56,7 +56,7 @@ const i18n: Record<string, string> = {
 
 const config = (over: Partial<ChatConfig> = {}): ChatConfig => ({
   userUuid: 'me', csrf: 't', locale: 'en', contextChannel: null, pollMs: 4000, maxLength: 4000, editWindowSeconds: 900, reactions: ['👍'], linkPreviews: false,
-  endpoints: {} as ChatConfig['endpoints'], i18n, prefs: { sound: 'pop', buzz: true, presence: true }, isAgent: false, ...over,
+  endpoints: { page: '/chat/__uuid__' } as ChatConfig['endpoints'], i18n, prefs: { sound: 'pop', buzz: true, presence: true }, isAgent: false, ...over,
 });
 
 const summary = (uuid: string, over: Partial<ConversationSummary> = {}): ConversationSummary => ({
@@ -199,6 +199,7 @@ describe('ChatDock', () => {
     await flush();
     expect(all('.nowo-chat-window')).toHaveLength(1);
     expect(q('.nowo-chat-window').classList.contains('is-entering')).toBe(true);
+    expect(q<HTMLAnchorElement>('.nowo-chat-window__popout').getAttribute('href')).toBe('/chat/a');
     vi.advanceTimersByTime(300);
 
     dock.minimise('a', true);

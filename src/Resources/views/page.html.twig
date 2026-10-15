@@ -1,0 +1,79 @@
+{#
+ # Full-page chat: works without JavaScript (links + form POST). Override in
+ # templates/bundles/NowoChatKitBundle/page.html.twig ({% extends '@!NowoChatKitBundle/page.html.twig' %}).
+ #}
+{% extends layout %}
+{% trans_default_domain 'NowoChatKitBundle' %}
+
+{% block title %}{{ current ? current.title : 'chat.page_title'|trans }}{% endblock %}
+
+{% block body %}
+    <div class="nowo-chat-page{{ current ? ' has-current' }}" data-testid="chat-page">
+        {% block nowo_chat_page_list %}
+            <nav class="nowo-chat-page__list" aria-label="{{ 'chat.launcher'|trans }}">
+                <h1 class="nowo-chat-page__heading">{{ 'chat.page_title'|trans }}</h1>
+                {% if conversations is empty %}
+                    <p class="nowo-chat-page__empty">{{ 'chat.empty_title'|trans }}</p>
+                {% endif %}
+                <ul role="list">
+                    {% for conversation in conversations %}
+                        <li>
+                            <a class="nowo-chat-page__row{{ current and current.uuid == conversation.uuid ? ' is-current' }}{{ conversation.unread > 0 ? ' is-unread' }}" href="{{ path('nowo_chat_page_conversation', {uuid: conversation.uuid}) }}"{% if current and current.uuid == conversation.uuid %} aria-current="page"{% endif %}>
+                                <span class="nowo-chat-page__row-title">{{ conversation.title }}</span>
+                                <span class="nowo-chat-page__row-preview">{{ conversation.lastMessage ? conversation.lastMessage.preview : conversation.subtitle }}</span>
+                                {% if conversation.unread > 0 %}<span class="nowo-chat-badge"><span aria-hidden="true">{{ conversation.unread }}</span><span class="nowo-chat-sr-only">{{ 'chat.unread'|trans({'%count%': conversation.unread}) }}</span></span>{% endif %}
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </nav>
+        {% endblock %}
+        {% block nowo_chat_page_thread %}
+            <section class="nowo-chat-page__thread" aria-label="{{ current ? 'chat.conversation_label'|trans({'%name%': current.title}) : 'chat.page_title'|trans }}">
+                {% if current %}
+                    <header class="nowo-chat-page__header">
+                        <a class="nowo-chat-page__back" href="{{ path('nowo_chat_page') }}">{{ 'chat.back'|trans }}</a>
+                        <h2>{{ current.title }}</h2>
+                        <p>{{ current.subtitle }}</p>
+                    </header>
+                    {% set error = app.request.query.get('error') %}
+                    {% if error in ['read_only', 'rate_limited', 'too_long', 'error'] %}
+                        <p class="nowo-chat-notice" role="alert">{{ ('chat.' ~ error)|trans({'%max%': 4000}) }}</p>
+                    {% endif %}
+                    <ol class="nowo-chat-page__messages" role="list">
+                        {% for message in messages %}
+                            <li class="nowo-chat-msg{{ message.mine ? ' nowo-chat-msg--mine' }}{{ message.kind == 'buzz' ? ' nowo-chat-page__buzz' }}"{% if loop.last %} id="nowo-chat-latest"{% endif %}>
+                                <div class="nowo-chat-msg__content">
+                                    {% if not message.mine %}<p class="nowo-chat-msg__author">{{ message.authorName }}</p>{% endif %}
+                                    {% if message.kind == 'buzz' %}
+                                        <p class="nowo-chat-buzz-line">{{ 'chat.buzz_sent'|trans({'%name%': message.authorName}) }}</p>
+                                    {% elseif message.deleted %}
+                                        <div class="nowo-chat-bubble nowo-chat-bubble--deleted">{{ (message.moderated ? 'chat.moderated_message' : 'chat.deleted_message')|trans }}</div>
+                                    {% else %}
+                                        {# Server-sanitised Markdown render (escape-first, closed tag set). #}
+                                        <div class="nowo-chat-bubble">{{ message.html|raw }}</div>
+                                    {% endif %}
+                                    <span class="nowo-chat-msg__meta"><time datetime="{{ message.createdAt }}">{{ message.createdAt|date('Y-m-d H:i') }}</time>{% if message.edited and not message.deleted %} · {{ 'chat.edited'|trans }}{% endif %}</span>
+                                </div>
+                            </li>
+                        {% else %}
+                            <li class="nowo-chat-page__empty">{{ 'chat.start_chat'|trans }}</li>
+                        {% endfor %}
+                    </ol>
+                    {% if can_send %}
+                        <form class="nowo-chat-page__composer" method="post" action="{{ path('nowo_chat_page_send', {uuid: current.uuid}) }}">
+                            <input type="hidden" name="_token" value="{{ csrf_token(csrf_id) }}">
+                            <label class="nowo-chat-sr-only" for="nowo-chat-page-body">{{ 'chat.composer_placeholder'|trans }}</label>
+                            <textarea id="nowo-chat-page-body" name="body" rows="3" maxlength="4000" required placeholder="{{ 'chat.composer_placeholder'|trans }}"></textarea>
+                            <button type="submit">{{ 'chat.send'|trans }}</button>
+                        </form>
+                    {% else %}
+                        <p class="nowo-chat-notice">{{ 'chat.read_only'|trans }}</p>
+                    {% endif %}
+                {% else %}
+                    <p class="nowo-chat-page__empty">{{ 'chat.page_select'|trans }}</p>
+                {% endif %}
+            </section>
+        {% endblock %}
+    </div>
+{% endblock %}

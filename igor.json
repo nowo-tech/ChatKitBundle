@@ -1,5 +1,6 @@
 {
   "exclude": [
+    "src/Entity",
     "demo",
     "tests",
     "vendor",

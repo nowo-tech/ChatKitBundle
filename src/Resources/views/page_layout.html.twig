@@ -1,0 +1,13 @@
+{# Default layout of the full-page chat: set `page_layout` to your own (it must define `title` and `body` blocks). #}
+<!doctype html>
+<html lang="{{ app.request.locale|default('en') }}">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>{% block title %}{% endblock %}</title>
+        <link rel="stylesheet" href="{{ asset('css/nowo-chat.css', 'nowo_chat_kit') }}">
+    </head>
+    <body>
+        {% block body %}{% endblock %}
+    </body>
+</html>

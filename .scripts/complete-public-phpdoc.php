@@ -19,7 +19,7 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($srcDir)) 
     }
 
     $updated = preg_replace_callback(
-        '#(/\*\*(?:(?!\*/).)*?\*/)\s*public\s+(?:static\s+)?function\s+\w+\s*\([^)]*\)\s*:\s*([^\s{]+)#s',
+        '#(/\*\*(?:(?!\*/).)*?\*/)\s*public\s+(?:static\s+)?function\s+\w+\s*\([^)]*\)\s*:\s*([^\s{;]+)#s',
         static function (array $matches): string {
             $doc = $matches[1];
             $returnType = $matches[2];

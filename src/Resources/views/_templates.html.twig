@@ -143,6 +143,7 @@
                 </button>
                 <span class="nowo-chat-window__actions">
                     {{ ui.icon_button('check', 'chat.resolve'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'resolve', 'nowo-chat-window__resolve') }}
+                    <a class="nowo-chat-icon-btn nowo-chat-window__popout" data-part="popout" aria-label="{{ 'chat.popout'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" title="{{ 'chat.popout'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}"><span data-icon="external"></span></a>
                     {{ ui.icon_button('buzz', 'chat.buzz'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'buzz', 'nowo-chat-window__buzz') }}
                     {{ ui.icon_button('chevronDown', 'chat.minimise'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'minimise') }}
                     {{ ui.icon_button('close', 'chat.close'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'close') }}

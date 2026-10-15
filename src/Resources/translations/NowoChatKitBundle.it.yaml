@@ -98,3 +98,6 @@ chat:
   save: 'Salva'
   cancel: 'Annulla'
   reported_from: 'Segnalato da'
+  page_title: 'Messaggi'
+  page_select: 'Scegli una conversazione.'
+  popout: 'Apri in una pagina'

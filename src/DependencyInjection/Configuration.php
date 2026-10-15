@@ -42,6 +42,7 @@ final class Configuration implements ConfigurationInterface
         'edit' => 'tabler:pencil',
         'trash' => 'tabler:trash',
         'link' => 'tabler:link',
+        'external' => 'tabler:external-link',
     ];
 
     /**
@@ -110,6 +111,11 @@ final class Configuration implements ConfigurationInterface
                                         ->defaultValue(60)->min(1)
                                     ->end()
                                 ->end()
+                            ->end()
+                            ->scalarNode('page_layout')
+                                ->info('Layout the full-page chat (/chat) extends; it must define the `title` and `body` blocks.')
+                                ->defaultValue('@NowoChatKitBundle/page_layout.html.twig')
+                                ->cannotBeEmpty()
                             ->end()
                             ->scalarNode('cache_pool')
                                 ->info('PSR-6 pool for presence and recipient lists (shared between workers, e.g. Redis).')

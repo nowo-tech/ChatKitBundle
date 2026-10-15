@@ -86,6 +86,7 @@ export class ThreadView {
 
     this.element = host.templates.clone('window');
     this.element.dataset.uuid = summary.uuid;
+    part<HTMLAnchorElement>(this.element, 'popout').href = host.config.endpoints.page.replace('__uuid__', encodeURIComponent(summary.uuid));
     this.identity = part<HTMLButtonElement>(this.element, 'identity');
     this.badge = part(this.element, 'badge');
     this.minimiseBtn = part<HTMLButtonElement>(this.element, 'minimise');

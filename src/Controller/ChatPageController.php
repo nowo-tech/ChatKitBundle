@@ -1,0 +1,163 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nowo\ChatKitBundle\Controller;
+
+use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Entity\ChatConversation;
+use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
+use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Security\ChatAccess;
+use Nowo\ChatKitBundle\Security\ChatVoter;
+use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatService;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\RedirectResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
+use Symfony\Component\Routing\Attribute\Route;
+
+/**
+ * Full-page chat (`/chat`, `/chat/{uuid}`): the dock's "open in a page", the small-screen view and the no-JS
+ * fallback — server-rendered list and thread, plain form POST + redirect (PRG). Same permissions as the API.
+ */
+final class ChatPageController extends AbstractController
+{
+    public const string CSRF_ID = 'nowo_chat_page';
+    private const int LIST_LIMIT = 50;
+    private const int PAGE_SIZE = 50;
+
+    public function __construct(
+        private readonly ChatService $chat,
+        private readonly ChatPresenter $presenter,
+        private readonly ChatAccess $access,
+        private readonly ChatChannelProviderInterface $channels,
+        private readonly ChatConversationRepository $conversations,
+        private readonly ChatMessageRepository $messages,
+        #[Autowire(service: 'limiter.nowo_chat_send')]
+        private readonly RateLimiterFactoryInterface $sendLimiter,
+        #[Autowire(param: 'nowo_chat_kit.page_layout')]
+        private readonly string $layout = '@NowoChatKitBundle/page_layout.html.twig',
+    ) {
+    }
+
+    #[Route('', name: 'nowo_chat_page', methods: ['GET'])]
+    public function index(): Response
+    {
+        $user = $this->chatUser();
+
+        return $this->render('@NowoChatKitBundle/page.html.twig', $this->context($user, null));
+    }
+
+    #[Route('/{uuid}', name: 'nowo_chat_page_conversation', requirements: ['uuid' => ChatApiController::UUID], methods: ['GET'])]
+    public function conversation(string $uuid): Response
+    {
+        $user = $this->chatUser();
+        $conversation = $this->find($uuid);
+        $page = $this->messages->findPage($conversation, self::PAGE_SIZE);
+        $last = end($page);
+        if ($last instanceof ChatMessage) {
+            $this->chat->markRead($user, $conversation, (int) $last->getId());
+        }
+
+        return $this->render('@NowoChatKitBundle/page.html.twig', [
+            'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $page),
+            'can_send' => $this->isGranted(ChatVoter::SEND, $conversation),
+        ] + $this->context($user, $conversation));
+    }
+
+    #[Route('/{uuid}', name: 'nowo_chat_page_send', requirements: ['uuid' => ChatApiController::UUID], methods: ['POST'])]
+    public function send(string $uuid, Request $request): RedirectResponse
+    {
+        $user = $this->chatUser();
+        $conversation = $this->find($uuid);
+        $error = null;
+        if (!$this->isCsrfTokenValid(self::CSRF_ID, (string) $request->request->get('_token'))) {
+            $error = 'error';
+        } elseif (!$this->isGranted(ChatVoter::SEND, $conversation)) {
+            $error = 'read_only';
+        } elseif (!$this->sendLimiter->create('nowo_chat_send_'.$user->getChatPublicId())->consume()->isAccepted()) {
+            $error = 'rate_limited';
+        } else {
+            try {
+                $this->chat->send($user, $conversation, (string) $request->request->get('body', ''));
+            } catch (\InvalidArgumentException $exception) {
+                $error = 'too_long' === $exception->getMessage() ? 'too_long' : 'error';
+            }
+        }
+
+        return $this->redirectToRoute('nowo_chat_page_conversation', ['uuid' => $uuid, 'error' => $error, '_fragment' => 'nowo-chat-latest'], Response::HTTP_SEE_OTHER);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function context(ChatUserInterface $user, ?ChatConversation $current): array
+    {
+        $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
+        $list = $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT);
+        $ids = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $latest = $this->messages->findLatestByConversationIds($ids);
+        $rows = [];
+        foreach ($list as $conversation) {
+            $id = (int) $conversation->getId();
+            if ($conversation->isDirect() && !isset($latest[$id]) && $conversation !== $current) {
+                continue;
+            }
+            $rows[] = $this->summary($conversation, $user, $unread[$id] ?? 0, $latest[$id] ?? null);
+        }
+
+        return [
+            'layout' => $this->layout,
+            'conversations' => $rows,
+            'current' => $current instanceof ChatConversation ? $this->summary($current, $user) : null,
+            'messages' => [],
+            'can_send' => false,
+            'csrf_id' => self::CSRF_ID,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function summary(ChatConversation $conversation, ChatUserInterface $user, int $unread = 0, ?ChatMessage $last = null): array
+    {
+        return $this->presenter->conversation(
+            $conversation,
+            $user,
+            $this->access->directPeer($conversation, $user),
+            $conversation->isChannel() ? $this->access->channel((string) $conversation->getChannelKey()) : null,
+            $this->isGranted(ChatVoter::SEND, $conversation),
+            $unread,
+            $last,
+            $this->access->isSupportAgent($user),
+        );
+    }
+
+    private function chatUser(): ChatUserInterface
+    {
+        $user = $this->getUser();
+        if (!$user instanceof ChatUserInterface || !$this->access->isReachable($user)) {
+            throw $this->createAccessDeniedException();
+        }
+
+        return $user;
+    }
+
+    private function find(string $uuid): ChatConversation
+    {
+        $conversation = $this->conversations->findOneByUuid($uuid);
+        if (!$conversation instanceof ChatConversation || !$this->isGranted(ChatVoter::VIEW, $conversation)) {
+            throw $this->createNotFoundException();
+        }
+
+        return $conversation;
+    }
+}

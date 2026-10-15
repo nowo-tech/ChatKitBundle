@@ -98,3 +98,6 @@ chat:
   save: 'Enregistrer'
   cancel: 'Annuler'
   reported_from: 'Signalé depuis'
+  page_title: 'Messages'
+  page_select: 'Choisissez une conversation.'
+  popout: 'Ouvrir dans une page'

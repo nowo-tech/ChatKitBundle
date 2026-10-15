@@ -98,3 +98,6 @@ chat:
   save: 'Opslaan'
   cancel: 'Annuleren'
   reported_from: 'Gemeld vanaf'
+  page_title: 'Berichten'
+  page_select: 'Kies een gesprek.'
+  popout: 'Openen in een pagina'
