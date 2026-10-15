@@ -36,6 +36,7 @@ final class RealtimeAdaptersTest extends TestCase
         $channel = new ChatChannel('k', 'K');
         self::assertSame([], $channels->channelsFor($user));
         self::assertNull($channels->find('k'));
+        self::assertNull($channels->contextChannel($user, new Request()));
         self::assertFalse($channels->canUse($user, $channel));
         self::assertSame([], $channels->members($channel));
 

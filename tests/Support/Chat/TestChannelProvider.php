@@ -9,6 +9,7 @@ use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * One channel, `project:acme` ("Acme"), for everyone except names starting with "Stranger".
@@ -32,6 +33,12 @@ final readonly class TestChannelProvider implements ChatChannelProviderInterface
     public function find(string $key): ?ChatChannel
     {
         return self::KEY === $key ? new ChatChannel(self::KEY, 'Acme') : null;
+    }
+
+    /** Pages under /projects/acme offer the channel. */
+    public function contextChannel(ChatUserInterface $user, Request $request): ?ChatChannel
+    {
+        return str_starts_with($request->getPathInfo(), '/projects/acme') ? $this->find(self::KEY) : null;
     }
 
     public function canUse(ChatUserInterface $user, ChatChannel $channel): bool

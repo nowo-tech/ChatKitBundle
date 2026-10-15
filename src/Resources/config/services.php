@@ -15,6 +15,7 @@ use Nowo\ChatKitBundle\Realtime\ChatRecipients;
 use Nowo\ChatKitBundle\Realtime\MercureChatRealtime;
 use Nowo\ChatKitBundle\Realtime\NullChatRealtime;
 use Nowo\ChatKitBundle\Service\ChatService;
+use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 
 use function Symfony\Component\DependencyInjection\Loader\Configurator\param;
@@ -40,6 +41,7 @@ return static function (ContainerConfigurator $container): void {
             '../../NowoChatKitBundle.php',
             '../../Repository',
             '../../Push/DeliverChatPushMessage.php',
+            '../../Http/ChatApiException.php',
             '../../Realtime/ChatTopics.php',
         ]);
     $services->load('Nowo\\ChatKitBundle\\Repository\\', '../../Repository/')
@@ -68,6 +70,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$pushEnabled', param('nowo_chat_kit.push'))
         ->arg('$bus', interface_exists(MessageBusInterface::class) ? service('messenger.default_bus')->nullOnInvalid() : null);
     $services->get(ChatService::class)
+        ->arg('$reactions', param('nowo_chat_kit.reactions'));
+    $services->get(ChatDockExtension::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'));
     $services->get(ChatPurgeCommand::class)
         ->arg('$retentionDays', param('nowo_chat_kit.retention_days'));

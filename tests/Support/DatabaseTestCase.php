@@ -8,6 +8,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\TestCase;
+use Psr\Cache\CacheItemPoolInterface;
 
 /**
  * Boots the test kernel on in-memory SQLite with the full schema (bundle entities + test user).
@@ -26,6 +27,9 @@ abstract class DatabaseTestCase extends TestCase
         \assert($em instanceof EntityManagerInterface);
         $this->em = $em;
         (new SchemaTool($em))->createSchema($em->getMetadataFactory()->getAllMetadata());
+        $cache = $this->kernel->getContainer()->get('cache.app');
+        \assert($cache instanceof CacheItemPoolInterface);
+        $cache->clear();
     }
 
     /**

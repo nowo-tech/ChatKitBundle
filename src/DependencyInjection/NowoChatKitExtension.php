@@ -37,11 +37,27 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      */
     public function prepend(ContainerBuilder $container): void
     {
-        $this->prependDoctrine($container);
+        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>}>} $config */
+        $config = (new Processor())->processConfiguration(new Configuration(), $container->getExtensionConfig(Configuration::ALIAS) ?: [[]]);
+        $profile = $config['profiles'][$config['default_profile']];
+        $this->prependDoctrine($container, $config['default_profile'], $profile['user_class']);
 
         if (!$container->hasExtension('framework')) {
             return;
         }
+
+        $limits = $profile['limits'];
+        $limiter = static fn (int $limit, string $interval): array => ['policy' => 'sliding_window', 'limit' => $limit, 'interval' => $interval];
+        $container->prependExtensionConfig('framework', [
+            'rate_limiter' => [
+                'nowo_chat_send' => $limiter($limits['send_per_minute'], '1 minute'),
+                'nowo_chat_action' => $limiter($limits['actions_per_minute'], '1 minute'),
+                'nowo_chat_typing' => $limiter($limits['typing_per_minute'], '1 minute'),
+                'nowo_chat_read' => $limiter($limits['reads_per_minute'], '1 minute'),
+                'nowo_chat_buzz' => $limiter(1, $limits['buzz_interval_seconds'].' seconds'),
+                'nowo_chat_buzz_global' => $limiter($limits['buzz_per_minute'], '1 minute'),
+            ],
+        ]);
 
         $container->prependExtensionConfig('framework', [
             'assets' => [
@@ -80,17 +96,13 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     /**
      * Entity mapping plus `resolve_target_entities` (ChatUserInterface → default profile `user_class`).
      */
-    private function prependDoctrine(ContainerBuilder $container): void
+    private function prependDoctrine(ContainerBuilder $container, string $profileName, ?string $userClass): void
     {
         if (!$container->hasExtension('doctrine')) {
             return;
         }
-
-        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string}>} $config */
-        $config = (new Processor())->processConfiguration(new Configuration(), $container->getExtensionConfig(Configuration::ALIAS) ?: [[]]);
-        $userClass = $config['profiles'][$config['default_profile']]['user_class'] ?? null;
-        if (!\is_string($userClass) || '' === $userClass) {
-            throw new \InvalidArgumentException(\sprintf('The "nowo_chat_kit.profiles.%s.user_class" configuration value is required.', $config['default_profile']));
+        if (null === $userClass || '' === $userClass) {
+            throw new \InvalidArgumentException(\sprintf('The "nowo_chat_kit.profiles.%s.user_class" configuration value is required.', $profileName));
         }
 
         $container->prependExtensionConfig('doctrine', [

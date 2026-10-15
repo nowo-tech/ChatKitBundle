@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle;
 
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\RealtimeTransportPass;
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
@@ -25,6 +26,7 @@ final class NowoChatKitBundle extends Bundle
     {
         parent::build($container);
         $container->addCompilerPass(new RealtimeTransportPass());
+        $container->addCompilerPass(new TwigPathsPass());
     }
 
     /**

@@ -1,0 +1,14 @@
+{#
+ # NowoChatKitBundle floating dock. Include it once in the base layout of signed-in pages:
+ #     {{ include('@NowoChatKitBundle/dock.html.twig') }}
+ # Guests and unreachable accounts get nothing. Override any block, or the whole file in
+ # templates/bundles/NowoChatKitBundle/dock.html.twig.
+ #}
+{% set nowo_chat_config = nowo_chat_dock_config() %}
+{% if nowo_chat_config %}
+    {% block nowo_chat_root %}
+        <div class="nowo-chat" data-nowo-chat-config="{{ nowo_chat_config|json_encode|e('html_attr') }}" data-testid="chat-dock">
+            {% block nowo_chat_templates %}{% endblock %}
+        </div>
+    {% endblock %}
+{% endif %}

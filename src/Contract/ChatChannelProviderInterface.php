@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Contract;
 
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Group conversations defined by the application (e.g. one channel per project). Optional: the default
@@ -21,6 +22,12 @@ interface ChatChannelProviderInterface
     public function channelsFor(ChatUserInterface $user): array;
 
     public function find(string $key): ?ChatChannel;
+
+    /**
+     * The channel of the page being viewed (e.g. the project page), offered as a shortcut in the people
+     * picker; null when the page has none.
+     */
+    public function contextChannel(ChatUserInterface $user, Request $request): ?ChatChannel;
 
     public function canUse(ChatUserInterface $user, ChatChannel $channel): bool;
 
