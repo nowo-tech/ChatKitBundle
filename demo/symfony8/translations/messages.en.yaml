@@ -3,25 +3,28 @@ demo:
   brand: 'Chat Kit'
   heading: 'Chat Kit Bundle'
   lead: 'Floating LinkedIn-style chat for Symfony: direct messages, channels and a support inbox.'
-  body: 'Skeleton demo: the bundle is installed and configured (default profile: %profile%). The floating dock is added in the next iterations.'
+  body: 'The bundle is installed with the default profile (%profile%). Sign in and open the floating dock at the bottom right.'
   language: Language
   logout: 'Sign out'
-  planned:
-    title: 'Planned features'
+  features:
+    title: 'What you can try'
     dms: 'Direct messages between users'
-    channels: 'Project / room channels'
-    support: 'Support inbox for agents'
-    realtime: 'Realtime delivery via Mercure'
+    channels: 'A "General" channel shared by everyone'
+    support: 'A support inbox answered by the support account'
+    realtime: 'Live delivery with Mercure, or polling without it'
     presence: 'Presence, typing indicators and read receipts'
-    buzz: 'Buzz, configurable sounds and emoji'
-    push: 'Web Push when the app is not open'
+    buzz: 'Buzz, sounds, reactions and Markdown'
+    page: 'A full-page view (/chat/) that also works without JavaScript'
     theming: 'Customizable Twig <template> markup and --nowo-chat-* CSS tokens'
-  status:
-    title: 'Browser entry'
-    body: 'The bundle TypeScript entry is compiled by Vite; example theme token:'
+  try:
+    title: 'Try it'
+    guest: 'Sign in as alice, bob, carol or support (password “password”), ideally in two browsers.'
+    signed_in: 'The dock is at the bottom right. You can also open:'
+    page: 'Full-page chat'
+    support: 'Contact support'
   login:
     nav: 'Sign in'
-    hint: 'In-memory users alice, bob and support — password “password”.'
+    hint: 'Seeded accounts alice, bob, carol and support — password “password”.'
     username: Username
     password: Password
     submit: 'Sign in'

@@ -3,25 +3,28 @@ demo:
   brand: 'Chat Kit'
   heading: 'Chat Kit Bundle'
   lead: 'Chat flotante estilo LinkedIn para Symfony: mensajes directos, canales y bandeja de soporte.'
-  body: 'Demo esqueleto: el bundle está instalado y configurado (perfil por defecto: %profile%). El dock flotante se añade en las siguientes iteraciones.'
+  body: 'El bundle está instalado con el perfil por defecto (%profile%). Inicia sesión y abre el dock flotante abajo a la derecha.'
   language: Idioma
   logout: 'Cerrar sesión'
-  planned:
-    title: 'Funcionalidades previstas'
+  features:
+    title: 'Qué puedes probar'
     dms: 'Mensajes directos entre usuarios'
-    channels: 'Canales de proyecto / sala'
-    support: 'Bandeja de soporte para agentes'
-    realtime: 'Entrega en tiempo real con Mercure'
+    channels: 'Un canal "General" compartido por todos'
+    support: 'Una bandeja de soporte que atiende la cuenta support'
+    realtime: 'Entrega en vivo con Mercure, o sondeo sin él'
     presence: 'Presencia, indicador de escritura y confirmaciones de lectura'
-    buzz: 'Zumbido, sonidos configurables y emoji'
-    push: 'Web Push cuando la aplicación no está abierta'
-    theming: 'Marcado Twig <template> personalizable y tokens CSS --nowo-chat-*'
-  status:
-    title: 'Entrada del navegador'
-    body: 'Vite compila la entrada TypeScript del bundle; token de tema de ejemplo:'
+    buzz: 'Zumbido, sonidos, reacciones y Markdown'
+    page: 'Una vista a página completa (/chat/) que funciona también sin JavaScript'
+    theming: 'Plantillas Twig <template> y tokens CSS --nowo-chat-* personalizables'
+  try:
+    title: 'Pruébalo'
+    guest: 'Inicia sesión como alice, bob, carol o support (contraseña «password»), mejor en dos navegadores.'
+    signed_in: 'El dock está abajo a la derecha. También puedes abrir:'
+    page: 'Chat a página completa'
+    support: 'Contactar con soporte'
   login:
     nav: 'Iniciar sesión'
-    hint: 'Usuarios en memoria alice, bob y support — contraseña «password».'
+    hint: 'Cuentas de ejemplo alice, bob, carol y support — contraseña «password».'
     username: Usuario
     password: Contraseña
     submit: 'Iniciar sesión'

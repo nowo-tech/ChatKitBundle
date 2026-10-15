@@ -79,6 +79,7 @@ assets: ensure-up
 setup-db: ensure-up
 	@$(call dc,exec -T php php bin/console doctrine:database:create --if-not-exists --no-interaction) || true
 	@$(call dc,exec -T php php bin/console doctrine:schema:update --force --no-interaction) || true
+	@$(call dc,exec -T php php bin/console app:demo:seed --no-interaction)
 
 shell: ensure-up
 	@$(call dc,exec php sh)

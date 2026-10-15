@@ -1,10 +1,6 @@
 /**
  * Demo app entry (Pentatrion Vite + TypeScript).
- * Compiles the NowoChatKitBundle browser entry from the mounted bundle sources.
+ * The chat dock ships its own script (`js/nowo-chat.js`, loaded by the dock template); applications that bundle
+ * their assets can instead import `mount` from the bundle sources (see the bundle's USAGE.md).
  */
-import { cssToken } from '@bundle/src/index.ts';
-
-const el = document.getElementById('nowo-chat-token');
-if (el instanceof HTMLElement) {
-  el.textContent = cssToken('accent');
-}
+document.documentElement.dataset.demo = 'chat-kit';

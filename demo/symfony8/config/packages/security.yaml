@@ -1,20 +1,19 @@
 security:
     password_hashers:
+        # Demo only: plain-text passwords for the seeded accounts (app:demo:seed).
         Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: plaintext
     providers:
-        users_in_memory:
-            memory:
-                users:
-                    alice: { password: 'password', roles: ['ROLE_USER'] }
-                    bob: { password: 'password', roles: ['ROLE_USER'] }
-                    support: { password: 'password', roles: ['ROLE_USER', 'ROLE_SUPPORT'] }
+        demo_users:
+            entity:
+                class: App\Entity\User
+                property: username
     firewalls:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
         main:
             lazy: true
-            provider: users_in_memory
+            provider: demo_users
             form_login:
                 login_path: demo_login
                 check_path: demo_login

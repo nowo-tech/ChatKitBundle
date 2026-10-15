@@ -4,5 +4,6 @@ nowo_chat_kit:
     profiles:
         default:
             enabled: true
-        support:
-            enabled: true
+            user_class: App\Entity\User
+            # The full-page chat (/chat/) renders inside the demo layout.
+            page_layout: base.html.twig

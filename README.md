@@ -20,6 +20,9 @@ This bundle is **FrankenPHP worker mode friendly**. See [docs/FRANKENPHP-WORKER-
 - **Realtime** through **Mercure** (FrankenPHP's built-in hub or standalone) with private per-user topics — polling fallback when it is off
 - **Presence** (online dot, reciprocal opt-out), **typing** indicator and **read receipts** (✓✓ / "Seen by")
 - **Edit and delete** your own messages within 15 minutes, **emoji reactions**, **buzz**, configurable **sounds**, **emoji picker**, light **Markdown** (sanitised on the server)
+- **Support inbox page data**, "report a problem" links with context (`data-nowo-chat-open`), moderation events
+- **Full-page chat** (`/chat/`) that also works without JavaScript; "open in a page" from every window
+- **Link previews** of your own pages (checked per viewer) and an optional **email digest** of unread conversations
 - **Web Push** only when the application is not open in any tab (your push stack, through one interface)
 - LinkedIn-style **floating dock**: windows that survive navigation and stay in step across browser tabs; full-screen sheet on phones
 - **Customisable markup**: every piece of the UI is a Twig `<template>` the TypeScript clones — override any block
@@ -88,7 +91,10 @@ make -C demo up
 # Demo started at: http://localhost:8147
 ```
 
-See [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md).
+`make -C demo/symfony8 setup-db` seeds the accounts **alice**, **bob**, **carol** and **support** (password
+`password`); sign in with two of them in two browsers. See [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md).
+
+![The chat dock in the demo: the conversation list and an open conversation](docs/images/demo/overview.webp)
 
 ## Documentation
 

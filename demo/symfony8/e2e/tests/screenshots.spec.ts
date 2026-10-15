@@ -3,12 +3,8 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
- * REQ-DEMO-013 — crop to the demo use-case panel that hosts the product UI
- * (title / form / widget in situ). Not a naked control; not full-page chrome
- * (site nav, “back to demos”, profiler).
- *
- * Prefer locator.screenshot() on that panel.
- * Skip this file entirely for packages with no distinctive UI.
+ * REQ-DEMO-013 — the chat dock in situ: the list and an open conversation over the demo page (the dock is
+ * fixed to the viewport, so the viewport is the use-case panel; the Symfony toolbar is hidden).
  */
 const outDir = process.env.SCREENSHOT_DIR
   ? resolve(process.env.SCREENSHOT_DIR)
@@ -19,11 +15,16 @@ test.beforeAll(() => {
 });
 
 test.describe('feature screenshots', () => {
-  test('overview — use-case panel', async ({ page }) => {
-    await page.goto('/');
-    // Chat Kit skeleton: the planned-features card. Switch to the dock once it ships.
-    const panel = page.locator('[data-screenshot-target], .demo-page-card, main .card, form').first();
-    await expect(panel).toBeVisible();
-    await panel.screenshot({ path: resolve(outDir, 'overview.png') });
+  test('overview — dock with an open conversation', async ({ page }) => {
+    await page.goto('/en/login');
+    await page.getByLabel('Username').fill('alice');
+    await page.getByLabel('Password').fill('password');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.addStyleTag({ content: '.sf-toolbar { display: none !important; } .nowo-chat { bottom: 0 !important; }' });
+    await page.locator('.nowo-chat-launcher').click();
+    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    await expect(page.locator('.nowo-chat-window', { hasText: 'Bob Lee' })).toBeVisible();
+    await page.waitForTimeout(400); // window entrance animation
+    await page.screenshot({ path: resolve(outDir, 'overview.png') });
   });
 });

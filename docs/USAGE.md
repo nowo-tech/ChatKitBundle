@@ -5,6 +5,12 @@
 - [How it fits together](#how-it-fits-together)
 - [Contracts](#contracts)
 - [Conversations and permissions](#conversations-and-permissions)
+- [Opening conversations from your pages](#opening-conversations-from-your-pages)
+- [Support inbox](#support-inbox)
+- [Full-page chat](#full-page-chat)
+- [Events](#events)
+- [Link previews](#link-previews)
+- [Email digest](#email-digest)
 - [Customising the markup](#customising-the-markup)
 - [Theme tokens](#theme-tokens)
 - [Translations](#translations)
@@ -72,6 +78,22 @@ public function send(array $recipients, callable $payloadFor): void; // $payload
 
 The bundle has already chosen the recipients; deliver to their push subscriptions.
 
+### `ChatLinkPreviewProviderInterface` (optional)
+
+```php
+public function previews(ChatUserInterface $viewer, array $urls): array; // url => ChatLinkPreview($title, $subtitle, $badge)
+```
+
+See [Link previews](#link-previews).
+
+### `ChatDigestSenderInterface` (optional)
+
+```php
+public function send(ChatUserInterface $user, array $items): void; // list<ChatDigestItem($title, $unread, $preview, $url)>
+```
+
+See [Email digest](#email-digest).
+
 ## Conversations and permissions
 
 | Kind | Who | Notes |
@@ -85,6 +107,73 @@ edits or deletes within 15 minutes (tombstone kept); agents delete in channels a
 configured emojis. Buzz: direct conversations only, rate limited.
 
 Unknown or foreign UUIDs answer 404 (never 403); every response is `Cache-Control: no-store`.
+
+## Opening conversations from your pages
+
+Any element with `data-nowo-chat-open` opens a conversation in the dock when clicked:
+
+```twig
+<a href="#" data-nowo-chat-open="support"
+   data-nowo-chat-context-url="{{ app.request.uri }}" data-nowo-chat-context-label="Invoice #42">Report a problem</a>
+<a href="#" data-nowo-chat-open="user:{{ colleague.chatPublicId }}">Message</a>
+<a href="#" data-nowo-chat-open="channel:project:{{ project.uuid }}">Project chat</a>
+```
+
+`support` opens (or creates) the user's support thread; the optional context (`url`, `label`) is stored on the thread and
+shown to the agents as a "Reported from" banner.
+
+## Support inbox
+
+Support agents (`ChatAccessPolicyInterface::isSupportAgent()`) see every support thread in the dock. For an inbox page of
+your own, `GET /api/support/inbox?status=open|resolved|mine|all&q=` returns the threads (each with its `owner`) and the
+`open` count; `ChatSupportInbox` gives the same data in PHP (e.g. a menu counter: `countOpen()`). Agents resolve threads;
+a new message from the owner reopens them.
+
+## Full-page chat
+
+`/chat/` (route `nowo_chat_page`) and `/chat/{uuid}` (`nowo_chat_page_conversation`) render the list and one thread on
+the server: a plain form posts the message and redirects back (works without JavaScript, same permissions, CSRF and
+rate limit as the API). Every dock window has an "Open in a page" link to it. The page extends `page_layout` (default: a
+minimal standalone layout); set it to your own layout, which must define the `title` and `body` blocks:
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            page_layout: base.html.twig
+```
+
+Override `@NowoChatKitBundle/page.html.twig` (blocks `nowo_chat_page_list`, `nowo_chat_page_thread`) to change the
+markup. With the route prefix `/chat`, the list lives at `/chat/` (Symfony redirects `/chat` there).
+
+## Events
+
+| Event | When | Typical use |
+| --- | --- | --- |
+| `ChatMessageSentEvent` | a message or buzz was stored and published | counters, bots, audit |
+| `ChatMessageDeletedEvent` | a message was deleted; `moderated` when an agent removed someone else's | audit moderation |
+| `ChatSupportStatusChangedEvent` | a support thread was resolved (`by` = agent) or reopened (`by` = owner) | inbox counters, notifications |
+
+## Link previews
+
+Messages that contain links to your application (absolute or root-relative URLs) can show a small card. The dock asks
+`GET /api/link-previews?url[]=…` (at most 10 URLs per request, batched and cached per page) and your
+`ChatLinkPreviewProviderInterface` answers **for the viewer**: leave out any URL the viewer may not see, so a preview
+never leaks a title. The default provider returns nothing (no cards).
+
+## Email digest
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            digest: { enabled: true, delay_minutes: 15, interval_minutes: 60 }
+```
+
+Each new message schedules (through Messenger, with a delay) one check per recipient. When it runs, conversations still
+unread are collected and passed to your `ChatDigestSenderInterface` — unless the user has the application open, opted out
+(`ChatUserSettings::setEmailDigest(false)`) or got a digest less than `interval_minutes` ago. You send the email with your
+own mailer and templates. Route `SendChatDigestMessage` to an async transport.
 
 ## Customising the markup
 
@@ -160,7 +249,7 @@ import { mount, unmount } from '../vendor/nowo-tech/chat-kit-bundle/src/Resource
 
 ## User settings
 
-Per-user settings live in the bundle (`ChatUserSettings`: sound, push, buzzes, presence). Read / save them with
+Per-user settings live in the bundle (`ChatUserSettings`: sound, push, buzzes, presence, email digest). Read / save them with
 `ChatUserSettingsRepository::forUser($user)` (unsaved defaults until changed) from your account page. Hiding presence
 is reciprocal; call `ChatPresence::forget($user)` to hide it at once.
 

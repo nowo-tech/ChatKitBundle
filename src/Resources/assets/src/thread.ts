@@ -1098,6 +1098,8 @@ export class ThreadView {
  * (paragraphs and line breaks become newlines; the Markdown markers are not recovered).
  */
 export function plain(html: string, lines = false): string {
-  const doc = new DOMParser().parseFromString(lines ? html.replace(/<br\s*\/?>/g, '\n').replace(/<\/(p|li|pre)>/g, '\n') : html, 'text/html');
-  return (doc.body.textContent ?? '').replace(/\n{3,}/g, '\n\n').trim();
+  const doc = new DOMParser().parseFromString(html.replace(/<br\s*\/?>/g, '\n').replace(/<\/(p|li|pre)>/g, '\n'), 'text/html');
+  const text = doc.body.textContent ?? '';
+  // One line for previews: block boundaries become spaces ("supports:\n- dms" → "supports: dms").
+  return (lines ? text.replace(/\n{3,}/g, '\n\n') : text.replace(/\s+/g, ' ')).trim();
 }

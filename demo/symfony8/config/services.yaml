@@ -9,3 +9,7 @@ services:
         resource: '../src/'
         exclude:
             - '../src/Kernel.php'
+
+    Nowo\ChatKitBundle\Contract\ChatDirectoryInterface: '@App\Chat\DemoChatDirectory'
+    Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface: '@App\Chat\DemoChatAccessPolicy'
+    Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface: '@App\Chat\DemoChannelProvider'

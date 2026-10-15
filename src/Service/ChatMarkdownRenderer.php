@@ -91,7 +91,7 @@ final class ChatMarkdownRenderer
     /** Plain text for previews, push bodies and email digests (no Markdown markers, collapsed whitespace). */
     public function plainText(string $markdown, int $maxLength = 120): string
     {
-        $text = (string) preg_replace(['/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^\s*([-*+]|\d+[.)])\s+/m', '/\s+/'], ['', '', '', ' '], self::clean($markdown));
+        $text = (string) preg_replace(['/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)])[ \t]+/m', '/\s+/'], ['', '', '', ' '], self::clean($markdown));
         $text = trim($text);
 
         return mb_strlen($text) > $maxLength ? rtrim(mb_substr($text, 0, $maxLength - 1)).'…' : $text;

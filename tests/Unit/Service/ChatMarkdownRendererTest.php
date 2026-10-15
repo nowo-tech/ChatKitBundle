@@ -46,5 +46,6 @@ final class ChatMarkdownRendererTest extends TestCase
 
         self::assertSame('hola mundo code', $renderer->plainText("**hola**\n\n- _mundo_\n```\ncode\n```"));
         self::assertSame('abcd…', $renderer->plainText('abcdefgh', 5));
+        self::assertSame('It supports: dms channels', $renderer->plainText("It supports:\n- dms\n  1. channels"), 'list markers never eat the line break');
     }
 }

@@ -33,7 +33,9 @@
                 </div>
             </div>
         </nav>
-        {% block body %}{% endblock %}
+        <main>{% block body %}{% endblock %}</main>
+        {# The floating chat dock: renders nothing for guests. #}
+        {{ include('@NowoChatKitBundle/dock.html.twig') }}
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
         {{ vite_entry_script_tags('app') }}
         {% block javascripts %}{% endblock %}

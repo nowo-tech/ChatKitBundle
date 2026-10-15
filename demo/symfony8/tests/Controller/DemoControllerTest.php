@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Controller;
 
+use App\Repository\UserRepository;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 /**
- * Smoke tests for the NowoChatKitBundle skeleton demo.
+ * Smoke tests for the NowoChatKitBundle demo (needs the seeded database: make setup-db).
  *
  * @author Héctor Franco Aceituno <hectorfranco@nowo.tech>
  * @copyright 2026 Nowo.tech
@@ -29,9 +30,9 @@ final class DemoControllerTest extends WebTestCase
 
         self::assertResponseIsSuccessful();
         self::assertSelectorTextContains('h1', 'Chat Kit Bundle');
-        self::assertSelectorTextContains('html', 'default profile: default');
+        self::assertSelectorTextContains('html', 'default profile (default)');
         self::assertSelectorExists('script[src*="/build/"]');
-        self::assertSelectorExists('#nowo-chat-token');
+        self::assertSelectorNotExists('[data-nowo-chat-config]');
     }
 
     public function testSpanishHomePage(): void
@@ -57,6 +58,26 @@ final class DemoControllerTest extends WebTestCase
         self::assertResponseRedirects();
         $client->followRedirect();
         self::assertSelectorTextContains('nav', 'alice');
+        self::assertSelectorExists('[data-nowo-chat-config]');
+        self::assertSelectorExists('template[data-nowo-chat-template]');
+    }
+
+    public function testFullPageChatAndApiForSignedInUser(): void
+    {
+        $client = static::createClient();
+        $alice = static::getContainer()->get(UserRepository::class)->findOneBy(['username' => 'alice']);
+        self::assertNotNull($alice, 'Run make setup-db (app:demo:seed) first.');
+        $client->loginUser($alice);
+
+        $client->request('GET', '/chat/');
+        self::assertResponseIsSuccessful();
+        self::assertSelectorTextContains('.nowo-chat-page__list', 'Bob Lee');
+        self::assertSelectorTextContains('.nowo-chat-page__list', 'General');
+
+        $client->request('GET', '/chat/api/conversations');
+        self::assertResponseIsSuccessful();
+        $titles = array_column(json_decode((string) $client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR)['conversations'], 'title');
+        self::assertContains('Bob Lee', $titles);
     }
 
     public function testTwigTemplatesDoNotUseRawHtmlForms(): void

@@ -105,6 +105,8 @@ php bin/console doctrine:migrations:migrate
 | `ChatChannelProviderInterface` | no | no channels | Group conversations of your application (e.g. one per project) |
 | `ChatRealtimeInterface` | no | Mercure when a hub is configured, else polling only | Realtime transport |
 | `ChatPushSenderInterface` | no | no push | Web Push delivery |
+| `ChatLinkPreviewProviderInterface` | no | no cards | Previews of links to your application, checked per viewer |
+| `ChatDigestSenderInterface` | no | no email | Email of the conversations still unread |
 
 Alias them in `config/services.yaml`:
 
@@ -141,7 +143,7 @@ are served locally (no Iconify request at runtime):
 ```bash
 php bin/console ux:icons:import tabler:message-circle tabler:edit tabler:chevron-up tabler:chevron-down tabler:x \
     tabler:send tabler:arrow-left tabler:arrow-down tabler:search tabler:hash tabler:lifebuoy tabler:refresh \
-    tabler:bolt tabler:mood-smile tabler:check tabler:pencil tabler:trash
+    tabler:bolt tabler:mood-smile tabler:check tabler:pencil tabler:trash tabler:link tabler:external-link
 ```
 
 An icon UX Icons cannot find falls back to the built-in SVG; `icon_set: svg_inline` uses only the built-in set.

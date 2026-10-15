@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { ChatApiError, type ChatApi } from '../src/api';
-import { ThreadView, type ThreadHost } from '../src/thread';
+import { ThreadView, plain, type ThreadHost } from '../src/thread';
 import type { ChatConfig, ChatMessage, ConversationSummary } from '../src/types';
 import { templates } from './support';
 
@@ -661,3 +661,11 @@ describe('ThreadView', () => {
   });
 });
 
+
+describe('plain', () => {
+  it('keeps one line for previews and paragraphs for the editor', () => {
+    const html = '<p>It supports:</p><ul><li>dms</li><li>channels<br>and more</li></ul>';
+    expect(plain(html)).toBe('It supports: dms channels and more');
+    expect(plain(html, true)).toBe('It supports:\ndms\nchannels\nand more');
+  });
+});

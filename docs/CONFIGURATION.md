@@ -48,10 +48,14 @@ nowo_chat_kit:
 | `profiles.<name>.push` | bool | `false` | Queue Web Push for new messages (needs a `ChatPushSenderInterface`). |
 | `profiles.<name>.push_url` | string | `/?chat={uuid}` | URL a notification opens; `{uuid}` is the conversation. The dock opens `?chat=<uuid>` itself. |
 | `profiles.<name>.push_icon` | ?string | `null` | Notification icon URL. |
+| `profiles.<name>.digest.enabled` | bool | `false` | Email the conversations still unread (needs Messenger and a `ChatDigestSenderInterface`). |
+| `profiles.<name>.digest.delay_minutes` | int ≥ 1 | `15` | How long a message stays unread before it counts. |
+| `profiles.<name>.digest.interval_minutes` | int ≥ 1 | `60` | At most one email per user in this window. |
+| `profiles.<name>.page_layout` | string | `@NowoChatKitBundle/page_layout.html.twig` | Layout the full-page chat extends (`title` and `body` blocks). |
 | `profiles.<name>.cache_pool` | string | `cache.app` | PSR-6 pool for presence and recipient lists. Share it between workers / replicas. |
 | `profiles.<name>.reactions` | list | `👍 ❤️ 😂 😮 😢 🎉` | Emojis offered as reactions (anything else is refused). |
 | `profiles.<name>.icon_set` | `ux_icon` \| `svg_inline` | `ux_icon` | Dock icons from Symfony UX Icons, or the built-in SVG only. |
-| `profiles.<name>.icons` | map | Tabler set | UX Icons name per dock icon (`chat`, `compose`, `chevronUp`, `chevronDown`, `close`, `send`, `back`, `arrowDown`, `search`, `hash`, `lifebuoy`, `retry`, `buzz`, `smile`, `check`, `edit`, `trash`). |
+| `profiles.<name>.icons` | map | Tabler set | UX Icons name per dock icon (`chat`, `compose`, `chevronUp`, `chevronDown`, `close`, `send`, `back`, `arrowDown`, `search`, `hash`, `lifebuoy`, `retry`, `buzz`, `smile`, `check`, `edit`, `trash`, `link`, `external`). |
 | `profiles.<name>.presence_ttl` | int ≥ 30 | `90` | Seconds a heartbeat keeps someone online. |
 | `profiles.<name>.limits.*` | int | see below | Rate limits. |
 
@@ -71,5 +75,5 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 ## Container parameters
 
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
-key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `cache_pool`, `reactions`,
-`icon_set`, `icons`, `presence_ttl`, `limits`).
+key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `cache_pool`, `page_layout`,
+`reactions`, `icon_set`, `icons`, `presence_ttl`, `limits`, `digest`).

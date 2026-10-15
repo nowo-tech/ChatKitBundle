@@ -8,12 +8,12 @@
 
     <div class="row g-4">
         <div class="col-lg-7">
-            <div class="card shadow-sm">
+            <div class="card shadow-sm" data-screenshot-target>
                 <div class="card-body">
-                    <h2 class="h5">{{ 'demo.planned.title'|trans }}</h2>
+                    <h2 class="h5">{{ 'demo.features.title'|trans }}</h2>
                     <ul class="mb-0">
-                        {% for key in ['dms', 'channels', 'support', 'realtime', 'presence', 'buzz', 'push', 'theming'] %}
-                            <li>{{ ('demo.planned.' ~ key)|trans }}</li>
+                        {% for key in ['dms', 'channels', 'support', 'realtime', 'presence', 'buzz', 'page', 'theming'] %}
+                            <li>{{ ('demo.features.' ~ key)|trans }}</li>
                         {% endfor %}
                     </ul>
                 </div>
@@ -22,9 +22,17 @@
         <div class="col-lg-5">
             <div class="card shadow-sm">
                 <div class="card-body">
-                    <h2 class="h6">{{ 'demo.status.title'|trans }}</h2>
-                    <p class="small mb-2">{{ 'demo.status.body'|trans }}</p>
-                    <code id="nowo-chat-token" class="small">…</code>
+                    <h2 class="h6">{{ 'demo.try.title'|trans }}</h2>
+                    {% if app.user %}
+                        <p class="small">{{ 'demo.try.signed_in'|trans }}</p>
+                        <div class="d-flex flex-wrap gap-2">
+                            <a class="btn btn-sm btn-outline-primary" href="{{ path('nowo_chat_page') }}">{{ 'demo.try.page'|trans }}</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="#" data-nowo-chat-open="support">{{ 'demo.try.support'|trans }}</a>
+                        </div>
+                    {% else %}
+                        <p class="small mb-2">{{ 'demo.try.guest'|trans }}</p>
+                        <a class="btn btn-sm btn-primary" href="{{ path('demo_login', { _locale: app.request.locale }) }}">{{ 'demo.login.nav'|trans }}</a>
+                    {% endif %}
                 </div>
             </div>
         </div>

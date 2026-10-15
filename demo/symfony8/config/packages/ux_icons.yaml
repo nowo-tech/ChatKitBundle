@@ -1,0 +1,4 @@
+# The chat icons are imported under assets/icons/tabler (no Iconify request at runtime).
+ux_icons:
+    iconify:
+        on_demand: false
