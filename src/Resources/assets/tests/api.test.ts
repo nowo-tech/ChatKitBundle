@@ -51,6 +51,9 @@ describe('chat api client', () => {
     expect(await api.react('c', 'm', '👍')).toEqual({ '👍': ['me'] });
     expect(fetchMock.mock.lastCall?.[0]).toBe('/conv/c/messages/m/reactions');
     expect(await api.openSupport()).toEqual({ uuid: 'x' });
+    expect(fetchMock.mock.lastCall?.[1]).toMatchObject({ body: '{}' });
+    await api.openSupport({ url: '/x', label: 'X' });
+    expect(fetchMock.mock.lastCall?.[1]).toMatchObject({ body: '{"context":{"url":"/x","label":"X"}}' });
     await api.messages('c');
     expect(fetchMock).toHaveBeenLastCalledWith('/conv/c/messages', expect.anything());
     await api.messages('c', { before: 5, after: 2 });

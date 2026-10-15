@@ -441,7 +441,23 @@ describe('ThreadView', () => {
   });
 
 
-  describe('edit, delete and reactions', () => {
+  it('shows where a support request comes from', () => {
+    const { q, view } = setup({ kind: 'support', supportStatus: 'open', supportContext: { url: '/projects/x/issues/9', label: 'Issue #9' } });
+    const chip = q<HTMLAnchorElement>('.nowo-chat-window__context');
+    expect(chip.hidden).toBe(false);
+    expect(chip.textContent).toContain('Issue #9');
+    expect(chip.getAttribute('href')).toBe('/projects/x/issues/9');
+    view.applySummary(summary({ kind: 'support', supportStatus: 'open', supportContext: { label: 'Dashboard' } }));
+    expect(chip.hasAttribute('href')).toBe(false);
+    view.applySummary(summary({ kind: 'support', supportStatus: 'open', supportContext: { url: '/settings' } }));
+    expect(chip.textContent).toContain('/settings');
+    view.applySummary(summary({ kind: 'direct', supportContext: { label: 'ignored' } }));
+    expect(chip.hidden).toBe(true);
+    view.applySummary(summary({ kind: 'support', supportStatus: 'open' }));
+    expect(chip.hidden).toBe(true);
+  });
+
+    describe('edit, delete and reactions', () => {
     const now = new Date('2026-10-15T10:05:00Z');
     async function loaded(messages: ChatMessage[], over: Partial<ConversationSummary> = {}, configOver: Partial<ChatConfig> = {}) {
       vi.setSystemTime(now);

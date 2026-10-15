@@ -51,6 +51,14 @@ class ChatConversation
     #[ORM\JoinColumn(name: 'resolved_by_id', nullable: true, onDelete: 'SET NULL')]
     private ?ChatUserInterface $resolvedBy = null;
 
+    /**
+     * Support only: where the user reported the problem from (`url`, `label`), shown to agents as a context chip.
+     *
+     * @var array{url?: string, label?: string}|null
+     */
+    #[ORM\Column(name: 'support_context', type: 'json', nullable: true)]
+    private ?array $supportContext = null;
+
     #[ORM\Column(name: 'resolved_at', nullable: true)]
     private ?\DateTimeImmutable $resolvedAt = null;
 
@@ -207,6 +215,27 @@ class ChatConversation
         $this->supportStatus = SupportStatus::Open;
         $this->resolvedBy = null;
         $this->resolvedAt = null;
+    }
+
+    /**
+     * @return array{url?: string, label?: string}|null
+     */
+    public function getSupportContext(): ?array
+    {
+        return $this->supportContext;
+    }
+
+    /** Relative URL (`/…`) or http(s) URL and a short label; anything else is dropped. */
+    public function setSupportContext(?string $url, ?string $label): void
+    {
+        $this->assertSupport();
+        $url = null === $url ? '' : mb_substr(trim($url), 0, 500);
+        if ('' !== $url && 1 !== preg_match('~^(/(?!/)|https?://)~i', $url)) {
+            $url = '';
+        }
+        $label = null === $label ? '' : mb_substr(trim((string) preg_replace('/\s+/u', ' ', $label)), 0, 120);
+        $context = array_filter(['url' => $url, 'label' => $label], static fn (string $value): bool => '' !== $value);
+        $this->supportContext = [] === $context ? null : $context;
     }
 
     public function getResolvedBy(): ?ChatUserInterface

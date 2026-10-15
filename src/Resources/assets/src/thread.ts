@@ -177,6 +177,7 @@ export class ThreadView {
           : summary.subtitle;
     this.element.setAttribute('aria-label', t(i18n, 'conversation_label', { name: summary.title }));
     part(this.element, 'avatar').replaceChildren(this.host.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline));
+    this.applyContext(summary);
     // A buzz is a person-to-person nudge: direct conversations only.
     this.buzzBtn.hidden = !summary.canSend || summary.kind !== 'direct';
     this.resolveBtn.hidden = !(this.host.config.isAgent && summary.kind === 'support' && summary.supportStatus === 'open');
@@ -186,6 +187,23 @@ export class ThreadView {
     this.notice.textContent = summary.canSend ? '' : t(i18n, 'read_only');
     this.composer.hidden = !summary.canSend;
     this.updateComposerState();
+  }
+
+  /** Support threads: "Reported from …" chip, a link when the page is known. */
+  private applyContext(summary: ConversationSummary): void {
+    const chip = part(this.element, 'context');
+    const context = summary.kind === 'support' ? summary.supportContext ?? null : null;
+    const label = context?.label ?? context?.url ?? '';
+    chip.hidden = label === '';
+    part(chip, 'context-label').textContent = label;
+    const link = chip instanceof HTMLAnchorElement ? chip : null;
+    if (link !== null) {
+      if (context?.url !== undefined) {
+        link.href = context.url;
+      } else {
+        link.removeAttribute('href');
+      }
+    }
   }
 
   setMinimised(minimised: boolean): void {

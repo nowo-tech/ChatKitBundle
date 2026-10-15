@@ -94,6 +94,7 @@ final class ChatDockExtension extends AbstractExtension
                 'direct' => $this->urls->generate('nowo_chat_api_open_direct'),
                 'channel' => $this->urls->generate('nowo_chat_api_open_channel'),
                 'support' => $this->urls->generate('nowo_chat_api_open_support'),
+                'supportInbox' => $this->urls->generate('nowo_chat_api_support_inbox'),
                 'conversation' => $this->pattern('nowo_chat_api_conversation'),
                 'messages' => $this->pattern('nowo_chat_api_messages'),
                 'message' => $this->pattern('nowo_chat_api_edit', ['messageUuid' => self::PLACEHOLDER], '__message__'),

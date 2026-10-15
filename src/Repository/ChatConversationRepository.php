@@ -117,6 +117,33 @@ class ChatConversationRepository extends ServiceEntityRepository
         return array_values(array_map(intval(...), $ids));
     }
 
+    /**
+     * Support threads for the agents' inbox, newest activity first: `open`, `resolved`, `mine` (threads the agent
+     * took part in) or every thread (null).
+     *
+     * @return list<ChatConversation>
+     */
+    public function findSupportInbox(?string $filter, ChatUserInterface $agent, int $limit): array
+    {
+        $qb = $this->createQueryBuilder('c')
+            ->leftJoin('c.supportOwner', 'owner')->addSelect('owner')
+            ->where('c.kind = :support')
+            ->setParameter('support', ConversationKind::Support)
+            ->orderBy('c.lastMessageAt', 'DESC')
+            ->addOrderBy('c.id', 'DESC')
+            ->setMaxResults($limit);
+        if ('open' === $filter || 'resolved' === $filter) {
+            $qb->andWhere('c.supportStatus = :status')->setParameter('status', SupportStatus::from($filter));
+        } elseif ('mine' === $filter) {
+            $qb->innerJoin(ChatParticipant::class, 'p', 'WITH', 'p.conversation = c AND p.user = :agent')->setParameter('agent', $agent);
+        }
+
+        /** @var list<ChatConversation> $rows */
+        $rows = $qb->getQuery()->getResult();
+
+        return $rows;
+    }
+
     /** Open support threads (agents' menu counter). */
     public function countOpenSupport(): int
     {

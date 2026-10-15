@@ -38,7 +38,7 @@ return static function (ContainerConfigurator $container): void {
 
     $services->load('Nowo\\ChatKitBundle\\', '../../')
         ->exclude([
-            '../../{DependencyInjection,Entity,Enum,Model,Contract,Resources}',
+            '../../{DependencyInjection,Entity,Enum,Event,Model,Contract,Resources}',
             '../../NowoChatKitBundle.php',
             '../../Repository',
             '../../Push/DeliverChatPushMessage.php',

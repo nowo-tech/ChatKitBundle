@@ -1,5 +1,5 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
-import type { ChatConfig, ChatMessage, Contact, ConversationSummary, Reactions, Reader } from './types';
+import type { ChatConfig, ChatMessage, Contact, ConversationSummary, Reactions, Reader, SupportContext } from './types';
 
 export class ChatApiError extends Error {
   readonly status: number;
@@ -40,8 +40,8 @@ export class ChatApi {
     return (await this.post<{ conversation: ConversationSummary }>(this.config.endpoints.channel, { channelKey })).conversation;
   }
 
-  async openSupport(): Promise<ConversationSummary> {
-    return (await this.post<{ conversation: ConversationSummary }>(this.config.endpoints.support, {})).conversation;
+  async openSupport(context?: SupportContext): Promise<ConversationSummary> {
+    return (await this.post<{ conversation: ConversationSummary }>(this.config.endpoints.support, context === undefined ? {} : { context })).conversation;
   }
 
   async messages(

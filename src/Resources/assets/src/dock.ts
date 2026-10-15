@@ -12,7 +12,7 @@ import { playOnce } from './sounds';
 import { clearChatStorage, DockStore, DraftStore, type SyncEvent, ThreadCache } from './state';
 import { part, Templates, text } from './templates';
 import { plain, ThreadView, type ThreadHost } from './thread';
-import type { ChatConfig, ChatMessage, Contact, ConversationSummary, RealtimeEvent } from './types';
+import type { ChatConfig, ChatMessage, Contact, ConversationSummary, RealtimeEvent, SupportContext } from './types';
 
 type Filter = 'all' | 'unread' | 'channel' | 'support';
 
@@ -142,6 +142,7 @@ export class ChatDock implements ThreadHost {
   /** Stop everything (page swap): connection, timers and listeners. */
   destroy(): void {
     this.abort.abort();
+    this.store.close();
     this.realtime?.stop();
     window.clearTimeout(this.pollTimer ?? undefined);
     window.clearInterval(this.presenceTimer ?? undefined);
@@ -315,6 +316,20 @@ export class ChatDock implements ThreadHost {
       },
       { signal },
     );
+    // Links anywhere on the page: data-nowo-chat-open="support" (data-nowo-chat-context-url / -label),
+    // "user:<public id>" or "channel:<key>" open that conversation in the dock.
+    document.addEventListener(
+      'click',
+      (event) => {
+        const trigger = (event.target as Element | null)?.closest?.<HTMLElement>('[data-nowo-chat-open]');
+        if (trigger === null || trigger === undefined) {
+          return;
+        }
+        event.preventDefault();
+        void this.openTarget(trigger).catch(() => this.showStatus('error'));
+      },
+      { signal },
+    );
     document.addEventListener(
       'submit',
       (event) => {
@@ -366,13 +381,31 @@ export class ChatDock implements ThreadHost {
     );
   }
 
+  private async openTarget(trigger: HTMLElement): Promise<void> {
+    const target = trigger.dataset.nowoChatOpen ?? '';
+    if (target === 'support') {
+      const context: SupportContext = {};
+      if (trigger.dataset.nowoChatContextUrl !== undefined) {
+        context.url = trigger.dataset.nowoChatContextUrl;
+      }
+      if (trigger.dataset.nowoChatContextLabel !== undefined) {
+        context.label = trigger.dataset.nowoChatContextLabel;
+      }
+      await this.open(await this.api.openSupport(Object.keys(context).length > 0 ? context : undefined));
+    } else if (target.startsWith('user:')) {
+      await this.open(await this.api.openDirect(target.slice(5)));
+    } else if (target.startsWith('channel:')) {
+      await this.open(await this.api.openChannel(target.slice(8)));
+    }
+  }
+
   private toggleOverflow(open: boolean): void {
     this.overflowMenu.hidden = !open;
     this.overflowBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
   /** "Reconnecting…" while the live connection is down, a short "Back online" when it returns. */
-  private showStatus(key: 'reconnecting' | 'reconnected' | null): void {
+  private showStatus(key: 'reconnecting' | 'reconnected' | 'error' | null): void {
     window.clearTimeout(this.statusTimer);
     if (key === null) {
       this.status.hidden = true;
@@ -381,8 +414,8 @@ export class ChatDock implements ThreadHost {
     this.status.hidden = false;
     this.status.textContent = t(this.config.i18n, key);
     this.status.classList.toggle('is-ok', key === 'reconnected');
-    if (key === 'reconnected') {
-      this.statusTimer = window.setTimeout(() => (this.status.hidden = true), 2_500);
+    if (key !== 'reconnecting') {
+      this.statusTimer = window.setTimeout(() => (this.status.hidden = true), key === 'error' ? 4_000 : 2_500);
     }
   }
 

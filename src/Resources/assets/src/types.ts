@@ -14,6 +14,8 @@ export interface ConversationSummary {
   peerUuid: string | null;
   channelKey: string | null;
   supportStatus: 'open' | 'resolved' | null;
+  /** Support only: where the problem was reported from. */
+  supportContext?: { url?: string; label?: string } | null;
   canSend: boolean;
   peerOnline: boolean;
   unread: number;
@@ -89,6 +91,7 @@ export interface ChatConfig {
     direct: string;
     channel: string;
     support: string;
+    supportInbox: string;
     /** `__uuid__` is replaced with the conversation UUID (and `__message__` with a message UUID). */
     conversation: string;
     messages: string;
@@ -104,6 +107,12 @@ export interface ChatConfig {
   prefs: { sound: SoundName; buzz: boolean; presence: boolean };
   isAgent: boolean;
   i18n: Record<string, string>;
+}
+
+/** Where a support request comes from ("Report this problem" links). */
+export interface SupportContext {
+  url?: string;
+  label?: string;
 }
 
 /** Layout shared by every browser tab of the same user (localStorage + BroadcastChannel). */

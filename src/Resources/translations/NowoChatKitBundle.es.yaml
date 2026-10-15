@@ -97,3 +97,4 @@ chat:
   delete_confirm: '¿Eliminar este mensaje?'
   save: 'Guardar'
   cancel: 'Cancelar'
+  reported_from: 'Enviado desde'

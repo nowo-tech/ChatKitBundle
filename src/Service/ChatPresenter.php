@@ -57,6 +57,7 @@ final readonly class ChatPresenter
             'peerUuid' => $peer?->getChatPublicId(),
             'channelKey' => $conversation->getChannelKey(),
             'supportStatus' => $conversation->getSupportStatus()?->value,
+            'supportContext' => $conversation->getSupportContext(),
             'canSend' => $canSend,
             'peerOnline' => $peerOnline,
             'unread' => $unread,

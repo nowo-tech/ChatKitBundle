@@ -9,6 +9,9 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
+use Nowo\ChatKitBundle\Event\ChatMessageDeletedEvent;
+use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
+use Nowo\ChatKitBundle\Event\ChatSupportStatusChangedEvent;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
@@ -17,6 +20,7 @@ use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Conversation lifecycle and messages. Authorization is the caller's job (ChatVoter); this service only keeps
@@ -37,6 +41,7 @@ final readonly class ChatService
         private ChatNotifier $notifier,
         private array $reactions = [],
         private ClockInterface $clock = new Clock(),
+        private ?EventDispatcherInterface $events = null,
     ) {
     }
 
@@ -60,10 +65,22 @@ final readonly class ChatService
         return $conversation;
     }
 
-    public function openSupport(ChatUserInterface $owner): ChatConversation
+    /**
+     * The owner's support thread (created on first use). `$context` (`url`, `label`) records where the problem was
+     * reported from, for the agents.
+     *
+     * @param array{url?: mixed, label?: mixed}|null $context
+     */
+    public function openSupport(ChatUserInterface $owner, ?array $context = null): ChatConversation
     {
-        return $this->conversations->findSupportFor($owner)
+        $conversation = $this->conversations->findSupportFor($owner)
             ?? $this->create(ChatConversation::support($owner), [$owner]);
+        if (null !== $context) {
+            $conversation->setSupportContext(\is_string($context['url'] ?? null) ? $context['url'] : null, \is_string($context['label'] ?? null) ? $context['label'] : null);
+            $this->entityManager->flush();
+        }
+
+        return $conversation;
     }
 
     /**
@@ -76,11 +93,16 @@ final readonly class ChatService
         $message = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
         $this->entityManager->persist($message);
         $conversation->touch($now);
-        if ($conversation->isSupport() && $conversation->isResolved() && $conversation->getSupportOwner()?->getId() === $author->getId()) {
+        $reopened = $conversation->isSupport() && $conversation->isResolved() && $conversation->getSupportOwner()?->getId() === $author->getId();
+        if ($reopened) {
             $conversation->reopen();
         }
+        $this->publish($message, $author);
+        if ($reopened) {
+            $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $author));
+        }
 
-        return $this->publish($message, $author);
+        return $message;
     }
 
     /** A nudge, stored as a `buzz` line so offline recipients see it too. */
@@ -112,6 +134,7 @@ final readonly class ChatService
         }
         $this->entityManager->flush();
         $this->notifier->messageUpdated($message);
+        $this->events?->dispatch(new ChatMessageDeletedEvent($message, $by, $message->isModerated()));
     }
 
     /**
@@ -144,6 +167,7 @@ final readonly class ChatService
         $conversation->resolve($agent);
         $this->entityManager->flush();
         $this->notifier->supportStatusChanged($conversation);
+        $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $agent));
     }
 
     public function markRead(ChatUserInterface $user, ChatConversation $conversation, int $messageId): bool
@@ -198,6 +222,7 @@ final readonly class ChatService
         $participant->markReadUpTo((int) $message->getId());
         $this->entityManager->flush();
         $this->notifier->messageCreated($message);
+        $this->events?->dispatch(new ChatMessageSentEvent($message));
 
         return $message;
     }

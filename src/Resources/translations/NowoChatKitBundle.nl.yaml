@@ -97,3 +97,4 @@ chat:
   delete_confirm: 'Dit bericht verwijderen?'
   save: 'Opslaan'
   cancel: 'Annuleren'
+  reported_from: 'Gemeld vanaf'

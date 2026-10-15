@@ -7,6 +7,9 @@ namespace Nowo\ChatKitBundle\Tests\Integration\Service;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
+use Nowo\ChatKitBundle\Event\ChatMessageDeletedEvent;
+use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
+use Nowo\ChatKitBundle\Event\ChatSupportStatusChangedEvent;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Realtime\ChatTopics;
@@ -14,9 +17,11 @@ use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatService;
+use Nowo\ChatKitBundle\Service\ChatSupportInbox;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Conversation lifecycle end to end on SQLite: open (idempotent), send / buzz / edit / delete / react, read
@@ -114,6 +119,58 @@ final class ChatServiceTest extends DatabaseTestCase
 
         $chat->markRead($agent, $channel, 999);
         self::assertSame([ChatTopics::forUser($agent->getChatPublicId())], $realtime->published[\count($realtime->published) - 1]['topics'], 'channel read receipts only go to the reader');
+    }
+
+    public function testEventsAndSupportInbox(): void
+    {
+        $chat = $this->get(ChatService::class);
+        $events = [];
+        $dispatcher = $this->get(EventDispatcherInterface::class);
+        foreach ([ChatMessageSentEvent::class, ChatMessageDeletedEvent::class, ChatSupportStatusChangedEvent::class] as $class) {
+            $dispatcher->addListener($class, static function (object $event) use (&$events): void {
+                $events[] = $event;
+            });
+        }
+        $ana = $this->user('Ana');
+        $bob = $this->user('Bob');
+        $agent = $this->user('Agent Smith');
+
+        $support = $chat->openSupport($ana, ['url' => '/projects/acme/issues', 'label' => 'Issues']);
+        self::assertSame(['url' => '/projects/acme/issues', 'label' => 'Issues'], $support->getSupportContext());
+        self::assertSame($support, $chat->openSupport($ana), 'no context: the last one stays');
+        self::assertSame(['url' => '/projects/acme/issues', 'label' => 'Issues'], $support->getSupportContext());
+        $chat->openSupport($ana, ['url' => 7, 'label' => 'Dashboard']);
+        self::assertSame(['label' => 'Dashboard'], $support->getSupportContext());
+
+        $question = $chat->send($ana, $support, 'help');
+        $bobs = $chat->openSupport($bob);
+        $chat->send($bob, $bobs, 'export broken');
+        $chat->send($agent, $bobs, 'looking');
+        $chat->resolveSupport($agent, $support);
+        $chat->send($ana, $support, 'still broken');
+        $chat->delete($agent, $question);
+
+        self::assertInstanceOf(ChatMessageSentEvent::class, $events[0]);
+        self::assertSame($question, $events[0]->message);
+        $resolved = array_values(array_filter($events, static fn (object $event): bool => $event instanceof ChatSupportStatusChangedEvent));
+        self::assertCount(2, $resolved, 'resolved by the agent, reopened by the owner');
+        self::assertSame($agent, $resolved[0]->by);
+        self::assertSame($ana, $resolved[1]->by);
+        $deleted = end($events);
+        self::assertInstanceOf(ChatMessageDeletedEvent::class, $deleted);
+        self::assertTrue($deleted->moderated);
+
+        $inbox = $this->get(ChatSupportInbox::class);
+        self::assertEqualsCanonicalizing(['Ana', 'Bob'], array_column($inbox->list($agent, 'open', null), 'title'));
+        self::assertSame(['Bob'], array_column($inbox->list($agent, 'mine', null), 'title'), 'threads the agent answered');
+        self::assertSame([], $inbox->list($agent, 'resolved', null));
+        self::assertSame(['Bob'], array_column($inbox->list($agent, 'all', 'BOB@'), 'title'), 'search by email');
+        self::assertSame(['Ana'], array_column($inbox->list($agent, 'unknown-filter', 'an'), 'title'), 'unknown filter = open; search by name');
+        $row = $inbox->list($agent, 'open', 'ana')[0];
+        self::assertSame(['uuid' => $ana->getChatPublicId(), 'name' => 'Ana', 'email' => 'ana@example.test'], $row['owner']);
+        self::assertSame(['label' => 'Dashboard'], $row['supportContext']);
+        self::assertSame(1, $row['unread']);
+        self::assertSame(2, $inbox->countOpen());
     }
 
     public function testPresenterShapes(): void

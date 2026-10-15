@@ -70,11 +70,15 @@ const message = (over: Partial<ChatMessage> = {}): ChatMessage => ({
   createdAt: '2026-10-15T11:00:00Z', edited: false, deleted: false, moderated: false, ...over,
 });
 
+/** Every dock a test mounted: destroyed after the test so no document listener outlives it. */
+const mounted: { destroy(): void }[] = [];
+
 function mount(conversations: ConversationSummary[], cfg: Partial<ChatConfig> = {}) {
   api.conversations.mockResolvedValue({ conversations, unreadTotal: 0 });
   const root = templatesRoot();
   document.body.append(root);
   const dock = new ChatDock(root, config(cfg));
+  mounted.push(dock);
   const q = <T extends Element = HTMLElement>(selector: string) => root.querySelector<T>(selector) as T;
   const all = (selector: string) => [...root.querySelectorAll<HTMLElement>(selector)];
   return { dock, root, q, all };
@@ -111,6 +115,7 @@ describe('ChatDock', () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   });
   afterEach(() => {
+    mounted.splice(0).forEach((dock) => dock.destroy());
     vi.useRealTimers();
     vi.unstubAllGlobals();
     document.body.replaceChildren();
@@ -205,6 +210,7 @@ describe('ChatDock', () => {
 
     // A new dock (next page) restores the window without entry motion.
     const again = new ChatDock(templatesRoot(), config());
+    mounted.push(again);
     document.body.append((again as unknown as { root: HTMLElement }).root);
     await again.start();
     expect((again as unknown as { root: HTMLElement }).root.querySelector('.nowo-chat-window.is-entering')).toBeNull();
@@ -414,6 +420,65 @@ describe('ChatDock', () => {
     expect(q(`[data-id="${original.id}"] .nowo-chat-bubble`).textContent).toBe('after');
     realtimeHandlers?.onEvent({ type: 'message_updated', conversationUuid: 'closed', message: original });
     expect(playOnce).not.toHaveBeenCalled();
+  });
+
+  it('opens conversations from data-nowo-chat-open links (support with context, people, channels)', async () => {
+    const { dock, all, q } = mount([]);
+    await dock.start();
+    const link = (attrs: Record<string, string>): HTMLAnchorElement => {
+      const element = document.createElement('a');
+      element.href = '#report';
+      for (const [name, value] of Object.entries(attrs)) {
+        element.setAttribute(name, value);
+      }
+      element.append(document.createElement('span'));
+      document.body.append(element);
+      return element;
+    };
+    const report = link({ 'data-nowo-chat-open': 'support', 'data-nowo-chat-context-url': '/projects/x/issues/9', 'data-nowo-chat-context-label': 'Issue #9' });
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    (report.firstElementChild as HTMLElement).dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    await flush();
+    expect(api.openSupport).toHaveBeenCalledWith({ url: '/projects/x/issues/9', label: 'Issue #9' });
+    expect(all('.nowo-chat-window')).toHaveLength(1);
+
+    link({ 'data-nowo-chat-open': 'support' }).click();
+    await flush();
+    expect(api.openSupport).toHaveBeenLastCalledWith(undefined);
+    link({ 'data-nowo-chat-open': 'user:peer-1' }).click();
+    await flush();
+    expect(api.openDirect).toHaveBeenCalledWith('peer-1');
+    link({ 'data-nowo-chat-open': 'channel:project:1' }).click();
+    await flush();
+    expect(api.openChannel).toHaveBeenCalledWith('project:1');
+    link({ 'data-nowo-chat-open': 'nothing' }).click();
+    link({ 'data-nowo-chat-open': 'support', 'data-nowo-chat-context-label': 'Only a label' }).click();
+    await flush();
+    expect(api.openSupport).toHaveBeenLastCalledWith({ label: 'Only a label' });
+
+    // A failure shows the status line for a few seconds; ordinary clicks are ignored.
+    api.openDirect.mockRejectedValueOnce(new Error('denied'));
+    link({ 'data-nowo-chat-open': 'user:x' }).click();
+    await flush();
+    await flush();
+    expect(q('.nowo-chat-status').hidden).toBe(false);
+    vi.advanceTimersByTime(4_000);
+    expect(q('.nowo-chat-status').hidden).toBe(true);
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    dock.destroy();
+  });
+
+  it('receives the other tabs over BroadcastChannel until destroyed', async () => {
+    vi.useRealTimers();
+    const { dock, q } = mount([summary('a', { unread: 3 })]);
+    await dock.start();
+    expect(q('.nowo-chat-launcher .nowo-chat-badge [aria-hidden]').textContent).toBe('3');
+    const otherTab = new BroadcastChannel('nowo-chat:me');
+    otherTab.postMessage({ type: 'read', uuid: 'a', messageId: 1 });
+    await vi.waitFor(() => expect(q('.nowo-chat-launcher .nowo-chat-badge').hidden).toBe(true));
+    dock.destroy();
+    otherTab.close();
   });
 
   it('marks online peers from the presence heartbeat', async () => {

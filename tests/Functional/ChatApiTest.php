@@ -168,8 +168,11 @@ final class ChatApiTest extends DatabaseTestCase
         $this->postJson('/chat/api/conversations/'.$channel['uuid'].'/buzz', [], $csrf);
         $this->assertStatus(422);
 
-        $support = $this->postJson('/chat/api/support', [], $csrf)['conversation'];
+        $support = $this->postJson('/chat/api/support', ['context' => ['url' => '/projects/acme/page', 'label' => 'Acme']], $csrf)['conversation'];
+        self::assertSame(['url' => '/projects/acme/page', 'label' => 'Acme'], $support['supportContext']);
         self::assertSame('support', $support['kind']);
+        $this->client->request(Request::METHOD_GET, '/chat/api/support/inbox');
+        $this->assertStatus(404, 'only agents see the inbox');
         self::assertSame('Support', $support['title']);
         $this->postJson('/chat/api/conversations/'.$support['uuid'].'/messages', ['body' => 'Broken export'], $csrf);
         $this->postJson('/chat/api/conversations/'.$support['uuid'].'/resolve', [], $csrf);
@@ -181,6 +184,10 @@ final class ChatApiTest extends DatabaseTestCase
         $titles = array_column($this->getJson('/chat/api/conversations')['conversations'], 'title');
         self::assertContains('Ana', $titles);
         self::assertContains('#Acme', $titles);
+        $inbox = $this->getJson('/chat/api/support/inbox?status=open&q=ana');
+        self::assertSame(['Ana'], array_column($inbox['threads'], 'title'));
+        self::assertSame(1, $inbox['open']);
+        self::assertStringEndsWith('/chat/api/support/inbox', $agentConfig['endpoints']['supportInbox']);
         $resolved = $this->postJson('/chat/api/conversations/'.$support['uuid'].'/resolve', [], $agentConfig['csrf'])['conversation'];
         self::assertSame('resolved', $resolved['supportStatus']);
 

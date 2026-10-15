@@ -50,6 +50,7 @@ const ICONS: Record<string, string> = {
   check: '<path d="m5 12 4.5 4.5L19 7" />',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16v4Z" />',
   trash: '<path d="M5 7h14M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" />',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />',
 };
 
 /** Decorative inline SVG (aria-hidden) from the built-in set; the accessible name lives on the button. */

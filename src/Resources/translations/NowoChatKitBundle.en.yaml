@@ -97,3 +97,4 @@ chat:
   delete_confirm: 'Delete this message?'
   save: 'Save'
   cancel: 'Cancel'
+  reported_from: 'Reported from'

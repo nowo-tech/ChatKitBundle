@@ -27,6 +27,7 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatService;
+use Nowo\ChatKitBundle\Service\ChatSupportInbox;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -65,6 +66,7 @@ final class ChatApiController extends AbstractController
         private readonly ChatPresence $presence,
         private readonly ChatRecipients $recipients,
         private readonly ChatRealtimeInterface $realtime,
+        private readonly ChatSupportInbox $supportInbox,
         #[Autowire(service: 'limiter.nowo_chat_send')]
         private readonly RateLimiterFactoryInterface $sendLimiter,
         #[Autowire(service: 'limiter.nowo_chat_action')]
@@ -162,7 +164,23 @@ final class ChatApiController extends AbstractController
     {
         $user = $this->writer($request);
 
-        return $this->json(['conversation' => $this->present($this->chat->openSupport($user), $user)]);
+        $context = $this->payload($request)['context'] ?? null;
+
+        return $this->json(['conversation' => $this->present($this->chat->openSupport($user, \is_array($context) ? $context : null), $user)]);
+    }
+
+    /** Support agents' inbox (`?status=open|resolved|mine|all&q=`); 404 for everyone else. */
+    #[Route('/support/inbox', name: 'support_inbox', methods: ['GET'])]
+    public function supportInbox(Request $request): JsonResponse
+    {
+        $user = $this->reader();
+        $this->deny(!$this->access->isSupportAgent($user), 'not_found', Response::HTTP_NOT_FOUND);
+        $query = mb_substr(trim((string) $request->query->get('q', '')), 0, 80);
+
+        return $this->json([
+            'threads' => $this->supportInbox->list($user, (string) $request->query->get('status', 'open'), '' === $query ? null : $query),
+            'open' => $this->supportInbox->countOpen(),
+        ]);
     }
 
     #[Route('/conversations/{uuid}', name: 'conversation', requirements: ['uuid' => self::UUID], methods: ['GET'])]

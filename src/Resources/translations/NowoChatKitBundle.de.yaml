@@ -97,3 +97,4 @@ chat:
   delete_confirm: 'Diese Nachricht löschen?'
   save: 'Speichern'
   cancel: 'Abbrechen'
+  reported_from: 'Gemeldet von'

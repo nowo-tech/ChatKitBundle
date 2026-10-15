@@ -51,7 +51,12 @@ abstract class DatabaseTestCase extends TestCase
      */
     protected function get(string $id): object
     {
-        $service = $this->kernel->getContainer()->get($id);
+        $container = $this->kernel->getContainer();
+        if (!$container->has($id)) {
+            $container = $container->get('test.service_container');
+            \assert($container instanceof ContainerInterface);
+        }
+        $service = $container->get($id);
         \assert($service instanceof $id);
 
         return $service;

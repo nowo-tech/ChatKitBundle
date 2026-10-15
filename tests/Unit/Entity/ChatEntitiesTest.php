@@ -110,6 +110,29 @@ final class ChatEntitiesTest extends TestCase
         self::assertNull($conversation->getResolvedAt());
     }
 
+    public function testSupportContextKeepsSafeUrlsAndShortLabels(): void
+    {
+        $conversation = ChatConversation::support($this->user(5));
+        self::assertNull($conversation->getSupportContext());
+
+        $conversation->setSupportContext('/projects/x/issues', "  Error   500\n on export ");
+        self::assertSame(['url' => '/projects/x/issues', 'label' => 'Error 500 on export'], $conversation->getSupportContext());
+        $conversation->setSupportContext('https://app.test/a', null);
+        self::assertSame(['url' => 'https://app.test/a'], $conversation->getSupportContext());
+        $conversation->setSupportContext('javascript:alert(1)', str_repeat('x', 200));
+        self::assertSame(['label' => str_repeat('x', 120)], $conversation->getSupportContext(), 'no other schemes, label capped');
+        $conversation->setSupportContext('//evil.test/x', '');
+        self::assertNull($conversation->getSupportContext(), 'protocol-relative URLs are dropped');
+        $conversation->setSupportContext(null, null);
+        self::assertNull($conversation->getSupportContext());
+    }
+
+    public function testOnlySupportThreadsHaveAContext(): void
+    {
+        $this->expectException(\LogicException::class);
+        ChatConversation::channel('project:acme')->setSupportContext('/x', 'x');
+    }
+
     public function testOnlySupportThreadsResolve(): void
     {
         $this->expectException(\LogicException::class);

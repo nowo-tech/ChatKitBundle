@@ -148,6 +148,8 @@
                     {{ ui.icon_button('close', 'chat.close'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'close') }}
                 </span>
             </header>
+            {# Support threads: where the problem was reported from. #}
+            <a class="nowo-chat-window__context" data-part="context" title="{{ 'chat.reported_from'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" hidden><span data-icon="link" data-icon-size="14"></span> <span data-part="context-label"></span></a>
             <div class="nowo-chat-window__main">
                 <div class="nowo-chat-window__body" data-part="body">
                     {# Not a live region: new messages are announced once by the `live` part. #}

@@ -1575,3 +1575,30 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat-list__start[hidden] {
   display: none;
 }
+
+/* Support threads: where the problem was reported from. */
+.nowo-chat-window__context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 12px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--nowo-chat-border);
+  background: var(--nowo-chat-surface-muted);
+  color: var(--nowo-chat-muted);
+  font-size: 0.75rem;
+  text-decoration: none;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nowo-chat-window__context[hidden] {
+  display: none;
+}
+.nowo-chat-window__context[href]:hover {
+  color: var(--nowo-chat-text);
+  text-decoration: underline;
+}
+.nowo-chat-window.is-minimised .nowo-chat-window__context {
+  display: none;
+}

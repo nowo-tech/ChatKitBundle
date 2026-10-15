@@ -17,18 +17,26 @@ export class DockStore {
   private readonly channel: BroadcastChannel | null;
   private readonly key: string;
   private readonly listeners = new Set<(event: SyncEvent) => void>();
+  private readonly onStorage = (event: StorageEvent): void => {
+    if (event.key === this.key && this.channel === null) {
+      this.state = this.load();
+      this.emit({ type: 'state', state: this.state });
+    }
+  };
 
   constructor(userUuid: string) {
     this.key = `nowo-chat:${userUuid}`;
     this.state = this.load();
     this.channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel(`nowo-chat:${userUuid}`) : null;
     this.channel?.addEventListener('message', (event: MessageEvent<SyncEvent>) => this.receive(event.data));
-    window.addEventListener('storage', (event) => {
-      if (event.key === this.key && this.channel === null) {
-        this.state = this.load();
-        this.emit({ type: 'state', state: this.state });
-      }
-    });
+    window.addEventListener('storage', this.onStorage);
+  }
+
+  /** Stop syncing (the dock was destroyed: page swap, logout): close the channel, drop the listeners. */
+  close(): void {
+    this.channel?.close();
+    window.removeEventListener('storage', this.onStorage);
+    this.listeners.clear();
   }
 
   get(): DockState {
