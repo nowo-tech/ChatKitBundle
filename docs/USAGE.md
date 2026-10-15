@@ -45,7 +45,7 @@ The bundle never queries the host user table directly; it only stores user ident
 | Bundle class | `NowoChatKitBundle` |
 | Configuration root / asset package | `nowo_chat_kit` |
 | Twig namespace | `@NowoChatKitBundle` (REQ-TWIG-002) |
-| Translation domain | `nowo_chat_kit` |
+| Translation domain | `NowoChatKitBundle` (REQ-I18N-003) |
 | Route name prefix | `nowo_chat_kit_` |
 | CSS classes / tokens | `.nowo-chat-*` / `--nowo-chat-*` |
 | JS / Stimulus identifiers | `nowo-chat*` |
