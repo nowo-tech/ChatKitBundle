@@ -28,6 +28,7 @@ final class ConfigurationTest extends TestCase
             'push' => false,
             'push_url' => '/?chat={uuid}',
             'push_icon' => null,
+            'digest' => ['enabled' => false, 'delay_minutes' => 15, 'interval_minutes' => 60],
             'cache_pool' => 'cache.app',
             'reactions' => ['👍', '❤️', '😂', '😮', '😢', '🎉'],
             'icon_set' => 'ux_icon',

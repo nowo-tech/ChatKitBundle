@@ -46,6 +46,7 @@ final readonly class ChatPersonalData
                 'sound' => $settings->getSound(),
                 'push' => $settings->isPushEnabled(),
                 'buzzes' => $settings->isBuzzEnabled(),
+                'email_digest' => $settings->isEmailDigest(),
                 'show_online' => $settings->isPresenceVisible(),
             ],
             'messages' => array_map(static fn (ChatMessage $message): array => [

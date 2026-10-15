@@ -5,9 +5,13 @@ declare(strict_types=1);
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
+use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
+use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Push\ChatPushDispatcher;
 use Nowo\ChatKitBundle\Push\NullChatPushSender;
@@ -44,6 +48,7 @@ return static function (ContainerConfigurator $container): void {
             '../../NowoChatKitBundle.php',
             '../../Repository',
             '../../Push/DeliverChatPushMessage.php',
+            '../../Digest/SendChatDigestMessage.php',
             '../../Http/ChatApiException.php',
             '../../Realtime/ChatTopics.php',
         ]);
@@ -53,6 +58,7 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);
     $services->alias(ChatLinkPreviewProviderInterface::class, NullLinkPreviewProvider::class);
+    $services->alias(ChatDigestSenderInterface::class, NullChatDigestSender::class);
     $services->set(NullChatRealtime::class);
     if (interface_exists(HubInterface::class)) {
         $services->alias(ChatRealtimeInterface::class, MercureChatRealtime::class);
@@ -71,9 +77,21 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$icon', param('nowo_chat_kit.push_icon'))
         // Signed (JSON + HMAC) when the application signs its Messenger messages.
         ->tag('messenger.message_handler', ['sign' => true]);
+    $bus = interface_exists(MessageBusInterface::class) ? service('messenger.default_bus')->nullOnInvalid() : null;
     $services->get(ChatNotifier::class)
         ->arg('$pushEnabled', param('nowo_chat_kit.push'))
-        ->arg('$bus', interface_exists(MessageBusInterface::class) ? service('messenger.default_bus')->nullOnInvalid() : null);
+        ->arg('$bus', $bus)
+        ->arg('$digest', service(ChatDigestScheduler::class));
+    $services->get(ChatDigestScheduler::class)
+        ->arg('$cache', service('nowo_chat_kit.cache'))
+        ->arg('$bus', $bus)
+        ->arg('$enabled', param('nowo_chat_kit.digest.enabled'))
+        ->arg('$delayMinutes', param('nowo_chat_kit.digest.delay_minutes'));
+    $services->get(ChatDigestDispatcher::class)
+        ->arg('$cache', service('nowo_chat_kit.cache'))
+        ->arg('$urlTemplate', param('nowo_chat_kit.push_url'))
+        ->arg('$intervalMinutes', param('nowo_chat_kit.digest.interval_minutes'))
+        ->tag('messenger.message_handler', ['sign' => true]);
     $services->get(ChatService::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'));
     $services->get(ChatDockExtension::class)

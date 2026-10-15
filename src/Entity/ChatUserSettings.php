@@ -37,6 +37,10 @@ class ChatUserSettings
     #[ORM\Column(length: 16, options: ['default' => self::DEFAULT_SOUND])]
     private string $sound = self::DEFAULT_SOUND;
 
+    /** Email listing the conversations still unread a while after a message (when the application sends it). */
+    #[ORM\Column(name: 'email_digest', options: ['default' => true])]
+    private bool $emailDigest = true;
+
     /** When off, a buzz is only a line in the thread (no opening, shake or sound). */
     #[ORM\Column(name: 'buzz_enabled', options: ['default' => true])]
     private bool $buzzEnabled = true;
@@ -89,6 +93,16 @@ class ChatUserSettings
             throw new \InvalidArgumentException(\sprintf('Unknown chat sound "%s".', $sound));
         }
         $this->sound = $sound;
+    }
+
+    public function isEmailDigest(): bool
+    {
+        return $this->emailDigest;
+    }
+
+    public function setEmailDigest(bool $enabled): void
+    {
+        $this->emailDigest = $enabled;
     }
 
     public function isBuzzEnabled(): bool

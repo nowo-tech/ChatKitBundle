@@ -255,6 +255,9 @@ final class ChatEntitiesTest extends TestCase
         self::assertTrue($settings->isPresenceVisible());
         self::assertFalse($settings->isPushEnabled());
         self::assertTrue($settings->isBuzzEnabled());
+        self::assertTrue($settings->isEmailDigest());
+        $settings->setEmailDigest(false);
+        self::assertFalse($settings->isEmailDigest());
         self::assertSame('pop', $settings->getSound());
 
         $settings->setPresenceVisible(false);

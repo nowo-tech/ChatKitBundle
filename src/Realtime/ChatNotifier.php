@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Realtime;
 
+use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -26,6 +27,7 @@ final readonly class ChatNotifier
         private ChatPushDispatcher $push,
         private bool $pushEnabled = false,
         private ?MessageBusInterface $bus = null,
+        private ?ChatDigestScheduler $digest = null,
     ) {
     }
 
@@ -35,14 +37,18 @@ final readonly class ChatNotifier
     public function messageCreated(ChatMessage $message, array $reactions = []): void
     {
         $this->messageEvent('message', $message, $reactions);
-
-        if (!$this->pushEnabled || $message->isDeleted()) {
+        if ($message->isDeleted()) {
             return;
         }
         $others = array_values(array_filter(
-            array_map(static fn (ChatUserInterface $user): int => (int) $user->getId(), $this->recipients->of($message->getConversation())),
-            static fn (int $id): bool => $id !== $message->getAuthor()?->getId(),
+            $this->recipients->of($message->getConversation()),
+            static fn (ChatUserInterface $user): bool => $user->getId() !== $message->getAuthor()?->getId(),
         ));
+        $this->digest?->schedule($others);
+        if (!$this->pushEnabled) {
+            return;
+        }
+        $others = array_map(static fn (ChatUserInterface $user): int => (int) $user->getId(), $others);
         if ([] === $others) {
             return;
         }

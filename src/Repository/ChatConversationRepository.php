@@ -144,6 +144,26 @@ class ChatConversationRepository extends ServiceEntityRepository
         return $rows;
     }
 
+    /**
+     * Conversations the user has a participant row in (wrote, opened or was added), newest activity first.
+     *
+     * @return list<ChatConversation>
+     */
+    public function findParticipating(ChatUserInterface $user, int $limit): array
+    {
+        /** @var list<ChatConversation> $rows */
+        $rows = $this->createQueryBuilder('c')
+            ->innerJoin(ChatParticipant::class, 'p', 'WITH', 'p.conversation = c AND p.user = :user')
+            ->setParameter('user', $user)
+            ->orderBy('c.lastMessageAt', 'DESC')
+            ->addOrderBy('c.id', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        return $rows;
+    }
+
     /** Open support threads (agents' menu counter). */
     public function countOpenSupport(): int
     {

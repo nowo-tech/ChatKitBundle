@@ -58,7 +58,7 @@ final class ChatPrivacyTest extends DatabaseTestCase
         $this->em->flush();
 
         $export = $data->export($ana);
-        self::assertSame(['sound' => 'ding', 'push' => false, 'buzzes' => true, 'show_online' => true], $export['settings']);
+        self::assertSame(['sound' => 'ding', 'push' => false, 'buzzes' => true, 'email_digest' => true, 'show_online' => true], $export['settings']);
         self::assertSame(['my words', 'help'], array_column($export['messages'], 'text'), 'only own messages');
         self::assertSame('direct', $export['messages'][0]['conversation_kind']);
 
