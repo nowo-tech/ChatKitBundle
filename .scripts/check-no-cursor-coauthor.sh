@@ -2,6 +2,9 @@
 # Fail if git history contains AI Co-authored-by trailers — Cursor or Claude (REQ-GIT-001).
 set -eu
 
+
+# Claude trailers: audited from the baseline on (REQ-GIT-001).
+sh "$(dirname "$0")/check-no-claude-coauthor.sh" "${1:-HEAD}"
 REF="${1:-HEAD}"
 
 if [ ! -d .git ]; then
