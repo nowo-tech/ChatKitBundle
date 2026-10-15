@@ -38,10 +38,17 @@
     },
     "require": {
         "php": ">=8.3 <8.6",
+        "doctrine/doctrine-bundle": "^2.13 || ^3.0",
+        "doctrine/orm": "^3.3",
         "symfony/config": "^7.4 || ^8.0",
         "symfony/dependency-injection": "^7.4 || ^8.0",
         "symfony/framework-bundle": "^7.4 || ^8.0",
+        "symfony/http-foundation": "^7.4 || ^8.0",
         "symfony/http-kernel": "^7.4 || ^8.0",
+        "symfony/rate-limiter": "^7.4 || ^8.0",
+        "symfony/security-bundle": "^7.4 || ^8.0",
+        "symfony/translation": "^7.4 || ^8.0",
+        "symfony/uid": "^7.4 || ^8.0",
         "twig/extra-bundle": "^3.12",
         "twig/string-extra": "^3.12"
     },
@@ -50,21 +57,23 @@
         "igor-php/igor-php": "^0.9.7",
         "nowo-tech/phpstan-frankenphp": "^1.1",
         "phpstan/phpstan": "^2.1",
+        "phpstan/phpstan-doctrine": "^2.0",
         "phpstan/phpstan-phpunit": "^2.0",
         "phpstan/phpstan-symfony": "^2.0",
         "phpunit/phpunit": "^10.5 || ^11.5",
         "rector/rector": "^2.0",
         "symfony/asset": "^7.4 || ^8.0",
+        "symfony/browser-kit": "^7.4 || ^8.0",
+        "symfony/mercure": "^0.6",
         "symfony/twig-bundle": "^7.4 || ^8.0",
         "symfony/yaml": "^7.4 || ^8.0",
         "twig/twig": "^3.12",
         "vincentlanglet/twig-cs-fixer": "^3.0"
     },
     "suggest": {
-        "symfony/mercure-bundle": "Realtime delivery of messages, presence, typing and read receipts (planned)",
-        "minishlink/web-push": "Web Push notifications when the app tab is not open (planned)",
-        "doctrine/orm": "Default persistence for conversations and messages (planned)",
-        "symfony/messenger": "Asynchronous fan-out of notifications and push (planned)"
+        "symfony/mercure-bundle": "Realtime delivery of messages, presence, typing and read receipts (default ChatRealtimeInterface)",
+        "minishlink/web-push": "Web Push notifications when the app is not open (implement ChatPushSenderInterface)",
+        "symfony/messenger": "Asynchronous push fan-out"
     },
     "autoload": {
         "psr-4": {

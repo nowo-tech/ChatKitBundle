@@ -17,10 +17,39 @@ final class ConfigurationTest extends TestCase
 {
     public function testDefaultsExposeDefaultProfile(): void
     {
-        $config = $this->process([]);
+        $config = $this->process([[]]);
 
         self::assertSame('default', $config['default_profile']);
-        self::assertSame(['default' => ['enabled' => true]], $config['profiles']);
+        self::assertSame([
+            'enabled' => true,
+            'user_class' => null,
+            'retention_days' => 365,
+            'realtime' => true,
+            'push' => false,
+            'presence_ttl' => 90,
+            'limits' => [
+                'send_per_minute' => 30,
+                'actions_per_minute' => 240,
+                'typing_per_minute' => 30,
+                'reads_per_minute' => 600,
+                'buzz_interval_seconds' => 15,
+                'buzz_per_minute' => 10,
+            ],
+        ], $config['profiles']['default']);
+    }
+
+    public function testOmittedProfilesFollowTheDefaultProfileName(): void
+    {
+        $config = $this->process([['default_profile' => 'member']]);
+
+        self::assertSame(['member'], array_keys($config['profiles']));
+    }
+
+    public function testRetentionBelowThirtyDaysIsRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+
+        $this->process([['profiles' => ['default' => ['retention_days' => 7]]]]);
     }
 
     public function testCustomProfilesAreKeptByName(): void
@@ -34,7 +63,8 @@ final class ConfigurationTest extends TestCase
         ]]);
 
         self::assertSame('support', $config['default_profile']);
-        self::assertSame(['enabled' => false], $config['profiles']['member']);
+        self::assertFalse($config['profiles']['member']['enabled']);
+        self::assertTrue($config['profiles']['support']['enabled']);
     }
 
     public function testUnknownDefaultProfileIsRejected(): void
@@ -51,11 +81,11 @@ final class ConfigurationTest extends TestCase
     /**
      * @param array<array<string, mixed>> $configs
      *
-     * @return array{default_profile: string, profiles: array<string, array{enabled: bool}>}
+     * @return array{default_profile: string, profiles: array<string, array<string, mixed>>}
      */
     private function process(array $configs): array
     {
-        /** @var array{default_profile: string, profiles: array<string, array{enabled: bool}>} $processed */
+        /** @var array{default_profile: string, profiles: array<string, array<string, mixed>>} $processed */
         $processed = (new Processor())->processConfiguration(new Configuration(), $configs);
 
         return $processed;

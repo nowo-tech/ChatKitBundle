@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Support;
 
+use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Component\Config\Loader\LoaderInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -20,6 +22,8 @@ final class TestKernel extends Kernel
 {
     public const ASSET_PACKAGES_ALIAS = 'nowo_chat_kit_test.assets_packages';
 
+    public const ENTITY_MANAGER_ALIAS = 'nowo_chat_kit_test.entity_manager';
+
     /**
      * @param array<string, mixed> $chatKitConfig
      */
@@ -31,6 +35,7 @@ final class TestKernel extends Kernel
     public function registerBundles(): iterable
     {
         yield new FrameworkBundle();
+        yield new DoctrineBundle();
         yield new NowoChatKitBundle();
     }
 
@@ -46,9 +51,26 @@ final class TestKernel extends Kernel
                 'php_errors' => ['log' => true],
                 'assets' => ['enabled' => true],
             ]);
-            $container->loadFromExtension('nowo_chat_kit', $chatKitConfig);
+            $container->loadFromExtension('doctrine', [
+                'dbal' => ['driver' => 'pdo_sqlite', 'memory' => true],
+                'orm' => [
+                    'mappings' => [
+                        'TestSupport' => [
+                            'type' => 'attribute',
+                            'is_bundle' => false,
+                            'dir' => __DIR__.'/Entity',
+                            'prefix' => 'Nowo\\ChatKitBundle\\Tests\\Support\\Entity',
+                        ],
+                    ],
+                ],
+            ]);
+            $container->loadFromExtension('nowo_chat_kit', array_replace_recursive(
+                ['profiles' => ['default' => ['user_class' => TestUser::class]]],
+                $chatKitConfig,
+            ));
             // Expose the asset packages service so the smoke test can resolve bundle URLs.
             $container->setAlias(self::ASSET_PACKAGES_ALIAS, 'assets.packages')->setPublic(true);
+            $container->setAlias(self::ENTITY_MANAGER_ALIAS, 'doctrine.orm.entity_manager')->setPublic(true);
         });
     }
 

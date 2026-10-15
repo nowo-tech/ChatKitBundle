@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Integration;
 
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
+use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Asset\Packages;
@@ -35,7 +37,8 @@ final class BundleBootTest extends TestCase
             $container = $kernel->getContainer();
 
             self::assertSame('default', $container->getParameter('nowo_chat_kit.default_profile'));
-            self::assertSame(['default' => ['enabled' => true]], $container->getParameter('nowo_chat_kit.profiles'));
+            self::assertSame(TestUser::class, $container->getParameter('nowo_chat_kit.user_class'));
+            self::assertSame(365, $container->getParameter('nowo_chat_kit.retention_days'));
 
             $packages = $container->get(TestKernel::ASSET_PACKAGES_ALIAS);
             self::assertInstanceOf(Packages::class, $packages);
@@ -53,6 +56,39 @@ final class BundleBootTest extends TestCase
         self::assertSame('nowo_chat_kit', $extension->getAlias());
     }
 
+    public function testPrependMapsTheUserInterfaceAndEntities(): void
+    {
+        $container = $this->containerWith('doctrine');
+        $container->loadFromExtension('nowo_chat_kit', ['profiles' => ['default' => ['user_class' => TestUser::class]]]);
+
+        (new NowoChatKitExtension())->prepend($container);
+
+        $orm = $container->getExtensionConfig('doctrine')[0]['orm'];
+        self::assertSame([ChatUserInterface::class => TestUser::class], $orm['resolve_target_entities']);
+        self::assertSame('Nowo\\ChatKitBundle\\Entity', $orm['mappings']['NowoChatKitBundle']['prefix']);
+    }
+
+    public function testPrependRequiresAUserClassWithDoctrine(): void
+    {
+        $container = $this->containerWith('doctrine');
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('nowo_chat_kit.profiles.default.user_class');
+
+        (new NowoChatKitExtension())->prepend($container);
+    }
+
+    public function testLoadWithoutConfigurationUsesTheDefaultProfile(): void
+    {
+        $container = new ContainerBuilder();
+        (new NowoChatKitExtension())->load([], $container);
+
+        $profiles = $container->getParameter('nowo_chat_kit.profiles');
+        self::assertIsArray($profiles);
+        self::assertSame(['default'], array_keys($profiles));
+        self::assertNull($container->getParameter('nowo_chat_kit.user_class'));
+    }
+
     public function testPrependIsNoopWithoutFrameworkExtension(): void
     {
         $container = new ContainerBuilder();
@@ -63,17 +99,7 @@ final class BundleBootTest extends TestCase
 
     public function testPrependRegistersAssetPackage(): void
     {
-        $container = new ContainerBuilder();
-        $container->registerExtension(new class extends Extension {
-            public function getAlias(): string
-            {
-                return 'framework';
-            }
-
-            public function load(array $configs, ContainerBuilder $container): void
-            {
-            }
-        });
+        $container = $this->containerWith('framework');
 
         (new NowoChatKitExtension())->prepend($container);
 
@@ -82,5 +108,27 @@ final class BundleBootTest extends TestCase
             NowoChatKitExtension::ASSET_BASE_PATH,
             $framework[0]['assets']['packages']['nowo_chat_kit']['base_path'] ?? null,
         );
+    }
+
+    private function containerWith(string $alias): ContainerBuilder
+    {
+        $container = new ContainerBuilder();
+        $container->registerExtension(new class($alias) extends Extension {
+            public function __construct(private readonly string $alias)
+            {
+            }
+
+            public function getAlias(): string
+            {
+                return $this->alias;
+            }
+
+            public function load(array $configs, ContainerBuilder $container): void
+            {
+            }
+        });
+        $container->registerExtension(new NowoChatKitExtension());
+
+        return $container;
     }
 }

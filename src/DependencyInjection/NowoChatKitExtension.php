@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\DependencyInjection;
 
+use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
@@ -15,7 +17,8 @@ use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
  *
  * Container parameters:
  * - `nowo_chat_kit.default_profile` (string)
- * - `nowo_chat_kit.profiles` (array<string, array{enabled: bool}>)
+ * - `nowo_chat_kit.profiles` (array<string, array<string, mixed>>)
+ * - `nowo_chat_kit.{user_class,retention_days,realtime,push,presence_ttl,limits}` (default profile)
  *
  * @author Héctor Franco Aceituno <hectorfranco@nowo.tech>
  * @copyright 2026 Nowo.tech
@@ -28,10 +31,13 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     public const ASSET_BASE_PATH = '/bundles/nowochatkit';
 
     /**
-     * Registers the `nowo_chat_kit` asset package when FrameworkBundle is present.
+     * Registers the Doctrine mapping, maps ChatUserInterface to the configured user class and registers the
+     * `nowo_chat_kit` asset package.
      */
     public function prepend(ContainerBuilder $container): void
     {
+        $this->prependDoctrine($container);
+
         if (!$container->hasExtension('framework')) {
             return;
         }
@@ -54,13 +60,51 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      */
     public function load(array $configs, ContainerBuilder $container): void
     {
-        $config = $this->processConfiguration(new Configuration(), $configs);
+        // No configuration at all still yields one defaulted profile (normalization only runs on given input).
+        $config = $this->processConfiguration(new Configuration(), [] === $configs ? [[]] : $configs);
 
         $container->setParameter(Configuration::ALIAS.'.default_profile', $config['default_profile']);
         $container->setParameter(Configuration::ALIAS.'.profiles', $config['profiles']);
 
+        $profile = $config['profiles'][$config['default_profile']];
+        foreach (['user_class', 'retention_days', 'realtime', 'push', 'presence_ttl', 'limits'] as $key) {
+            $container->setParameter(Configuration::ALIAS.'.'.$key, $profile[$key]);
+        }
+
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
         $loader->load('services.php');
+    }
+
+    /**
+     * Entity mapping plus `resolve_target_entities` (ChatUserInterface → default profile `user_class`).
+     */
+    private function prependDoctrine(ContainerBuilder $container): void
+    {
+        if (!$container->hasExtension('doctrine')) {
+            return;
+        }
+
+        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string}>} $config */
+        $config = (new Processor())->processConfiguration(new Configuration(), $container->getExtensionConfig(Configuration::ALIAS) ?: [[]]);
+        $userClass = $config['profiles'][$config['default_profile']]['user_class'] ?? null;
+        if (!\is_string($userClass) || '' === $userClass) {
+            throw new \InvalidArgumentException(\sprintf('The "nowo_chat_kit.profiles.%s.user_class" configuration value is required.', $config['default_profile']));
+        }
+
+        $container->prependExtensionConfig('doctrine', [
+            'orm' => [
+                'resolve_target_entities' => [ChatUserInterface::class => $userClass],
+                'mappings' => [
+                    'NowoChatKitBundle' => [
+                        'type' => 'attribute',
+                        'is_bundle' => false,
+                        'dir' => __DIR__.'/../Entity',
+                        'prefix' => 'Nowo\\ChatKitBundle\\Entity',
+                        'alias' => 'NowoChatKit',
+                    ],
+                ],
+            ],
+        ]);
     }
 
     /**

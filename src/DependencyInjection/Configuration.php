@@ -10,9 +10,8 @@ use Symfony\Component\Config\Definition\ConfigurationInterface;
 /**
  * Configuration tree for `nowo_chat_kit` (REQ-CFG-001: `default_profile` + `profiles`).
  *
- * Each profile is a complete, named chat setup (e.g. `default` for the end-user dock,
- * `support` for an agent inbox). The skeleton only exposes the minimal keys; feature
- * options (realtime, push, sounds, templates, theme tokens) are added per profile later.
+ * Each profile is a complete, named chat setup. The default profile's `user_class` is mapped to
+ * ChatUserInterface through `doctrine.orm.resolve_target_entities`.
  *
  * @author Héctor Franco Aceituno <hectorfranco@nowo.tech>
  * @copyright 2026 Nowo.tech
@@ -31,6 +30,11 @@ final class Configuration implements ConfigurationInterface
         $treeBuilder = new TreeBuilder(self::ALIAS);
 
         $treeBuilder->getRootNode()
+            ->beforeNormalization()
+                // An omitted `profiles` still gets one fully defaulted profile (prototype defaults apply).
+                ->ifTrue(static fn (mixed $v): bool => \is_array($v) && !isset($v['profiles']))
+                ->then(static fn (array $v): array => $v + ['profiles' => [$v['default_profile'] ?? self::DEFAULT_PROFILE => []]])
+            ->end()
             ->children()
                 ->scalarNode('default_profile')
                     ->info('Profile used when no explicit profile is requested. Must exist under "profiles".')
@@ -40,13 +44,48 @@ final class Configuration implements ConfigurationInterface
                 ->arrayNode('profiles')
                     ->info('Named chat profiles (complete settings block per variant).')
                     ->useAttributeAsKey('name')
-                    ->defaultValue([self::DEFAULT_PROFILE => ['enabled' => true]])
                     ->requiresAtLeastOneElement()
                     ->arrayPrototype()
                         ->children()
                             ->booleanNode('enabled')
                                 ->info('Render the floating chat dock for this profile.')
                                 ->defaultTrue()
+                            ->end()
+                            ->scalarNode('user_class')
+                                ->info('Application user entity implementing Nowo\\ChatKitBundle\\Model\\ChatUserInterface.')
+                                ->defaultNull()
+                            ->end()
+                            ->integerNode('retention_days')
+                                ->info('Messages older than this are purged by nowo:chat:purge (minimum 30).')
+                                ->defaultValue(365)
+                                ->min(30)
+                            ->end()
+                            ->booleanNode('realtime')
+                                ->info('Push messages, typing, presence and receipts live (needs a ChatRealtimeInterface; Mercure by default).')
+                                ->defaultTrue()
+                            ->end()
+                            ->booleanNode('push')
+                                ->info('Offer Web Push for new messages (needs a ChatPushSenderInterface implementation).')
+                                ->defaultFalse()
+                            ->end()
+                            ->integerNode('presence_ttl')
+                                ->info('Seconds a heartbeat keeps a user online.')
+                                ->defaultValue(90)
+                                ->min(30)
+                            ->end()
+                            ->arrayNode('limits')
+                                ->addDefaultsIfNotSet()
+                                ->children()
+                                    ->integerNode('send_per_minute')->defaultValue(30)->min(1)->end()
+                                    ->integerNode('actions_per_minute')->defaultValue(240)->min(1)->end()
+                                    ->integerNode('typing_per_minute')->defaultValue(30)->min(1)->end()
+                                    ->integerNode('reads_per_minute')->defaultValue(600)->min(1)->end()
+                                    ->integerNode('buzz_interval_seconds')
+                                        ->info('Minimum seconds between two buzzes in the same conversation.')
+                                        ->defaultValue(15)->min(1)
+                                    ->end()
+                                    ->integerNode('buzz_per_minute')->defaultValue(10)->min(1)->end()
+                                ->end()
                             ->end()
                         ->end()
                     ->end()
