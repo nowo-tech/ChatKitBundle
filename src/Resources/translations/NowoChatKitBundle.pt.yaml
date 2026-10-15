@@ -80,6 +80,8 @@ chat:
   settings_buzz_help: 'Um zumbido abre e abana a janela da conversa e toca um som (mesmo com o som de mensagens desligado).'
   settings_presence: 'Mostrar quando estou online'
   settings_presence_help: 'Desativado, ninguém vê o seu ponto online e também não vê o dos outros.'
+  settings_email_digest: 'Avisar-me por email das mensagens não lidas'
+  settings_email_digest_help: 'No máximo um email por hora, apenas para mensagens ainda não lidas algum tempo depois de chegarem.'
   settings_save: 'Guardar definições do chat'
   filter_label: 'Filtrar conversas'
   sent: 'Enviada'

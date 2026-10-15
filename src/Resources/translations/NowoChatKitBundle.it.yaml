@@ -80,6 +80,8 @@ chat:
   settings_buzz_help: 'Un trillo apre e scuote la finestra della conversazione e riproduce un suono (anche con il suono dei messaggi disattivato).'
   settings_presence: 'Mostra quando sono online'
   settings_presence_help: 'Se disattivato, nessuno vede il tuo punto online e tu non vedi quello degli altri.'
+  settings_email_digest: 'Avvisami via email dei messaggi non letti'
+  settings_email_digest_help: 'Al massimo un''email all''ora, solo per i messaggi ancora non letti un po'' dopo l''arrivo.'
   settings_save: 'Salva impostazioni chat'
   filter_label: 'Filtra conversazioni'
   sent: 'Inviato'

@@ -80,6 +80,8 @@ chat:
   settings_buzz_help: 'Un wizz ouvre et secoue la fenêtre de la conversation et joue un son (même si le son des messages est coupé).'
   settings_presence: 'Afficher quand je suis en ligne'
   settings_presence_help: 'Désactivé, personne ne voit votre point en ligne et vous ne voyez pas le leur.'
+  settings_email_digest: 'M''envoyer un e-mail pour les messages non lus'
+  settings_email_digest_help: 'Au plus un e-mail par heure, seulement pour les messages encore non lus un moment après leur arrivée.'
   settings_save: 'Enregistrer les réglages de messagerie'
   filter_label: 'Filtrer les conversations'
   sent: 'Envoyé'

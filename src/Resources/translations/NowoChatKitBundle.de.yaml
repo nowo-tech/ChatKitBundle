@@ -80,6 +80,8 @@ chat:
   settings_buzz_help: 'Ein Anstupser öffnet und schüttelt das Unterhaltungsfenster und spielt einen Ton (auch wenn der Nachrichtenton aus ist).'
   settings_presence: 'Anzeigen, wenn ich online bin'
   settings_presence_help: 'Wenn aus, sieht niemand Ihren Online-Punkt und Sie sehen den der anderen nicht.'
+  settings_email_digest: 'Per E-Mail über ungelesene Nachrichten informieren'
+  settings_email_digest_help: 'Höchstens eine E-Mail pro Stunde, nur für Nachrichten, die eine Weile nach dem Eingang noch ungelesen sind.'
   settings_save: 'Chat-Einstellungen speichern'
   filter_label: 'Unterhaltungen filtern'
   sent: 'Gesendet'

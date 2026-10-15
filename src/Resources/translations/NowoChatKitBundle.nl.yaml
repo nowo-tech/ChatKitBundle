@@ -80,6 +80,8 @@ chat:
   settings_buzz_help: 'Een buzz opent en schudt het gespreksvenster en speelt een geluid (ook als het berichtgeluid uit staat).'
   settings_presence: 'Tonen wanneer ik online ben'
   settings_presence_help: 'Uit: niemand ziet je online-stip en jij ziet die van anderen niet.'
+  settings_email_digest: 'Mail me over ongelezen berichten'
+  settings_email_digest_help: 'Hoogstens één e-mail per uur, alleen voor berichten die een tijdje na aankomst nog ongelezen zijn.'
   settings_save: 'Chatinstellingen opslaan'
   filter_label: 'Gesprekken filteren'
   sent: 'Verzonden'

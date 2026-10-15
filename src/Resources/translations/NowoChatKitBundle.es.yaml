@@ -80,6 +80,8 @@ chat:
   settings_buzz_help: 'Un zumbido abre y sacude la ventana de la conversación y suena un aviso (aunque el sonido de mensajes esté desactivado).'
   settings_presence: 'Mostrar cuándo estoy en línea'
   settings_presence_help: 'Si lo desactivas, nadie ve tu punto de en línea y tú tampoco ves el de los demás.'
+  settings_email_digest: 'Avisarme por email de los mensajes sin leer'
+  settings_email_digest_help: 'Como mucho un email por hora, solo por mensajes que siguen sin leer un rato después de llegar.'
   settings_save: 'Guardar ajustes del chat'
   filter_label: 'Filtrar conversaciones'
   sent: 'Enviado'

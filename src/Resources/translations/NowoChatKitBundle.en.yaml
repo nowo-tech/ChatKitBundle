@@ -80,6 +80,8 @@ chat:
   settings_buzz_help: 'A buzz opens and shakes the conversation window and plays a sound (even when the message sound is off).'
   settings_presence: 'Show when I am online'
   settings_presence_help: 'When off, nobody sees your online dot and you do not see theirs.'
+  settings_email_digest: 'Email me about unread messages'
+  settings_email_digest_help: 'At most one email per hour, only for messages still unread a while after they arrive.'
   settings_save: 'Save chat settings'
   filter_label: 'Filter conversations'
   sent: 'Sent'
