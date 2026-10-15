@@ -1,0 +1,107 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nowo\ChatKitBundle\Push;
+
+use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
+use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatParticipant;
+use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Realtime\ChatPresence;
+use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
+use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+use Nowo\ChatKitBundle\Security\ChatAccess;
+use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
+use Symfony\Component\Clock\Clock;
+use Symfony\Component\Clock\ClockInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
+
+/**
+ * Picks who gets a Web Push for a message, checked at delivery time: participants only (never everyone who
+ * could read it), reachable, push enabled, not muted, not yet read, the app not open in any tab, buzzes only
+ * to people who accept them. The application's ChatPushSenderInterface delivers the payloads.
+ */
+final readonly class ChatPushDispatcher
+{
+    public function __construct(
+        private ChatMessageRepository $messages,
+        private ChatParticipantRepository $participants,
+        private ChatUserSettingsRepository $settings,
+        private ChatPresence $presence,
+        private ChatAccess $access,
+        private ChatMarkdownRenderer $markdown,
+        private TranslatorInterface $translator,
+        private ChatPushSenderInterface $sender,
+        private string $urlTemplate = '/?chat={uuid}',
+        private ?string $icon = null,
+        private ClockInterface $clock = new Clock(),
+    ) {
+    }
+
+    public function __invoke(DeliverChatPushMessage $command): void
+    {
+        $message = $this->messages->find($command->messageId);
+        if (!$message instanceof ChatMessage || $message->isDeleted() || [] === $command->recipientIds) {
+            return;
+        }
+        $now = $this->clock->now();
+        /** @var list<ChatParticipant> $participants */
+        $participants = $this->participants->findBy(['conversation' => $message->getConversation(), 'user' => $command->recipientIds]);
+        $users = array_map(static fn (ChatParticipant $participant): ChatUserInterface => $participant->getUser(), $participants);
+        $presence = $this->presence->statusOf($users);
+        $settings = $this->settings->forUsers($users);
+
+        $recipients = [];
+        foreach ($participants as $participant) {
+            $user = $participant->getUser();
+            $preferences = $settings[(int) $user->getId()];
+            if (!$this->access->isReachable($user) || !$preferences->isPushEnabled() || ($presence[$user->getChatPublicId()]['appOpen'] ?? false)) {
+                continue;
+            }
+            if ($this->isSilenced($participant, $message, $now) || ($message->isBuzz() && !$preferences->isBuzzEnabled())) {
+                continue;
+            }
+            $recipients[] = $user;
+        }
+        if ([] !== $recipients) {
+            $this->sender->send($recipients, fn (ChatUserInterface $user): array => $this->payload($message, $user));
+        }
+    }
+
+    private function isSilenced(ChatParticipant $participant, ChatMessage $message, \DateTimeImmutable $now): bool
+    {
+        return $participant->isMuted($now) || (int) $participant->getLastReadMessageId() >= (int) $message->getId();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function payload(ChatMessage $message, ChatUserInterface $recipient): array
+    {
+        $conversation = $message->getConversation();
+        $locale = $recipient->getChatLocale();
+        $author = $message->getAuthor();
+        $authorName = $author?->getChatDisplayName() ?? $this->translator->trans('chat.deleted_user', [], 'NowoChatKitBundle', $locale);
+        $title = match (true) {
+            $conversation->isChannel() => '#'.($this->access->channel((string) $conversation->getChannelKey())->label ?? '').' · '.$authorName,
+            $conversation->isSupport() && $author?->getId() !== $conversation->getSupportOwner()?->getId() => $this->translator->trans('chat.administrators', [], 'NowoChatKitBundle', $locale),
+            default => $authorName,
+        };
+        $body = $message->isBuzz()
+            ? $this->translator->trans('chat.buzz_received', ['%name%' => $authorName], 'NowoChatKitBundle', $locale)
+            : $this->markdown->plainText($message->getBody(), 140);
+
+        return array_filter([
+            'event' => 'chat.message',
+            'title' => $title,
+            'body' => $body,
+            // One notification per conversation, replaced by the next one (no stack of toasts).
+            'tag' => 'chat-'.$conversation->getUuid(),
+            'url' => str_replace('{uuid}', $conversation->getUuid(), $this->urlTemplate),
+            'icon' => $this->icon,
+            'badge' => $this->icon,
+        ], static fn (?string $value): bool => null !== $value);
+    }
+}

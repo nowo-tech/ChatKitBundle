@@ -26,6 +26,10 @@ final class ConfigurationTest extends TestCase
             'retention_days' => 365,
             'realtime' => true,
             'push' => false,
+            'push_url' => '/?chat={uuid}',
+            'push_icon' => null,
+            'cache_pool' => 'cache.app',
+            'reactions' => ['👍', '❤️', '😂', '😮', '😢', '🎉'],
             'presence_ttl' => 90,
             'limits' => [
                 'send_per_minute' => 30,

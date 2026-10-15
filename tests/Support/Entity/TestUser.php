@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Tests\Support\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Uid\Uuid;
 
 /**
@@ -13,7 +14,7 @@ use Symfony\Component\Uid\Uuid;
  */
 #[ORM\Entity]
 #[ORM\Table(name: 'test_user')]
-class TestUser implements ChatUserInterface
+class TestUser implements ChatUserInterface, UserInterface
 {
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -22,6 +23,9 @@ class TestUser implements ChatUserInterface
 
     #[ORM\Column(length: 36)]
     private string $publicId;
+
+    #[ORM\Column(length: 8, nullable: true)]
+    private ?string $locale = null;
 
     public function __construct(
         #[ORM\Column(length: 120)]
@@ -55,5 +59,34 @@ class TestUser implements ChatUserInterface
     public function getChatEmail(): ?string
     {
         return $this->email;
+    }
+
+    public function getChatLocale(): ?string
+    {
+        return $this->locale;
+    }
+
+    public function setChatLocale(?string $locale): void
+    {
+        $this->locale = $locale;
+    }
+
+    public function getRoles(): array
+    {
+        return ['ROLE_USER'];
+    }
+
+    /**
+     * @return non-empty-string
+     */
+    public function getUserIdentifier(): string
+    {
+        \assert('' !== $this->publicId);
+
+        return $this->publicId;
+    }
+
+    public function eraseCredentials(): void
+    {
     }
 }

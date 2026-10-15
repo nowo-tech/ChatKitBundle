@@ -23,4 +23,7 @@ interface ChatUserInterface
 
     /** Shown as a subtitle to people allowed to message this user; null hides it. */
     public function getChatEmail(): ?string;
+
+    /** Locale for texts sent outside a request (Web Push); null uses the default locale. */
+    public function getChatLocale(): ?string;
 }

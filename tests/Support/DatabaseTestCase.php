@@ -20,12 +20,35 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function setUp(): void
     {
-        $this->kernel = new TestKernel();
+        $this->kernel = new TestKernel($this->chatKitConfig());
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         \assert($em instanceof EntityManagerInterface);
         $this->em = $em;
         (new SchemaTool($em))->createSchema($em->getMetadataFactory()->getAllMetadata());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function chatKitConfig(): array
+    {
+        return [];
+    }
+
+    /**
+     * @template T of object
+     *
+     * @param class-string<T> $id
+     *
+     * @return T
+     */
+    protected function get(string $id): object
+    {
+        $service = $this->kernel->getContainer()->get($id);
+        \assert($service instanceof $id);
+
+        return $service;
     }
 
     protected function tearDown(): void

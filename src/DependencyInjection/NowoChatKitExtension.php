@@ -18,7 +18,8 @@ use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
  * Container parameters:
  * - `nowo_chat_kit.default_profile` (string)
  * - `nowo_chat_kit.profiles` (array<string, array<string, mixed>>)
- * - `nowo_chat_kit.{user_class,retention_days,realtime,push,presence_ttl,limits}` (default profile)
+ * - `nowo_chat_kit.{user_class,retention_days,realtime,push,push_url,push_icon,cache_pool,reactions,presence_ttl,limits}`
+ *   (default profile)
  *
  * @author Héctor Franco Aceituno <hectorfranco@nowo.tech>
  * @copyright 2026 Nowo.tech
@@ -67,12 +68,13 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS.'.profiles', $config['profiles']);
 
         $profile = $config['profiles'][$config['default_profile']];
-        foreach (['user_class', 'retention_days', 'realtime', 'push', 'presence_ttl', 'limits'] as $key) {
+        foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'cache_pool', 'reactions', 'presence_ttl', 'limits'] as $key) {
             $container->setParameter(Configuration::ALIAS.'.'.$key, $profile[$key]);
         }
 
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
         $loader->load('services.php');
+        $container->setAlias('nowo_chat_kit.cache', $profile['cache_pool']);
     }
 
     /**

@@ -5,10 +5,21 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Support;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
+use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
+use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
+use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingPushSender;
+use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestAccessPolicy;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Component\Config\Loader\LoaderInterface;
+use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Kernel;
 
@@ -50,6 +61,8 @@ final class TestKernel extends Kernel
                 'handle_all_throwables' => true,
                 'php_errors' => ['log' => true],
                 'assets' => ['enabled' => true],
+                'translator' => ['enabled' => true, 'fallbacks' => ['en']],
+                'default_locale' => 'en',
             ]);
             $container->loadFromExtension('doctrine', [
                 'dbal' => ['driver' => 'pdo_sqlite', 'memory' => true],
@@ -71,6 +84,26 @@ final class TestKernel extends Kernel
             // Expose the asset packages service so the smoke test can resolve bundle URLs.
             $container->setAlias(self::ASSET_PACKAGES_ALIAS, 'assets.packages')->setPublic(true);
             $container->setAlias(self::ENTITY_MANAGER_ALIAS, 'doctrine.orm.entity_manager')->setPublic(true);
+            $container->loadFromExtension('framework', ['cache' => ['app' => 'cache.adapter.array']]);
+            foreach ([TestDirectory::class, TestAccessPolicy::class, TestChannelProvider::class, RecordingRealtime::class, RecordingPushSender::class] as $class) {
+                $container->register($class)->setAutowired(true)->setPublic(true);
+            }
+            $container->setAlias(ChatDirectoryInterface::class, TestDirectory::class);
+            $container->setAlias(ChatAccessPolicyInterface::class, TestAccessPolicy::class);
+            $container->setAlias(ChatChannelProviderInterface::class, TestChannelProvider::class);
+            $container->setAlias(ChatRealtimeInterface::class, RecordingRealtime::class);
+            $container->setAlias(ChatPushSenderInterface::class, RecordingPushSender::class);
+            // Expose the bundle services to the tests.
+            $container->addCompilerPass(new class implements CompilerPassInterface {
+                public function process(ContainerBuilder $container): void
+                {
+                    foreach ($container->getDefinitions() as $id => $definition) {
+                        if (str_starts_with($id, 'Nowo\\ChatKitBundle\\') && !str_contains($id, '\\Tests\\')) {
+                            $definition->setPublic(true);
+                        }
+                    }
+                }
+            });
         });
     }
 
