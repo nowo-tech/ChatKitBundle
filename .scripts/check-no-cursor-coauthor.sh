@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Fail if git history contains Cursor agent Co-authored-by trailers (REQ-GIT-001).
+# Fail if git history contains AI Co-authored-by trailers — Cursor or Claude (REQ-GIT-001).
 set -eu
 
 REF="${1:-HEAD}"
@@ -23,21 +23,21 @@ if [ -n "${TOPLEVEL}" ] && [ "$(cd "${TOPLEVEL}" && pwd -P)" != "${HERE}" ]; the
   exit 1
 fi
 
-PATTERN='(^Co-authored-by: Cursor <cursoragent@cursor.com>$|^Co-authored-by:.*cursoragent@cursor\.com| Co-authored-by: Cursor <cursoragent@cursor.com>| Co-authored-by:.*cursoragent@cursor\.com)'
+PATTERN='co-authored-by:.*(cursoragent@cursor\.com|claude|anthropic\.com)'
 
 # Use --no-replace-objects so local `git replace` refs cannot hide dirty history
 # that CI (fresh clone) would still see.
 MATCHES="$(
   git --no-replace-objects log "${REF}" --format=%B \
-    | grep -E "${PATTERN}" \
+    | grep -iE "${PATTERN}" \
     || true
 )"
 
 if [ -n "${MATCHES}" ]; then
-  echo "ERROR: Cursor co-author trailers found in git history (ref: ${REF})" >&2
+  echo "ERROR: AI co-author trailers (Cursor / Claude) found in git history (ref: ${REF})" >&2
   echo "Offending commits:" >&2
   git --no-replace-objects log "${REF}" --format='%H %s' | while read -r hash subject; do
-    if git --no-replace-objects log -1 --format=%B "${hash}" | grep -qE 'cursoragent@cursor\.com'; then
+    if git --no-replace-objects log -1 --format=%B "${hash}" | grep -qiE "${PATTERN}"; then
       echo "  ${hash} ${subject}" >&2
     fi
   done
@@ -46,4 +46,4 @@ if [ -n "${MATCHES}" ]; then
   exit 1
 fi
 
-echo "OK: no Cursor co-author trailers in git history (ref: ${REF})"
+echo "OK: no AI (Cursor / Claude) co-author trailers in git history (ref: ${REF})"

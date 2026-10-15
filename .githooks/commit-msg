@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Strip Cursor agent co-author trailers from commit messages (REQ-GIT-001).
+# Strip AI co-author trailers (Cursor, Claude) from commit messages (REQ-GIT-001).
 set -eu
 
 MSG_FILE="${1:?commit message file required}"
@@ -7,6 +7,8 @@ tmp="$(mktemp)"
 
 sed -e '/^Co-authored-by: Cursor <cursoragent@cursor.com>$/d' \
     -e '/^Co-authored-by:.*cursoragent@cursor\.com/d' \
+    -e '/^[Cc]o-[Aa]uthored-[Bb]y:.*[Cc]laude/d' \
+    -e '/^[Cc]o-[Aa]uthored-[Bb]y:.*anthropic\.com/d' \
     "$MSG_FILE" > "$tmp"
 
 mv "$tmp" "$MSG_FILE"
