@@ -353,7 +353,7 @@ export class ChatDock implements ThreadHost {
       { signal },
     );
     // Links anywhere on the page: data-nowo-chat-open="support" (data-nowo-chat-context-url / -label),
-    // "user:<public id>" or "channel:<key>" open that conversation in the dock.
+    // "user:<public id>", "channel:<key>" or "conversation:<uuid>" open that conversation in the dock.
     document.addEventListener(
       'click',
       (event) => {
@@ -432,6 +432,8 @@ export class ChatDock implements ThreadHost {
       await this.open(await this.api.openDirect(target.slice(5)));
     } else if (target.startsWith('channel:')) {
       await this.open(await this.api.openChannel(target.slice(8)));
+    } else if (target.startsWith('conversation:')) {
+      await this.open(await this.api.conversation(target.slice(13)));
     }
   }
 

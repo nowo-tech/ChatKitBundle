@@ -117,7 +117,10 @@ Any element with `data-nowo-chat-open` opens a conversation in the dock when cli
    data-nowo-chat-context-url="{{ app.request.uri }}" data-nowo-chat-context-label="Invoice #42">Report a problem</a>
 <a href="#" data-nowo-chat-open="user:{{ colleague.chatPublicId }}">Message</a>
 <a href="#" data-nowo-chat-open="channel:project:{{ project.uuid }}">Project chat</a>
+<a href="{{ path('nowo_chat_page_conversation', {uuid: thread.uuid}) }}" data-nowo-chat-open="conversation:{{ thread.uuid }}">Open</a>
 ```
+
+The dock handles the click; without JavaScript the `href` still works (e.g. the full-page chat).
 
 `support` opens (or creates) the user's support thread; the optional context (`url`, `label`) is stored on the thread and
 shown to the agents as a "Reported from" banner.

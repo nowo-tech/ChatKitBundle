@@ -454,6 +454,10 @@ describe('ChatDock', () => {
     link({ 'data-nowo-chat-open': 'channel:project:1' }).click();
     await flush();
     expect(api.openChannel).toHaveBeenCalledWith('project:1');
+    api.conversation.mockResolvedValueOnce(summary('c-42'));
+    link({ 'data-nowo-chat-open': 'conversation:c-42' }).click();
+    await flush();
+    expect(api.conversation).toHaveBeenCalledWith('c-42');
     link({ 'data-nowo-chat-open': 'nothing' }).click();
     link({ 'data-nowo-chat-open': 'support', 'data-nowo-chat-context-label': 'Only a label' }).click();
     await flush();
