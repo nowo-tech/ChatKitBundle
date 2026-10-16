@@ -1709,6 +1709,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   background: var(--nowo-chat-surface-muted);
 }
 .nowo-chat-page__row-title {
+  grid-column: 1;
   overflow: hidden;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -1720,6 +1721,8 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   align-self: center;
 }
 .nowo-chat-page__row-preview {
+  /* Always under the title, also when the row has no unread badge. */
+  grid-column: 1;
   overflow: hidden;
   color: var(--nowo-chat-muted);
   font-size: 0.8125rem;
