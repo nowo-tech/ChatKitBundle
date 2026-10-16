@@ -15,6 +15,20 @@
   --nowo-chat-warn: #d99a00;
   --nowo-chat-mist: #dce7f2;
   --nowo-chat-font-display: inherit;
+  /* Shapes and sizes (override any of them like the colours). */
+  --nowo-chat-radius-window: 12px;
+  --nowo-chat-radius-bubble: 16px;
+  --nowo-chat-radius-input: 18px;
+  --nowo-chat-radius-control: 8px;
+  --nowo-chat-radius-pill: 999px;
+  --nowo-chat-radius-button: 50%;
+  --nowo-chat-radius-avatar: 50%;
+  --nowo-chat-radius-avatar-square: 10px;
+  --nowo-chat-shadow: 0 8px 28px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+  --nowo-chat-shadow-soft: 0 6px 18px rgba(0, 0, 0, 0.14);
+  --nowo-chat-window-width: 336px;
+  --nowo-chat-panel-width: 312px;
+  --nowo-chat-font-size: 0.875rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -49,19 +63,14 @@
   --nowo-chat-muted: color-mix(in srgb, var(--nowo-chat-text) 68%, transparent);
   position: fixed;
   right: 16px;
-  bottom: var(--nowo-chat-bottom-offset, 0px);
+  /* Flush with the bottom, or above what covers it: the measured `data-nowo-chat-avoid` elements / Symfony toolbar
+     (`--nowo-chat-toolbar-offset`) or an offset the application sets itself, whichever is taller. */
+  --nowo-chat-lift: max(var(--nowo-chat-bottom-offset, 0px), var(--nowo-chat-toolbar-offset, 0px));
+  bottom: var(--nowo-chat-lift);
   z-index: var(--nowo-chat-z-index, 60);
   pointer-events: none;
-  font-size: 0.875rem;
+  font-size: var(--nowo-chat-font-size);
   color: var(--nowo-chat-text);
-}
-
-body:has(.sf-toolbar-opened) .nowo-chat {
-  bottom: 76px;
-}
-
-body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
-  bottom: 40px;
 }
 
 .nowo-chat-dock {
@@ -84,13 +93,13 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   background: var(--nowo-chat-surface);
   border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
   border-bottom: 0;
-  border-radius: 12px 12px 0 0;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+  border-radius: var(--nowo-chat-radius-window) var(--nowo-chat-radius-window) 0 0;
+  box-shadow: var(--nowo-chat-shadow);
   overflow: hidden;
 }
 
 .nowo-chat-panel {
-  width: 312px;
+  width: var(--nowo-chat-panel-width);
 }
 
 .nowo-chat-panel__header,
@@ -117,7 +126,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   align-items: center;
   gap: 10px;
   padding: 8px;
-  border-radius: 10px;
+  border-radius: var(--nowo-chat-radius-avatar-square);
   background: none;
   color: inherit;
   text-align: left;
@@ -138,7 +147,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: var(--nowo-chat-radius-avatar);
   background: color-mix(in srgb, var(--nowo-chat-accent) 14%, transparent);
   color: var(--nowo-chat-accent);
 }
@@ -160,7 +169,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 
 .nowo-chat-panel__body {
   display: none;
-  height: min(520px, 100dvh - 140px);
+  height: min(520px, 100dvh - 140px - var(--nowo-chat-lift, 0px));
   flex-direction: column;
   position: relative;
 }
@@ -203,7 +212,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   height: 34px;
   padding: 0 10px 0 32px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--nowo-chat-radius-control);
   background: var(--nowo-chat-surface-muted);
   color: var(--nowo-chat-text);
   font-size: 0.8125rem;
@@ -226,7 +235,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   flex: none;
   padding: 3px 10px;
   border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 90%, transparent);
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: none;
   color: inherit;
   font-size: 0.75rem;
@@ -322,7 +331,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat-row__tag {
   flex: none;
   padding: 0 6px;
-  border-radius: 4px;
+  border-radius: calc(var(--nowo-chat-radius-control) / 2);
   background: color-mix(in srgb, var(--nowo-chat-warn) 22%, transparent);
   font-size: 0.6875rem;
   font-weight: 600;
@@ -405,7 +414,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   display: grid;
   flex: none;
   place-items: center;
-  border-radius: 50%;
+  border-radius: var(--nowo-chat-radius-avatar);
   background: color-mix(in srgb, var(--nowo-chat-accent) 18%, var(--nowo-chat-surface));
   color: var(--nowo-chat-accent-strong);
   font-weight: 600;
@@ -426,7 +435,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 }
 
 .nowo-chat-avatar--channel {
-  border-radius: 10px;
+  border-radius: var(--nowo-chat-radius-avatar-square);
   background: color-mix(in srgb, var(--nowo-chat-mist) 40%, var(--nowo-chat-surface));
   color: var(--nowo-chat-text);
 }
@@ -448,7 +457,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   height: 18px;
   padding: 0 5px;
   place-items: center;
-  border-radius: 9px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: var(--nowo-chat-danger);
   color: #fff;
   font-size: 0.6875rem;
@@ -466,7 +475,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   height: 32px;
   place-items: center;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--nowo-chat-radius-button);
   background: none;
   color: var(--nowo-chat-muted);
   cursor: pointer;
@@ -481,8 +490,8 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 }
 
 .nowo-chat-window {
-  width: 336px;
-  height: min(460px, 100dvh - 96px);
+  width: var(--nowo-chat-window-width);
+  height: min(460px, 100dvh - 96px - var(--nowo-chat-lift, 0px));
 }
 .nowo-chat-window.is-minimised {
   width: 232px;
@@ -585,7 +594,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   margin: 14px auto 6px;
   width: fit-content;
   padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: var(--nowo-chat-surface-muted);
   color: var(--nowo-chat-muted);
   font-size: 0.6875rem;
@@ -642,7 +651,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 
 .nowo-chat-bubble {
   padding: 7px 11px;
-  border-radius: 16px;
+  border-radius: var(--nowo-chat-radius-bubble);
   background: var(--nowo-chat-surface-muted);
   line-height: 1.42;
   overflow-wrap: anywhere;
@@ -672,14 +681,14 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 }
 .nowo-chat-bubble code {
   padding: 0 4px;
-  border-radius: 4px;
+  border-radius: calc(var(--nowo-chat-radius-control) / 2);
   background: color-mix(in srgb, var(--nowo-chat-text) 10%, transparent);
   font-size: 0.8125em;
 }
 .nowo-chat-bubble pre {
   margin: 4px 0;
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--nowo-chat-radius-control);
   background: color-mix(in srgb, var(--nowo-chat-text) 9%, transparent);
   overflow-x: auto;
 }
@@ -788,9 +797,9 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   gap: 4px;
   padding: 5px 12px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: var(--nowo-chat-text);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--nowo-chat-shadow);
   color: var(--nowo-chat-on-accent);
   font-size: 0.75rem;
   font-weight: 600;
@@ -805,7 +814,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat-notice {
   margin: 0 12px 12px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--nowo-chat-radius-control);
   background: var(--nowo-chat-surface-muted);
   color: var(--nowo-chat-muted);
   font-size: 0.75rem;
@@ -833,7 +842,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   max-height: 144px;
   padding: 8px 12px;
   border: 1px solid transparent;
-  border-radius: 18px;
+  border-radius: var(--nowo-chat-radius-input);
   background: var(--nowo-chat-surface-muted);
   color: var(--nowo-chat-text);
   font: inherit;
@@ -853,7 +862,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   height: 36px;
   place-items: center;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--nowo-chat-radius-button);
   background: var(--nowo-chat-accent);
   color: var(--nowo-chat-on-accent);
   cursor: pointer;
@@ -918,9 +927,9 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   width: 40px;
   height: 40px;
   border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
-  border-radius: 50%;
+  border-radius: var(--nowo-chat-radius-button);
   background: var(--nowo-chat-surface);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--nowo-chat-shadow);
   color: var(--nowo-chat-text);
   font-size: 0.75rem;
   font-weight: 700;
@@ -935,9 +944,9 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   margin: 0;
   padding: 6px;
   border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
-  border-radius: 10px;
+  border-radius: var(--nowo-chat-radius-window);
   background: var(--nowo-chat-surface);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--nowo-chat-shadow);
   list-style: none;
 }
 .nowo-chat-overflow__menu[hidden] {
@@ -951,7 +960,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   gap: 8px;
   padding: 6px 8px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--nowo-chat-radius-control);
   background: none;
   color: inherit;
   text-align: left;
@@ -974,7 +983,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) {
   width: auto;
   border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
 }
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__header {
   min-height: 0;
@@ -983,7 +992,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher {
   position: relative;
   padding: 8px;
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
 }
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__label,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__chevron,
@@ -1174,7 +1183,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   gap: 4px;
   margin: 10px auto 4px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: color-mix(in srgb, var(--nowo-chat-warn) 20%, transparent);
   color: var(--nowo-chat-text);
   font-size: 0.6875rem;
@@ -1227,9 +1236,9 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   padding: 6px 8px 8px;
   overflow-y: auto;
   border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
-  border-radius: 12px;
+  border-radius: var(--nowo-chat-radius-window);
   background: var(--nowo-chat-surface);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--nowo-chat-shadow);
   overscroll-behavior: contain;
   animation: nowo-chat-rise 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -1254,7 +1263,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   aspect-ratio: 1;
   place-items: center;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--nowo-chat-radius-control);
   background: none;
   font-size: 1.25rem;
   line-height: 1;
@@ -1404,7 +1413,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   gap: 4px;
   padding: 1px 8px;
   border: 1px solid var(--nowo-chat-border);
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: var(--nowo-chat-surface);
   color: var(--nowo-chat-text);
   font-size: 0.8125rem;
@@ -1435,9 +1444,9 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   gap: 2px;
   padding: 4px;
   border: 1px solid var(--nowo-chat-border);
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: var(--nowo-chat-surface);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--nowo-chat-shadow-soft);
 }
 .nowo-chat-msg--mine .nowo-chat-reaction-bar {
   right: auto;
@@ -1447,7 +1456,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   width: 30px;
   height: 30px;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--nowo-chat-radius-button);
   background: none;
   font-size: 1.05rem;
   cursor: pointer;
@@ -1471,7 +1480,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   min-height: 3.2em;
   padding: 8px 10px;
   border: 1px solid var(--nowo-chat-accent);
-  border-radius: 12px;
+  border-radius: var(--nowo-chat-radius-window);
   background: var(--nowo-chat-surface);
   color: var(--nowo-chat-text);
   font: inherit;
@@ -1495,7 +1504,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat-confirm__no {
   padding: 3px 10px;
   border: 1px solid var(--nowo-chat-border);
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: var(--nowo-chat-surface);
   color: var(--nowo-chat-text);
   font: inherit;
@@ -1565,7 +1574,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat-list__start {
   padding: 6px 14px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: var(--nowo-chat-accent);
   color: var(--nowo-chat-on-accent);
   font: inherit;
@@ -1623,7 +1632,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   padding: 6px 10px;
   border: 1px solid var(--nowo-chat-border);
   border-left: 3px solid var(--nowo-chat-accent);
-  border-radius: 8px;
+  border-radius: var(--nowo-chat-radius-control);
   background: var(--nowo-chat-surface);
   color: var(--nowo-chat-text);
   font-size: 0.8125rem;
@@ -1636,7 +1645,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat-preview__badge {
   grid-row: 1;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: color-mix(in srgb, var(--nowo-chat-accent) 14%, transparent);
   color: var(--nowo-chat-accent-strong);
   font-size: 0.6875rem;
@@ -1680,7 +1689,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
 .nowo-chat-page__thread {
   min-width: 0;
   border: 1px solid var(--nowo-chat-border);
-  border-radius: 12px;
+  border-radius: var(--nowo-chat-radius-window);
   background: var(--nowo-chat-surface);
 }
 .nowo-chat-page__list ul {
@@ -1700,7 +1709,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   grid-template-columns: 1fr auto;
   gap: 2px 8px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--nowo-chat-radius-control);
   color: inherit;
   text-decoration: none;
 }
@@ -1782,7 +1791,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   flex: 1;
   padding: 8px 10px;
   border: 1px solid var(--nowo-chat-border);
-  border-radius: 10px;
+  border-radius: var(--nowo-chat-radius-control);
   background: var(--nowo-chat-surface);
   color: inherit;
   font: inherit;
@@ -1792,7 +1801,7 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   align-self: flex-end;
   padding: 8px 16px;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--nowo-chat-radius-pill);
   background: var(--nowo-chat-accent);
   color: var(--nowo-chat-on-accent);
   font: inherit;

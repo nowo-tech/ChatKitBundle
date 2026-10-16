@@ -614,6 +614,67 @@ describe('ChatDock', () => {
     expect(window.location.search).toBe('?chat=not-a-uuid');
   });
 
+  it('stays above the Symfony toolbar at its real height (collapsed, one row, two rows, gone)', async () => {
+    const { dock, root } = mount([]);
+    await dock.start();
+    const offset = (): string => root.style.getPropertyValue('--nowo-chat-toolbar-offset');
+    expect(offset()).toBe('0px');
+
+    // The web debug toolbar arrives after the page (AJAX), collapsed.
+    const toolbar = document.createElement('div');
+    toolbar.className = 'sf-toolbar';
+    const mini = document.createElement('div');
+    mini.className = 'sf-minitoolbar';
+    const bar = document.createElement('div');
+    bar.className = 'sf-toolbarreset';
+    toolbar.append(mini, bar);
+    const rect = (top: number, height: number) => ({ top, height, width: height > 0 ? 40 : 0, bottom: top + height, left: 0, right: 40, x: 0, y: top, toJSON: () => ({}) });
+    let miniRect = rect(window.innerHeight - 36, 36);
+    let barRect = rect(0, 0);
+    mini.getBoundingClientRect = () => miniRect as DOMRect;
+    bar.getBoundingClientRect = () => barRect as DOMRect;
+    document.body.append(toolbar);
+    await flush();
+    expect(offset()).toBe('36px');
+
+    // Opened on one row, then wrapped on two rows (narrow window).
+    miniRect = rect(0, 0);
+    barRect = rect(window.innerHeight - 36, 36);
+    bar.setAttribute('style', 'display: block');
+    await flush();
+    expect(offset()).toBe('36px');
+    barRect = rect(window.innerHeight - 72, 72);
+    window.dispatchEvent(new Event('resize'));
+    expect(offset()).toBe('72px');
+
+    // A static application footer scrolled into view (marked data-nowo-chat-avoid): the dock rests just above it.
+    toolbar.remove();
+    await flush();
+    const footer = document.createElement('footer');
+    footer.setAttribute('data-nowo-chat-avoid', '');
+    let footerRect = rect(window.innerHeight + 200, 48);
+    footer.getBoundingClientRect = () => footerRect as DOMRect;
+    document.body.append(footer);
+    await flush();
+    expect(offset()).toBe('0px', 'footer below the fold: flush with the bottom');
+    footerRect = rect(window.innerHeight - 30, 48);
+    window.dispatchEvent(new Event('scroll'));
+    vi.advanceTimersByTime(20);
+    expect(offset()).toBe('30px', 'partly scrolled into view');
+    footer.remove();
+    document.body.append(toolbar);
+    await flush();
+
+    // Closed for good.
+    toolbar.remove();
+    await flush();
+    expect(offset()).toBe('0px');
+    dock.destroy();
+    document.body.append(toolbar);
+    await flush();
+    expect(offset()).toBe('0px', 'observers stop with the dock');
+  });
+
   it('switches to the full-screen sheet on phones', async () => {
     let listener: (() => void) | null = null;
     let matches = true;

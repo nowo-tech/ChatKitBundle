@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-16
+
+### Added
+
+- Shape and size tokens: `--nowo-chat-radius-window`, `-radius-bubble`, `-radius-input`, `-radius-control`,
+  `-radius-pill`, `-radius-button`, `-radius-avatar`, `-radius-avatar-square`, `--nowo-chat-shadow`, `-shadow-soft`,
+  `--nowo-chat-window-width`, `-panel-width`, `-font-size` (defaults unchanged).
+- `data-nowo-chat-avoid`: the dock rests just above the marked elements (an application footer, fixed or scrolled into
+  view) and otherwise sits flush with the bottom.
+
+### Fixed
+
+- The dock no longer jumps too high with the Symfony web debug toolbar: its real height (collapsed, one row, two rows)
+  is measured instead of a fixed 76 px / 40 px; windows and the list shrink by the same amount.
+
 ## [1.0.0] - 2026-10-16
 
 ### Added
@@ -40,5 +55,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/nowo-tech/ChatKitBundle/releases/tag/v1.0.0

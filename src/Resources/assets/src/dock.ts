@@ -153,6 +153,53 @@ export class ChatDock implements ThreadHost {
     this.startPresence();
   }
 
+  /**
+   * Keeps the dock flush with the bottom of the viewport, or just above whatever covers it there: elements the
+   * application marks with `data-nowo-chat-avoid` (e.g. its footer — fixed, or static and scrolled into view) and the
+   * Symfony web debug toolbar (collapsed, open, wrapped on two rows). Their visible height goes to
+   * `--nowo-chat-toolbar-offset`, recomputed when they appear or change, on scroll and on resize.
+   *
+   * @param signal Stops the observers and listeners when the dock is destroyed.
+   */
+  private trackBottomBars(signal: AbortSignal): void {
+    const measure = (): void => {
+      let offset = 0;
+      document
+        .querySelectorAll<HTMLElement>('[data-nowo-chat-avoid], .sf-toolbar .sf-toolbarreset, .sf-toolbar .sf-minitoolbar')
+        .forEach((bar) => {
+          const rect = bar.getBoundingClientRect();
+          if (rect.height > 0 && rect.width > 0 && rect.top < window.innerHeight && rect.bottom > 0) {
+            offset = Math.max(offset, Math.round(window.innerHeight - rect.top));
+          }
+        });
+      this.root.style.setProperty('--nowo-chat-toolbar-offset', `${Math.max(0, offset)}px`);
+    };
+    let frame = 0;
+    const schedule = (): void => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    };
+    const bars = new MutationObserver(measure);
+    const watch = (): void => {
+      bars.disconnect();
+      document.querySelectorAll('.sf-toolbar, [data-nowo-chat-avoid]').forEach((element) =>
+        bars.observe(element, { attributes: true, attributeFilter: ['class', 'style'], childList: true, subtree: true }),
+      );
+      measure();
+    };
+    // The toolbar is injected after the page loads (AJAX): watch the body's direct children for it.
+    const body = new MutationObserver(watch);
+    body.observe(document.body, { childList: true });
+    window.addEventListener('resize', measure, { signal });
+    window.addEventListener('scroll', schedule, { signal, passive: true });
+    signal.addEventListener('abort', () => {
+      window.cancelAnimationFrame(frame);
+      bars.disconnect();
+      body.disconnect();
+    });
+    watch();
+  }
+
   /** Stop everything (page swap): connection, timers and listeners. */
   destroy(): void {
     this.abort.abort();
@@ -475,6 +522,7 @@ export class ChatDock implements ThreadHost {
       }
     }, { signal });
     window.addEventListener('resize', () => this.layout(), { signal });
+    this.trackBottomBars(signal);
     // Mobile keyboard: size the full-screen conversation to the visible area so the composer stays above it.
     window.visualViewport?.addEventListener(
       'resize',

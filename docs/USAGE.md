@@ -22,6 +22,7 @@
   - [Overridable templates](#overridable-templates)
   - [Forms](#forms)
 - [Theme tokens](#theme-tokens)
+  - [Bottom bars](#bottom-bars)
 - [Translations](#translations)
 - [Front end: IIFE or your bundler](#front-end-iife-or-your-bundler)
 - [User settings](#user-settings)
@@ -262,9 +263,45 @@ as an HTML form, so they are not Symfony Form views; `make check-no-raw-html-for
   --nowo-chat-warn: var(--amber-500);
   --nowo-chat-mist: var(--blue-100);
   --nowo-chat-font-display: var(--font-heading);
-  --nowo-chat-bottom-offset: 0px;   /* e.g. above a fixed footer */
+  --nowo-chat-bottom-offset: 0px;   /* extra offset; footers are better marked with data-nowo-chat-avoid */
   --nowo-chat-z-index: 60;
 }
+```
+
+Shapes and sizes are tokens too (defaults shown):
+
+| Token | Default | Used by |
+| --- | --- | --- |
+| `--nowo-chat-radius-window` | `12px` | panel, windows (top corners), popovers, full page |
+| `--nowo-chat-radius-bubble` | `16px` | message bubbles |
+| `--nowo-chat-radius-input` | `18px` | composer field |
+| `--nowo-chat-radius-control` | `8px` | search, rows, notices, link previews, code blocks (inline tags use half) |
+| `--nowo-chat-radius-pill` | `999px` | chips, reactions, badges, day separators, mobile launcher |
+| `--nowo-chat-radius-button` | `50%` | icon buttons, send, emoji |
+| `--nowo-chat-radius-avatar` / `--nowo-chat-radius-avatar-square` | `50%` / `10px` | people / channels and support |
+| `--nowo-chat-shadow` / `--nowo-chat-shadow-soft` | elevation | windows, menus / reaction bar |
+| `--nowo-chat-window-width` / `--nowo-chat-panel-width` | `336px` / `312px` | conversation windows / list panel |
+| `--nowo-chat-font-size` | `0.875rem` | base text size of the dock |
+
+```css
+/* Square, flat look */
+.nowo-chat, .nowo-chat-page {
+  --nowo-chat-radius-window: 4px;
+  --nowo-chat-radius-bubble: 4px;
+  --nowo-chat-radius-input: 4px;
+  --nowo-chat-radius-avatar: 6px;
+  --nowo-chat-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+```
+
+### Bottom bars
+
+The dock sits flush with the bottom of the viewport. Mark anything the application pins or scrolls into that area
+(typically its footer) with `data-nowo-chat-avoid`: the dock rests just above its visible part (recomputed on scroll and
+resize). The Symfony web debug toolbar is detected automatically at its real height (collapsed, open, two rows).
+
+```twig
+<footer class="site-footer" data-nowo-chat-avoid>…</footer>
 ```
 
 ## Translations

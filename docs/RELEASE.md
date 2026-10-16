@@ -77,4 +77,5 @@ Update README **Tests and coverage** percentages after each release when coverag
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 1.1.0 | 2026-10-16 | Shape / size tokens, `data-nowo-chat-avoid`, dock above the measured Symfony toolbar. |
 | 1.0.0 | 2026-10-16 | First release: floating chat (DMs, channels, support inbox), JSON API + full page, Mercure, Web Push, email digest, link previews, Spec Kit baseline, SEC-004 Pass (good). |
