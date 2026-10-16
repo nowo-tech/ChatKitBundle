@@ -26,6 +26,7 @@
   --nowo-chat-radius-avatar-square: 10px;
   --nowo-chat-shadow: 0 8px 28px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
   --nowo-chat-shadow-soft: 0 6px 18px rgba(0, 0, 0, 0.14);
+  --nowo-chat-shadow-dock: 0 -2px 18px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.02);
   --nowo-chat-window-width: 336px;
   --nowo-chat-panel-width: 312px;
   --nowo-chat-font-size: 0.875rem;
@@ -94,8 +95,19 @@
   border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
   border-bottom: 0;
   border-radius: var(--nowo-chat-radius-window) var(--nowo-chat-radius-window) 0 0;
-  box-shadow: var(--nowo-chat-shadow);
+  box-shadow: var(--nowo-chat-shadow-dock);
   overflow: hidden;
+}
+
+/* Desktop dock: tabs that come out of the bottom edge (or of the footer they rest on) — the shadow is cast upwards and
+   sideways only, and the dock overlaps the edge by 1px so it merges with a footer's top border. */
+.nowo-chat:not(.is-mobile) {
+  bottom: calc(var(--nowo-chat-lift) - 1px);
+}
+
+.nowo-chat:not(.is-mobile) .nowo-chat-panel,
+.nowo-chat:not(.is-mobile) .nowo-chat-window {
+  clip-path: inset(-40px -40px 0 -40px);
 }
 
 .nowo-chat-panel {

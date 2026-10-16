@@ -13,6 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Shape and size tokens: `--nowo-chat-radius-window`, `-radius-bubble`, `-radius-input`, `-radius-control`,
   `-radius-pill`, `-radius-button`, `-radius-avatar`, `-radius-avatar-square`, `--nowo-chat-shadow`, `-shadow-soft`,
   `--nowo-chat-window-width`, `-panel-width`, `-font-size` (defaults unchanged).
+- The desktop dock looks like tabs coming out of the bottom edge or of the footer it rests on (upward shadow clipped at
+  the edge, 1px overlap with the footer border; `--nowo-chat-shadow-dock`).
 - `data-nowo-chat-avoid`: the dock rests just above the marked elements (an application footer, fixed or scrolled into
   view) and otherwise sits flush with the bottom.
 

@@ -279,7 +279,8 @@ Shapes and sizes are tokens too (defaults shown):
 | `--nowo-chat-radius-pill` | `999px` | chips, reactions, badges, day separators, mobile launcher |
 | `--nowo-chat-radius-button` | `50%` | icon buttons, send, emoji |
 | `--nowo-chat-radius-avatar` / `--nowo-chat-radius-avatar-square` | `50%` / `10px` | people / channels and support |
-| `--nowo-chat-shadow` / `--nowo-chat-shadow-soft` | elevation | windows, menus / reaction bar |
+| `--nowo-chat-shadow-dock` | upward elevation | panel and windows (clipped at the bottom edge so they come out of it) |
+| `--nowo-chat-shadow` / `--nowo-chat-shadow-soft` | elevation | menus, jump button / reaction bar |
 | `--nowo-chat-window-width` / `--nowo-chat-panel-width` | `336px` / `312px` | conversation windows / list panel |
 | `--nowo-chat-font-size` | `0.875rem` | base text size of the dock |
 
