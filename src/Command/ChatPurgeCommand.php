@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Command;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -12,6 +13,8 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
+use function sprintf;
+
 /**
  * Deletes messages (and their reactions) older than `retention_days`, in bounded batches. Schedule it daily.
  */
@@ -19,7 +22,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 final class ChatPurgeCommand extends Command
 {
     public const int MIN_DAYS = 30;
-    private const int BATCH = 1000;
+    private const int BATCH   = 1000;
 
     public function __construct(
         private readonly ChatMessageRepository $messages,
@@ -35,10 +38,10 @@ final class ChatPurgeCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $days = max(self::MIN_DAYS, $this->retentionDays);
-        $cutoff = new \DateTimeImmutable(\sprintf('-%d days', $days));
+        $days    = max(self::MIN_DAYS, $this->retentionDays);
+        $cutoff  = new DateTimeImmutable(sprintf('-%d days', $days));
         $deleted = 0;
-        $max = max(1, (int) $input->getOption('max-batches'));
+        $max     = max(1, (int) $input->getOption('max-batches'));
         for ($batch = 0; $batch < $max; ++$batch) {
             $count = $this->messages->purgeOlderThan($cutoff, self::BATCH);
             $deleted += $count;
@@ -46,7 +49,7 @@ final class ChatPurgeCommand extends Command
                 break;
             }
         }
-        (new SymfonyStyle($input, $output))->success(\sprintf('Deleted %d chat message(s) older than %d days.', $deleted, $days));
+        (new SymfonyStyle($input, $output))->success(sprintf('Deleted %d chat message(s) older than %d days.', $deleted, $days));
 
         return Command::SUCCESS;
     }

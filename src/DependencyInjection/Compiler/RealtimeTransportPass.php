@@ -23,10 +23,10 @@ final class RealtimeTransportPass implements CompilerPassInterface
         if (!$hubAvailable) {
             $container->removeDefinition(MercureChatRealtime::class);
         }
-        if (!$container->hasAlias(ChatRealtimeInterface::class) || MercureChatRealtime::class !== (string) $container->getAlias(ChatRealtimeInterface::class)) {
+        if (!$container->hasAlias(ChatRealtimeInterface::class) || (string) $container->getAlias(ChatRealtimeInterface::class) !== MercureChatRealtime::class) {
             return;
         }
-        if (!$hubAvailable || true !== $container->getParameter('nowo_chat_kit.realtime')) {
+        if (!$hubAvailable || $container->getParameter('nowo_chat_kit.realtime') !== true) {
             $container->setAlias(ChatRealtimeInterface::class, NullChatRealtime::class);
         }
     }

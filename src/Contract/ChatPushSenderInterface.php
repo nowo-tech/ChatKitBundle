@@ -13,7 +13,7 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 interface ChatPushSenderInterface
 {
     /**
-     * @param list<ChatUserInterface>                            $recipients
+     * @param list<ChatUserInterface> $recipients
      * @param callable(ChatUserInterface): array<string, string> $payloadFor title, body, tag, url, icon …
      */
     public function send(array $recipients, callable $payloadFor): void;

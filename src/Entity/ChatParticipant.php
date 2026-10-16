@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Entity;
 
+use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
@@ -29,10 +30,10 @@ class ChatParticipant
     private ?int $lastReadMessageId = null;
 
     #[ORM\Column(name: 'muted_until', nullable: true)]
-    private ?\DateTimeImmutable $mutedUntil = null;
+    private ?DateTimeImmutable $mutedUntil = null;
 
     #[ORM\Column(name: 'joined_at')]
-    private \DateTimeImmutable $joinedAt;
+    private DateTimeImmutable $joinedAt;
 
     public function __construct(
         #[ORM\ManyToOne(targetEntity: ChatConversation::class)]
@@ -42,7 +43,7 @@ class ChatParticipant
         #[ORM\JoinColumn(name: 'user_id', nullable: false, onDelete: 'CASCADE')]
         private ChatUserInterface $user,
     ) {
-        $this->joinedAt = new \DateTimeImmutable();
+        $this->joinedAt = new DateTimeImmutable();
     }
 
     public function getId(): ?int
@@ -68,7 +69,7 @@ class ChatParticipant
     /** The cursor only moves forward (an older "read" from a stale tab is ignored). */
     public function markReadUpTo(int $messageId): bool
     {
-        if (null !== $this->lastReadMessageId && $messageId <= $this->lastReadMessageId) {
+        if ($this->lastReadMessageId !== null && $messageId <= $this->lastReadMessageId) {
             return false;
         }
         $this->lastReadMessageId = $messageId;
@@ -76,22 +77,22 @@ class ChatParticipant
         return true;
     }
 
-    public function getMutedUntil(): ?\DateTimeImmutable
+    public function getMutedUntil(): ?DateTimeImmutable
     {
         return $this->mutedUntil;
     }
 
-    public function isMuted(\DateTimeImmutable $now): bool
+    public function isMuted(DateTimeImmutable $now): bool
     {
-        return $this->mutedUntil instanceof \DateTimeImmutable && $this->mutedUntil > $now;
+        return $this->mutedUntil instanceof DateTimeImmutable && $this->mutedUntil > $now;
     }
 
-    public function muteUntil(?\DateTimeImmutable $until): void
+    public function muteUntil(?DateTimeImmutable $until): void
     {
         $this->mutedUntil = $until;
     }
 
-    public function getJoinedAt(): \DateTimeImmutable
+    public function getJoinedAt(): DateTimeImmutable
     {
         return $this->joinedAt;
     }

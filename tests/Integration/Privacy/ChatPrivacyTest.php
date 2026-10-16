@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Integration\Privacy;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -23,10 +24,10 @@ final class ChatPrivacyTest extends DatabaseTestCase
     public function testPurgeKeepsTheRetentionWindow(): void
     {
         $chat = $this->get(ChatService::class);
-        $ana = $this->user('Ana');
-        $dm = $chat->openDirect($ana, $this->user('Luis'));
+        $ana  = $this->user('Ana');
+        $dm   = $chat->openDirect($ana, $this->user('Luis'));
         $chat->send($ana, $dm, 'recent');
-        $this->em->persist(new ChatMessage($dm, $ana, 'old', '<p>old</p>', new \DateTimeImmutable('-400 days')));
+        $this->em->persist(new ChatMessage($dm, $ana, 'old', '<p>old</p>', new DateTimeImmutable('-400 days')));
         $this->em->flush();
 
         $tester = new CommandTester($this->get(ChatPurgeCommand::class));
@@ -43,14 +44,14 @@ final class ChatPrivacyTest extends DatabaseTestCase
     {
         $chat = $this->get(ChatService::class);
         $data = $this->get(ChatPersonalData::class);
-        $ana = $this->user('Ana');
+        $ana  = $this->user('Ana');
         $luis = $this->user('Luis');
-        $dm = $chat->openDirect($ana, $luis);
+        $dm   = $chat->openDirect($ana, $luis);
         $mine = $chat->send($ana, $dm, 'my words');
         $chat->send($luis, $dm, 'his words');
         $chat->toggleReaction($ana, $mine, '👍');
         $support = $chat->openSupport($ana);
-        $help = $chat->send($ana, $support, 'help');
+        $help    = $chat->send($ana, $support, 'help');
         $chat->toggleReaction($ana, $help, '🎉');
         $settings = $this->em->getRepository(ChatUserSettings::class)->forUser($ana);
         $settings->setSound('ding');

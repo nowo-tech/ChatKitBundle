@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Repository;
 
+use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\Persistence\ManagerRegistry;
@@ -39,14 +40,14 @@ class ChatMessageRepository extends ServiceEntityRepository
             ->where('m.conversation = :conversation')
             ->setParameter('conversation', $conversation)
             ->setMaxResults($limit);
-        if (null !== $afterId) {
+        if ($afterId !== null) {
             /** @var list<ChatMessage> $newer */
             $newer = $qb->andWhere('m.id > :after')->setParameter('after', $afterId)
                 ->orderBy('m.id', 'ASC')->getQuery()->getResult();
 
             return $newer;
         }
-        if (null !== $beforeId) {
+        if ($beforeId !== null) {
             $qb->andWhere('m.id < :before')->setParameter('before', $beforeId);
         }
 
@@ -71,7 +72,7 @@ class ChatMessageRepository extends ServiceEntityRepository
      */
     public function countUnreadByConversation(int $userId, array $conversationIds): array
     {
-        if ([] === $conversationIds) {
+        if ($conversationIds === []) {
             return [];
         }
         $rows = $this->getEntityManager()->getConnection()->fetchAllAssociative(
@@ -103,7 +104,7 @@ class ChatMessageRepository extends ServiceEntityRepository
      */
     public function findLatestByConversationIds(array $conversationIds): array
     {
-        if ([] === $conversationIds) {
+        if ($conversationIds === []) {
             return [];
         }
         $latestIds = $this->createQueryBuilder('m2')
@@ -113,7 +114,7 @@ class ChatMessageRepository extends ServiceEntityRepository
             ->setParameter('ids', $conversationIds)
             ->getQuery()
             ->getSingleColumnResult();
-        if ([] === $latestIds) {
+        if ($latestIds === []) {
             return [];
         }
         /** @var list<ChatMessage> $messages */
@@ -132,7 +133,7 @@ class ChatMessageRepository extends ServiceEntityRepository
     }
 
     /** one batch of messages older than the retention window; returns rows deleted. */
-    public function purgeOlderThan(\DateTimeImmutable $cutoff, int $batchSize): int
+    public function purgeOlderThan(DateTimeImmutable $cutoff, int $batchSize): int
     {
         $ids = $this->createQueryBuilder('m')
             ->select('m.id')
@@ -141,7 +142,7 @@ class ChatMessageRepository extends ServiceEntityRepository
             ->setMaxResults($batchSize)
             ->getQuery()
             ->getSingleColumnResult();
-        if ([] === $ids) {
+        if ($ids === []) {
             return 0;
         }
         $this->getEntityManager()->createQueryBuilder()

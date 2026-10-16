@@ -12,6 +12,8 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Psr\Cache\CacheItemPoolInterface;
 
+use function is_array;
+
 /**
  * Who receives realtime events of a conversation — the same people ChatVoter lets VIEW it: both people of a
  * direct thread, the owner and every support agent for a support thread, the channel members. Unreachable
@@ -38,9 +40,9 @@ final readonly class ChatRecipients
      */
     public function of(ChatConversation $conversation): array
     {
-        $item = $this->cache->getItem('nowo_chat_recipients_'.$conversation->getUuid());
-        if ($item->isHit() && \is_array($ids = $item->get())) {
-            return [] === $ids ? [] : $this->directory->findByIds(array_values(array_map(intval(...), $ids)));
+        $item = $this->cache->getItem('nowo_chat_recipients_' . $conversation->getUuid());
+        if ($item->isHit() && is_array($ids = $item->get())) {
+            return $ids === [] ? [] : $this->directory->findByIds(array_values(array_map(intval(...), $ids)));
         }
         $recipients = $this->compute($conversation);
         $this->cache->save($item->set(array_map(static fn (ChatUserInterface $user): int => (int) $user->getId(), $recipients))->expiresAfter(self::TTL_SECONDS));
@@ -58,7 +60,7 @@ final readonly class ChatRecipients
         } elseif ($conversation->isSupport()) {
             $candidates = [...$this->directory->supportAgents(), ...array_filter([$conversation->getSupportOwner()])];
         } else {
-            $channel = $this->access->channel((string) $conversation->getChannelKey());
+            $channel    = $this->access->channel((string) $conversation->getChannelKey());
             $candidates = $channel instanceof ChatChannel ? $this->channels->members($channel) : [];
         }
 

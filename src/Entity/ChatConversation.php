@@ -4,11 +4,16 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Entity;
 
+use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
+use LogicException;
 use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
+
+use function in_array;
+use function strlen;
 
 /**
  * A conversation: one per user pair (direct), one per application channel key and one per user with the shared
@@ -60,27 +65,27 @@ class ChatConversation
     private ?array $supportContext = null;
 
     #[ORM\Column(name: 'resolved_at', nullable: true)]
-    private ?\DateTimeImmutable $resolvedAt = null;
+    private ?DateTimeImmutable $resolvedAt = null;
 
     /** Set from creation so list ordering needs no COALESCE and stays indexed. */
     #[ORM\Column(name: 'last_message_at')]
-    private \DateTimeImmutable $lastMessageAt;
+    private DateTimeImmutable $lastMessageAt;
 
     #[ORM\Column(name: 'created_at')]
-    private \DateTimeImmutable $createdAt;
+    private DateTimeImmutable $createdAt;
 
     private function __construct(
         #[ORM\Column(length: 16, enumType: ConversationKind::class)]
         private ConversationKind $kind,
     ) {
         $this->initUuid();
-        $this->createdAt = new \DateTimeImmutable();
+        $this->createdAt     = new DateTimeImmutable();
         $this->lastMessageAt = $this->createdAt;
     }
 
     public static function direct(ChatUserInterface $a, ChatUserInterface $b): self
     {
-        $conversation = new self(ConversationKind::Direct);
+        $conversation            = new self(ConversationKind::Direct);
         $conversation->directKey = self::directKeyFor($a, $b);
 
         return $conversation;
@@ -88,10 +93,10 @@ class ChatConversation
 
     public static function channel(string $key): self
     {
-        if ('' === $key || \strlen($key) > self::CHANNEL_KEY_MAX_LENGTH) {
-            throw new \LogicException('A channel key must be 1–120 characters.');
+        if ($key === '' || strlen($key) > self::CHANNEL_KEY_MAX_LENGTH) {
+            throw new LogicException('A channel key must be 1–120 characters.');
         }
-        $conversation = new self(ConversationKind::Channel);
+        $conversation             = new self(ConversationKind::Channel);
         $conversation->channelKey = $key;
 
         return $conversation;
@@ -99,8 +104,8 @@ class ChatConversation
 
     public static function support(ChatUserInterface $owner): self
     {
-        $conversation = new self(ConversationKind::Support);
-        $conversation->supportOwner = $owner;
+        $conversation                = new self(ConversationKind::Support);
+        $conversation->supportOwner  = $owner;
         $conversation->supportStatus = SupportStatus::Open;
 
         return $conversation;
@@ -110,12 +115,12 @@ class ChatConversation
     public static function directKeyFor(ChatUserInterface $a, ChatUserInterface $b): string
     {
         $ids = [$a->getId(), $b->getId()];
-        if (null === $ids[0] || null === $ids[1] || $ids[0] === $ids[1]) {
-            throw new \LogicException('A direct conversation needs two different persisted users.');
+        if ($ids[0] === null || $ids[1] === null || $ids[0] === $ids[1]) {
+            throw new LogicException('A direct conversation needs two different persisted users.');
         }
         sort($ids);
 
-        return $ids[0].':'.$ids[1];
+        return $ids[0] . ':' . $ids[1];
     }
 
     public function getId(): ?int
@@ -130,17 +135,17 @@ class ChatConversation
 
     public function isDirect(): bool
     {
-        return ConversationKind::Direct === $this->kind;
+        return $this->kind === ConversationKind::Direct;
     }
 
     public function isChannel(): bool
     {
-        return ConversationKind::Channel === $this->kind;
+        return $this->kind === ConversationKind::Channel;
     }
 
     public function isSupport(): bool
     {
-        return ConversationKind::Support === $this->kind;
+        return $this->kind === ConversationKind::Support;
     }
 
     public function getDirectKey(): ?string
@@ -155,7 +160,7 @@ class ChatConversation
      */
     public function directUserIds(): array
     {
-        if (null === $this->directKey) {
+        if ($this->directKey === null) {
             return [];
         }
 
@@ -167,7 +172,7 @@ class ChatConversation
     {
         $id = $user->getId();
 
-        return $this->isDirect() && null !== $id && \in_array($id, $this->directUserIds(), true);
+        return $this->isDirect() && $id !== null && in_array($id, $this->directUserIds(), true);
     }
 
     /** Direct only: the other user's id, null when `$user` is not part of the pair. */
@@ -198,23 +203,23 @@ class ChatConversation
 
     public function isResolved(): bool
     {
-        return SupportStatus::Resolved === $this->supportStatus;
+        return $this->supportStatus === SupportStatus::Resolved;
     }
 
     public function resolve(ChatUserInterface $agent): void
     {
         $this->assertSupport();
         $this->supportStatus = SupportStatus::Resolved;
-        $this->resolvedBy = $agent;
-        $this->resolvedAt = new \DateTimeImmutable();
+        $this->resolvedBy    = $agent;
+        $this->resolvedAt    = new DateTimeImmutable();
     }
 
     public function reopen(): void
     {
         $this->assertSupport();
         $this->supportStatus = SupportStatus::Open;
-        $this->resolvedBy = null;
-        $this->resolvedAt = null;
+        $this->resolvedBy    = null;
+        $this->resolvedAt    = null;
     }
 
     /**
@@ -229,13 +234,13 @@ class ChatConversation
     public function setSupportContext(?string $url, ?string $label): void
     {
         $this->assertSupport();
-        $url = null === $url ? '' : mb_substr(trim($url), 0, 500);
-        if ('' !== $url && 1 !== preg_match('~^(/(?!/)|https?://)~i', $url)) {
+        $url = $url === null ? '' : mb_substr(trim($url), 0, 500);
+        if ($url !== '' && preg_match('~^(/(?!/)|https?://)~i', $url) !== 1) {
             $url = '';
         }
-        $label = null === $label ? '' : mb_substr(trim((string) preg_replace('/\s+/u', ' ', $label)), 0, 120);
-        $context = array_filter(['url' => $url, 'label' => $label], static fn (string $value): bool => '' !== $value);
-        $this->supportContext = [] === $context ? null : $context;
+        $label                = $label === null ? '' : mb_substr(trim((string) preg_replace('/\s+/u', ' ', $label)), 0, 120);
+        $context              = array_filter(['url' => $url, 'label' => $label], static fn (string $value): bool => $value !== '');
+        $this->supportContext = $context === [] ? null : $context;
     }
 
     public function getResolvedBy(): ?ChatUserInterface
@@ -243,22 +248,22 @@ class ChatConversation
         return $this->resolvedBy;
     }
 
-    public function getResolvedAt(): ?\DateTimeImmutable
+    public function getResolvedAt(): ?DateTimeImmutable
     {
         return $this->resolvedAt;
     }
 
-    public function getLastMessageAt(): \DateTimeImmutable
+    public function getLastMessageAt(): DateTimeImmutable
     {
         return $this->lastMessageAt;
     }
 
-    public function touch(\DateTimeImmutable $at): void
+    public function touch(DateTimeImmutable $at): void
     {
         $this->lastMessageAt = $at;
     }
 
-    public function getCreatedAt(): \DateTimeImmutable
+    public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
     }
@@ -266,7 +271,7 @@ class ChatConversation
     private function assertSupport(): void
     {
         if (!$this->isSupport()) {
-            throw new \LogicException('Only support conversations can be resolved or reopened.');
+            throw new LogicException('Only support conversations can be resolved or reopened.');
         }
     }
 }

@@ -49,7 +49,7 @@ final readonly class ChatNotifier
             return;
         }
         $others = array_map(static fn (ChatUserInterface $user): int => (int) $user->getId(), $others);
-        if ([] === $others) {
+        if ($others === []) {
             return;
         }
         $command = new DeliverChatPushMessage((int) $message->getId(), $others);
@@ -82,9 +82,9 @@ final readonly class ChatNotifier
         }
         $this->publisher->publish('read', [
             'conversationUuid' => $conversation->getUuid(),
-            'userUuid' => $reader->getChatPublicId(),
-            'userName' => $reader->getChatDisplayName(),
-            'messageId' => $messageId,
+            'userUuid'         => $reader->getChatPublicId(),
+            'userName'         => $reader->getChatDisplayName(),
+            'messageId'        => $messageId,
         ], $recipients);
     }
 
@@ -93,8 +93,8 @@ final readonly class ChatNotifier
     {
         $this->publisher->publish('typing', [
             'conversationUuid' => $conversation->getUuid(),
-            'userUuid' => $typist->getChatPublicId(),
-            'userName' => $typist->getChatDisplayName(),
+            'userUuid'         => $typist->getChatPublicId(),
+            'userName'         => $typist->getChatDisplayName(),
         ], array_values(array_filter(
             $this->recipients->of($conversation),
             static fn (ChatUserInterface $user): bool => $user->getId() !== $typist->getId(),
@@ -114,7 +114,7 @@ final readonly class ChatNotifier
         $conversation = $message->getConversation();
         $this->publisher->publish($type, [
             'conversationUuid' => $conversation->getUuid(),
-            'message' => $this->presenter->message($message, null, $reactions),
+            'message'          => $this->presenter->message($message, null, $reactions),
         ], $this->recipients->of($conversation));
     }
 }

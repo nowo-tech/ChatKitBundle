@@ -6,6 +6,6 @@ namespace Nowo\ChatKitBundle\Enum;
 
 enum SupportStatus: string
 {
-    case Open = 'open';
+    case Open     = 'open';
     case Resolved = 'resolved';
 }

@@ -9,6 +9,8 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Uid\Uuid;
 
+use function assert;
+
 /**
  * Host user entity used by the integration tests.
  */
@@ -81,7 +83,7 @@ class TestUser implements ChatUserInterface, UserInterface
      */
     public function getUserIdentifier(): string
     {
-        \assert('' !== $this->publicId);
+        assert($this->publicId !== '');
 
         return $this->publicId;
     }

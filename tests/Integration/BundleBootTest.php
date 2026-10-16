@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Integration;
 
+use InvalidArgumentException;
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
@@ -25,7 +26,7 @@ final class BundleBootTest extends TestCase
 {
     protected function tearDown(): void
     {
-        (new Filesystem())->remove(sys_get_temp_dir().'/nowo-chat-kit-bundle');
+        (new Filesystem())->remove(sys_get_temp_dir() . '/nowo-chat-kit-bundle');
     }
 
     public function testKernelBootsWithDefaultConfiguration(): void
@@ -82,7 +83,7 @@ final class BundleBootTest extends TestCase
     {
         $container = $this->containerWith('doctrine');
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('nowo_chat_kit.profiles.default.user_class');
 
         (new NowoChatKitExtension())->prepend($container);

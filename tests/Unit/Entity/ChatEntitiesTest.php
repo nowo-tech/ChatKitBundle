@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Unit\Entity;
 
+use DateTimeImmutable;
+use InvalidArgumentException;
+use LogicException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -13,6 +16,7 @@ use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 
 /**
  * Chat entity invariants (cardinality keys, support lifecycle, edit window, tombstones, cursors).
@@ -21,7 +25,7 @@ final class ChatEntitiesTest extends TestCase
 {
     public function testDirectConversationKeyIsOrderIndependent(): void
     {
-        $ana = $this->user(7);
+        $ana  = $this->user(7);
         $luis = $this->user(3);
 
         $conversation = ChatConversation::direct($ana, $luis);
@@ -46,22 +50,22 @@ final class ChatEntitiesTest extends TestCase
         self::assertNull($conversation->getSupportOwner());
         self::assertNull($conversation->getSupportStatus());
         self::assertSame($conversation->getCreatedAt(), $conversation->getLastMessageAt(), 'activity starts at creation');
-        self::assertLessThanOrEqual(new \DateTimeImmutable(), $conversation->getCreatedAt());
+        self::assertLessThanOrEqual(new DateTimeImmutable(), $conversation->getCreatedAt());
 
-        $at = new \DateTimeImmutable('2026-10-15 10:00:00');
+        $at = new DateTimeImmutable('2026-10-15 10:00:00');
         $conversation->touch($at);
         self::assertSame($at, $conversation->getLastMessageAt());
     }
 
     public function testDirectKeyNeedsTwoDifferentPersistedUsers(): void
     {
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         ChatConversation::directKeyFor($this->user(4), $this->user(4));
     }
 
     public function testDirectKeyRejectsUnsavedUsers(): void
     {
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         ChatConversation::directKeyFor($this->user(4), new TestUser('Unsaved'));
     }
 
@@ -78,20 +82,20 @@ final class ChatEntitiesTest extends TestCase
 
     public function testChannelKeyMustFit(): void
     {
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         ChatConversation::channel(str_repeat('x', 121));
     }
 
     public function testChannelKeyCannotBeEmpty(): void
     {
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         ChatConversation::channel('');
     }
 
     public function testSupportThreadResolvesAndReopens(): void
     {
-        $owner = $this->user(5);
-        $admin = $this->user(1);
+        $owner        = $this->user(5);
+        $admin        = $this->user(1);
         $conversation = ChatConversation::support($owner);
 
         self::assertTrue($conversation->isSupport());
@@ -129,29 +133,29 @@ final class ChatEntitiesTest extends TestCase
 
     public function testOnlySupportThreadsHaveAContext(): void
     {
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         ChatConversation::channel('project:acme')->setSupportContext('/x', 'x');
     }
 
     public function testOnlySupportThreadsResolve(): void
     {
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         ChatConversation::channel('project:acme')->resolve($this->user(1));
     }
 
     public function testOnlySupportThreadsReopen(): void
     {
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         ChatConversation::direct($this->user(1), $this->user(2))->reopen();
     }
 
     public function testMessageEditWindowAndTombstones(): void
     {
-        $author = $this->user(2);
-        $admin = $this->user(1);
-        $created = new \DateTimeImmutable('2026-10-15 10:00:00');
+        $author       = $this->user(2);
+        $admin        = $this->user(1);
+        $created      = new DateTimeImmutable('2026-10-15 10:00:00');
         $conversation = ChatConversation::direct($author, $admin);
-        $message = new ChatMessage($conversation, $author, '**hi**', '<p><strong>hi</strong></p>', $created);
+        $message      = new ChatMessage($conversation, $author, '**hi**', '<p><strong>hi</strong></p>', $created);
 
         self::assertNull($message->getId());
         self::assertNotSame('', $message->getUuid());
@@ -196,14 +200,14 @@ final class ChatEntitiesTest extends TestCase
 
     public function testParticipantReadCursorOnlyMovesForwardAndMute(): void
     {
-        $user = $this->user(4);
+        $user         = $this->user(4);
         $conversation = ChatConversation::direct($user, $this->user(9));
-        $participant = new ChatParticipant($conversation, $user);
+        $participant  = new ChatParticipant($conversation, $user);
 
         self::assertNull($participant->getId());
         self::assertSame($conversation, $participant->getConversation());
         self::assertSame($user, $participant->getUser());
-        self::assertLessThanOrEqual(new \DateTimeImmutable(), $participant->getJoinedAt());
+        self::assertLessThanOrEqual(new DateTimeImmutable(), $participant->getJoinedAt());
         self::assertNull($participant->getLastReadMessageId());
 
         self::assertTrue($participant->markReadUpTo(10));
@@ -212,7 +216,7 @@ final class ChatEntitiesTest extends TestCase
         self::assertTrue($participant->markReadUpTo(11));
         self::assertSame(11, $participant->getLastReadMessageId());
 
-        $now = new \DateTimeImmutable('2026-10-15 10:00:00');
+        $now = new DateTimeImmutable('2026-10-15 10:00:00');
         self::assertFalse($participant->isMuted($now));
         $participant->muteUntil($now->modify('+1 hour'));
         self::assertTrue($participant->isMuted($now));
@@ -224,21 +228,21 @@ final class ChatEntitiesTest extends TestCase
 
     public function testReaction(): void
     {
-        $user = $this->user(4);
-        $message = new ChatMessage(ChatConversation::direct($user, $this->user(9)), $user, 'x', '<p>x</p>');
+        $user     = $this->user(4);
+        $message  = new ChatMessage(ChatConversation::direct($user, $this->user(9)), $user, 'x', '<p>x</p>');
         $reaction = new ChatReaction($message, $user, '👍');
 
         self::assertNull($reaction->getId());
         self::assertSame($message, $reaction->getMessage());
         self::assertSame($user, $reaction->getUser());
         self::assertSame('👍', $reaction->getEmoji());
-        self::assertLessThanOrEqual(new \DateTimeImmutable(), $reaction->getCreatedAt());
+        self::assertLessThanOrEqual(new DateTimeImmutable(), $reaction->getCreatedAt());
     }
 
     public function testBuzzMessage(): void
     {
         $author = $this->user(2);
-        $buzz = ChatMessage::buzz(ChatConversation::direct($author, $this->user(3)), $author);
+        $buzz   = ChatMessage::buzz(ChatConversation::direct($author, $this->user(3)), $author);
 
         self::assertTrue($buzz->isBuzz());
         self::assertSame(ChatMessage::KIND_BUZZ, $buzz->getKind());
@@ -247,7 +251,7 @@ final class ChatEntitiesTest extends TestCase
 
     public function testUserSettings(): void
     {
-        $user = $this->user(4);
+        $user     = $this->user(4);
         $settings = new ChatUserSettings($user);
 
         self::assertNull($settings->getId());
@@ -269,14 +273,14 @@ final class ChatEntitiesTest extends TestCase
         self::assertFalse($settings->isBuzzEnabled());
         self::assertSame('none', $settings->getSound());
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         $settings->setSound('foghorn');
     }
 
     private function user(int $id): TestUser
     {
-        $user = new TestUser('User '.$id);
-        new \ReflectionProperty(TestUser::class, 'id')->setValue($user, $id);
+        $user = new TestUser('User ' . $id);
+        new ReflectionProperty(TestUser::class, 'id')->setValue($user, $id);
 
         return $user;
     }

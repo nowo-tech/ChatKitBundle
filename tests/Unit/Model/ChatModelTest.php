@@ -13,7 +13,7 @@ final class ChatModelTest extends TestCase
 {
     public function testContactKeepsWhyTheUserIsReachable(): void
     {
-        $user = new TestUser('Ana', 'ana@example.test');
+        $user    = new TestUser('Ana', 'ana@example.test');
         $contact = new ChatContact($user, 'group', 'Backend');
 
         self::assertSame($user, $contact->user);

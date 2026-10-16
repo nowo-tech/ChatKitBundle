@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Realtime;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -26,7 +27,7 @@ final class NullChatRealtime implements ChatRealtimeInterface
         return null;
     }
 
-    public function subscriberToken(array $topics, \DateTimeImmutable $expiresAt): ?string
+    public function subscriberToken(array $topics, DateTimeImmutable $expiresAt): ?string
     {
         return null;
     }

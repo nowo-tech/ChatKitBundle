@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
+use InvalidArgumentException;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+
+use function in_array;
+use function sprintf;
 
 /**
  * Per-user chat preferences, owned by the bundle so the host user table needs no extra columns. A missing
@@ -89,8 +93,8 @@ class ChatUserSettings
 
     public function setSound(string $sound): void
     {
-        if (!\in_array($sound, self::SOUNDS, true)) {
-            throw new \InvalidArgumentException(\sprintf('Unknown chat sound "%s".', $sound));
+        if (!in_array($sound, self::SOUNDS, true)) {
+            throw new InvalidArgumentException(sprintf('Unknown chat sound "%s".', $sound));
         }
         $this->sound = $sound;
     }

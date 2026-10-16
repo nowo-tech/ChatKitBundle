@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Unit\Realtime;
 
+use DateTimeImmutable;
+use LogicException;
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Model\ChatChannel;
@@ -17,6 +19,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
+use Stringable;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Jwt\TokenFactoryInterface;
@@ -31,11 +34,11 @@ final class RealtimeAdaptersTest extends TestCase
         $realtime->publish(['/t'], ['type' => 'x']);
         self::assertFalse($realtime->isEnabled());
         self::assertNull($realtime->browserHubUrl(new Request()));
-        self::assertNull($realtime->subscriberToken(['/t'], new \DateTimeImmutable()));
+        self::assertNull($realtime->subscriberToken(['/t'], new DateTimeImmutable()));
 
         $channels = new NullChannelProvider();
-        $user = new TestUser('Ana');
-        $channel = new ChatChannel('k', 'K');
+        $user     = new TestUser('Ana');
+        $channel  = new ChatChannel('k', 'K');
         self::assertSame([], $channels->channelsFor($user));
         self::assertNull($channels->find('k'));
         self::assertNull($channels->contextChannel($user, new Request()));
@@ -74,7 +77,7 @@ final class RealtimeAdaptersTest extends TestCase
 
             public function getProvider(): TokenProviderInterface
             {
-                throw new \LogicException('unused');
+                throw new LogicException('unused');
             }
 
             public function getFactory(): ?TokenFactoryInterface
@@ -92,7 +95,7 @@ final class RealtimeAdaptersTest extends TestCase
         $realtime = new MercureChatRealtime($hub);
         self::assertTrue($realtime->isEnabled());
         self::assertSame('https://app.test/.well-known/mercure', $realtime->browserHubUrl(new Request()));
-        self::assertNull($realtime->subscriberToken(['/t'], new \DateTimeImmutable()), 'no factory configured');
+        self::assertNull($realtime->subscriberToken(['/t'], new DateTimeImmutable()), 'no factory configured');
 
         $realtime->publish(['/a', '/b'], ['type' => 'message']);
         self::assertSame(['/a', '/b'], $hub->updates[0]->getTopics());
@@ -104,27 +107,27 @@ final class RealtimeAdaptersTest extends TestCase
             {
                 $exp = $additionalClaims['exp'] ?? null;
 
-                return implode(',', (array) $subscribe).'|'.($exp instanceof \DateTimeImmutable ? $exp->getTimestamp() : '');
+                return implode(',', (array) $subscribe) . '|' . ($exp instanceof DateTimeImmutable ? $exp->getTimestamp() : '');
             }
         };
-        $expires = new \DateTimeImmutable('@2000000000');
+        $expires = new DateTimeImmutable('@2000000000');
         self::assertSame('/a|2000000000', $realtime->subscriberToken(['/a'], $expires));
     }
 
     public function testPublisherFansOutToUniqueTopicsAndSwallowsHubErrors(): void
     {
         $realtime = new RecordingRealtime();
-        $logger = new class extends AbstractLogger {
+        $logger   = new class extends AbstractLogger {
             /** @var list<string> */
             public array $warnings = [];
 
-            public function log($level, string|\Stringable $message, array $context = []): void
+            public function log($level, string|Stringable $message, array $context = []): void
             {
                 $this->warnings[] = (string) $message;
             }
         };
         $publisher = new ChatPublisher($realtime, $logger);
-        $ana = new TestUser('Ana');
+        $ana       = new TestUser('Ana');
 
         $publisher->publish('typing', ['a' => 1], []);
         self::assertSame([], $realtime->published, 'no recipients, no publish');

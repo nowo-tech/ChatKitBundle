@@ -13,6 +13,8 @@ use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Vote;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
 
+use function in_array;
+
 /**
  * Every chat permission. Controllers ask this voter; they never decide inline.
  *
@@ -22,16 +24,16 @@ use Symfony\Component\Security\Core\Authorization\Voter\Voter;
  */
 final class ChatVoter extends Voter
 {
-    public const string VIEW = 'nowo_chat.view';
-    public const string SEND = 'nowo_chat.send';
+    public const string VIEW     = 'nowo_chat.view';
+    public const string SEND     = 'nowo_chat.send';
     public const string MODERATE = 'nowo_chat.moderate';
-    public const string RESOLVE = 'nowo_chat.resolve';
-    public const string EDIT = 'nowo_chat.message.edit';
-    public const string DELETE = 'nowo_chat.message.delete';
-    public const string REACT = 'nowo_chat.message.react';
+    public const string RESOLVE  = 'nowo_chat.resolve';
+    public const string EDIT     = 'nowo_chat.message.edit';
+    public const string DELETE   = 'nowo_chat.message.delete';
+    public const string REACT    = 'nowo_chat.message.react';
 
     private const array CONVERSATION_ATTRIBUTES = [self::VIEW, self::SEND, self::MODERATE, self::RESOLVE];
-    private const array MESSAGE_ATTRIBUTES = [self::EDIT, self::DELETE, self::REACT];
+    private const array MESSAGE_ATTRIBUTES      = [self::EDIT, self::DELETE, self::REACT];
 
     public function __construct(
         private readonly ChatAccess $access,
@@ -41,8 +43,8 @@ final class ChatVoter extends Voter
 
     protected function supports(string $attribute, mixed $subject): bool
     {
-        return ($subject instanceof ChatConversation && \in_array($attribute, self::CONVERSATION_ATTRIBUTES, true))
-            || ($subject instanceof ChatMessage && \in_array($attribute, self::MESSAGE_ATTRIBUTES, true));
+        return ($subject instanceof ChatConversation && in_array($attribute, self::CONVERSATION_ATTRIBUTES, true))
+            || ($subject instanceof ChatMessage && in_array($attribute, self::MESSAGE_ATTRIBUTES, true));
     }
 
     protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
@@ -57,10 +59,10 @@ final class ChatVoter extends Voter
         }
 
         return match ($attribute) {
-            self::VIEW => $this->canView($subject, $user),
-            self::SEND => $this->canSend($subject, $user),
+            self::VIEW     => $this->canView($subject, $user),
+            self::SEND     => $this->canSend($subject, $user),
             self::MODERATE => !$subject->isDirect() && $this->access->isSupportAgent($user) && $this->canView($subject, $user),
-            default => $subject->isSupport() && $this->access->isSupportAgent($user), // RESOLVE
+            default        => $subject->isSupport() && $this->access->isSupportAgent($user), // RESOLVE
         };
     }
 
@@ -73,7 +75,7 @@ final class ChatVoter extends Voter
         $ownInWindow = $message->isAuthoredBy($user) && $message->isWithinEditWindow($this->clock->now());
 
         return match ($attribute) {
-            self::EDIT => $ownInWindow && !$message->isBuzz() && $this->canSend($conversation, $user),
+            self::EDIT   => $ownInWindow && !$message->isBuzz() && $this->canSend($conversation, $user),
             self::DELETE => ($ownInWindow && $this->canView($conversation, $user))
                 || (!$conversation->isDirect() && $this->access->isSupportAgent($user) && $this->canView($conversation, $user)),
             default => !$message->isBuzz() && $this->canSend($conversation, $user), // REACT

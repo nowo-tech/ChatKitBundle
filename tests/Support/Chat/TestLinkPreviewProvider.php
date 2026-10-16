@@ -21,7 +21,7 @@ final class TestLinkPreviewProvider implements ChatLinkPreviewProviderInterface
         $previews = [];
         foreach ($urls as $url) {
             if (str_starts_with($url, '/projects/acme/')) {
-                $previews[$url] = new ChatLinkPreview('Acme · '.basename($url), 'Issue', 'open');
+                $previews[$url] = new ChatLinkPreview('Acme · ' . basename($url), 'Issue', 'open');
             }
         }
         // A provider returning extra keys does not leak them.

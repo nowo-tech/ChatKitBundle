@@ -10,6 +10,8 @@ use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
+use const DATE_ATOM;
+
 /**
  * JSON shapes for the dock. Message HTML is the server-sanitised render; every other string is plain text the
  * client inserts with textContent.
@@ -44,29 +46,29 @@ final readonly class ChatPresenter
                 $peer?->getChatEmail() ?? '',
                 $peer?->getChatInitials() ?? '?',
             ],
-            $conversation->isChannel() => ['#'.($channel->label ?? ''), $this->trans('chat.channel'), '#'],
-            default => $this->supportTitle($conversation, $viewer, $viewerIsAgent),
+            $conversation->isChannel() => ['#' . ($channel->label ?? ''), $this->trans('chat.channel'), '#'],
+            default                    => $this->supportTitle($conversation, $viewer, $viewerIsAgent),
         };
 
         return [
-            'uuid' => $conversation->getUuid(),
-            'kind' => $conversation->getKind()->value,
-            'title' => $title,
-            'subtitle' => $subtitle,
-            'initials' => $initials,
-            'peerUuid' => $peer?->getChatPublicId(),
-            'channelKey' => $conversation->getChannelKey(),
-            'supportStatus' => $conversation->getSupportStatus()?->value,
+            'uuid'           => $conversation->getUuid(),
+            'kind'           => $conversation->getKind()->value,
+            'title'          => $title,
+            'subtitle'       => $subtitle,
+            'initials'       => $initials,
+            'peerUuid'       => $peer?->getChatPublicId(),
+            'channelKey'     => $conversation->getChannelKey(),
+            'supportStatus'  => $conversation->getSupportStatus()?->value,
             'supportContext' => $conversation->getSupportContext(),
-            'canSend' => $canSend,
-            'peerOnline' => $peerOnline,
-            'unread' => $unread,
-            'lastMessageAt' => ($last?->getCreatedAt() ?? $conversation->getLastMessageAt())->format(\DATE_ATOM),
-            'lastMessage' => $last instanceof ChatMessage ? [
-                'preview' => $last->isDeleted() || $last->isBuzz() ? '' : $this->markdown->plainText($last->getBody(), 90),
-                'buzz' => $last->isBuzz(),
-                'deleted' => $last->isDeleted(),
-                'mine' => $last->isAuthoredBy($viewer),
+            'canSend'        => $canSend,
+            'peerOnline'     => $peerOnline,
+            'unread'         => $unread,
+            'lastMessageAt'  => ($last?->getCreatedAt() ?? $conversation->getLastMessageAt())->format(DATE_ATOM),
+            'lastMessage'    => $last instanceof ChatMessage ? [
+                'preview'    => $last->isDeleted() || $last->isBuzz() ? '' : $this->markdown->plainText($last->getBody(), 90),
+                'buzz'       => $last->isBuzz(),
+                'deleted'    => $last->isDeleted(),
+                'mine'       => $last->isAuthoredBy($viewer),
                 'authorName' => $last->getAuthor()?->getChatDisplayName(),
             ] : null,
         ];
@@ -82,19 +84,19 @@ final readonly class ChatPresenter
         $author = $message->getAuthor();
 
         return [
-            'id' => $message->getId(),
-            'uuid' => $message->getUuid(),
-            'authorUuid' => $author?->getChatPublicId(),
-            'authorName' => $author?->getChatDisplayName() ?? $this->trans('chat.deleted_user'),
+            'id'             => $message->getId(),
+            'uuid'           => $message->getUuid(),
+            'authorUuid'     => $author?->getChatPublicId(),
+            'authorName'     => $author?->getChatDisplayName() ?? $this->trans('chat.deleted_user'),
             'authorInitials' => $author?->getChatInitials() ?? '?',
-            'mine' => $viewer instanceof ChatUserInterface && $message->isAuthoredBy($viewer),
-            'kind' => $message->getKind(),
-            'html' => $message->getBodyHtml(),
-            'createdAt' => $message->getCreatedAt()->format(\DATE_ATOM),
-            'edited' => $message->isEdited(),
-            'deleted' => $message->isDeleted(),
-            'moderated' => $message->isModerated(),
-            'reactions' => $reactions,
+            'mine'           => $viewer instanceof ChatUserInterface && $message->isAuthoredBy($viewer),
+            'kind'           => $message->getKind(),
+            'html'           => $message->getBodyHtml(),
+            'createdAt'      => $message->getCreatedAt()->format(DATE_ATOM),
+            'edited'         => $message->isEdited(),
+            'deleted'        => $message->isDeleted(),
+            'moderated'      => $message->isModerated(),
+            'reactions'      => $reactions,
         ];
     }
 

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Support\Chat;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -25,7 +27,7 @@ final class RecordingRealtime implements ChatRealtimeInterface
     public function publish(array $topics, array $payload): void
     {
         if ($this->failing) {
-            throw new \RuntimeException('hub down');
+            throw new RuntimeException('hub down');
         }
         $this->published[] = ['topics' => $topics, 'payload' => $payload];
     }
@@ -35,9 +37,9 @@ final class RecordingRealtime implements ChatRealtimeInterface
         return 'https://hub.example.test/.well-known/mercure';
     }
 
-    public function subscriberToken(array $topics, \DateTimeImmutable $expiresAt): string
+    public function subscriberToken(array $topics, DateTimeImmutable $expiresAt): string
     {
-        return 'token:'.implode(',', $topics).'@'.$expiresAt->getTimestamp();
+        return 'token:' . implode(',', $topics) . '@' . $expiresAt->getTimestamp();
     }
 
     /**

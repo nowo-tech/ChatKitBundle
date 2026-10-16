@@ -12,6 +12,8 @@ use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Twig\Environment;
 
+use function assert;
+
 /**
  * Boots the test kernel on in-memory SQLite with the full schema (bundle entities + test user).
  */
@@ -26,11 +28,11 @@ abstract class DatabaseTestCase extends TestCase
         $this->kernel = new TestKernel($this->chatKitConfig());
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
-        \assert($em instanceof EntityManagerInterface);
+        assert($em instanceof EntityManagerInterface);
         $this->em = $em;
         (new SchemaTool($em))->createSchema($em->getMetadataFactory()->getAllMetadata());
         $cache = $this->kernel->getContainer()->get('cache.app');
-        \assert($cache instanceof CacheItemPoolInterface);
+        assert($cache instanceof CacheItemPoolInterface);
         $cache->clear();
     }
 
@@ -54,10 +56,10 @@ abstract class DatabaseTestCase extends TestCase
         $container = $this->kernel->getContainer();
         if (!$container->has($id)) {
             $container = $container->get('test.service_container');
-            \assert($container instanceof ContainerInterface);
+            assert($container instanceof ContainerInterface);
         }
         $service = $container->get($id);
-        \assert($service instanceof $id);
+        assert($service instanceof $id);
 
         return $service;
     }
@@ -65,9 +67,9 @@ abstract class DatabaseTestCase extends TestCase
     protected function twig(): Environment
     {
         $container = $this->kernel->getContainer()->get('test.service_container');
-        \assert($container instanceof ContainerInterface);
+        assert($container instanceof ContainerInterface);
         $twig = $container->get('twig');
-        \assert($twig instanceof Environment);
+        assert($twig instanceof Environment);
 
         return $twig;
     }
@@ -79,7 +81,7 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function user(string $name): TestUser
     {
-        $user = new TestUser($name, strtolower($name).'@example.test');
+        $user = new TestUser($name, strtolower($name) . '@example.test');
         $this->em->persist($user);
         $this->em->flush();
 

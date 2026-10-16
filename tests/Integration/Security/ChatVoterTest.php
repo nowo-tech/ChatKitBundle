@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Integration\Security;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Security\ChatAccess;
@@ -12,6 +13,8 @@ use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use ReflectionProperty;
+use stdClass;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Security\Core\Authentication\Token\NullToken;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
@@ -36,13 +39,13 @@ final class ChatVoterTest extends DatabaseTestCase
 
     public function testDirectConversations(): void
     {
-        $chat = $this->get(ChatService::class);
-        $ana = $this->user('Ana');
-        $luis = $this->user('Luis');
-        $eve = $this->user('Eve');
+        $chat     = $this->get(ChatService::class);
+        $ana      = $this->user('Ana');
+        $luis     = $this->user('Luis');
+        $eve      = $this->user('Eve');
         $stranger = $this->user('Stranger');
-        $agent = $this->user('Agent Smith');
-        $dm = $chat->openDirect($ana, $luis);
+        $agent    = $this->user('Agent Smith');
+        $dm       = $chat->openDirect($ana, $luis);
 
         self::assertTrue($this->can($ana, ChatVoter::VIEW, $dm));
         self::assertTrue($this->can($luis, ChatVoter::SEND, $dm));
@@ -63,7 +66,7 @@ final class ChatVoterTest extends DatabaseTestCase
 
         // The peer's account is gone.
         $ghost = new TestUser('Ghost');
-        (new \ReflectionProperty(TestUser::class, 'id'))->setValue($ghost, 999_999);
+        (new ReflectionProperty(TestUser::class, 'id'))->setValue($ghost, 999_999);
         $orphan = ChatConversation::direct($ana, $ghost);
         $this->em->persist($orphan);
         $this->em->flush();
@@ -73,19 +76,19 @@ final class ChatVoterTest extends DatabaseTestCase
 
         self::assertSame(VoterInterface::ACCESS_DENIED, $this->voter->vote(new NullToken(), $dm, [ChatVoter::VIEW]), 'anonymous');
         self::assertSame(VoterInterface::ACCESS_ABSTAIN, $this->voter->vote($this->token($ana), $dm, ['other']));
-        self::assertSame(VoterInterface::ACCESS_ABSTAIN, $this->voter->vote($this->token($ana), new \stdClass(), [ChatVoter::VIEW]));
+        self::assertSame(VoterInterface::ACCESS_ABSTAIN, $this->voter->vote($this->token($ana), new stdClass(), [ChatVoter::VIEW]));
         $disabled = $this->user('Disabled Bob');
         self::assertFalse($this->can($disabled, ChatVoter::VIEW, $chat->openDirect($disabled, $ana)));
     }
 
     public function testChannelsAndSupport(): void
     {
-        $chat = $this->get(ChatService::class);
-        $access = $this->get(ChatAccess::class);
-        $ana = $this->user('Ana');
+        $chat     = $this->get(ChatService::class);
+        $access   = $this->get(ChatAccess::class);
+        $ana      = $this->user('Ana');
         $stranger = $this->user('Stranger');
-        $agent = $this->user('Agent Smith');
-        $channel = $chat->openChannel($ana, $access->channel(TestChannelProvider::KEY) ?? self::fail('channel'));
+        $agent    = $this->user('Agent Smith');
+        $channel  = $chat->openChannel($ana, $access->channel(TestChannelProvider::KEY) ?? self::fail('channel'));
 
         self::assertTrue($this->can($ana, ChatVoter::SEND, $channel));
         self::assertFalse($this->can($stranger, ChatVoter::VIEW, $channel));
@@ -105,13 +108,13 @@ final class ChatVoterTest extends DatabaseTestCase
 
     public function testMessages(): void
     {
-        $chat = $this->get(ChatService::class);
-        $ana = $this->user('Ana');
-        $luis = $this->user('Luis');
-        $agent = $this->user('Agent Smith');
-        $dm = $chat->openDirect($ana, $luis);
-        $message = new ChatMessage($dm, $ana, 'hi', '<p>hi</p>', new \DateTimeImmutable('2026-10-15 09:50:00'));
-        $buzz = ChatMessage::buzz($dm, $ana, new \DateTimeImmutable('2026-10-15 09:55:00'));
+        $chat    = $this->get(ChatService::class);
+        $ana     = $this->user('Ana');
+        $luis    = $this->user('Luis');
+        $agent   = $this->user('Agent Smith');
+        $dm      = $chat->openDirect($ana, $luis);
+        $message = new ChatMessage($dm, $ana, 'hi', '<p>hi</p>', new DateTimeImmutable('2026-10-15 09:50:00'));
+        $buzz    = ChatMessage::buzz($dm, $ana, new DateTimeImmutable('2026-10-15 09:55:00'));
         $this->em->persist($message);
         $this->em->persist($buzz);
         $this->em->flush();
@@ -128,7 +131,7 @@ final class ChatVoterTest extends DatabaseTestCase
         self::assertFalse($this->can($ana, ChatVoter::EDIT, $message), 'edit window over');
         self::assertFalse($this->can($ana, ChatVoter::DELETE, $message));
 
-        $support = $chat->openSupport($luis);
+        $support  = $chat->openSupport($luis);
         $reported = $chat->send($luis, $support, 'spam');
         self::assertTrue($this->can($agent, ChatVoter::DELETE, $reported), 'agents moderate support threads');
         $reported->delete($agent);
@@ -138,7 +141,7 @@ final class ChatVoterTest extends DatabaseTestCase
 
     private function can(TestUser $user, string $attribute, object $subject): bool
     {
-        return VoterInterface::ACCESS_GRANTED === $this->voter->vote($this->token($user), $subject, [$attribute]);
+        return $this->voter->vote($this->token($user), $subject, [$attribute]) === VoterInterface::ACCESS_GRANTED;
     }
 
     private function token(TestUser $user): UsernamePasswordToken

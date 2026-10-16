@@ -38,7 +38,7 @@ class ChatUserSettingsRepository extends ServiceEntityRepository
         foreach ($users as $user) {
             $byId[(int) $user->getId()] = new ChatUserSettings($user);
         }
-        if ([] === $byId) {
+        if ($byId === []) {
             return [];
         }
         /** @var list<ChatUserSettings> $rows */

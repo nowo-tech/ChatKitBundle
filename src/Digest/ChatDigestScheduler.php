@@ -32,7 +32,7 @@ final readonly class ChatDigestScheduler
             return;
         }
         foreach ($recipients as $user) {
-            $pending = $this->cache->getItem('nowo_chat_digest_pending_'.hash('xxh128', $user->getChatPublicId()));
+            $pending = $this->cache->getItem('nowo_chat_digest_pending_' . hash('xxh128', $user->getChatPublicId()));
             if ($pending->isHit()) {
                 continue;
             }

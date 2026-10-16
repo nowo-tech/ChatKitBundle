@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Service;
 
 use Doctrine\ORM\EntityManagerInterface;
+use InvalidArgumentException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -21,6 +22,9 @@ use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+
+use function in_array;
+use function is_string;
 
 /**
  * Conversation lifecycle and messages. Authorization is the caller's job (ChatVoter); this service only keeps
@@ -75,8 +79,8 @@ final readonly class ChatService
     {
         $conversation = $this->conversations->findSupportFor($owner)
             ?? $this->create(ChatConversation::support($owner), [$owner]);
-        if (null !== $context) {
-            $conversation->setSupportContext(\is_string($context['url'] ?? null) ? $context['url'] : null, \is_string($context['label'] ?? null) ? $context['label'] : null);
+        if ($context !== null) {
+            $conversation->setSupportContext(is_string($context['url'] ?? null) ? $context['url'] : null, is_string($context['label'] ?? null) ? $context['label'] : null);
             $this->entityManager->flush();
         }
 
@@ -84,12 +88,12 @@ final readonly class ChatService
     }
 
     /**
-     * @throws \InvalidArgumentException `empty` or `too_long`
+     * @throws InvalidArgumentException `empty` or `too_long`
      */
     public function send(ChatUserInterface $author, ChatConversation $conversation, string $body): ChatMessage
     {
-        $body = $this->normalize($body);
-        $now = $this->clock->now();
+        $body    = $this->normalize($body);
+        $now     = $this->clock->now();
         $message = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
         $this->entityManager->persist($message);
         $conversation->touch($now);
@@ -116,7 +120,7 @@ final readonly class ChatService
     }
 
     /**
-     * @throws \InvalidArgumentException `empty` or `too_long`
+     * @throws InvalidArgumentException `empty` or `too_long`
      */
     public function edit(ChatMessage $message, string $body): void
     {
@@ -140,14 +144,14 @@ final readonly class ChatService
     /**
      * Adds the reaction, or removes it when the user had already reacted with that emoji.
      *
-     * @return array<string, list<string>> the message's reactions after the change
+     * @throws InvalidArgumentException `reaction` when the emoji is not offered
      *
-     * @throws \InvalidArgumentException `reaction` when the emoji is not offered
+     * @return array<string, list<string>> the message's reactions after the change
      */
     public function toggleReaction(ChatUserInterface $user, ChatMessage $message, string $emoji): array
     {
-        if (!\in_array($emoji, $this->reactions, true)) {
-            throw new \InvalidArgumentException('reaction');
+        if (!in_array($emoji, $this->reactions, true)) {
+            throw new InvalidArgumentException('reaction');
         }
         $existing = $this->reactionRepository->findOneFor($message, $user, $emoji);
         if ($existing instanceof ChatReaction) {
@@ -216,11 +220,11 @@ final readonly class ChatService
     private function normalize(string $body): string
     {
         $body = trim(str_replace(["\r\n", "\r"], "\n", ChatMarkdownRenderer::clean($body)));
-        if ('' === $body) {
-            throw new \InvalidArgumentException('empty');
+        if ($body === '') {
+            throw new InvalidArgumentException('empty');
         }
         if (mb_strlen($body) > ChatMessage::MAX_LENGTH) {
-            throw new \InvalidArgumentException('too_long');
+            throw new InvalidArgumentException('too_long');
         }
 
         return $body;

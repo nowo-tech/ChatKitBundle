@@ -23,9 +23,9 @@ final class ChatNotifierTest extends DatabaseTestCase
 {
     public function testTypingGoesToEveryoneButTheTypist(): void
     {
-        $ana = $this->user('Ana');
+        $ana  = $this->user('Ana');
         $luis = $this->user('Luis');
-        $dm = $this->get(ChatService::class)->openDirect($ana, $luis);
+        $dm   = $this->get(ChatService::class)->openDirect($ana, $luis);
 
         $this->get(ChatNotifier::class)->typing($dm, $ana);
         $this->get(ChatNotifier::class)->typing($dm, $ana);
@@ -38,12 +38,12 @@ final class ChatNotifierTest extends DatabaseTestCase
 
     public function testPushGoesThroughMessengerWhenAvailable(): void
     {
-        $ana = $this->user('Ana');
-        $luis = $this->user('Luis');
-        $chat = $this->get(ChatService::class);
-        $dm = $chat->openDirect($ana, $luis);
+        $ana     = $this->user('Ana');
+        $luis    = $this->user('Luis');
+        $chat    = $this->get(ChatService::class);
+        $dm      = $chat->openDirect($ana, $luis);
         $support = $chat->openSupport($ana);
-        $bus = new class implements MessageBusInterface {
+        $bus     = new class implements MessageBusInterface {
             /** @var list<object> */
             public array $dispatched = [];
 

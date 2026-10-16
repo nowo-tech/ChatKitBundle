@@ -8,6 +8,7 @@ use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Throwable;
 
 /**
  * Pushes one chat event to the private topics of the given users. Publishing never breaks the request (the
@@ -23,11 +24,11 @@ final readonly class ChatPublisher
 
     /**
      * @param list<ChatUserInterface> $recipients
-     * @param array<string, mixed>    $payload
+     * @param array<string, mixed> $payload
      */
     public function publish(string $type, array $payload, array $recipients): void
     {
-        if ([] === $recipients || !$this->realtime->isEnabled()) {
+        if ($recipients === [] || !$this->realtime->isEnabled()) {
             return;
         }
         $topics = array_values(array_unique(array_map(
@@ -36,7 +37,7 @@ final readonly class ChatPublisher
         )));
         try {
             $this->realtime->publish($topics, ['type' => $type] + $payload);
-        } catch (\Throwable $exception) {
+        } catch (Throwable $exception) {
             $this->logger->warning('Realtime publish failed for a chat event.', ['type' => $type, 'exception' => $exception]);
         }
     }

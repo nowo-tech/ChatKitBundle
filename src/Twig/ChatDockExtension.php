@@ -27,6 +27,9 @@ use Twig\Extension\AbstractExtension;
 use Twig\Markup;
 use Twig\TwigFunction;
 
+use function assert;
+use function strlen;
+
 /**
  * `nowo_chat_dock_config()`: what the dock needs (endpoints, CSRF token, settings, UI strings, the channel of
  * the current page). Null for guests and unreachable accounts, so the dock template renders nothing.
@@ -36,8 +39,8 @@ final class ChatDockExtension extends AbstractExtension
     private const string PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 
     /**
-     * @param list<string>          $reactions
-     * @param array<string, string> $icons     dock icon → UX Icons name (icon_set: ux_icon)
+     * @param list<string> $reactions
+     * @param array<string, string> $icons dock icon → UX Icons name (icon_set: ux_icon)
      */
     public function __construct(
         private readonly Security $security,
@@ -75,7 +78,7 @@ final class ChatDockExtension extends AbstractExtension
             return null;
         }
         $request = $this->requestStack->getMainRequest();
-        $locale = $request?->getLocale() ?? 'en';
+        $locale  = $request?->getLocale() ?? 'en';
         $channel = $request instanceof Request ? $this->channels->contextChannel($user, $request) : null;
         if ($channel instanceof ChatChannel && !$this->access->canUseChannel($user, $channel->key)) {
             $channel = null;
@@ -83,42 +86,42 @@ final class ChatDockExtension extends AbstractExtension
         $settings = $this->settings->forUser($user);
 
         return [
-            'userUuid' => $user->getChatPublicId(),
-            'csrf' => $this->csrf->getToken(ChatApiController::CSRF_ID)->getValue(),
-            'locale' => $locale,
-            'contextChannel' => $channel instanceof ChatChannel ? ['key' => $channel->key, 'label' => $channel->label] : null,
-            'pollMs' => $this->pollMs,
-            'maxLength' => ChatMessage::MAX_LENGTH,
+            'userUuid'          => $user->getChatPublicId(),
+            'csrf'              => $this->csrf->getToken(ChatApiController::CSRF_ID)->getValue(),
+            'locale'            => $locale,
+            'contextChannel'    => $channel instanceof ChatChannel ? ['key' => $channel->key, 'label' => $channel->label] : null,
+            'pollMs'            => $this->pollMs,
+            'maxLength'         => ChatMessage::MAX_LENGTH,
             'editWindowSeconds' => ChatMessage::EDIT_WINDOW_SECONDS,
-            'reactions' => $this->reactions,
-            'endpoints' => [
+            'reactions'         => $this->reactions,
+            'endpoints'         => [
                 'conversations' => $this->urls->generate('nowo_chat_api_conversations'),
-                'contacts' => $this->urls->generate('nowo_chat_api_contacts'),
-                'direct' => $this->urls->generate('nowo_chat_api_open_direct'),
-                'channel' => $this->urls->generate('nowo_chat_api_open_channel'),
-                'support' => $this->urls->generate('nowo_chat_api_open_support'),
-                'supportInbox' => $this->urls->generate('nowo_chat_api_support_inbox'),
-                'linkPreviews' => $this->urls->generate('nowo_chat_api_link_previews'),
-                'page' => $this->pattern('nowo_chat_page_conversation'),
-                'conversation' => $this->pattern('nowo_chat_api_conversation'),
-                'messages' => $this->pattern('nowo_chat_api_messages'),
-                'message' => $this->pattern('nowo_chat_api_edit', ['messageUuid' => self::PLACEHOLDER], '__message__'),
-                'reactions' => $this->pattern('nowo_chat_api_react', ['messageUuid' => self::PLACEHOLDER], '__message__'),
-                'read' => $this->pattern('nowo_chat_api_read'),
-                'typing' => $this->pattern('nowo_chat_api_typing'),
-                'buzz' => $this->pattern('nowo_chat_api_buzz'),
-                'resolve' => $this->pattern('nowo_chat_api_resolve'),
-                'realtime' => $this->urls->generate('nowo_chat_api_realtime'),
-                'presence' => $this->urls->generate('nowo_chat_api_presence'),
+                'contacts'      => $this->urls->generate('nowo_chat_api_contacts'),
+                'direct'        => $this->urls->generate('nowo_chat_api_open_direct'),
+                'channel'       => $this->urls->generate('nowo_chat_api_open_channel'),
+                'support'       => $this->urls->generate('nowo_chat_api_open_support'),
+                'supportInbox'  => $this->urls->generate('nowo_chat_api_support_inbox'),
+                'linkPreviews'  => $this->urls->generate('nowo_chat_api_link_previews'),
+                'page'          => $this->pattern('nowo_chat_page_conversation'),
+                'conversation'  => $this->pattern('nowo_chat_api_conversation'),
+                'messages'      => $this->pattern('nowo_chat_api_messages'),
+                'message'       => $this->pattern('nowo_chat_api_edit', ['messageUuid' => self::PLACEHOLDER], '__message__'),
+                'reactions'     => $this->pattern('nowo_chat_api_react', ['messageUuid' => self::PLACEHOLDER], '__message__'),
+                'read'          => $this->pattern('nowo_chat_api_read'),
+                'typing'        => $this->pattern('nowo_chat_api_typing'),
+                'buzz'          => $this->pattern('nowo_chat_api_buzz'),
+                'resolve'       => $this->pattern('nowo_chat_api_resolve'),
+                'realtime'      => $this->urls->generate('nowo_chat_api_realtime'),
+                'presence'      => $this->urls->generate('nowo_chat_api_presence'),
             ],
             'prefs' => [
-                'sound' => $settings->getSound(),
-                'buzz' => $settings->isBuzzEnabled(),
+                'sound'    => $settings->getSound(),
+                'buzz'     => $settings->isBuzzEnabled(),
                 'presence' => $settings->isPresenceVisible(),
             ],
-            'isAgent' => $this->access->isSupportAgent($user),
+            'isAgent'      => $this->access->isSupportAgent($user),
             'linkPreviews' => !$this->linkPreviews instanceof NullLinkPreviewProvider,
-            'i18n' => $this->strings($locale),
+            'i18n'         => $this->strings($locale),
         ];
     }
 
@@ -130,7 +133,7 @@ final class ChatDockExtension extends AbstractExtension
      */
     public function icons(): array
     {
-        if ('ux_icon' !== $this->iconSet || !$this->iconRenderer instanceof IconRendererInterface) {
+        if ($this->iconSet !== 'ux_icon' || !$this->iconRenderer instanceof IconRendererInterface) {
             return [];
         }
         $rendered = [];
@@ -153,11 +156,11 @@ final class ChatDockExtension extends AbstractExtension
     private function pattern(string $route, array $extra = [], string $extraPlaceholder = ''): string
     {
         $url = $this->urls->generate($route, ['uuid' => self::PLACEHOLDER] + $extra);
-        if ([] !== $extra) {
+        if ($extra !== []) {
             // The message placeholder comes second in every route that has one.
             $position = strrpos($url, self::PLACEHOLDER);
-            \assert(false !== $position);
-            $url = substr_replace($url, $extraPlaceholder, $position, \strlen(self::PLACEHOLDER));
+            assert($position !== false);
+            $url = substr_replace($url, $extraPlaceholder, $position, strlen(self::PLACEHOLDER));
         }
 
         return str_replace(self::PLACEHOLDER, '__uuid__', $url);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Repository;
 
+use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -13,13 +14,15 @@ use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
+use function array_slice;
+
 /**
  * @extends ServiceEntityRepository<ChatConversation>
  */
 class ChatConversationRepository extends ServiceEntityRepository
 {
     /** Support threads opened but never written to are not in the inbox (nor counted). */
-    private const string HAS_MESSAGES = 'EXISTS (SELECT 1 FROM '.ChatMessage::class.' hm WHERE hm.conversation = c)';
+    private const string HAS_MESSAGES = 'EXISTS (SELECT 1 FROM ' . ChatMessage::class . ' hm WHERE hm.conversation = c)';
 
     public function __construct(ManagerRegistry $registry)
     {
@@ -56,13 +59,13 @@ class ChatConversationRepository extends ServiceEntityRepository
      *
      * @return list<ChatConversation>
      */
-    public function findListForUser(ChatUserInterface $user, array $channelKeys, bool $isSupportAgent, int $limit, ?\DateTimeImmutable $before = null): array
+    public function findListForUser(ChatUserInterface $user, array $channelKeys, bool $isSupportAgent, int $limit, ?DateTimeImmutable $before = null): array
     {
         $branch = function (callable $shape) use ($limit, $before): array {
             $qb = $this->createQueryBuilder('c')
                 ->leftJoin('c.supportOwner', 'owner')->addSelect('owner');
             $shape($qb);
-            if ($before instanceof \DateTimeImmutable) {
+            if ($before instanceof DateTimeImmutable) {
                 $qb->andWhere('c.lastMessageAt < :before')->setParameter('before', $before);
             }
 
@@ -78,7 +81,7 @@ class ChatConversationRepository extends ServiceEntityRepository
                 ->setParameter('user', $user)
                 ->setParameter('kinds', [ConversationKind::Direct, ConversationKind::Support]);
         });
-        if ([] !== $channelKeys) {
+        if ($channelKeys !== []) {
             $rows = [...$rows, ...$branch(static function ($qb) use ($channelKeys): void {
                 $qb->andWhere('c.channelKey IN (:channels)')->setParameter('channels', $channelKeys);
             })];
@@ -97,7 +100,7 @@ class ChatConversationRepository extends ServiceEntityRepository
         $merged = array_values($unique);
         usort($merged, static fn (ChatConversation $a, ChatConversation $b): int => [$b->getLastMessageAt(), $b->getId()] <=> [$a->getLastMessageAt(), $a->getId()]);
 
-        return \array_slice($merged, 0, $limit);
+        return array_slice($merged, 0, $limit);
     }
 
     /**
@@ -138,9 +141,9 @@ class ChatConversationRepository extends ServiceEntityRepository
             ->orderBy('c.lastMessageAt', 'DESC')
             ->addOrderBy('c.id', 'DESC')
             ->setMaxResults($limit);
-        if ('open' === $filter || 'resolved' === $filter) {
+        if ($filter === 'open' || $filter === 'resolved') {
             $qb->andWhere('c.supportStatus = :status')->setParameter('status', SupportStatus::from($filter));
-        } elseif ('mine' === $filter) {
+        } elseif ($filter === 'mine') {
             $qb->innerJoin(ChatParticipant::class, 'p', 'WITH', 'p.conversation = c AND p.user = :agent')->setParameter('agent', $agent);
         }
 

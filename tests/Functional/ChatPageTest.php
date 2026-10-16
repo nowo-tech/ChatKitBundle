@@ -10,6 +10,8 @@ use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\HttpFoundation\Request;
 
+use function assert;
+
 /**
  * The full-page chat (FR-005): server-rendered list and thread, form POST + redirect, same permissions as the API.
  */
@@ -26,7 +28,7 @@ final class ChatPageTest extends DatabaseTestCase
     {
         parent::setUp();
         $client = $this->kernel->getContainer()->get('test.client');
-        \assert($client instanceof KernelBrowser);
+        assert($client instanceof KernelBrowser);
         $client->disableReboot();
         $this->client = $client;
     }
@@ -44,10 +46,10 @@ final class ChatPageTest extends DatabaseTestCase
     public function testListThreadAndSend(): void
     {
         $chat = $this->get(ChatService::class);
-        $ana = $this->user('Ana');
+        $ana  = $this->user('Ana');
         $luis = $this->user('Luis');
-        $eve = $this->user('Eve');
-        $dm = $chat->openDirect($ana, $luis);
+        $eve  = $this->user('Eve');
+        $dm   = $chat->openDirect($ana, $luis);
         $chat->send($luis, $dm, 'Hola **Ana**');
         $chat->openDirect($ana, $eve); // empty direct conversations stay out of the list
         $foreign = $chat->openDirect($luis, $eve);
@@ -63,7 +65,7 @@ final class ChatPageTest extends DatabaseTestCase
         self::assertSame('Pick a conversation.', $crawler->filter('.nowo-chat-page__thread .nowo-chat-page__empty')->text());
 
         // The thread marks it read and offers the composer.
-        $crawler = $this->client->request(Request::METHOD_GET, '/chat/'.$dm->getUuid());
+        $crawler = $this->client->request(Request::METHOD_GET, '/chat/' . $dm->getUuid());
         self::assertSame('Luis', $crawler->filter('title')->text());
         self::assertSame('<p>Hola <strong>Ana</strong></p>', $crawler->filter('#nowo-chat-latest .nowo-chat-bubble')->html());
         self::assertCount(0, $crawler->filter('.nowo-chat-page__row.is-unread'));
@@ -71,13 +73,13 @@ final class ChatPageTest extends DatabaseTestCase
         $form = $crawler->filter('.nowo-chat-page__composer')->form(['nowo_chat_message[body]' => 'Hey _Luis_']);
         $this->client->submit($form);
         self::assertSame(303, $this->client->getResponse()->getStatusCode());
-        self::assertStringEndsWith('/chat/'.$dm->getUuid().'#nowo-chat-latest', (string) $this->client->getResponse()->headers->get('Location'));
+        self::assertStringEndsWith('/chat/' . $dm->getUuid() . '#nowo-chat-latest', (string) $this->client->getResponse()->headers->get('Location'));
         $crawler = $this->client->followRedirect();
         self::assertSame('<p>Hey <em>Luis</em></p>', $crawler->filter('#nowo-chat-latest .nowo-chat-bubble')->html());
         self::assertCount(0, $crawler->filter('[role="alert"]'));
 
         // Errors come back through the redirect.
-        $this->client->request(Request::METHOD_POST, '/chat/'.$dm->getUuid(), ['nowo_chat_message' => ['_token' => 'bad', 'body' => 'x']]);
+        $this->client->request(Request::METHOD_POST, '/chat/' . $dm->getUuid(), ['nowo_chat_message' => ['_token' => 'bad', 'body' => 'x']]);
         self::assertStringContainsString('error=error', (string) $this->client->getResponse()->headers->get('Location'));
         $crawler = $this->client->followRedirect();
         self::assertSame('Something went wrong. Try again.', $crawler->filter('[role="alert"]')->text());
@@ -87,30 +89,30 @@ final class ChatPageTest extends DatabaseTestCase
         self::assertStringContainsString('error=rate_limited', (string) $this->client->getResponse()->headers->get('Location'));
 
         // IDOR: someone else's conversation is a 404, read or write.
-        $this->client->request(Request::METHOD_GET, '/chat/'.$foreign->getUuid());
+        $this->client->request(Request::METHOD_GET, '/chat/' . $foreign->getUuid());
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
-        $this->client->request(Request::METHOD_POST, '/chat/'.$foreign->getUuid(), ['nowo_chat_message' => ['body' => 'x']]);
+        $this->client->request(Request::METHOD_POST, '/chat/' . $foreign->getUuid(), ['nowo_chat_message' => ['body' => 'x']]);
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
     }
 
     public function testReadOnlyConversation(): void
     {
         $chat = $this->get(ChatService::class);
-        $ana = $this->user('Ana');
+        $ana  = $this->user('Ana');
         $luis = $this->user('Luis');
-        $dm = $chat->openDirect($ana, $luis);
+        $dm   = $chat->openDirect($ana, $luis);
         $chat->send($ana, $dm, 'Hola');
         $this->client->loginUser($ana);
-        $token = $this->client->request(Request::METHOD_GET, '/chat/'.$dm->getUuid())->filter('input[name="nowo_chat_message[_token]"]')->attr('value');
+        $token = $this->client->request(Request::METHOD_GET, '/chat/' . $dm->getUuid())->filter('input[name="nowo_chat_message[_token]"]')->attr('value');
         // Luis loses the right to be messaged: the conversation stays readable, never writable.
-        $this->em->createQuery('UPDATE '.TestUser::class.' u SET u.name = :name WHERE u.id = :id')
+        $this->em->createQuery('UPDATE ' . TestUser::class . ' u SET u.name = :name WHERE u.id = :id')
             ->setParameters(['name' => 'Stranger Luis', 'id' => $luis->getId()])->execute();
         $this->em->clear();
 
-        $crawler = $this->client->request(Request::METHOD_GET, '/chat/'.$dm->getUuid());
+        $crawler = $this->client->request(Request::METHOD_GET, '/chat/' . $dm->getUuid());
         self::assertCount(0, $crawler->filter('.nowo-chat-page__composer'));
         self::assertSame('You can no longer message this person.', $crawler->filter('.nowo-chat-page__thread .nowo-chat-notice')->text());
-        $this->client->request(Request::METHOD_POST, '/chat/'.$dm->getUuid(), ['nowo_chat_message' => ['_token' => $token, 'body' => 'x']]);
+        $this->client->request(Request::METHOD_POST, '/chat/' . $dm->getUuid(), ['nowo_chat_message' => ['_token' => $token, 'body' => 'x']]);
         self::assertStringContainsString('error=read_only', (string) $this->client->getResponse()->headers->get('Location'));
     }
 }

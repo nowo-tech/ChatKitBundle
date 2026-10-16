@@ -37,14 +37,14 @@ final class ChatAccess implements ResetInterface
 
     public function reset(): void
     {
-        $this->agents = [];
-        $this->channels = [];
+        $this->agents        = [];
+        $this->channels      = [];
         $this->channelAccess = [];
     }
 
     public function isReachable(ChatUserInterface $user): bool
     {
-        return null !== $user->getId() && $this->policy->isReachable($user);
+        return $user->getId() !== null && $this->policy->isReachable($user);
     }
 
     public function isSupportAgent(ChatUserInterface $user): bool
@@ -70,12 +70,12 @@ final class ChatAccess implements ResetInterface
     {
         $channel = $this->channels[$key] ??= $this->channelProvider->find($key) ?? false;
 
-        return false === $channel ? null : $channel;
+        return $channel === false ? null : $channel;
     }
 
     public function canUseChannel(ChatUserInterface $user, string $key): bool
     {
-        return $this->channelAccess[$user->getId().':'.$key] ??= $this->isReachable($user)
+        return $this->channelAccess[$user->getId() . ':' . $key] ??= $this->isReachable($user)
             && ($channel = $this->channel($key)) instanceof ChatChannel
             && $this->channelProvider->canUse($user, $channel);
     }
@@ -85,6 +85,6 @@ final class ChatAccess implements ResetInterface
     {
         $peerId = $conversation->peerIdOf($actor);
 
-        return null === $peerId ? null : ($this->directory->findByIds([$peerId])[0] ?? null);
+        return $peerId === null ? null : ($this->directory->findByIds([$peerId])[0] ?? null);
     }
 }

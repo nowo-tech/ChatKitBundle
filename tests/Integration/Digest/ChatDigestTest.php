@@ -43,8 +43,8 @@ final class ChatDigestTest extends DatabaseTestCase
                 return $this->sent[] = new Envelope($message, $stamps);
             }
         };
-        $ana = $this->user('Ana');
-        $luis = $this->user('Luis');
+        $ana       = $this->user('Ana');
+        $luis      = $this->user('Luis');
         $scheduler = new ChatDigestScheduler(new ArrayAdapter(), $bus, true, 15);
         $scheduler->schedule([$ana, $luis]);
         $scheduler->schedule([$ana]);
@@ -60,11 +60,11 @@ final class ChatDigestTest extends DatabaseTestCase
 
     public function testEmailsStillUnreadConversations(): void
     {
-        $chat = $this->get(ChatService::class);
-        $ana = $this->user('Ana');
-        $luis = $this->user('Luis');
+        $chat  = $this->get(ChatService::class);
+        $ana   = $this->user('Ana');
+        $luis  = $this->user('Luis');
         $agent = $this->user('Agent Smith');
-        $dm = $chat->openDirect($ana, $luis);
+        $dm    = $chat->openDirect($ana, $luis);
         $chat->send($luis, $dm, "**Deploy** done\n- all green");
         $chat->buzz($luis, $dm);
         $channel = $chat->openChannel($ana, $this->get(ChatAccess::class)->channel(TestChannelProvider::KEY) ?? self::fail('channel'));
@@ -75,8 +75,8 @@ final class ChatDigestTest extends DatabaseTestCase
         $read = $chat->openDirect($ana, $agent);
         $chat->markRead($ana, $read, (int) $chat->send($agent, $read, 'seen already')->getId());
 
-        $sender = new RecordingDigestSender();
-        $cache = new ArrayAdapter();
+        $sender     = new RecordingDigestSender();
+        $cache      = new ArrayAdapter();
         $dispatcher = $this->dispatcher($sender, $cache);
         $dispatcher(new SendChatDigestMessage((int) $ana->getId()));
 
@@ -91,7 +91,7 @@ final class ChatDigestTest extends DatabaseTestCase
         self::assertCount(1, $sender->sent);
 
         // Opted out, app open, nothing unread, unknown or unreachable user: no email.
-        $other = new RecordingDigestSender();
+        $other    = new RecordingDigestSender();
         $settings = $this->get(ChatUserSettingsRepository::class)->forUser($ana);
         $settings->setEmailDigest(false);
         $this->em->persist($settings);

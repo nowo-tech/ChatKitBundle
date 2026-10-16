@@ -32,6 +32,8 @@ use Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator;
 use Symfony\UX\Icons\UXIconsBundle;
 use Twig\Environment;
 
+use function dirname;
+
 /**
  * Kernel for integration and functional tests: SQLite in memory, the test user, in-memory contracts and the
  * bundle routes under /chat.
@@ -67,34 +69,34 @@ final class TestKernel extends Kernel
 
     public function getProjectDir(): string
     {
-        return \dirname(__DIR__, 2);
+        return dirname(__DIR__, 2);
     }
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir().'/nowo-chat-kit-bundle/'.md5(serialize($this->chatKitConfig)).'/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize($this->chatKitConfig)) . '/cache';
     }
 
     public function getLogDir(): string
     {
-        return sys_get_temp_dir().'/nowo-chat-kit-bundle/logs';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/logs';
     }
 
     protected function configureContainer(ContainerConfigurator $container): void
     {
         $container->extension('framework', [
-            'secret' => 'chat-kit-test',
-            'test' => true,
-            'http_method_override' => false,
+            'secret'                => 'chat-kit-test',
+            'test'                  => true,
+            'http_method_override'  => false,
             'handle_all_throwables' => true,
-            'php_errors' => ['log' => true],
-            'assets' => ['enabled' => true],
-            'translator' => ['enabled' => true, 'fallbacks' => ['en']],
-            'default_locale' => 'en',
-            'csrf_protection' => true,
-            'session' => ['storage_factory_id' => 'session.storage.factory.mock_file'],
+            'php_errors'            => ['log' => true],
+            'assets'                => ['enabled' => true],
+            'translator'            => ['enabled' => true, 'fallbacks' => ['en']],
+            'default_locale'        => 'en',
+            'csrf_protection'       => true,
+            'session'               => ['storage_factory_id' => 'session.storage.factory.mock_file'],
             // Filesystem, not array: the services resetter empties array pools between browser requests.
-            'cache' => ['app' => 'cache.adapter.filesystem'],
+            'cache'  => ['app' => 'cache.adapter.filesystem'],
             'router' => ['utf8' => true],
         ]);
         $container->extension('security', [
@@ -103,16 +105,16 @@ final class TestKernel extends Kernel
         ]);
         $container->extension('twig', ['strict_variables' => true, 'auto_reload' => true]);
         // Only `send` and `x` exist: the other dock icons fall back to the built-in SVG.
-        $container->extension('ux_icons', ['icon_dir' => __DIR__.'/icons', 'iconify' => ['enabled' => false]]);
+        $container->extension('ux_icons', ['icon_dir' => __DIR__ . '/icons', 'iconify' => ['enabled' => false]]);
         $container->extension('doctrine', [
             'dbal' => ['driver' => 'pdo_sqlite', 'memory' => true],
-            'orm' => [
+            'orm'  => [
                 'mappings' => [
                     'TestSupport' => [
-                        'type' => 'attribute',
+                        'type'      => 'attribute',
                         'is_bundle' => false,
-                        'dir' => __DIR__.'/Entity',
-                        'prefix' => 'Nowo\ChatKitBundle\Tests\Support\Entity',
+                        'dir'       => __DIR__ . '/Entity',
+                        'prefix'    => 'Nowo\ChatKitBundle\Tests\Support\Entity',
                     ],
                 ],
             ],

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Controller;
 
+use DateTimeImmutable;
+use InvalidArgumentException;
+use JsonException;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
@@ -38,6 +41,16 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
+use function array_slice;
+use function assert;
+use function count;
+use function is_array;
+use function is_string;
+use function strlen;
+
+use const DATE_ATOM;
+use const JSON_THROW_ON_ERROR;
+
 /**
  * JSON API of the floating chat. Every mutation needs the `nowo_chat` CSRF header token; every conversation
  * and message is resolved by UUID and checked with ChatVoter (unknown or foreign → 404, never 403, so UUIDs
@@ -46,12 +59,12 @@ use Symfony\Component\Routing\Attribute\Route;
 #[Route('/api', name: 'nowo_chat_api_')]
 final class ChatApiController extends AbstractController
 {
-    public const string CSRF_ID = 'nowo_chat';
-    public const string UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+    public const string CSRF_ID           = 'nowo_chat';
+    public const string UUID              = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
     private const int MAX_JSON_BODY_BYTES = 32_768;
-    private const int LIST_LIMIT = 50;
-    private const int PAGE_SIZE = 30;
-    private const int CONTACTS_LIMIT = 30;
+    private const int LIST_LIMIT          = 50;
+    private const int PAGE_SIZE           = 30;
+    private const int CONTACTS_LIMIT      = 30;
 
     public function __construct(
         private readonly ChatService $chat,
@@ -88,12 +101,12 @@ final class ChatApiController extends AbstractController
     #[Route('/conversations', name: 'conversations', methods: ['GET'])]
     public function conversations(): JsonResponse
     {
-        $user = $this->reader();
+        $user        = $this->reader();
         $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
-        $list = $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT);
-        $ids = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
-        $latest = $this->messages->findLatestByConversationIds($ids);
+        $list        = $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT);
+        $ids         = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $unread      = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $latest      = $this->messages->findLatestByConversationIds($ids);
         // Peers of direct threads in one query and their presence in one cache round trip.
         $peerIds = [];
         foreach ($list as $conversation) {
@@ -107,9 +120,9 @@ final class ChatApiController extends AbstractController
 
         $rows = [];
         foreach ($list as $conversation) {
-            $id = (int) $conversation->getId();
+            $id     = (int) $conversation->getId();
             $peerId = $conversation->peerIdOf($user);
-            $rows[] = $this->present($conversation, $user, null === $peerId ? null : ($peers[$peerId] ?? null), $unread[$id] ?? 0, $latest[$id] ?? null, $presence);
+            $rows[] = $this->present($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $unread[$id] ?? 0, $latest[$id] ?? null, $presence);
         }
 
         return $this->json(['conversations' => $rows, 'unreadTotal' => array_sum($unread)]);
@@ -118,21 +131,21 @@ final class ChatApiController extends AbstractController
     #[Route('/contacts', name: 'contacts', methods: ['GET'])]
     public function contacts(Request $request): JsonResponse
     {
-        $user = $this->reader();
-        $query = mb_substr(trim((string) $request->query->get('q', '')), 0, 80);
+        $user     = $this->reader();
+        $query    = mb_substr(trim((string) $request->query->get('q', '')), 0, 80);
         $contacts = array_values(array_filter(
-            $this->directory->contactsFor($user, '' === $query ? null : $query, self::CONTACTS_LIMIT),
+            $this->directory->contactsFor($user, $query === '' ? null : $query, self::CONTACTS_LIMIT),
             fn (ChatContact $contact): bool => $this->access->canOpenDirect($user, $contact->user),
         ));
 
         return $this->json([
             'contacts' => array_map(static fn (ChatContact $contact): array => [
-                'uuid' => $contact->user->getChatPublicId(),
-                'name' => $contact->user->getChatDisplayName(),
-                'email' => $contact->user->getChatEmail(),
+                'uuid'     => $contact->user->getChatPublicId(),
+                'name'     => $contact->user->getChatDisplayName(),
+                'email'    => $contact->user->getChatEmail(),
                 'initials' => $contact->user->getChatInitials(),
-                'source' => $contact->source,
-                'via' => $contact->via,
+                'source'   => $contact->source,
+                'via'      => $contact->via,
             ], $contacts),
         ]);
     }
@@ -140,7 +153,7 @@ final class ChatApiController extends AbstractController
     #[Route('/direct', name: 'open_direct', methods: ['POST'])]
     public function openDirect(Request $request): JsonResponse
     {
-        $user = $this->writer($request);
+        $user  = $this->writer($request);
         $other = $this->directory->findByPublicId((string) ($this->payload($request)['userUuid'] ?? ''));
         if (!$other instanceof ChatUserInterface || !$this->access->canOpenDirect($user, $other)) {
             throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
@@ -152,8 +165,8 @@ final class ChatApiController extends AbstractController
     #[Route('/channel', name: 'open_channel', methods: ['POST'])]
     public function openChannel(Request $request): JsonResponse
     {
-        $user = $this->writer($request);
-        $key = (string) ($this->payload($request)['channelKey'] ?? '');
+        $user    = $this->writer($request);
+        $key     = (string) ($this->payload($request)['channelKey'] ?? '');
         $channel = $this->access->channel($key);
         if (!$channel instanceof ChatChannel || !$this->access->canUseChannel($user, $key)) {
             throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
@@ -169,23 +182,23 @@ final class ChatApiController extends AbstractController
 
         $context = $this->payload($request)['context'] ?? null;
 
-        return $this->json(['conversation' => $this->present($this->chat->openSupport($user, \is_array($context) ? $context : null), $user)]);
+        return $this->json(['conversation' => $this->present($this->chat->openSupport($user, is_array($context) ? $context : null), $user)]);
     }
 
     /** Previews of the given links for the caller (`?url[]=…`, at most 10; invisible ones are left out). */
     #[Route('/link-previews', name: 'link_previews', methods: ['GET'])]
     public function linkPreviews(Request $request): JsonResponse
     {
-        $user = $this->reader();
-        $urls = [];
+        $user  = $this->reader();
+        $urls  = [];
         $given = $request->query->all()['url'] ?? [];
-        foreach (\is_array($given) ? $given : [] as $url) {
-            if (\is_string($url) && \strlen($url) <= 500 && 1 === preg_match('~^(/(?!/)|https?://)~i', $url)) {
+        foreach (is_array($given) ? $given : [] as $url) {
+            if (is_string($url) && strlen($url) <= 500 && preg_match('~^(/(?!/)|https?://)~i', $url) === 1) {
                 $urls[$url] = $url;
             }
         }
-        $urls = \array_slice(array_values($urls), 0, 10);
-        $previews = [] === $urls ? [] : $this->linkPreviews->previews($user, $urls);
+        $urls     = array_slice(array_values($urls), 0, 10);
+        $previews = $urls === [] ? [] : $this->linkPreviews->previews($user, $urls);
 
         return $this->json(['previews' => array_map(static fn (ChatLinkPreview $preview): array => $preview->toArray(), array_intersect_key($previews, array_flip($urls)))]);
     }
@@ -199,17 +212,17 @@ final class ChatApiController extends AbstractController
         $query = mb_substr(trim((string) $request->query->get('q', '')), 0, 80);
 
         return $this->json([
-            'threads' => $this->supportInbox->list($user, (string) $request->query->get('status', 'open'), '' === $query ? null : $query),
-            'open' => $this->supportInbox->countOpen(),
+            'threads' => $this->supportInbox->list($user, (string) $request->query->get('status', 'open'), $query === '' ? null : $query),
+            'open'    => $this->supportInbox->countOpen(),
         ]);
     }
 
     #[Route('/conversations/{uuid}', name: 'conversation', requirements: ['uuid' => self::UUID], methods: ['GET'])]
     public function conversation(string $uuid): JsonResponse
     {
-        $user = $this->reader();
+        $user         = $this->reader();
         $conversation = $this->find($uuid, ChatVoter::VIEW);
-        $id = (int) $conversation->getId();
+        $id           = (int) $conversation->getId();
 
         return $this->json(['conversation' => $this->present(
             $conversation,
@@ -223,26 +236,26 @@ final class ChatApiController extends AbstractController
     #[Route('/conversations/{uuid}/messages', name: 'messages', requirements: ['uuid' => self::UUID], methods: ['GET'])]
     public function messages(string $uuid, Request $request): JsonResponse
     {
-        $user = $this->reader();
+        $user         = $this->reader();
         $conversation = $this->find($uuid, ChatVoter::VIEW);
-        $before = $request->query->getInt('before') ?: null;
-        $after = $request->query->getInt('after') ?: null;
-        $page = $this->messages->findPage($conversation, self::PAGE_SIZE + 1, $before, $after);
-        $hasMore = \count($page) > self::PAGE_SIZE;
+        $before       = $request->query->getInt('before') ?: null;
+        $after        = $request->query->getInt('after') ?: null;
+        $page         = $this->messages->findPage($conversation, self::PAGE_SIZE + 1, $before, $after);
+        $hasMore      = count($page) > self::PAGE_SIZE;
         if ($hasMore) {
             // Older pages drop their oldest extra row; catch-up pages their newest.
-            $page = null === $after ? \array_slice($page, 1) : \array_slice($page, 0, self::PAGE_SIZE);
+            $page = $after === null ? array_slice($page, 1) : array_slice($page, 0, self::PAGE_SIZE);
         }
         $reactions = $this->reactions->summaryFor(array_map(static fn (ChatMessage $message): int => (int) $message->getId(), $page));
 
         return $this->json([
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, $reactions[(int) $message->getId()] ?? []), $page),
-            'hasMore' => $hasMore,
+            'hasMore'  => $hasMore,
             'readUpTo' => $this->participants->findOneBy(['conversation' => $conversation, 'user' => $user])?->getLastReadMessageId(),
             // Other people's read cursors (✓✓ / "Seen by N").
             'readers' => array_map(static fn (ChatParticipant $participant): array => [
-                'userUuid' => $participant->getUser()->getChatPublicId(),
-                'name' => $participant->getUser()->getChatDisplayName(),
+                'userUuid'  => $participant->getUser()->getChatPublicId(),
+                'name'      => $participant->getUser()->getChatDisplayName(),
                 'messageId' => $participant->getLastReadMessageId(),
             ], $this->currentReaders($conversation, $user)),
         ]);
@@ -251,13 +264,13 @@ final class ChatApiController extends AbstractController
     #[Route('/conversations/{uuid}/messages', name: 'send', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function send(string $uuid, Request $request): JsonResponse
     {
-        $user = $this->writer($request);
+        $user         = $this->writer($request);
         $conversation = $this->find($uuid, ChatVoter::VIEW);
         $this->deny(!$this->isGranted(ChatVoter::SEND, $conversation), 'read_only', Response::HTTP_FORBIDDEN);
-        $this->deny(!$this->sendLimiter->create('nowo_chat_send_'.$user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        $this->deny(!$this->sendLimiter->create('nowo_chat_send_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
         try {
             $message = $this->chat->send($user, $conversation, (string) ($this->payload($request)['body'] ?? ''));
-        } catch (\InvalidArgumentException $exception) {
+        } catch (InvalidArgumentException $exception) {
             throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
         }
 
@@ -267,11 +280,11 @@ final class ChatApiController extends AbstractController
     #[Route('/conversations/{uuid}/messages/{messageUuid}', name: 'edit', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['PATCH'])]
     public function edit(string $uuid, string $messageUuid, Request $request): JsonResponse
     {
-        $user = $this->writer($request);
+        $user    = $this->writer($request);
         $message = $this->findMessage($uuid, $messageUuid, ChatVoter::EDIT);
         try {
             $this->chat->edit($message, (string) ($this->payload($request)['body'] ?? ''));
-        } catch (\InvalidArgumentException $exception) {
+        } catch (InvalidArgumentException $exception) {
             throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
         }
 
@@ -281,7 +294,7 @@ final class ChatApiController extends AbstractController
     #[Route('/conversations/{uuid}/messages/{messageUuid}', name: 'delete', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['DELETE'])]
     public function delete(string $uuid, string $messageUuid, Request $request): JsonResponse
     {
-        $user = $this->writer($request);
+        $user    = $this->writer($request);
         $message = $this->findMessage($uuid, $messageUuid, ChatVoter::DELETE);
         $this->chat->delete($user, $message);
 
@@ -291,11 +304,11 @@ final class ChatApiController extends AbstractController
     #[Route('/conversations/{uuid}/messages/{messageUuid}/reactions', name: 'react', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST'])]
     public function react(string $uuid, string $messageUuid, Request $request): JsonResponse
     {
-        $user = $this->writer($request);
+        $user    = $this->writer($request);
         $message = $this->findMessage($uuid, $messageUuid, ChatVoter::REACT);
         try {
             $reactions = $this->chat->toggleReaction($user, $message, (string) ($this->payload($request)['emoji'] ?? ''));
-        } catch (\InvalidArgumentException $exception) {
+        } catch (InvalidArgumentException $exception) {
             throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
         }
 
@@ -305,10 +318,10 @@ final class ChatApiController extends AbstractController
     #[Route('/conversations/{uuid}/read', name: 'read', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function read(string $uuid, Request $request): JsonResponse
     {
-        $user = $this->writer($request);
+        $user         = $this->writer($request);
         $conversation = $this->find($uuid, ChatVoter::VIEW);
-        $latest = $this->messages->findLatest($conversation);
-        $requested = (int) ($this->payload($request)['messageId'] ?? 0);
+        $latest       = $this->messages->findLatest($conversation);
+        $requested    = (int) ($this->payload($request)['messageId'] ?? 0);
         // Never beyond the newest message of this conversation (ids are global).
         $upTo = $latest instanceof ChatMessage ? min($requested, (int) $latest->getId()) : 0;
         if ($upTo > 0) {
@@ -322,20 +335,20 @@ final class ChatApiController extends AbstractController
     #[Route('/realtime', name: 'realtime', methods: ['GET'])]
     public function realtime(Request $request): JsonResponse
     {
-        $user = $this->reader();
+        $user  = $this->reader();
         $topic = ChatTopics::forUser($user->getChatPublicId());
         // Short-lived (it may travel in the hub URL and end up in access logs); the client refreshes it.
-        $expiresAt = new \DateTimeImmutable('+15 minutes');
-        $enabled = $this->realtime->isEnabled();
-        $token = $enabled ? $this->realtime->subscriberToken([$topic], $expiresAt) : null;
-        $hubUrl = $enabled ? $this->realtime->browserHubUrl($request) : null;
+        $expiresAt = new DateTimeImmutable('+15 minutes');
+        $enabled   = $this->realtime->isEnabled();
+        $token     = $enabled ? $this->realtime->subscriberToken([$topic], $expiresAt) : null;
+        $hubUrl    = $enabled ? $this->realtime->browserHubUrl($request) : null;
 
         return $this->json([
-            'enabled' => null !== $token && null !== $hubUrl,
-            'hubUrl' => $hubUrl,
-            'token' => $token,
-            'topic' => $topic,
-            'expiresAt' => $expiresAt->format(\DATE_ATOM),
+            'enabled'   => $token !== null && $hubUrl !== null,
+            'hubUrl'    => $hubUrl,
+            'token'     => $token,
+            'topic'     => $topic,
+            'expiresAt' => $expiresAt->format(DATE_ATOM),
         ]);
     }
 
@@ -348,7 +361,7 @@ final class ChatApiController extends AbstractController
         $online = [];
         if ($this->showsPresence($user)) {
             $peerIds = $this->conversations->findDirectPeerIds($user);
-            $peers = array_values(array_filter([] === $peerIds ? [] : $this->directory->findByIds($peerIds), $this->access->isReachable(...)));
+            $peers   = array_values(array_filter($peerIds === [] ? [] : $this->directory->findByIds($peerIds), $this->access->isReachable(...)));
             foreach ($this->presence->statusOf($peers) as $publicId => $status) {
                 if ($status['online']) {
                     $online[] = $publicId;
@@ -366,7 +379,7 @@ final class ChatApiController extends AbstractController
         $user = $this->chatUser();
         $this->checkCsrf($request);
         // Limiter before the voter: over the limit the ping is dropped without touching the database.
-        if (!$this->typingLimiter->create('nowo_chat_typing_'.$user->getChatPublicId())->consume()->isAccepted()) {
+        if (!$this->typingLimiter->create('nowo_chat_typing_' . $user->getChatPublicId())->consume()->isAccepted()) {
             return $this->json(['ok' => true]);
         }
         $conversation = $this->find($uuid, ChatVoter::SEND);
@@ -379,14 +392,14 @@ final class ChatApiController extends AbstractController
     #[Route('/conversations/{uuid}/buzz', name: 'buzz', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function buzz(string $uuid, Request $request): JsonResponse
     {
-        $user = $this->writer($request);
+        $user         = $this->writer($request);
         $conversation = $this->find($uuid, ChatVoter::VIEW);
         $this->deny(!$this->isGranted(ChatVoter::SEND, $conversation), 'read_only', Response::HTTP_FORBIDDEN);
         // A buzz is a person-to-person nudge: never a channel- or support-wide alarm.
         $this->deny(!$conversation->isDirect(), 'buzz_direct_only', Response::HTTP_UNPROCESSABLE_ENTITY);
         $this->deny(
-            !$this->buzzGlobalLimiter->create('nowo_chat_buzz_global_'.$user->getChatPublicId())->consume()->isAccepted()
-            || !$this->buzzLimiter->create('nowo_chat_buzz_'.$user->getChatPublicId().'_'.$conversation->getUuid())->consume()->isAccepted(),
+            !$this->buzzGlobalLimiter->create('nowo_chat_buzz_global_' . $user->getChatPublicId())->consume()->isAccepted()
+            || !$this->buzzLimiter->create('nowo_chat_buzz_' . $user->getChatPublicId() . '_' . $conversation->getUuid())->consume()->isAccepted(),
             'buzz_too_soon',
             Response::HTTP_TOO_MANY_REQUESTS,
         );
@@ -398,7 +411,7 @@ final class ChatApiController extends AbstractController
     #[Route('/conversations/{uuid}/resolve', name: 'resolve', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function resolve(string $uuid, Request $request): JsonResponse
     {
-        $user = $this->writer($request);
+        $user         = $this->writer($request);
         $conversation = $this->find($uuid, ChatVoter::RESOLVE);
         $this->chat->resolveSupport($user, $conversation);
 
@@ -409,7 +422,7 @@ final class ChatApiController extends AbstractController
     #[Route('/conversations/{uuid}/reopen', name: 'reopen', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function reopen(string $uuid, Request $request): JsonResponse
     {
-        $user = $this->writer($request);
+        $user         = $this->writer($request);
         $conversation = $this->find($uuid, ChatVoter::RESOLVE);
         $this->chat->reopenSupport($user, $conversation);
 
@@ -494,7 +507,7 @@ final class ChatApiController extends AbstractController
     {
         $user = $this->getUser();
         $this->deny(!$user instanceof ChatUserInterface || !$this->access->isReachable($user), 'unauthorized', Response::HTTP_UNAUTHORIZED);
-        \assert($user instanceof ChatUserInterface);
+        assert($user instanceof ChatUserInterface);
 
         return $user;
     }
@@ -503,7 +516,7 @@ final class ChatApiController extends AbstractController
     private function reader(): ChatUserInterface
     {
         $user = $this->chatUser();
-        $this->deny(!$this->readLimiter->create('nowo_chat_read_'.$user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        $this->deny(!$this->readLimiter->create('nowo_chat_read_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
 
         return $user;
     }
@@ -513,7 +526,7 @@ final class ChatApiController extends AbstractController
     {
         $user = $this->chatUser();
         $this->checkCsrf($request);
-        $this->deny(!$this->actionLimiter->create('nowo_chat_action_'.$user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        $this->deny(!$this->actionLimiter->create('nowo_chat_action_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
 
         return $user;
     }
@@ -562,15 +575,15 @@ final class ChatApiController extends AbstractController
             return [];
         }
         $content = $request->getContent();
-        if (\strlen($content) > self::MAX_JSON_BODY_BYTES) {
+        if (strlen($content) > self::MAX_JSON_BODY_BYTES) {
             return [];
         }
         try {
-            $decoded = json_decode($content, true, 16, \JSON_THROW_ON_ERROR);
-        } catch (\JsonException) {
+            $decoded = json_decode($content, true, 16, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
             return [];
         }
 
-        return \is_array($decoded) ? $decoded : [];
+        return is_array($decoded) ? $decoded : [];
     }
 }

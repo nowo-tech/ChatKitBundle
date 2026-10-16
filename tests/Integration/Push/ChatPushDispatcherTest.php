@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Integration\Push;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Push\ChatPushDispatcher;
 use Nowo\ChatKitBundle\Push\DeliverChatPushMessage;
@@ -27,22 +28,22 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
 
     public function testOnlyParticipantsWhoWantItAndAreAway(): void
     {
-        $chat = $this->get(ChatService::class);
+        $chat   = $this->get(ChatService::class);
         $sender = $this->get(RecordingPushSender::class);
-        $ana = $this->user('Ana');
-        $luis = $this->enablePush($this->user('Luis'));
-        $eve = $this->enablePush($this->user('Eve'));
-        $dm = $chat->openDirect($ana, $luis);
+        $ana    = $this->user('Ana');
+        $luis   = $this->enablePush($this->user('Luis'));
+        $eve    = $this->enablePush($this->user('Eve'));
+        $dm     = $chat->openDirect($ana, $luis);
 
         $message = $chat->send($ana, $dm, '**Deploy** at 5');
         self::assertSame([$luis->getChatPublicId()], array_keys($sender->sent), 'Ana wrote it; Eve is not in the conversation');
         self::assertSame([
             'event' => 'chat.message',
             'title' => 'Ana',
-            'body' => 'Deploy at 5',
-            'tag' => 'chat-'.$dm->getUuid(),
-            'url' => '/inbox?chat='.$dm->getUuid(),
-            'icon' => '/icon.png',
+            'body'  => 'Deploy at 5',
+            'tag'   => 'chat-' . $dm->getUuid(),
+            'url'   => '/inbox?chat=' . $dm->getUuid(),
+            'icon'  => '/icon.png',
             'badge' => '/icon.png',
         ], $sender->sent[$luis->getChatPublicId()]);
 
@@ -67,14 +68,14 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
         $chat->buzz($ana, $dm);
         self::assertSame([], $sender->sent, 'buzzes refused');
 
-        $chat->participant($dm, $luis)->muteUntil(new \DateTimeImmutable('+1 hour'));
+        $chat->participant($dm, $luis)->muteUntil(new DateTimeImmutable('+1 hour'));
         $this->em->flush();
         $chat->send($ana, $dm, 'muted');
         self::assertSame([], $sender->sent);
         $chat->participant($dm, $luis)->muteUntil(null);
         $this->em->flush();
 
-        $deleted = $chat->send($ana, $dm, 'oops');
+        $deleted      = $chat->send($ana, $dm, 'oops');
         $sender->sent = [];
         $chat->delete($ana, $deleted);
         $dispatch(new DeliverChatPushMessage((int) $deleted->getId(), [(int) $luis->getId()]));
@@ -89,9 +90,9 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
 
     public function testTitlesForChannelsAndSupportInTheRecipientsLocale(): void
     {
-        $chat = $this->get(ChatService::class);
+        $chat   = $this->get(ChatService::class);
         $sender = $this->get(RecordingPushSender::class);
-        $ana = $this->enablePush($this->user('Ana'));
+        $ana    = $this->enablePush($this->user('Ana'));
         $ana->setChatLocale('es');
         $agent = $this->enablePush($this->user('Agent Smith'));
         $this->em->flush();

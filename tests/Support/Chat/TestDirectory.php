@@ -10,6 +10,8 @@ use Nowo\ChatKitBundle\Model\ChatContact;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 
+use function array_slice;
+
 /**
  * Directory over the test user table: everyone is a contact; names starting with "Agent" answer support.
  */
@@ -27,19 +29,19 @@ final readonly class TestDirectory implements ChatDirectoryInterface
 
     public function findByIds(array $ids): array
     {
-        return [] === $ids ? [] : array_values($this->entityManager->getRepository(TestUser::class)->findBy(['id' => $ids], ['id' => 'ASC']));
+        return $ids === [] ? [] : array_values($this->entityManager->getRepository(TestUser::class)->findBy(['id' => $ids], ['id' => 'ASC']));
     }
 
     public function contactsFor(ChatUserInterface $actor, ?string $query, int $limit): array
     {
         $contacts = [];
         foreach ($this->entityManager->getRepository(TestUser::class)->findBy([], ['name' => 'ASC']) as $user) {
-            if ($user->getId() !== $actor->getId() && (null === $query || false !== stripos($user->getChatDisplayName(), $query))) {
+            if ($user->getId() !== $actor->getId() && ($query === null || stripos($user->getChatDisplayName(), $query) !== false)) {
                 $contacts[] = new ChatContact($user, 'group', 'Team');
             }
         }
 
-        return \array_slice($contacts, 0, $limit);
+        return array_slice($contacts, 0, $limit);
     }
 
     public function supportAgents(): array

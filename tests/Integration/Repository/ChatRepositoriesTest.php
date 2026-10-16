@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Integration\Repository;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -25,33 +26,33 @@ final class ChatRepositoriesTest extends DatabaseTestCase
 {
     public function testListPagesUnreadSupportAndPurge(): void
     {
-        $em = $this->em;
-        $ana = $this->user('Ana');
+        $em   = $this->em;
+        $ana  = $this->user('Ana');
         $luis = $this->user('Luis');
-        $eve = $this->user('Eve');
+        $eve  = $this->user('Eve');
 
-        $dm = ChatConversation::direct($ana, $luis);
-        $foreignDm = ChatConversation::direct($luis, $eve);
-        $channel = ChatConversation::channel('project:acme');
+        $dm         = ChatConversation::direct($ana, $luis);
+        $foreignDm  = ChatConversation::direct($luis, $eve);
+        $channel    = ChatConversation::channel('project:acme');
         $anaSupport = ChatConversation::support($ana);
         $eveSupport = ChatConversation::support($eve);
         foreach ([$dm, $foreignDm, $channel, $anaSupport, $eveSupport] as $conversation) {
             $em->persist($conversation);
         }
-        $dm->touch(new \DateTimeImmutable('-1 minute'));
-        $channel->touch(new \DateTimeImmutable('-2 minutes'));
-        $anaSupport->touch(new \DateTimeImmutable('-3 minutes'));
-        $eveSupport->touch(new \DateTimeImmutable('-4 minutes'));
+        $dm->touch(new DateTimeImmutable('-1 minute'));
+        $channel->touch(new DateTimeImmutable('-2 minutes'));
+        $anaSupport->touch(new DateTimeImmutable('-3 minutes'));
+        $eveSupport->touch(new DateTimeImmutable('-4 minutes'));
         $eveSupport->resolve($ana);
 
-        $old = new ChatMessage($dm, $luis, 'old', '<p>old</p>', new \DateTimeImmutable('-400 days'));
-        $m1 = new ChatMessage($dm, $luis, 'one', '<p>one</p>');
-        $m2 = new ChatMessage($dm, $ana, 'two', '<p>two</p>');
-        $m3 = new ChatMessage($dm, $luis, 'three', '<p>three</p>');
+        $old     = new ChatMessage($dm, $luis, 'old', '<p>old</p>', new DateTimeImmutable('-400 days'));
+        $m1      = new ChatMessage($dm, $luis, 'one', '<p>one</p>');
+        $m2      = new ChatMessage($dm, $ana, 'two', '<p>two</p>');
+        $m3      = new ChatMessage($dm, $luis, 'three', '<p>three</p>');
         $deleted = new ChatMessage($dm, $luis, 'gone', '<p>gone</p>');
         $deleted->delete($luis);
         $channelMsg = new ChatMessage($channel, $luis, 'hello all', '<p>hello all</p>');
-        $question = new ChatMessage($anaSupport, $ana, 'help', '<p>help</p>');
+        $question   = new ChatMessage($anaSupport, $ana, 'help', '<p>help</p>');
         foreach ([$old, $m1, $m2, $m3, $deleted, $channelMsg, $question] as $message) {
             $em->persist($message);
         }
@@ -68,7 +69,7 @@ final class ChatRepositoriesTest extends DatabaseTestCase
         $em->flush();
 
         $conversations = $em->getRepository(ChatConversation::class);
-        $messages = $em->getRepository(ChatMessage::class);
+        $messages      = $em->getRepository(ChatMessage::class);
         self::assertInstanceOf(ChatConversationRepository::class, $conversations);
         self::assertInstanceOf(ChatMessageRepository::class, $messages);
 
@@ -118,15 +119,15 @@ final class ChatRepositoriesTest extends DatabaseTestCase
         self::assertInstanceOf(ChatReactionRepository::class, $em->getRepository(ChatReaction::class));
 
         // Retention purge in batches (reactions first).
-        self::assertSame(1, $messages->purgeOlderThan(new \DateTimeImmutable('-365 days'), 100));
-        self::assertSame(0, $messages->purgeOlderThan(new \DateTimeImmutable('-365 days'), 100));
-        self::assertSame(5, $messages->purgeOlderThan(new \DateTimeImmutable('+1 day'), 5));
+        self::assertSame(1, $messages->purgeOlderThan(new DateTimeImmutable('-365 days'), 100));
+        self::assertSame(0, $messages->purgeOlderThan(new DateTimeImmutable('-365 days'), 100));
+        self::assertSame(5, $messages->purgeOlderThan(new DateTimeImmutable('+1 day'), 5));
         self::assertCount(0, $em->getRepository(ChatReaction::class)->findAll());
     }
 
     public function testOneDirectConversationPerPair(): void
     {
-        $ana = $this->user('Ana');
+        $ana  = $this->user('Ana');
         $luis = $this->user('Luis');
 
         $this->em->persist(ChatConversation::direct($ana, $luis));
@@ -147,8 +148,8 @@ final class ChatRepositoriesTest extends DatabaseTestCase
 
     public function testUserSettingsDefaultUntilSaved(): void
     {
-        $ana = $this->user('Ana');
-        $luis = $this->user('Luis');
+        $ana        = $this->user('Ana');
+        $luis       = $this->user('Luis');
         $repository = $this->em->getRepository(ChatUserSettings::class);
         self::assertInstanceOf(ChatUserSettingsRepository::class, $repository);
 
@@ -162,7 +163,7 @@ final class ChatRepositoriesTest extends DatabaseTestCase
         $this->em->flush();
         $this->em->clear();
 
-        $ana = $this->em->find($ana::class, $ana->getId());
+        $ana  = $this->em->find($ana::class, $ana->getId());
         $luis = $this->em->find($luis::class, $luis->getId());
         self::assertNotNull($ana);
         self::assertNotNull($luis);

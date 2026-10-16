@@ -21,27 +21,27 @@ final class ConfigurationTest extends TestCase
 
         self::assertSame('default', $config['default_profile']);
         self::assertSame([
-            'enabled' => true,
-            'user_class' => null,
+            'enabled'        => true,
+            'user_class'     => null,
             'retention_days' => 365,
-            'realtime' => true,
-            'push' => false,
-            'push_url' => '/?chat={uuid}',
-            'push_icon' => null,
-            'digest' => ['enabled' => false, 'delay_minutes' => 15, 'interval_minutes' => 60],
-            'page_layout' => '@NowoChatKitBundle/page_layout.html.twig',
-            'cache_pool' => 'cache.app',
-            'reactions' => ['👍', '❤️', '😂', '😮', '😢', '🎉'],
-            'icon_set' => 'ux_icon',
-            'icons' => Configuration::DEFAULT_ICONS,
-            'presence_ttl' => 90,
-            'limits' => [
-                'send_per_minute' => 30,
-                'actions_per_minute' => 240,
-                'typing_per_minute' => 30,
-                'reads_per_minute' => 600,
+            'realtime'       => true,
+            'push'           => false,
+            'push_url'       => '/?chat={uuid}',
+            'push_icon'      => null,
+            'digest'         => ['enabled' => false, 'delay_minutes' => 15, 'interval_minutes' => 60],
+            'page_layout'    => '@NowoChatKitBundle/page_layout.html.twig',
+            'cache_pool'     => 'cache.app',
+            'reactions'      => ['👍', '❤️', '😂', '😮', '😢', '🎉'],
+            'icon_set'       => 'ux_icon',
+            'icons'          => Configuration::DEFAULT_ICONS,
+            'presence_ttl'   => 90,
+            'limits'         => [
+                'send_per_minute'       => 30,
+                'actions_per_minute'    => 240,
+                'typing_per_minute'     => 30,
+                'reads_per_minute'      => 600,
                 'buzz_interval_seconds' => 15,
-                'buzz_per_minute' => 10,
+                'buzz_per_minute'       => 10,
             ],
         ], $config['profiles']['default']);
     }
@@ -64,9 +64,9 @@ final class ConfigurationTest extends TestCase
     {
         $config = $this->process([[
             'default_profile' => 'support',
-            'profiles' => [
+            'profiles'        => [
                 'support' => ['enabled' => true],
-                'member' => ['enabled' => false],
+                'member'  => ['enabled' => false],
             ],
         ]]);
 
@@ -82,7 +82,7 @@ final class ConfigurationTest extends TestCase
 
         $this->process([[
             'default_profile' => 'missing',
-            'profiles' => ['default' => []],
+            'profiles'        => ['default' => []],
         ]]);
     }
 

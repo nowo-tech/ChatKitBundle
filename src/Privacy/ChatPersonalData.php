@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Privacy;
 
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -12,6 +13,8 @@ use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+
+use const DATE_ATOM;
 
 /**
  * Personal data hooks for the application's export / erasure flows (GDPR). Export: the user's own messages
@@ -43,19 +46,19 @@ final readonly class ChatPersonalData
 
         return [
             'settings' => [
-                'sound' => $settings->getSound(),
-                'push' => $settings->isPushEnabled(),
-                'buzzes' => $settings->isBuzzEnabled(),
+                'sound'        => $settings->getSound(),
+                'push'         => $settings->isPushEnabled(),
+                'buzzes'       => $settings->isBuzzEnabled(),
                 'email_digest' => $settings->isEmailDigest(),
-                'show_online' => $settings->isPresenceVisible(),
+                'show_online'  => $settings->isPresenceVisible(),
             ],
             'messages' => array_map(static fn (ChatMessage $message): array => [
                 'conversation_uuid' => $message->getConversation()->getUuid(),
                 'conversation_kind' => $message->getConversation()->getKind()->value,
-                'kind' => $message->getKind(),
-                'text' => $message->getBody(),
-                'sent_at' => $message->getCreatedAt()->format(\DATE_ATOM),
-                'edited_at' => $message->getEditedAt()?->format(\DATE_ATOM),
+                'kind'              => $message->getKind(),
+                'text'              => $message->getBody(),
+                'sent_at'           => $message->getCreatedAt()->format(DATE_ATOM),
+                'edited_at'         => $message->getEditedAt()?->format(DATE_ATOM),
             ], $messages),
         ];
     }
@@ -68,7 +71,7 @@ final readonly class ChatPersonalData
             ->set('m.body', ':empty')->set('m.bodyHtml', ':empty')
             ->set('m.author', ':none')->set('m.deletedAt', ':now')
             ->where('m.author = :user')
-            ->setParameter('empty', '')->setParameter('none', null)->setParameter('now', new \DateTimeImmutable())
+            ->setParameter('empty', '')->setParameter('none', null)->setParameter('now', new DateTimeImmutable())
             ->setParameter('user', $user)
             ->getQuery()->execute();
         $qb()->delete(ChatReaction::class, 'r')->where('r.user = :user')->setParameter('user', $user)->getQuery()->execute();
@@ -78,7 +81,7 @@ final readonly class ChatPersonalData
         $support = $this->entityManager->getRepository(ChatConversation::class)->findOneBy(['supportOwner' => $user]);
         if ($support instanceof ChatConversation) {
             $messageIds = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->getSingleColumnResult();
-            if ([] !== $messageIds) {
+            if ($messageIds !== []) {
                 $qb()->delete(ChatReaction::class, 'r')->where('IDENTITY(r.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
             }
             $qb()->delete(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->execute();

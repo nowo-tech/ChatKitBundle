@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Controller;
 
+use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -31,9 +32,9 @@ use Symfony\Component\Routing\Attribute\Route;
  */
 final class ChatPageController extends AbstractController
 {
-    public const string CSRF_ID = 'nowo_chat_page';
+    public const string CSRF_ID  = 'nowo_chat_page';
     private const int LIST_LIMIT = 50;
-    private const int PAGE_SIZE = 50;
+    private const int PAGE_SIZE  = 50;
 
     public function __construct(
         private readonly ChatService $chat,
@@ -60,10 +61,10 @@ final class ChatPageController extends AbstractController
     #[Route('/{uuid}', name: 'nowo_chat_page_conversation', requirements: ['uuid' => ChatApiController::UUID], methods: ['GET'])]
     public function conversation(string $uuid): Response
     {
-        $user = $this->chatUser();
+        $user         = $this->chatUser();
         $conversation = $this->find($uuid);
-        $page = $this->messages->findPage($conversation, self::PAGE_SIZE);
-        $last = end($page);
+        $page         = $this->messages->findPage($conversation, self::PAGE_SIZE);
+        $last         = end($page);
         if ($last instanceof ChatMessage) {
             $this->chat->markRead($user, $conversation, (int) $last->getId());
         }
@@ -78,22 +79,22 @@ final class ChatPageController extends AbstractController
     #[Route('/{uuid}', name: 'nowo_chat_page_send', requirements: ['uuid' => ChatApiController::UUID], methods: ['POST'])]
     public function send(string $uuid, Request $request): RedirectResponse
     {
-        $user = $this->chatUser();
+        $user         = $this->chatUser();
         $conversation = $this->find($uuid);
-        $error = null;
-        $form = $this->composer($uuid);
+        $error        = null;
+        $form         = $this->composer($uuid);
         $form->handleRequest($request);
         if (!$form->isSubmitted() || !$form->isValid()) {
             $error = 'error';
         } elseif (!$this->isGranted(ChatVoter::SEND, $conversation)) {
             $error = 'read_only';
-        } elseif (!$this->sendLimiter->create('nowo_chat_send_'.$user->getChatPublicId())->consume()->isAccepted()) {
+        } elseif (!$this->sendLimiter->create('nowo_chat_send_' . $user->getChatPublicId())->consume()->isAccepted()) {
             $error = 'rate_limited';
         } else {
             try {
                 $this->chat->send($user, $conversation, (string) $form->get('body')->getData());
-            } catch (\InvalidArgumentException $exception) {
-                $error = 'too_long' === $exception->getMessage() ? 'too_long' : 'error';
+            } catch (InvalidArgumentException $exception) {
+                $error = $exception->getMessage() === 'too_long' ? 'too_long' : 'error';
             }
         }
 
@@ -116,11 +117,11 @@ final class ChatPageController extends AbstractController
     private function context(ChatUserInterface $user, ?ChatConversation $current): array
     {
         $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
-        $list = $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT);
-        $ids = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
-        $latest = $this->messages->findLatestByConversationIds($ids);
-        $rows = [];
+        $list        = $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT);
+        $ids         = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $unread      = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $latest      = $this->messages->findLatestByConversationIds($ids);
+        $rows        = [];
         foreach ($list as $conversation) {
             $id = (int) $conversation->getId();
             if ($conversation->isDirect() && !isset($latest[$id]) && $conversation !== $current) {
@@ -130,11 +131,11 @@ final class ChatPageController extends AbstractController
         }
 
         return [
-            'layout' => $this->layout,
+            'layout'        => $this->layout,
             'conversations' => $rows,
-            'current' => $current instanceof ChatConversation ? $this->summary($current, $user) : null,
-            'messages' => [],
-            'can_send' => false,
+            'current'       => $current instanceof ChatConversation ? $this->summary($current, $user) : null,
+            'messages'      => [],
+            'can_send'      => false,
         ];
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Entity;
 
+use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
@@ -40,13 +41,13 @@ class ChatMessage
     private string $kind = self::KIND_TEXT;
 
     #[ORM\Column(name: 'created_at')]
-    private \DateTimeImmutable $createdAt;
+    private DateTimeImmutable $createdAt;
 
     #[ORM\Column(name: 'edited_at', nullable: true)]
-    private ?\DateTimeImmutable $editedAt = null;
+    private ?DateTimeImmutable $editedAt = null;
 
     #[ORM\Column(name: 'deleted_at', nullable: true)]
-    private ?\DateTimeImmutable $deletedAt = null;
+    private ?DateTimeImmutable $deletedAt = null;
 
     #[ORM\ManyToOne(targetEntity: ChatUserInterface::class)]
     #[ORM\JoinColumn(name: 'deleted_by_id', nullable: true, onDelete: 'SET NULL')]
@@ -64,15 +65,15 @@ class ChatMessage
         private string $body,
         #[ORM\Column(name: 'body_html', type: 'text')]
         private string $bodyHtml,
-        ?\DateTimeImmutable $createdAt = null,
+        ?DateTimeImmutable $createdAt = null,
     ) {
         $this->initUuid();
-        $this->createdAt = $createdAt ?? new \DateTimeImmutable();
+        $this->createdAt = $createdAt ?? new DateTimeImmutable();
     }
 
-    public static function buzz(ChatConversation $conversation, ChatUserInterface $author, ?\DateTimeImmutable $createdAt = null): self
+    public static function buzz(ChatConversation $conversation, ChatUserInterface $author, ?DateTimeImmutable $createdAt = null): self
     {
-        $message = new self($conversation, $author, '', '', $createdAt);
+        $message       = new self($conversation, $author, '', '', $createdAt);
         $message->kind = self::KIND_BUZZ;
 
         return $message;
@@ -90,7 +91,7 @@ class ChatMessage
 
     public function isBuzz(): bool
     {
-        return self::KIND_BUZZ === $this->kind;
+        return $this->kind === self::KIND_BUZZ;
     }
 
     public function getConversation(): ChatConversation
@@ -105,7 +106,7 @@ class ChatMessage
 
     public function isAuthoredBy(ChatUserInterface $user): bool
     {
-        return $this->author instanceof ChatUserInterface && null !== $user->getId() && $this->author->getId() === $user->getId();
+        return $this->author instanceof ChatUserInterface && $user->getId() !== null && $this->author->getId() === $user->getId();
     }
 
     public function getBody(): string
@@ -118,41 +119,41 @@ class ChatMessage
         return $this->bodyHtml;
     }
 
-    public function getCreatedAt(): \DateTimeImmutable
+    public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
     }
 
-    public function getEditedAt(): ?\DateTimeImmutable
+    public function getEditedAt(): ?DateTimeImmutable
     {
         return $this->editedAt;
     }
 
     public function isEdited(): bool
     {
-        return $this->editedAt instanceof \DateTimeImmutable;
+        return $this->editedAt instanceof DateTimeImmutable;
     }
 
-    public function edit(string $body, string $bodyHtml, ?\DateTimeImmutable $at = null): void
+    public function edit(string $body, string $bodyHtml, ?DateTimeImmutable $at = null): void
     {
-        $this->body = $body;
+        $this->body     = $body;
         $this->bodyHtml = $bodyHtml;
-        $this->editedAt = $at ?? new \DateTimeImmutable();
+        $this->editedAt = $at ?? new DateTimeImmutable();
     }
 
-    public function isWithinEditWindow(\DateTimeImmutable $now): bool
+    public function isWithinEditWindow(DateTimeImmutable $now): bool
     {
         return $now->getTimestamp() - $this->createdAt->getTimestamp() <= self::EDIT_WINDOW_SECONDS;
     }
 
-    public function getDeletedAt(): ?\DateTimeImmutable
+    public function getDeletedAt(): ?DateTimeImmutable
     {
         return $this->deletedAt;
     }
 
     public function isDeleted(): bool
     {
-        return $this->deletedAt instanceof \DateTimeImmutable;
+        return $this->deletedAt instanceof DateTimeImmutable;
     }
 
     public function getDeletedBy(): ?ChatUserInterface
@@ -161,12 +162,12 @@ class ChatMessage
     }
 
     /** Tombstone: the text is gone, the row stays so the thread keeps its shape. */
-    public function delete(ChatUserInterface $by, ?\DateTimeImmutable $at = null): void
+    public function delete(ChatUserInterface $by, ?DateTimeImmutable $at = null): void
     {
-        $this->body = '';
-        $this->bodyHtml = '';
+        $this->body      = '';
+        $this->bodyHtml  = '';
         $this->deletedBy = $by;
-        $this->deletedAt = $at ?? new \DateTimeImmutable();
+        $this->deletedAt = $at ?? new DateTimeImmutable();
     }
 
     /** True when a moderator (not the author) removed it ("Removed by a moderator"). */

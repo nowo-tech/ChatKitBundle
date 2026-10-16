@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Contract;
 
+use DateTimeImmutable;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -14,7 +15,7 @@ interface ChatRealtimeInterface
     public function isEnabled(): bool;
 
     /**
-     * @param list<string>         $topics
+     * @param list<string> $topics
      * @param array<string, mixed> $payload
      */
     public function publish(array $topics, array $payload): void;
@@ -27,5 +28,5 @@ interface ChatRealtimeInterface
      *
      * @param list<string> $topics
      */
-    public function subscriberToken(array $topics, \DateTimeImmutable $expiresAt): ?string;
+    public function subscriberToken(array $topics, DateTimeImmutable $expiresAt): ?string;
 }

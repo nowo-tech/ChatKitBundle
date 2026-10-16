@@ -21,8 +21,8 @@ final class TwigPathsPassTest extends TestCase
 
     public function testApplicationOverridesArePrepended(): void
     {
-        $project = sys_get_temp_dir().'/nowo-chat-twig-'.bin2hex(random_bytes(4));
-        (new Filesystem())->mkdir($project.'/templates/bundles/NowoChatKitBundle');
+        $project = sys_get_temp_dir() . '/nowo-chat-twig-' . bin2hex(random_bytes(4));
+        (new Filesystem())->mkdir($project . '/templates/bundles/NowoChatKitBundle');
         try {
             $container = new ContainerBuilder();
             $container->setParameter('kernel.project_dir', $project);
@@ -30,7 +30,7 @@ final class TwigPathsPassTest extends TestCase
             (new TwigPathsPass())->process($container);
 
             $calls = $container->getDefinition('twig.loader.filesystem')->getMethodCalls();
-            self::assertSame(['prependPath', [$project.'/templates/bundles/NowoChatKitBundle', 'NowoChatKitBundle']], $calls[0]);
+            self::assertSame(['prependPath', [$project . '/templates/bundles/NowoChatKitBundle', 'NowoChatKitBundle']], $calls[0]);
             self::assertSame('addPath', $calls[1][0]);
             self::assertStringEndsWith('/Resources/views', $calls[1][1][0]);
             self::assertSame(['addPath', [$calls[1][1][0], '!NowoChatKitBundle']], $calls[2]);

@@ -32,7 +32,7 @@ final readonly class TestChannelProvider implements ChatChannelProviderInterface
 
     public function find(string $key): ?ChatChannel
     {
-        return self::KEY === $key ? new ChatChannel(self::KEY, 'Acme') : null;
+        return $key === self::KEY ? new ChatChannel(self::KEY, 'Acme') : null;
     }
 
     /** Pages under /projects/acme offer the channel. */
@@ -43,7 +43,7 @@ final readonly class TestChannelProvider implements ChatChannelProviderInterface
 
     public function canUse(ChatUserInterface $user, ChatChannel $channel): bool
     {
-        return self::KEY === $channel->key && !str_starts_with($user->getChatDisplayName(), 'Stranger');
+        return $channel->key === self::KEY && !str_starts_with($user->getChatDisplayName(), 'Stranger');
     }
 
     public function members(ChatChannel $channel): array

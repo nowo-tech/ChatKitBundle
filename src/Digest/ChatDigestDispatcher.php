@@ -42,24 +42,24 @@ final readonly class ChatDigestDispatcher
     public function __invoke(SendChatDigestMessage $command): void
     {
         $user = $this->directory->findByIds([$command->userId])[0] ?? null;
-        if (null === $user || !$this->access->isReachable($user) || !$this->settings->forUser($user)->isEmailDigest()) {
+        if ($user === null || !$this->access->isReachable($user) || !$this->settings->forUser($user)->isEmailDigest()) {
             return;
         }
         if ($this->presence->statusOf([$user])[$user->getChatPublicId()]['appOpen']) {
             return;
         }
-        $sent = $this->cache->getItem('nowo_chat_digest_sent_'.hash('xxh128', $user->getChatPublicId()));
+        $sent = $this->cache->getItem('nowo_chat_digest_sent_' . hash('xxh128', $user->getChatPublicId()));
         if ($sent->isHit()) {
             return;
         }
         $conversations = $this->conversations->findParticipating($user, 50);
-        $ids = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $conversations);
-        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
-        $latest = $this->messages->findLatestByConversationIds($ids);
-        $items = [];
+        $ids           = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $conversations);
+        $unread        = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $latest        = $this->messages->findLatestByConversationIds($ids);
+        $items         = [];
         foreach ($conversations as $conversation) {
             $count = $unread[(int) $conversation->getId()] ?? 0;
-            if (0 === $count) {
+            if ($count === 0) {
                 continue;
             }
             $summary = $this->presenter->conversation(
@@ -72,15 +72,15 @@ final readonly class ChatDigestDispatcher
                 null,
                 $this->access->isSupportAgent($user),
             );
-            $last = $latest[(int) $conversation->getId()] ?? null;
+            $last    = $latest[(int) $conversation->getId()] ?? null;
             $items[] = new ChatDigestItem(
                 (string) $summary['title'],
                 $count,
-                null === $last || $last->isDeleted() || $last->isBuzz() ? '' : $this->markdown->plainText($last->getBody(), 140),
+                $last === null || $last->isDeleted() || $last->isBuzz() ? '' : $this->markdown->plainText($last->getBody(), 140),
                 str_replace('{uuid}', $conversation->getUuid(), $this->urlTemplate),
             );
         }
-        if ([] === $items) {
+        if ($items === []) {
             return;
         }
         $this->sender->send($user, $items);

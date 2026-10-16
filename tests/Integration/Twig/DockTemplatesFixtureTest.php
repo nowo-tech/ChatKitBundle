@@ -13,20 +13,20 @@ use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
  */
 final class DockTemplatesFixtureTest extends DatabaseTestCase
 {
-    private const string FIXTURE = __DIR__.'/../../../src/Resources/assets/tests/fixtures/templates.html';
+    private const string FIXTURE = __DIR__ . '/../../../src/Resources/assets/tests/fixtures/templates.html';
 
     public function testFixtureMatchesTheTemplates(): void
     {
-        $html = $this->twig()->render('@NowoChatKitBundle/_templates.html.twig')."\n";
+        $html = $this->twig()->render('@NowoChatKitBundle/_templates.html.twig') . "\n";
 
-        if ('1' === getenv('UPDATE_FIXTURES')) {
+        if (getenv('UPDATE_FIXTURES') === '1') {
             file_put_contents(self::FIXTURE, $html);
         }
 
         self::assertFileExists(self::FIXTURE);
         self::assertSame($html, file_get_contents(self::FIXTURE), 'Run UPDATE_FIXTURES=1 vendor/bin/phpunit --filter DockTemplatesFixtureTest');
         foreach (['dock', 'row', 'list-state', 'picker-section', 'picker-row', 'picker-state', 'overflow-item', 'window', 'message', 'edit-form', 'delete-confirm', 'pending', 'buzz-line', 'day', 'unseen', 'seen', 'thread-state', 'thread-empty'] as $name) {
-            self::assertStringContainsString('data-nowo-chat-template="'.$name.'"', $html);
+            self::assertStringContainsString('data-nowo-chat-template="' . $name . '"', $html);
         }
     }
 }

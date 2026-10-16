@@ -22,11 +22,11 @@ final class ChatPageMessageType extends AbstractType
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add('body', TextareaType::class, [
-            'label' => 'chat.composer_placeholder',
+            'label'      => 'chat.composer_placeholder',
             'label_attr' => ['class' => 'nowo-chat-sr-only'],
-            'attr' => [
-                'rows' => 3,
-                'maxlength' => $options['max_length'],
+            'attr'       => [
+                'rows'        => 3,
+                'maxlength'   => $options['max_length'],
                 'placeholder' => 'chat.composer_placeholder',
             ],
         ]);
@@ -36,8 +36,8 @@ final class ChatPageMessageType extends AbstractType
     {
         $resolver->setDefaults([
             'translation_domain' => 'NowoChatKitBundle',
-            'csrf_token_id' => ChatPageController::CSRF_ID,
-            'max_length' => ChatMessage::MAX_LENGTH,
+            'csrf_token_id'      => ChatPageController::CSRF_ID,
+            'max_length'         => ChatMessage::MAX_LENGTH,
         ]);
         $resolver->setAllowedTypes('max_length', 'int');
     }

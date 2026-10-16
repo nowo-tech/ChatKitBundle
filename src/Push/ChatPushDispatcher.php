@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Push;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -43,19 +44,19 @@ final readonly class ChatPushDispatcher
     public function __invoke(DeliverChatPushMessage $command): void
     {
         $message = $this->messages->find($command->messageId);
-        if (!$message instanceof ChatMessage || $message->isDeleted() || [] === $command->recipientIds) {
+        if (!$message instanceof ChatMessage || $message->isDeleted() || $command->recipientIds === []) {
             return;
         }
         $now = $this->clock->now();
         /** @var list<ChatParticipant> $participants */
         $participants = $this->participants->findBy(['conversation' => $message->getConversation(), 'user' => $command->recipientIds]);
-        $users = array_map(static fn (ChatParticipant $participant): ChatUserInterface => $participant->getUser(), $participants);
-        $presence = $this->presence->statusOf($users);
-        $settings = $this->settings->forUsers($users);
+        $users        = array_map(static fn (ChatParticipant $participant): ChatUserInterface => $participant->getUser(), $participants);
+        $presence     = $this->presence->statusOf($users);
+        $settings     = $this->settings->forUsers($users);
 
         $recipients = [];
         foreach ($participants as $participant) {
-            $user = $participant->getUser();
+            $user        = $participant->getUser();
             $preferences = $settings[(int) $user->getId()];
             if (!$this->access->isReachable($user) || !$preferences->isPushEnabled() || ($presence[$user->getChatPublicId()]['appOpen'] ?? false)) {
                 continue;
@@ -65,12 +66,12 @@ final readonly class ChatPushDispatcher
             }
             $recipients[] = $user;
         }
-        if ([] !== $recipients) {
+        if ($recipients !== []) {
             $this->sender->send($recipients, fn (ChatUserInterface $user): array => $this->payload($message, $user));
         }
     }
 
-    private function isSilenced(ChatParticipant $participant, ChatMessage $message, \DateTimeImmutable $now): bool
+    private function isSilenced(ChatParticipant $participant, ChatMessage $message, DateTimeImmutable $now): bool
     {
         return $participant->isMuted($now) || (int) $participant->getLastReadMessageId() >= (int) $message->getId();
     }
@@ -81,13 +82,13 @@ final readonly class ChatPushDispatcher
     private function payload(ChatMessage $message, ChatUserInterface $recipient): array
     {
         $conversation = $message->getConversation();
-        $locale = $recipient->getChatLocale();
-        $author = $message->getAuthor();
-        $authorName = $author?->getChatDisplayName() ?? $this->translator->trans('chat.deleted_user', [], 'NowoChatKitBundle', $locale);
-        $title = match (true) {
-            $conversation->isChannel() => '#'.($this->access->channel((string) $conversation->getChannelKey())->label ?? '').' · '.$authorName,
+        $locale       = $recipient->getChatLocale();
+        $author       = $message->getAuthor();
+        $authorName   = $author?->getChatDisplayName() ?? $this->translator->trans('chat.deleted_user', [], 'NowoChatKitBundle', $locale);
+        $title        = match (true) {
+            $conversation->isChannel()                                                                     => '#' . ($this->access->channel((string) $conversation->getChannelKey())->label ?? '') . ' · ' . $authorName,
             $conversation->isSupport() && $author?->getId() !== $conversation->getSupportOwner()?->getId() => $this->translator->trans('chat.support_title', [], 'NowoChatKitBundle', $locale),
-            default => $authorName,
+            default                                                                                        => $authorName,
         };
         $body = $message->isBuzz()
             ? $this->translator->trans('chat.buzz_received', ['%name%' => $authorName], 'NowoChatKitBundle', $locale)
@@ -96,12 +97,12 @@ final readonly class ChatPushDispatcher
         return array_filter([
             'event' => 'chat.message',
             'title' => $title,
-            'body' => $body,
+            'body'  => $body,
             // One notification per conversation, replaced by the next one (no stack of toasts).
-            'tag' => 'chat-'.$conversation->getUuid(),
-            'url' => str_replace('{uuid}', $conversation->getUuid(), $this->urlTemplate),
-            'icon' => $this->icon,
+            'tag'   => 'chat-' . $conversation->getUuid(),
+            'url'   => str_replace('{uuid}', $conversation->getUuid(), $this->urlTemplate),
+            'icon'  => $this->icon,
             'badge' => $this->icon,
-        ], static fn (?string $value): bool => null !== $value);
+        ], static fn (?string $value): bool => $value !== null);
     }
 }

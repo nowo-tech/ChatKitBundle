@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Integration\Service;
 
+use InvalidArgumentException;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
@@ -23,6 +24,8 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
+use function count;
+
 /**
  * Conversation lifecycle end to end on SQLite: open (idempotent), send / buzz / edit / delete / react, read
  * cursors, support reopen, and the realtime events each step publishes to whom.
@@ -31,10 +34,10 @@ final class ChatServiceTest extends DatabaseTestCase
 {
     public function testDirectConversationLifecycle(): void
     {
-        $chat = $this->get(ChatService::class);
+        $chat     = $this->get(ChatService::class);
         $realtime = $this->get(RecordingRealtime::class);
-        $ana = $this->user('Ana');
-        $luis = $this->user('Luis');
+        $ana      = $this->user('Ana');
+        $luis     = $this->user('Luis');
 
         $dm = $chat->openDirect($ana, $luis);
         self::assertSame($dm, $chat->openDirect($luis, $ana), 'one conversation per pair');
@@ -69,20 +72,20 @@ final class ChatServiceTest extends DatabaseTestCase
 
         $buzz = $chat->buzz($luis, $dm);
         self::assertTrue($buzz->isBuzz());
-        self::assertSame('message', $realtime->published[\count($realtime->published) - 1]['payload']['type']);
+        self::assertSame('message', $realtime->published[count($realtime->published) - 1]['payload']['type']);
     }
 
     public function testRejectsEmptyTooLongAndUnknownReactions(): void
     {
-        $chat = $this->get(ChatService::class);
-        $dm = $chat->openDirect($ana = $this->user('Ana'), $this->user('Luis'));
+        $chat    = $this->get(ChatService::class);
+        $dm      = $chat->openDirect($ana = $this->user('Ana'), $this->user('Luis'));
         $message = $chat->send($ana, $dm, 'hi');
 
         foreach (['  ' => 'empty', "\u{202E}" => 'empty', str_repeat('a', ChatMessage::MAX_LENGTH + 1) => 'too_long'] as $body => $error) {
             try {
                 $chat->send($ana, $dm, (string) $body);
-                self::fail('expected '.$error);
-            } catch (\InvalidArgumentException $exception) {
+                self::fail('expected ' . $error);
+            } catch (InvalidArgumentException $exception) {
                 self::assertSame($error, $exception->getMessage());
             }
         }
@@ -93,10 +96,10 @@ final class ChatServiceTest extends DatabaseTestCase
 
     public function testChannelAndSupport(): void
     {
-        $chat = $this->get(ChatService::class);
+        $chat     = $this->get(ChatService::class);
         $realtime = $this->get(RecordingRealtime::class);
-        $ana = $this->user('Ana');
-        $agent = $this->user('Agent Smith');
+        $ana      = $this->user('Ana');
+        $agent    = $this->user('Agent Smith');
         $this->user('Stranger');
         $this->user('Disabled Bob');
 
@@ -121,21 +124,21 @@ final class ChatServiceTest extends DatabaseTestCase
         self::assertFalse($support->isResolved(), 'the owner writing again reopens');
 
         $chat->markRead($agent, $channel, 999);
-        self::assertSame([ChatTopics::forUser($agent->getChatPublicId())], $realtime->published[\count($realtime->published) - 1]['topics'], 'channel read receipts only go to the reader');
+        self::assertSame([ChatTopics::forUser($agent->getChatPublicId())], $realtime->published[count($realtime->published) - 1]['topics'], 'channel read receipts only go to the reader');
     }
 
     public function testEventsAndSupportInbox(): void
     {
-        $chat = $this->get(ChatService::class);
-        $events = [];
+        $chat       = $this->get(ChatService::class);
+        $events     = [];
         $dispatcher = $this->get(EventDispatcherInterface::class);
         foreach ([ChatMessageSentEvent::class, ChatMessageDeletedEvent::class, ChatSupportStatusChangedEvent::class] as $class) {
             $dispatcher->addListener($class, static function (object $event) use (&$events): void {
                 $events[] = $event;
             });
         }
-        $ana = $this->user('Ana');
-        $bob = $this->user('Bob');
+        $ana   = $this->user('Ana');
+        $bob   = $this->user('Bob');
         $agent = $this->user('Agent Smith');
 
         $support = $chat->openSupport($ana, ['url' => '/projects/acme/issues', 'label' => 'Issues']);
@@ -146,7 +149,7 @@ final class ChatServiceTest extends DatabaseTestCase
         self::assertSame(['label' => 'Dashboard'], $support->getSupportContext());
 
         $question = $chat->send($ana, $support, 'help');
-        $bobs = $chat->openSupport($bob);
+        $bobs     = $chat->openSupport($bob);
         $chat->send($bob, $bobs, 'export broken');
         $chat->send($agent, $bobs, 'looking');
         $chat->resolveSupport($agent, $support);
@@ -180,15 +183,15 @@ final class ChatServiceTest extends DatabaseTestCase
     public function testPresenterShapes(): void
     {
         $presenter = $this->get(ChatPresenter::class);
-        $chat = $this->get(ChatService::class);
-        $access = $this->get(ChatAccess::class);
-        $ana = $this->user('Ana');
-        $luis = $this->user('Luis');
-        $agent = $this->user('Agent Smith');
+        $chat      = $this->get(ChatService::class);
+        $access    = $this->get(ChatAccess::class);
+        $ana       = $this->user('Ana');
+        $luis      = $this->user('Luis');
+        $agent     = $this->user('Agent Smith');
 
-        $dm = $chat->openDirect($ana, $luis);
+        $dm   = $chat->openDirect($ana, $luis);
         $last = $chat->send($luis, $dm, '**Deploy** done');
-        $row = $presenter->conversation($dm, $ana, $luis, null, true, 2, $last, false, true);
+        $row  = $presenter->conversation($dm, $ana, $luis, null, true, 2, $last, false, true);
         self::assertSame('Luis', $row['title']);
         self::assertSame('luis@example.test', $row['subtitle']);
         self::assertSame('L', $row['initials']);
@@ -198,7 +201,7 @@ final class ChatServiceTest extends DatabaseTestCase
         self::assertSame('Deleted user', $presenter->conversation($dm, $ana, null, null, false)['title']);
         self::assertNull($presenter->conversation($dm, $ana, null, null, false)['lastMessage']);
 
-        $channel = $chat->openChannel($ana, $access->channel(TestChannelProvider::KEY) ?? self::fail('channel'));
+        $channel    = $chat->openChannel($ana, $access->channel(TestChannelProvider::KEY) ?? self::fail('channel'));
         $channelRow = $presenter->conversation($channel, $ana, null, $access->channel(TestChannelProvider::KEY), true);
         self::assertSame('#Acme', $channelRow['title']);
         self::assertSame(TestChannelProvider::KEY, $channelRow['channelKey']);
@@ -220,9 +223,9 @@ final class ChatServiceTest extends DatabaseTestCase
     public function testPresenceRespectsTheVisibilitySetting(): void
     {
         $presence = $this->get(ChatPresence::class);
-        $ana = $this->user('Ana');
-        $luis = $this->user('Luis');
-        $eve = $this->user('Eve');
+        $ana      = $this->user('Ana');
+        $luis     = $this->user('Luis');
+        $eve      = $this->user('Eve');
 
         self::assertSame([], $presence->statusOf([]));
         $presence->heartbeat($ana, true);

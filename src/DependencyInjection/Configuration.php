@@ -7,6 +7,9 @@ namespace Nowo\ChatKitBundle\DependencyInjection;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
+use function array_key_exists;
+use function is_array;
+
 /**
  * Configuration tree for `nowo_chat_kit` (REQ-CFG-001: `default_profile` + `profiles`).
  *
@@ -24,25 +27,25 @@ final class Configuration implements ConfigurationInterface
 
     /** Dock icon → Symfony UX Icons name (Tabler set), used with `icon_set: ux_icon`. */
     public const array DEFAULT_ICONS = [
-        'chat' => 'tabler:message-circle',
-        'compose' => 'tabler:edit',
-        'chevronUp' => 'tabler:chevron-up',
+        'chat'        => 'tabler:message-circle',
+        'compose'     => 'tabler:edit',
+        'chevronUp'   => 'tabler:chevron-up',
         'chevronDown' => 'tabler:chevron-down',
-        'close' => 'tabler:x',
-        'send' => 'tabler:send',
-        'back' => 'tabler:arrow-left',
-        'arrowDown' => 'tabler:arrow-down',
-        'search' => 'tabler:search',
-        'hash' => 'tabler:hash',
-        'lifebuoy' => 'tabler:lifebuoy',
-        'retry' => 'tabler:refresh',
-        'buzz' => 'tabler:bolt',
-        'smile' => 'tabler:mood-smile',
-        'check' => 'tabler:check',
-        'edit' => 'tabler:pencil',
-        'trash' => 'tabler:trash',
-        'link' => 'tabler:link',
-        'external' => 'tabler:external-link',
+        'close'       => 'tabler:x',
+        'send'        => 'tabler:send',
+        'back'        => 'tabler:arrow-left',
+        'arrowDown'   => 'tabler:arrow-down',
+        'search'      => 'tabler:search',
+        'hash'        => 'tabler:hash',
+        'lifebuoy'    => 'tabler:lifebuoy',
+        'retry'       => 'tabler:refresh',
+        'buzz'        => 'tabler:bolt',
+        'smile'       => 'tabler:mood-smile',
+        'check'       => 'tabler:check',
+        'edit'        => 'tabler:pencil',
+        'trash'       => 'tabler:trash',
+        'link'        => 'tabler:link',
+        'external'    => 'tabler:external-link',
     ];
 
     /**
@@ -55,7 +58,7 @@ final class Configuration implements ConfigurationInterface
         $treeBuilder->getRootNode()
             ->beforeNormalization()
                 // An omitted `profiles` still gets one fully defaulted profile (prototype defaults apply).
-                ->ifTrue(static fn (mixed $v): bool => \is_array($v) && !isset($v['profiles']))
+                ->ifTrue(static fn (mixed $v): bool => is_array($v) && !isset($v['profiles']))
                 ->then(static fn (array $v): array => $v + ['profiles' => [$v['default_profile'] ?? self::DEFAULT_PROFILE => []]])
             ->end()
             ->children()
@@ -162,7 +165,7 @@ final class Configuration implements ConfigurationInterface
                 ->end()
             ->end()
             ->validate()
-                ->ifTrue(static fn (array $config): bool => !\array_key_exists($config['default_profile'], $config['profiles']))
+                ->ifTrue(static fn (array $config): bool => !array_key_exists($config['default_profile'], $config['profiles']))
                 ->thenInvalid('nowo_chat_kit.default_profile must reference a key defined under nowo_chat_kit.profiles.')
             ->end();
 

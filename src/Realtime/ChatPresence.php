@@ -10,6 +10,9 @@ use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 
+use function is_array;
+use function is_int;
+
 /**
  * Presence from tab heartbeats (every 30 s), kept only in the cache with a short TTL — no presence history is
  * stored. "Online" = a heartbeat within the window and the user shows presence; "app open" = a visible tab
@@ -29,9 +32,9 @@ final readonly class ChatPresence
 
     public function heartbeat(ChatUserInterface $user, bool $visible): void
     {
-        $item = $this->cache->getItem($this->key($user));
-        $now = $this->clock->now()->getTimestamp();
-        $state = $item->isHit() && \is_array($item->get()) ? $item->get() : [];
+        $item          = $this->cache->getItem($this->key($user));
+        $now           = $this->clock->now()->getTimestamp();
+        $state         = $item->isHit() && is_array($item->get()) ? $item->get() : [];
         $state['seen'] = $now;
         if ($visible) {
             $state['visible'] = $now;
@@ -53,7 +56,7 @@ final readonly class ChatPresence
      */
     public function statusOf(array $users): array
     {
-        if ([] === $users) {
+        if ($users === []) {
             return [];
         }
         $byKey = [];
@@ -61,16 +64,16 @@ final readonly class ChatPresence
             $byKey[$this->key($user)] = $user;
         }
         $settings = $this->settings->forUsers(array_values($byKey));
-        $now = $this->clock->now()->getTimestamp();
-        $status = [];
+        $now      = $this->clock->now()->getTimestamp();
+        $status   = [];
         foreach ($this->cache->getItems(array_keys($byKey)) as $key => $item) {
-            $user = $byKey[$key];
-            $state = $item->isHit() ? $item->get() : null;
-            $seen = \is_array($state) && \is_int($state['seen'] ?? null) ? $state['seen'] : null;
-            $visible = \is_array($state) && \is_int($state['visible'] ?? null) ? $state['visible'] : null;
+            $user                             = $byKey[$key];
+            $state                            = $item->isHit() ? $item->get() : null;
+            $seen                             = is_array($state) && is_int($state['seen'] ?? null) ? $state['seen'] : null;
+            $visible                          = is_array($state) && is_int($state['visible'] ?? null) ? $state['visible'] : null;
             $status[$user->getChatPublicId()] = [
-                'online' => $settings[(int) $user->getId()]->isPresenceVisible() && null !== $seen && $now - $seen <= self::WINDOW_SECONDS,
-                'appOpen' => null !== $visible && $now - $visible <= self::WINDOW_SECONDS,
+                'online'  => $settings[(int) $user->getId()]->isPresenceVisible() && $seen !== null && $now - $seen <= self::WINDOW_SECONDS,
+                'appOpen' => $visible !== null && $now - $visible <= self::WINDOW_SECONDS,
             ];
         }
 
@@ -79,6 +82,6 @@ final readonly class ChatPresence
 
     private function key(ChatUserInterface $user): string
     {
-        return 'nowo_chat_presence_'.hash('xxh128', $user->getChatPublicId());
+        return 'nowo_chat_presence_' . hash('xxh128', $user->getChatPublicId());
     }
 }

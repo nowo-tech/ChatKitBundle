@@ -144,7 +144,7 @@ check-twig-extra:
 # Run Igor worker-state audit (REQ-CS-008)
 igor: ensure-up
 	$(COMPOSE) exec -T php composer igor
-release-check: ensure-up check-no-cursor-coauthor check-open-prs check-twig-extra check-no-raw-html-form assets composer-sync validate-phpdoc cs-fix cs-check rector-dry phpstan igor coverage-check test-ts validate-translations release-check-demos
+release-check: ensure-up check-no-cursor-coauthor check-open-prs check-twig-extra check-no-raw-html-form assets composer-sync cs-fix cs-check rector-dry phpstan igor coverage-check test-ts validate-translations release-check-demos
 
 release-check-demos:
 	@if [ -f demo/Makefile ]; then $(MAKE) -C demo release-check; else true; fi

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\DependencyInjection;
 
+use InvalidArgumentException;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\FileLocator;
@@ -11,6 +12,9 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
+
+use function is_array;
+use function sprintf;
 
 /**
  * Loads `nowo_chat_kit` configuration and registers the bundle asset package.
@@ -38,7 +42,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     public function prepend(ContainerBuilder $container): void
     {
         /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>}>} $config */
-        $config = (new Processor())->processConfiguration(new Configuration(), $this->prependableConfigs($container));
+        $config  = (new Processor())->processConfiguration(new Configuration(), $this->prependableConfigs($container));
         $profile = $config['profiles'][$config['default_profile']];
         $this->prependDoctrine($container, $config['default_profile'], $profile['user_class']);
 
@@ -46,15 +50,15 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
             return;
         }
 
-        $limits = $profile['limits'];
+        $limits  = $profile['limits'];
         $limiter = static fn (int $limit, string $interval): array => ['policy' => 'sliding_window', 'limit' => $limit, 'interval' => $interval];
         $container->prependExtensionConfig('framework', [
             'rate_limiter' => [
-                'nowo_chat_send' => $limiter($limits['send_per_minute'], '1 minute'),
-                'nowo_chat_action' => $limiter($limits['actions_per_minute'], '1 minute'),
-                'nowo_chat_typing' => $limiter($limits['typing_per_minute'], '1 minute'),
-                'nowo_chat_read' => $limiter($limits['reads_per_minute'], '1 minute'),
-                'nowo_chat_buzz' => $limiter(1, $limits['buzz_interval_seconds'].' seconds'),
+                'nowo_chat_send'        => $limiter($limits['send_per_minute'], '1 minute'),
+                'nowo_chat_action'      => $limiter($limits['actions_per_minute'], '1 minute'),
+                'nowo_chat_typing'      => $limiter($limits['typing_per_minute'], '1 minute'),
+                'nowo_chat_read'        => $limiter($limits['reads_per_minute'], '1 minute'),
+                'nowo_chat_buzz'        => $limiter(1, $limits['buzz_interval_seconds'] . ' seconds'),
                 'nowo_chat_buzz_global' => $limiter($limits['buzz_per_minute'], '1 minute'),
             ],
         ]);
@@ -78,21 +82,21 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     public function load(array $configs, ContainerBuilder $container): void
     {
         // No configuration at all still yields one defaulted profile (normalization only runs on given input).
-        $config = $this->processConfiguration(new Configuration(), [] === $configs ? [[]] : $configs);
+        $config = $this->processConfiguration(new Configuration(), $configs === [] ? [[]] : $configs);
 
-        $container->setParameter(Configuration::ALIAS.'.default_profile', $config['default_profile']);
-        $container->setParameter(Configuration::ALIAS.'.profiles', $config['profiles']);
+        $container->setParameter(Configuration::ALIAS . '.default_profile', $config['default_profile']);
+        $container->setParameter(Configuration::ALIAS . '.profiles', $config['profiles']);
 
-        $profile = $config['profiles'][$config['default_profile']];
+        $profile          = $config['profiles'][$config['default_profile']];
         $profile['icons'] = array_replace(Configuration::DEFAULT_ICONS, $profile['icons']);
         foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'cache_pool', 'page_layout', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'limits', 'digest'] as $key) {
-            $container->setParameter(Configuration::ALIAS.'.'.$key, $profile[$key]);
+            $container->setParameter(Configuration::ALIAS . '.' . $key, $profile[$key]);
         }
 
-        $loader = new PhpFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
+        $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.php');
         foreach ($profile['digest'] as $key => $value) {
-            $container->setParameter(Configuration::ALIAS.'.digest.'.$key, $value);
+            $container->setParameter(Configuration::ALIAS . '.digest.' . $key, $value);
         }
         $container->setAlias('nowo_chat_kit.cache', $profile['cache_pool']);
     }
@@ -108,12 +112,12 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $configs = [];
         foreach ($container->getExtensionConfig(Configuration::ALIAS) as $config) {
             foreach ($config['profiles'] ?? [] as $name => $profile) {
-                $config['profiles'][$name] = array_intersect_key(\is_array($profile) ? $profile : [], ['user_class' => true, 'limits' => true]);
+                $config['profiles'][$name] = array_intersect_key(is_array($profile) ? $profile : [], ['user_class' => true, 'limits' => true]);
             }
             $configs[] = $config;
         }
 
-        return [] === $configs ? [[]] : $configs;
+        return $configs === [] ? [[]] : $configs;
     }
 
     /**
@@ -124,20 +128,20 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         if (!$container->hasExtension('doctrine')) {
             return;
         }
-        if (null === $userClass || '' === $userClass) {
-            throw new \InvalidArgumentException(\sprintf('The "nowo_chat_kit.profiles.%s.user_class" configuration value is required.', $profileName));
+        if ($userClass === null || $userClass === '') {
+            throw new InvalidArgumentException(sprintf('The "nowo_chat_kit.profiles.%s.user_class" configuration value is required.', $profileName));
         }
 
         $container->prependExtensionConfig('doctrine', [
             'orm' => [
                 'resolve_target_entities' => [ChatUserInterface::class => $userClass],
-                'mappings' => [
+                'mappings'                => [
                     'NowoChatKitBundle' => [
-                        'type' => 'attribute',
+                        'type'      => 'attribute',
                         'is_bundle' => false,
-                        'dir' => __DIR__.'/../Entity',
-                        'prefix' => 'Nowo\\ChatKitBundle\\Entity',
-                        'alias' => 'NowoChatKit',
+                        'dir'       => __DIR__ . '/../Entity',
+                        'prefix'    => 'Nowo\\ChatKitBundle\\Entity',
+                        'alias'     => 'NowoChatKit',
                     ],
                 ],
             ],

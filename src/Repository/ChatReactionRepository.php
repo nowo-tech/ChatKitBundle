@@ -34,7 +34,7 @@ class ChatReactionRepository extends ServiceEntityRepository
      */
     public function summaryFor(array $messageIds): array
     {
-        if ([] === $messageIds) {
+        if ($messageIds === []) {
             return [];
         }
         /** @var list<ChatReaction> $rows */
