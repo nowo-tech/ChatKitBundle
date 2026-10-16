@@ -4,29 +4,27 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Security;
 
+use Closure;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Contracts\Service\ResetInterface;
+
+use function array_key_exists;
 
 /**
  * The single place that decides reachability, on top of the application's policy and channel provider.
- * Answers are memoized for the current request only (FrankenPHP worker mode: reset between requests), so
+ * Answers are memoized on the current request object only (never in this service, so FrankenPHP workers without a
+ * kernel reset cannot carry them over), so
  * losing a shared context turns a direct thread read-only and hides a channel on the next request.
  */
 final class ChatAccess implements ResetInterface
 {
-    /** @var array<int, bool> */
-    private array $agents = [];
-
-    /** @var array<string, ChatChannel|false> */
-    private array $channels = [];
-
-    /** @var array<string, bool> "userId:channelKey" => access */
-    private array $channelAccess = [];
+    private const string MEMO = '_nowo_chat_access';
 
     /**
      * Builds the access checks on top of the application's policy, channel provider and directory.
@@ -39,6 +37,7 @@ final class ChatAccess implements ResetInterface
         private readonly ChatAccessPolicyInterface $policy,
         private readonly ChatChannelProviderInterface $channelProvider,
         private readonly ChatDirectoryInterface $directory,
+        private readonly ?RequestStack $requests = null,
     ) {
     }
 
@@ -47,9 +46,7 @@ final class ChatAccess implements ResetInterface
      */
     public function reset(): void
     {
-        $this->agents        = [];
-        $this->channels      = [];
-        $this->channelAccess = [];
+        $this->requests?->getMainRequest()?->attributes->remove(self::MEMO);
     }
 
     /**
@@ -95,7 +92,7 @@ final class ChatAccess implements ResetInterface
      */
     public function isSupportAgent(ChatUserInterface $user): bool
     {
-        return $this->agents[(int) $user->getId()] ??= $this->policy->isSupportAgent($user);
+        return (bool) $this->memo('agent:' . $user->getId(), fn (): bool => $this->policy->isSupportAgent($user));
     }
 
     /**
@@ -135,9 +132,9 @@ final class ChatAccess implements ResetInterface
      */
     public function channel(string $key): ?ChatChannel
     {
-        $channel = $this->channels[$key] ??= $this->channelProvider->find($key) ?? false;
+        $channel = $this->memo('channel:' . $key, fn (): ChatChannel|false => $this->channelProvider->find($key) ?? false);
 
-        return $channel === false ? null : $channel;
+        return $channel instanceof ChatChannel ? $channel : null;
     }
 
     /**
@@ -150,9 +147,9 @@ final class ChatAccess implements ResetInterface
      */
     public function canUseChannel(ChatUserInterface $user, string $key): bool
     {
-        return $this->channelAccess[$user->getId() . ':' . $key] ??= $this->isReachable($user)
+        return (bool) $this->memo('access:' . $user->getId() . ':' . $key, fn (): bool => $this->isReachable($user)
             && ($channel = $this->channel($key)) instanceof ChatChannel
-            && $this->channelProvider->canUse($user, $channel);
+            && $this->channelProvider->canUse($user, $channel));
     }
 
     /**
@@ -168,5 +165,30 @@ final class ChatAccess implements ResetInterface
         $peerId = $conversation->peerIdOf($actor);
 
         return $peerId === null ? null : ($this->directory->findByIds([$peerId])[0] ?? null);
+    }
+
+    /**
+     * Memoizes an answer on the current main request only: nothing survives the request, even when the kernel is never
+     * reset (FrankenPHP worker mode); without a request (console, Messenger) nothing is memoized.
+     *
+     * @param string $key Memo key
+     * @param Closure(): mixed $compute Computes the answer on a miss
+     *
+     * @return mixed The memoized or computed answer
+     */
+    private function memo(string $key, Closure $compute): mixed
+    {
+        $request = $this->requests?->getMainRequest();
+        if ($request === null) {
+            return $compute();
+        }
+        /** @var array<string, mixed> $memo */
+        $memo = $request->attributes->get(self::MEMO, []);
+        if (!array_key_exists($key, $memo)) {
+            $memo[$key] = $compute();
+            $request->attributes->set(self::MEMO, $memo);
+        }
+
+        return $memo[$key];
     }
 }

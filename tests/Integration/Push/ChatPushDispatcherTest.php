@@ -145,7 +145,7 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
             $this->get(TranslatorInterface::class),
             $sender,
         );
-        $message      = $chat->send($ana, $dm, 'salary review is on Friday');
+        $message = $chat->send($ana, $dm, 'salary review is on Friday');
         $dispatcher(new DeliverChatPushMessage((int) $message->getId(), [(int) $luis->getId()]));
         self::assertSame('New message', $sender->sent[$luis->getChatPublicId()]['body'] ?? null, 'CHAT-SEC-03: no message text on lock screens by default');
     }

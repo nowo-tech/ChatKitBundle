@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Controller;
 
-use DateTimeImmutable;
 use InvalidArgumentException;
 use JsonException;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
@@ -34,6 +33,8 @@ use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatSupportInbox;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\Clock\Clock;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -69,6 +70,8 @@ final class ChatApiController extends AbstractController
     /**
      * Builds the API controller from the chat services, repositories, realtime helpers and the rate limiters
      * (send, action, typing, buzz per conversation, buzz per minute, read).
+     *
+     * @param ClockInterface $clock Clock for the realtime token expiry
      */
     public function __construct(
         private readonly ChatService $chat,
@@ -99,6 +102,7 @@ final class ChatApiController extends AbstractController
         private readonly RateLimiterFactoryInterface $buzzGlobalLimiter,
         #[Autowire(service: 'limiter.nowo_chat_read')]
         private readonly RateLimiterFactoryInterface $readLimiter,
+        private readonly ClockInterface $clock = new Clock(),
     ) {
     }
 
@@ -457,7 +461,7 @@ final class ChatApiController extends AbstractController
         $user  = $this->reader();
         $topic = ChatTopics::forUser($user->getChatPublicId());
         // Short-lived (it may travel in the hub URL and end up in access logs); the client refreshes it.
-        $expiresAt = new DateTimeImmutable('+15 minutes');
+        $expiresAt = $this->clock->now()->modify('+15 minutes');
         $enabled   = $this->realtime->isEnabled();
         $token     = $enabled ? $this->realtime->subscriberToken([$topic], $expiresAt) : null;
         $hubUrl    = $enabled ? $this->realtime->browserHubUrl($request) : null;

@@ -58,6 +58,18 @@ final readonly class ChatRecipients
     }
 
     /**
+     * Drops the cached recipients of a conversation so the next event recomputes them. Call it when the application
+     * revokes access to a known conversation (e.g. removes someone from a project channel); otherwise a revoked user
+     * may still receive that conversation's realtime events for up to 30 seconds.
+     *
+     * @param ChatConversation $conversation The conversation whose recipients changed
+     */
+    public function forget(ChatConversation $conversation): void
+    {
+        $this->cache->deleteItem('nowo_chat_recipients_' . $conversation->getUuid());
+    }
+
+    /**
      * @return list<ChatUserInterface>
      */
     private function compute(ChatConversation $conversation): array

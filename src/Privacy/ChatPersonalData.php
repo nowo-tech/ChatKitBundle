@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Privacy;
 
-use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -13,6 +12,8 @@ use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+use Symfony\Component\Clock\Clock;
+use Symfony\Component\Clock\ClockInterface;
 
 use const DATE_ATOM;
 
@@ -29,10 +30,12 @@ final readonly class ChatPersonalData
      *
      * @param EntityManagerInterface $entityManager Runs the export queries and the bulk erasure
      * @param ChatUserSettingsRepository $settings Loads the user's chat settings for the export
+     * @param ClockInterface $clock Clock stamping the erasure tombstones
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
         private ChatUserSettingsRepository $settings,
+        private ClockInterface $clock = new Clock(),
     ) {
     }
 
@@ -87,7 +90,7 @@ final readonly class ChatPersonalData
             ->set('m.body', ':empty')->set('m.bodyHtml', ':empty')
             ->set('m.author', ':none')->set('m.deletedAt', ':now')
             ->where('m.author = :user')
-            ->setParameter('empty', '')->setParameter('none', null)->setParameter('now', new DateTimeImmutable())
+            ->setParameter('empty', '')->setParameter('none', null)->setParameter('now', $this->clock->now())
             ->setParameter('user', $user)
             ->getQuery()->execute();
         $qb()->delete(ChatReaction::class, 'r')->where('r.user = :user')->setParameter('user', $user)->getQuery()->execute();

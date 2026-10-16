@@ -12,8 +12,13 @@ use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
+use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use Psr\Log\AbstractLogger;
+use RuntimeException;
+use Stringable;
+use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Console\Tester\CommandTester;
 
 /**
@@ -38,6 +43,32 @@ final class ChatPrivacyTest extends DatabaseTestCase
         $short = new CommandTester(new ChatPurgeCommand($this->em->getRepository(ChatMessage::class), 1));
         $short->execute([]);
         self::assertStringContainsString('older than 30 days', $short->getDisplay(), 'never below the minimum');
+    }
+
+    public function testPurgeLogsStartEndAndFailure(): void
+    {
+        $logger = new class extends AbstractLogger {
+            /** @var list<string> */
+            public array $lines = [];
+
+            public function log($level, string|Stringable $message, array $context = []): void
+            {
+                $this->lines[] = $level . ' ' . $message;
+            }
+        };
+        $clock = new MockClock('2026-10-16 12:00:00');
+        (new CommandTester(new ChatPurgeCommand($this->em->getRepository(ChatMessage::class), 365, $clock, $logger)))->execute([]);
+        self::assertSame(['info Chat purge started.', 'info Chat purge finished.'], $logger->lines);
+
+        $broken = $this->createStub(ChatMessageRepository::class);
+        $broken->method('purgeOlderThan')->willThrowException(new RuntimeException('db gone'));
+        $logger->lines = [];
+        try {
+            (new CommandTester(new ChatPurgeCommand($broken, 365, $clock, $logger)))->execute([]);
+            self::fail('the failure is rethrown');
+        } catch (RuntimeException) {
+            self::assertSame(['info Chat purge started.', 'error Chat purge failed.'], $logger->lines);
+        }
     }
 
     public function testExportAndErase(): void

@@ -16,6 +16,7 @@ use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 
@@ -80,5 +81,24 @@ final class ChatNotifierTest extends DatabaseTestCase
         self::assertCount(1, $bus->dispatched, 'deleted before delivery');
 
         self::assertSame([], $this->get(ChatReactionRepository::class)->summaryFor([]));
+    }
+
+    public function testRecipientsAreCachedUntilForgotten(): void
+    {
+        $chat       = $this->get(ChatService::class);
+        $recipients = $this->get(ChatRecipients::class);
+        $ana        = $this->user('Ana');
+        $luis       = $this->user('Luis');
+        $dm         = $chat->openDirect($ana, $luis);
+        $names      = static fn (array $users): array => array_map(static fn ($user): string => $user->getChatDisplayName(), $users);
+
+        self::assertEqualsCanonicalizing(['Ana', 'Luis'], $names($recipients->of($dm)));
+        // Luis becomes unreachable: the cached list still has him (≤ 30 s) until the application forgets it.
+        $this->em->createQuery('UPDATE ' . TestUser::class . ' u SET u.name = :name WHERE u.id = :id')
+            ->setParameters(['name' => 'Disabled Luis', 'id' => $luis->getId()])->execute();
+        $this->em->clear();
+        self::assertCount(2, $recipients->of($dm));
+        $recipients->forget($dm);
+        self::assertSame(['Ana'], $names($recipients->of($dm)));
     }
 }
