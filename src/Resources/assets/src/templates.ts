@@ -5,6 +5,9 @@
  */
 import { builtinIcon, h } from './dom';
 
+/** Serial suffix that keeps the ids of cloned form controls unique (several windows clone the same template). */
+let serial = 0;
+
 /** Clones the Twig `<template>` markup of the dock and resolves its icons. */
 export class Templates {
   private readonly root: ParentNode;
@@ -19,7 +22,7 @@ export class Templates {
   }
 
   /**
-   * A fresh copy of the template's first element, icons filled in.
+   * A fresh copy of the template's first element, icons filled in and form control ids made unique.
    *
    * @param name Value of `data-nowo-chat-template`.
    * @returns The cloned element.
@@ -32,6 +35,7 @@ export class Templates {
       throw new Error(`NowoChat: missing <template data-nowo-chat-template="${name}">.`);
     }
     this.fillIcons(element);
+    Templates.uniqueIds(element);
     return element as T;
   }
 
@@ -71,6 +75,25 @@ export class Templates {
       element.append(this.icon(kind === 'channel' ? 'hash' : 'lifebuoy', size === 'sm' ? 14 : 16));
     }
     return element;
+  }
+
+  /**
+   * Gives every form control of the copy (Symfony Form widgets carry an `id`) a unique id, and moves the copy's
+   * `<label for>` along, so several copies of the same template never share an id.
+   *
+   * @param scope Cloned element.
+   */
+  private static uniqueIds(scope: Element): void {
+    scope.querySelectorAll<HTMLElement>('input[id], textarea[id], select[id]').forEach((control) => {
+      serial += 1;
+      const unique = `${control.id}-${serial}`;
+      scope.querySelectorAll<HTMLLabelElement>('label[for]').forEach((label) => {
+        if (label.htmlFor === control.id) {
+          label.htmlFor = unique;
+        }
+      });
+      control.id = unique;
+    });
   }
 
   /**

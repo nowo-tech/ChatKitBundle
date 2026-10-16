@@ -33,6 +33,7 @@
 - [Timeouts](#timeouts)
 - [Privacy](#privacy)
 - [JSON API](#json-api)
+  - [Pagination and limits](#pagination-and-limits)
 - [Naming conventions](#naming-conventions)
 
 ## How it fits together
@@ -152,7 +153,11 @@ them too.
 `/chat/` (route `nowo_chat_page`) and `/chat/{uuid}` (`nowo_chat_page_conversation`) render the list and one thread on
 the server: a plain form posts the message and redirects back (works without JavaScript, same permissions, CSRF and
 rate limit as the API). Every dock window has an "Open in a page" link to it. The page extends `page_layout` (default: a
-minimal standalone layout); set it to your own layout, which must define the `title` and `body` blocks:
+minimal standalone layout), also exposed as the Twig global `nowo_chat_kit_page_layout` (the `layout` variable is still
+passed for existing overrides). Set it to your own layout, which must define the `title`, `stylesheets`, `javascripts`
+and `body` blocks: the page appends `css/nowo-chat.css` to `stylesheets` and `js/nowo-chat.js` to `javascripts` with
+`parent()`, so the chat is styled even when your layout does not include the dock (when it does, the dock does not load
+them a second time):
 
 ```yaml
 nowo_chat_kit:
@@ -160,6 +165,11 @@ nowo_chat_kit:
         default:
             page_layout: base.html.twig
 ```
+
+Opening `/chat/{uuid}` is a plain GET that changes nothing. With JavaScript, `nowo-chat.js` marks the conversation read
+through the CSRF-protected `POST /api/conversations/{uuid}/read` (the page carries the URL, the newest message id and the
+header token in `data-nowo-chat-read-*` attributes); without JavaScript, sending a message from the page marks the
+conversation read up to that message.
 
 Override `@NowoChatKitBundle/page.html.twig` (blocks `nowo_chat_page_list`, `nowo_chat_page_thread`) to change the
 markup. With the route prefix `/chat`, the list lives at `/chat/` (Symfony redirects `/chat` there).
@@ -226,8 +236,8 @@ application's copy always wins.
 | --- | --- | --- |
 | `dock.html.twig` | Dock root (config attribute) and assets | `nowo_chat_assets`, `nowo_chat_root` |
 | `_templates.html.twig` | Every `<template>` the dock clones | `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`, `nowo_chat_icons` |
-| `page.html.twig` | Full-page chat (list + thread + composer form) | `title`, `body`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
-| `page_layout.html.twig` | Default standalone layout of the full page (or set `page_layout`) | `title`, `body` |
+| `page.html.twig` | Full-page chat (list + thread + composer form) | `title`, `stylesheets`, `javascripts`, `body`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
+| `page_layout.html.twig` | Default standalone layout of the full page (or set `page_layout`) | `title`, `stylesheets`, `javascripts`, `body` |
 
 **Procedure.** Create the file under `templates/bundles/NowoChatKitBundle/`, start it with
 `{% extends '@!NowoChatKitBundle/<subpath>' %}` and override only the blocks you need, then
@@ -243,9 +253,15 @@ The full-page composer is a Symfony Form (`ChatPageMessageType`, CSRF token id `
 `form_start` / the `{% for child in form %}{% if not child.rendered %}{{ form_row(child) }}…` loop / `form_end`; overrides
 of `page.html.twig` must keep that pattern and never reintroduce hand-written form tags or inputs.
 
-The one documented exception is `_templates.html.twig`: its composer and search fields are inert `<template>` markup
-that the TypeScript clones and sends as JSON to the API (CSRF in the `X-CSRF-TOKEN` header). They are never submitted
-as an HTML form, so they are not Symfony Form views; `make check-no-raw-html-form` allowlists only this file.
+The dock markup in `_templates.html.twig` follows the same rule: its search boxes, window composer and inline message
+editor are Symfony Form views from `nowo_chat_dock_forms()` (`ChatDockSearchType` — children `query` and `people`,
+`ChatDockComposerType` and `ChatDockEditType` — child `body`), rendered with `form_start` / `form_widget` / the child
+loop / `form_end`. The types carry the attributes the script relies on (`class`, `data-part`, `rows`, `autocomplete`);
+the template adds the placeholder and `aria-label` translated in the dock locale. The script clones these `<template>`
+copies, gives each cloned control a unique `id`, cancels the submit and sends JSON to the API with the CSRF token in the
+`X-CSRF-TOKEN` header. The types keep Symfony form CSRF on with the API token id (`nowo_chat`), so the hidden `_token`
+carries the same token the API checks (the dock is rendered for signed-in users, inside a session). When you
+override those blocks, keep the Form helpers and the `data-part` hooks; `make check-no-raw-html-form` has no exception.
 
 ## Theme tokens
 
@@ -418,6 +434,22 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | GET | `/api/link-previews?url[]=…` | previews from your provider, per viewer |
 | GET | `/api/realtime` | hub URL + subscriber token for the caller's topic |
 | POST | `/api/presence` `{visible}` | heartbeat; online direct contacts |
+
+### Pagination and limits
+
+Every list is bounded server-side (constants, not configuration); nothing returns an unbounded collection:
+
+| Endpoint | Default / cap | Paging |
+| --- | --- | --- |
+| `GET /api/conversations` | 50 most recent conversations (DMs, channels, support merged by last message) | none (the list is a recent-activity view) |
+| `GET /api/conversations/{uuid}/messages` | 30 messages per page | `?before={messageId}` (older page) / `?after={messageId}` (catch-up), response `hasMore` |
+| `GET /api/contacts?q=` | 30 contacts from `ChatDirectoryInterface::contactsFor()` | narrow with `q` |
+| `GET /api/support/inbox` | 50 threads (`ChatSupportInbox::list()` default) | narrow with `status` / `q` |
+| `GET /api/link-previews?url[]=…` | 10 URLs per request (500 characters each) | the dock batches |
+| Full page `/chat/`, `/chat/{uuid}` | 50 conversations, last 50 messages | none (server-rendered view) |
+
+The conversation list loads unread counts, last messages and direct peers in batched queries, and a message page loads
+authors and reactions in batch (no per-row queries).
 
 ## Naming conventions
 

@@ -8,6 +8,9 @@ use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Controller\ChatApiController;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Form\ChatDockComposerType;
+use Nowo\ChatKitBundle\Form\ChatDockEditType;
+use Nowo\ChatKitBundle\Form\ChatDockSearchType;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -15,6 +18,8 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\Form\FormFactoryInterface;
+use Symfony\Component\Form\FormView;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
@@ -24,6 +29,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 use Symfony\UX\Icons\Exception\IconNotFoundException;
 use Symfony\UX\Icons\IconRendererInterface;
 use Twig\Extension\AbstractExtension;
+use Twig\Extension\GlobalsInterface;
 use Twig\Markup;
 use Twig\TwigFunction;
 
@@ -33,8 +39,10 @@ use function strlen;
 /**
  * `nowo_chat_dock_config()`: what the dock needs (endpoints, CSRF token, settings, UI strings, the channel of
  * the current page). Null for guests and unreachable accounts, so the dock template renders nothing.
+ * `nowo_chat_dock_forms()`: the Form views of the dock's search boxes, composer and inline editor.
+ * Global `nowo_chat_kit_page_layout`: the layout the full-page chat extends (`page_layout`).
  */
-final class ChatDockExtension extends AbstractExtension
+final class ChatDockExtension extends AbstractExtension implements GlobalsInterface
 {
     private const string PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 
@@ -46,6 +54,7 @@ final class ChatDockExtension extends AbstractExtension
      * @param string $iconSet `ux_icon` or `svg_inline`
      * @param array<string, string> $icons dock icon → UX Icons name (icon_set: ux_icon)
      * @param IconRendererInterface|null $iconRenderer UX Icons renderer; null when symfony/ux-icons is not installed
+     * @param string $pageLayout Template the full-page chat extends (`page_layout`)
      */
     public function __construct(
         private readonly Security $security,
@@ -57,16 +66,18 @@ final class ChatDockExtension extends AbstractExtension
         private readonly ChatChannelProviderInterface $channels,
         private readonly ChatUserSettingsRepository $settings,
         private readonly ChatLinkPreviewProviderInterface $linkPreviews,
+        private readonly FormFactoryInterface $forms,
         private readonly array $reactions = [],
         private readonly int $pollMs = 4000,
         private readonly string $iconSet = 'ux_icon',
         private readonly array $icons = [],
         private readonly ?IconRendererInterface $iconRenderer = null,
+        private readonly string $pageLayout = '@NowoChatKitBundle/page_layout.html.twig',
     ) {
     }
 
     /**
-     * Registers `nowo_chat_dock_config()` and `nowo_chat_icons()`.
+     * Registers `nowo_chat_dock_config()`, `nowo_chat_dock_forms()` and `nowo_chat_icons()`.
      *
      * @return list<TwigFunction> The Twig functions
      */
@@ -74,7 +85,33 @@ final class ChatDockExtension extends AbstractExtension
     {
         return [
             new TwigFunction('nowo_chat_dock_config', $this->config(...)),
+            new TwigFunction('nowo_chat_dock_forms', $this->forms(...)),
             new TwigFunction('nowo_chat_icons', $this->icons(...)),
+        ];
+    }
+
+    /**
+     * Twig globals: `nowo_chat_kit_page_layout`, the layout the full-page chat extends.
+     *
+     * @return array<string, mixed> The globals
+     */
+    public function getGlobals(): array
+    {
+        return ['nowo_chat_kit_page_layout' => $this->pageLayout];
+    }
+
+    /**
+     * Fresh Form views of the dock markup (a view renders once): `search` (children `query` and `people`),
+     * `composer` and `edit` (child `body` each).
+     *
+     * @return array{search: FormView, composer: FormView, edit: FormView} The Form views
+     */
+    public function forms(): array
+    {
+        return [
+            'search'   => $this->forms->create(ChatDockSearchType::class)->createView(),
+            'composer' => $this->forms->create(ChatDockComposerType::class)->createView(),
+            'edit'     => $this->forms->create(ChatDockEditType::class)->createView(),
         ];
     }
 

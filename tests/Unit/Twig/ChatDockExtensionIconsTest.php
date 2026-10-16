@@ -13,6 +13,7 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use PHPUnit\Framework\TestCase;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
@@ -42,6 +43,7 @@ final class ChatDockExtensionIconsTest extends TestCase
             $this->createStub(ChatChannelProviderInterface::class),
             $this->createStub(ChatUserSettingsRepository::class),
             new NullLinkPreviewProvider(),
+            $this->createStub(FormFactoryInterface::class),
             iconSet: $iconSet,
             icons: ['send' => 'tabler:send'],
             iconRenderer: $renderer,

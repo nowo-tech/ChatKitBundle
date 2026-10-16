@@ -4,7 +4,58 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Table of contents
+
+- [[Unreleased]](#unreleased)
+- [[1.3.0] - 2026-10-16](#130---2026-10-16)
+  - [Added](#added)
+  - [Changed](#changed)
+- [[1.2.0] - 2026-10-16](#120---2026-10-16)
+  - [Added](#added-1)
+  - [Fixed](#fixed)
+- [[1.1.1] - 2026-10-16](#111---2026-10-16)
+  - [Fixed](#fixed-1)
+- [[1.1.0] - 2026-10-16](#110---2026-10-16)
+  - [Added](#added-2)
+  - [Fixed](#fixed-2)
+- [[1.0.0] - 2026-10-16](#100---2026-10-16)
+  - [Added](#added-3)
+
 ## [Unreleased]
+
+## [1.3.0] - 2026-10-16
+
+### Added
+
+- Dock Form types `ChatDockSearchType`, `ChatDockComposerType` and `ChatDockEditType` and the Twig function
+  `nowo_chat_dock_forms()`: the dock search boxes, composer and inline editor in `_templates.html.twig` are rendered with
+  Symfony Form helpers (no raw `<form>` / `<input>` / `<textarea>`; `make check-no-raw-html-form` has no exception). The
+  forms keep Symfony CSRF on with the API token id `nowo_chat`.
+- Twig global `nowo_chat_kit_page_layout` (the configured `page_layout`); `page_layout.html.twig` defines `stylesheets`
+  and `javascripts` blocks, and the full-page chat adds the chat CSS / JS there, so `/chat/` is styled with a host
+  layout that does not include the dock (each asset is still loaded once).
+- Page script `markPageRead()`: the full-page chat marks the open conversation read through the CSRF-protected
+  `POST /api/conversations/{uuid}/read` once the tab is visible.
+- Docs: pagination caps, timeout hierarchy, multi-profile example and profile selection, the literal
+  `asset(..., 'nowo_chat_kit')` snippet, Playwright e2e / screenshot targets; Spec Kit baseline with key entities,
+  assumptions and the 1.1 / 1.2 features (94-unit inventory).
+
+### Changed
+
+- `GET /chat/{uuid}` no longer moves the read cursor (no state change on GET, REQ-SEC-005): the page script marks the
+  conversation read, and without JavaScript sending a message does.
+- `symfony/asset` is a required dependency (the bundle templates call `asset(..., 'nowo_chat_kit')`).
+- Messenger handlers use `#[AsMessageHandler(sign: true)]` and the table prefix listener `#[AsDoctrineListener]` instead
+  of manual tags (Messenger stays optional).
+- Entities take the injected clock time (`ChatService` passes `ClockInterface::now()` to conversations, participants,
+  reactions and support resolution); `ChatPersonalData` uses `ChatConversationRepository`.
+- Twig paths compiler pass resolves the loader in the canonical order (`twig.loader.native` alias target, then
+  `twig.loader.native`, then `twig.loader.native_filesystem`).
+- Development: `release-check` runs its steps sequentially and includes the demo Playwright e2e; the CI coverage job
+  enforces the 99% PHP gate and the TS job the 90% gate (Vitest thresholds at 90 for all four metrics); weekly CI
+  schedule; Codecov upload skipped for Dependabot; `make help` grouped by block; demo `verify` / `setup` targets, `up`
+  without `--build`, demo timeouts (HTTP client 5 s < PHP 30 s < Caddy write 60 s); `setup-hooks` copies the hooks into
+  `.git/hooks`; the translation check also scans Twig keys used with a locale argument.
 
 ## [1.2.0] - 2026-10-16
 

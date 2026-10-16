@@ -79,9 +79,9 @@ Full guide: [docs/INSTALLATION.md](docs/INSTALLATION.md) · options: [docs/CONFI
 
 ## Requirements
 
-- PHP `>=8.3 <8.6`
+- PHP `>=8.3 <8.6` (8.3 floor: the code uses typed class constants, a PHP 8.3 feature)
 - Symfony 7.4, 8.0, and 8.1+
-- Doctrine ORM, SecurityBundle, TwigBundle, Symfony UX Icons
+- Doctrine ORM, SecurityBundle, TwigBundle, Form, Asset, Symfony UX Icons
 - Optional: `symfony/mercure-bundle` (realtime), Symfony Messenger (async push), a Web Push library behind `ChatPushSenderInterface`
 
 ### Version information
@@ -101,6 +101,9 @@ make -C demo up
 
 `make -C demo/symfony8 setup-db` seeds the accounts **alice**, **bob**, **carol** and **support** (password
 `password`); sign in with two of them in two browsers. See [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md).
+
+Playwright end-to-end tests and the README screenshots (WebP under `docs/images/demo/`): `make -C demo/symfony8 test-e2e`
+and `make -C demo/symfony8 demo-screenshots` (see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)).
 
 ## Documentation
 
@@ -129,7 +132,12 @@ make -C demo up
 
 ## Tests and coverage
 
-PHP line coverage target: **100%** of includable `src/` (gate **≥ 99%**). TypeScript coverage is reported as the minimum of statements / branches / functions / lines (REQ-TEST-009): **99.34%** today (branches; the other three are 100% — the remaining branches are unreachable defensive fallbacks), gate **≥ 90%**.
+- Tests: PHPUnit (unit, integration, functional), Vitest (TypeScript), Playwright (demo e2e)
+- PHP: 100%
+- TS/JS: 99.35%
+- Python: N/A
+
+PHP line coverage target: **100%** of includable `src/` (gate **≥ 99%**). TypeScript coverage is the minimum of statements / branches / functions / lines (REQ-TEST-009): statements, functions and lines 100%, branches 99.35% (the remaining branches are unreachable defensive fallbacks); gate **≥ 90%**.
 
 ```bash
 make test
@@ -137,11 +145,6 @@ make test-coverage
 make test-ts
 make qa
 ```
-
-| Language | Latest reported |
-| --- | --- |
-| PHP | 100% lines (`make test-coverage`) |
-| TypeScript | 99.34% (min of the four metrics; lines, statements and functions 100%, branches 99.34%) — `pnpm run test:coverage` |
 
 ## License
 

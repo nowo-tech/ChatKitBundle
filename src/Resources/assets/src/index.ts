@@ -4,9 +4,11 @@
  * after Turbo page swaps. Applications with their own bundler can import `ChatDock` / `mount` from the source.
  */
 import { ChatDock } from './dock';
+import { markPageRead } from './page';
 import type { ChatConfig } from './types';
 
 export { ChatDock } from './dock';
+export { markPageRead } from './page';
 export type { ChatConfig } from './types';
 
 /** Package version of the browser bundle. */
@@ -65,13 +67,21 @@ export function mountAll(scope: ParentNode = document): void {
   }
 }
 
-/** Auto start for the IIFE build: document ready, Turbo visits, and cleanup before Turbo swaps the body. */
+/**
+ * Auto start for the IIFE build: document ready, Turbo visits, and cleanup before Turbo swaps the body. Also marks
+ * read the conversation of a full-page chat (see markPageRead).
+ */
 export function autoStart(): void {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => mountAll(), { once: true });
-  } else {
+  /** Mounts the docks and marks the open full-page conversation read. */
+  const start = (): void => {
+    markPageRead();
     mountAll();
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
   }
-  document.addEventListener('turbo:load', () => mountAll());
+  document.addEventListener('turbo:load', start);
   document.addEventListener('turbo:before-render', () => document.querySelectorAll<HTMLElement>('[data-nowo-chat-config]').forEach(unmount));
 }

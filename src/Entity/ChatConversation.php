@@ -77,9 +77,10 @@ class ChatConversation
     private function __construct(
         #[ORM\Column(length: 16, enumType: ConversationKind::class)]
         private ConversationKind $kind,
+        ?DateTimeImmutable $createdAt = null,
     ) {
         $this->initUuid();
-        $this->createdAt     = new DateTimeImmutable();
+        $this->createdAt     = $createdAt ?? new DateTimeImmutable();
         $this->lastMessageAt = $this->createdAt;
     }
 
@@ -88,14 +89,15 @@ class ChatConversation
      *
      * @param ChatUserInterface $a One person
      * @param ChatUserInterface $b The other person
+     * @param DateTimeImmutable|null $createdAt Creation time; null for now
      *
      * @throws LogicException When the users are the same or not persisted
      *
      * @return self The new, unpersisted conversation
      */
-    public static function direct(ChatUserInterface $a, ChatUserInterface $b): self
+    public static function direct(ChatUserInterface $a, ChatUserInterface $b, ?DateTimeImmutable $createdAt = null): self
     {
-        $conversation            = new self(ConversationKind::Direct);
+        $conversation            = new self(ConversationKind::Direct, $createdAt);
         $conversation->directKey = self::directKeyFor($a, $b);
 
         return $conversation;
@@ -105,17 +107,18 @@ class ChatConversation
      * Creates the conversation of an application channel.
      *
      * @param string $key Channel key (1–120 characters)
+     * @param DateTimeImmutable|null $createdAt Creation time; null for now
      *
      * @throws LogicException When the key is empty or too long
      *
      * @return self The new, unpersisted conversation
      */
-    public static function channel(string $key): self
+    public static function channel(string $key, ?DateTimeImmutable $createdAt = null): self
     {
         if ($key === '' || strlen($key) > self::CHANNEL_KEY_MAX_LENGTH) {
             throw new LogicException('A channel key must be 1–120 characters.');
         }
-        $conversation             = new self(ConversationKind::Channel);
+        $conversation             = new self(ConversationKind::Channel, $createdAt);
         $conversation->channelKey = $key;
 
         return $conversation;
@@ -125,12 +128,13 @@ class ChatConversation
      * Creates the user's support thread, open.
      *
      * @param ChatUserInterface $owner The user asking for support
+     * @param DateTimeImmutable|null $createdAt Creation time; null for now
      *
      * @return self The new, unpersisted conversation
      */
-    public static function support(ChatUserInterface $owner): self
+    public static function support(ChatUserInterface $owner, ?DateTimeImmutable $createdAt = null): self
     {
-        $conversation                = new self(ConversationKind::Support);
+        $conversation                = new self(ConversationKind::Support, $createdAt);
         $conversation->supportOwner  = $owner;
         $conversation->supportStatus = SupportStatus::Open;
 
@@ -304,13 +308,14 @@ class ChatConversation
     }
 
     /**
-     * Marks the support thread resolved by the agent, now.
+     * Marks the support thread resolved by the agent.
      *
      * @param ChatUserInterface $agent The support agent
+     * @param DateTimeImmutable|null $at Resolution time; null for now
      *
      * @throws LogicException When the conversation is not a support thread
      */
-    public function resolve(ChatUserInterface $agent): void
+    public function resolve(ChatUserInterface $agent, ?DateTimeImmutable $at = null): void
     {
         $this->assertSupport();
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
@@ -318,7 +323,7 @@ class ChatConversation
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->resolvedBy = $agent;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
-        $this->resolvedAt = new DateTimeImmutable();
+        $this->resolvedAt = $at ?? new DateTimeImmutable();
     }
 
     /**

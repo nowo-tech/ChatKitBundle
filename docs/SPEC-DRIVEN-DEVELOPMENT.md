@@ -23,16 +23,20 @@ There is no separate executable spec language (for example Gherkin); Spec Kit sp
 
 ## User stories
 
-| ID | Story |
-| --- | --- |
-| US-01 | **As a** user of a Symfony application, **I want** a floating chat dock **so that** I can exchange direct messages with people I am allowed to reach. |
-| US-02 | **As a** project member, **I want** channels bound to projects or rooms **so that** the whole team shares one conversation. |
-| US-03 | **As a** user, **I want** to write to "Support" **so that** any available agent can answer me from a shared inbox. |
-| US-04 | **As a** user, **I want** realtime delivery, presence, typing indicators and read receipts **so that** the chat feels live. |
-| US-05 | **As a** user, **I want** push notifications only when the application is not open **so that** I am not notified twice. |
-| US-06 | **As an** integrator, **I want** overridable Twig `<template>` markup and `--nowo-chat-*` CSS tokens **so that** the dock matches my design system. |
-| US-07 | **As an** integrator, **I want** access / reachability and user display provider interfaces **so that** my application stays the source of truth for users and permissions. |
-| US-08 | **As a** maintainer, **I want** behavior covered by automated tests **so that** regressions are caught in CI. |
+The IDs match the user scenarios of the baseline spec ([`specs/001-baseline/spec.md`](../specs/001-baseline/spec.md#user-scenarios)), where each has Given/When/Then acceptance criteria.
+
+| ID | Story | Integrator docs |
+| --- | --- | --- |
+| US-01 | **As an** integrator, **I want** to install the bundle, point it at my user entity and implement two contracts **so that** signed-in, reachable users get the dock. | [INSTALLATION](INSTALLATION.md#requirements) ([user entity](INSTALLATION.md#your-user-entity), [routes](INSTALLATION.md#routes), [database](INSTALLATION.md#database), [contracts](INSTALLATION.md#contracts-to-implement), [render the dock](INSTALLATION.md#render-the-dock)) · [CONFIGURATION — Profiles](CONFIGURATION.md#profiles) · [USAGE — Contracts](USAGE.md#contracts) |
+| US-02 | **As a** user, **I want** direct messages with the people I may reach (unread counts, reactions, receipts, edit / delete window) **so that** I can talk one to one. | [USAGE — Conversations and permissions](USAGE.md#conversations-and-permissions) · [USAGE — JSON API](USAGE.md#json-api) · [CONFIGURATION — Rate limits](CONFIGURATION.md#rate-limits) |
+| US-03 | **As a** project member, **I want** application channels (e.g. one per project) **so that** the whole team shares one conversation. | [USAGE — `ChatChannelProviderInterface`](USAGE.md#chatchannelproviderinterface-optional) · [USAGE — Conversations and permissions](USAGE.md#conversations-and-permissions) |
+| US-04 | **As a** user, **I want** to write to "Support" **so that** any agent can answer, resolve and reopen my thread from a shared inbox. | [USAGE — Support inbox](USAGE.md#support-inbox) · [USAGE — Opening conversations from your pages](USAGE.md#opening-conversations-from-your-pages) · [USAGE — Events](USAGE.md#events) |
+| US-05 | **As a** user, **I want** typing indicators, presence, read receipts, buzzes and sounds across tabs **so that** the chat feels live. | [INSTALLATION — Realtime (Mercure)](INSTALLATION.md#realtime-mercure) · [USAGE — User settings](USAGE.md#user-settings) · [USAGE — Timeouts](USAGE.md#timeouts) · [CONFIGURATION — Reference](CONFIGURATION.md#reference) (`realtime`, `cache_pool`, `presence_ttl`) |
+| US-06 | **As a** user, **I want** Web Push when no tab is visible and an email digest of what stays unread **so that** I do not miss messages nor get notified twice. | [USAGE — Web Push](USAGE.md#web-push) · [USAGE — Email digest](USAGE.md#email-digest) · [USAGE — Messenger](USAGE.md#messenger-retries-and-failures) · [CONFIGURATION — Reference](CONFIGURATION.md#reference) (`push`, `digest.*`) |
+| US-07 | **As a** user, **I want** a full-page chat that works without JavaScript **so that** I can read and answer in a page of the application. | [USAGE — Full-page chat](USAGE.md#full-page-chat) · [CONFIGURATION — Reference](CONFIGURATION.md#reference) (`page_layout`) |
+| US-08 | **As an** integrator, **I want** overridable Twig `<template>` markup, `--nowo-chat-*` tokens, icons, bottom-bar avoidance and a dock that hides to the side **so that** it matches my design system. | [USAGE — Customising the markup](USAGE.md#customising-the-markup) · [USAGE — Theme tokens](USAGE.md#theme-tokens) ([tucking the dock away](USAGE.md#tucking-the-dock-away)) · [USAGE — Translations](USAGE.md#translations) · [INSTALLATION — Icons](INSTALLATION.md#icons) · [USAGE — Front end](USAGE.md#front-end-iife-or-your-bundler) |
+| US-09 | **As a** data controller, **I want** export / erasure helpers and a retention purge **so that** chat data follows GDPR rules. | [USAGE — Privacy](USAGE.md#privacy) · [INSTALLATION — Retention purge](INSTALLATION.md#retention-purge) · [CONFIGURATION — Reference](CONFIGURATION.md#reference) (`retention_days`) |
+| US-10 | **As a** user, **I want** links to the application shown as preview cards and page elements that open a conversation **so that** the app and the chat stay connected. | [USAGE — Link previews](USAGE.md#link-previews) · [USAGE — Opening conversations from your pages](USAGE.md#opening-conversations-from-your-pages) |
 
 **Out of scope:** end-to-end encryption, video/voice calls, federation with external chat networks, and behavior outside declared PHP/Symfony compatibility ranges.
 
@@ -42,7 +46,7 @@ There is no separate executable spec language (for example Gherkin); Spec Kit sp
 
 **Goal:** floating LinkedIn-style chat for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens.
 
-**Current state:** `1.0` — implemented and covered by the baseline spec [`specs/001-baseline/spec.md`](../specs/001-baseline/spec.md) (user scenarios US-01…US-10, `FR-*` by domain) and its 100% code inventory. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design.
+**Current state:** `1.2.x` — implemented and covered by the baseline spec [`specs/001-baseline/spec.md`](../specs/001-baseline/spec.md) (user scenarios US-01…US-10, `FR-*` by domain) and its 100% code inventory. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design.
 
 **In scope**
 
@@ -51,7 +55,7 @@ There is no separate executable spec language (for example Gherkin); Spec Kit sp
 - Realtime through Mercure private topics (polling fallback), presence, typing, read receipts, buzz, reactions, edit / delete window.
 - Web Push and an unread-messages email digest through Messenger; link previews through the host's provider.
 - GDPR export / erasure helpers and the `nowo:chat:purge` retention command.
-- Overridable Twig `<template>` markup, `--nowo-chat-*` tokens, Symfony UX Icons; 7 locales.
+- Overridable Twig `<template>` markup, `--nowo-chat-*` tokens (colours, shapes, shadows, sizes), bottom-bar avoidance (`data-nowo-chat-avoid`, Symfony toolbar), the dock tucked into a right-edge tab (1.2), Symfony UX Icons; 7 locales.
 - Documented integration (root `README.md` and `docs/`).
 - Configuration in [`CONFIGURATION.md`](CONFIGURATION.md) and runtime behavior in [`USAGE.md`](USAGE.md).
 - Browser entry `nowo-chat.js` built from TypeScript via Vite.
@@ -61,7 +65,7 @@ There is no separate executable spec language (for example Gherkin); Spec Kit sp
 
 - Managing host users, roles or permissions (delegated to host providers through the contracts).
 - Running a Mercure hub, a Web Push stack or a mailer (the host provides them).
-- Attachments, message search and threads inside conversations (not in 1.0).
+- Attachments, message search and threads inside conversations (not in 1.x).
 - **`demo/`** UI: illustrative unless explicitly documented as stable API.
 
 ---
@@ -82,6 +86,12 @@ There is no separate executable spec language (for example Gherkin); Spec Kit sp
 | `REQ-DEMO-007` | `demo/Makefile`, demo Makefiles | `update-bundle` before demo tests in `release-check`. |
 | `REQ-MAKE-001` | Root `Makefile` | Docker-driven development workflow for the bundle. |
 | `REQ-MAKE-008` | Root `Makefile` | `update-deps` via shared `.scripts/`. |
+| `REQ-MAKE-002` | Root `Makefile` | `release-check` runs its steps sequentially in spec order. |
+| `REQ-CS-008` | Root `Makefile` | `make igor` worker-state audit (FrankenPHP). |
+| `REQ-TWIG-005` | Root `Makefile` | `check-no-raw-html-form`: no raw `<form>` / `<input>` / `<textarea>` / `<select>` in Twig. |
+| `REQ-GIT-001` | Root `Makefile` | `setup-hooks`, `check-no-cursor-coauthor`, `strip-cursor-coauthor-from-history`. |
+| `REQ-TEST-011` | Root / demo `Makefile` | `demo-smoke`: the demo boots and answers HTTP 200. |
+| `REQ-DEMO-013` | `demo/symfony8/Makefile` | `test-e2e` (Playwright) and `demo-screenshots` (WebP under `docs/images/demo/`). |
 
 When you change scripted behavior, update the existing `REQ-*` comment or add a new ID and document it here.
 
@@ -136,5 +146,7 @@ In Cursor Agent, start a new feature with `/speckit-specify <description>`. For 
 - [`specs/001-baseline/spec.md`](../specs/001-baseline/spec.md)
 - [`USAGE.md`](USAGE.md)
 - [`CONFIGURATION.md`](CONFIGURATION.md)
+- [`INSTALLATION.md`](INSTALLATION.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 - [`RELEASE.md`](RELEASE.md)
+- [`DEMO-FRANKENPHP.md`](DEMO-FRANKENPHP.md)

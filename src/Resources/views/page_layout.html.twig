@@ -1,11 +1,16 @@
-{# Default layout of the full-page chat: set `page_layout` to your own (it must define `title` and `body` blocks). #}
+{#
+ # Default layout of the full-page chat (Twig global `nowo_chat_kit_page_layout`). Set `page_layout` to your own:
+ # it must define the `title`, `stylesheets`, `javascripts` and `body` blocks (page.html.twig appends the chat
+ # stylesheet and script to the first two with parent()).
+ #}
 <!doctype html>
 <html lang="{{ app.request.locale|default('en') }}">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>{% block title %}{% endblock %}</title>
-        <link rel="stylesheet" href="{{ asset('css/nowo-chat.css', 'nowo_chat_kit') }}">
+        {% block stylesheets %}{% endblock %}
+        {% block javascripts %}{% endblock %}
     </head>
     <body>
         {% block body %}{% endblock %}

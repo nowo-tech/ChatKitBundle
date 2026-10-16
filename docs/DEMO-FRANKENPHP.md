@@ -12,6 +12,7 @@ This document describes how the **Chat Kit Bundle** demo runs under **FrankenPHP
   - [Start (development)](#start-development)
 - [Production configuration](#production-configuration)
 - [Switching classic vs worker (`FRANKENPHP_MODE`)](#switching-classic-vs-worker-frankenphp_mode)
+- [Timeouts](#timeouts)
 - [Troubleshooting](#troubleshooting)
   - [Twig or PHP changes do not appear](#twig-or-php-changes-do-not-appear)
   - [Demo does not start](#demo-does-not-start)
@@ -57,7 +58,8 @@ make -C demo up-symfony8
 - **Chat Kit Bundle** — Symfony 8.1 (PHP 8.5) app with the real chat: Doctrine users seeded by `make -C demo/symfony8 setup-db` (`alice`, `bob`, `carol` and the support agent `support`, password `password`), the dock on every signed-in page, a **General** channel, a support thread and the full-page chat at `/chat/`. See [`demo/README.md`](../demo/README.md).
 - **Tests**: `make -C demo/symfony8 test` (PHPUnit), `make -C demo/symfony8 test-e2e` (Playwright: dock send, full page), `make -C demo/symfony8 demo-screenshots` (README image), `make demo-smoke` from the bundle root (boot + HTTP 200, REQ-TEST-011).
 - **PHP / Symfony policy**: the demo tracks the latest PHP (8.5) and Symfony 8.1; the bundle itself supports PHP 8.3+ and Symfony 7.4 / 8.x (see the README requirements).
-- **Pentatrion Vite + pnpm** — demo entry `assets/app.ts` compiles bundle TypeScript (`@bundle`)
+- **The chat dock as an integrator ships it** — `templates/base.html.twig` includes `@NowoChatKitBundle/dock.html.twig`, which loads the bundle's IIFE `js/nowo-chat.js` and `css/nowo-chat.css` from `/bundles/nowochatkit/` (`assets:install`)
+- **Pentatrion Vite + pnpm** — only for the demo's own entry `assets/app.ts` (demo chrome); it does not compile the bundle TypeScript
 - **MySQL** — ready for the chat Doctrine schema (no SQLite / `*.db`)
 
 Example `config/bundles.php`:
@@ -108,6 +110,23 @@ docker compose up -d --force-recreate
 
 The entrypoint copies `Caddyfile.dev` when mode is `classic`.
 
+## Timeouts
+
+The only blocking call the bundle makes inside a web request is the Mercure publish, through the application's
+`HubInterface` / Symfony HttpClient (see [CONFIGURATION — Timeouts](CONFIGURATION.md#timeouts) and
+[USAGE — Timeouts](USAGE.md#timeouts)). The demo layers its deadlines innermost first (REQ-RUNTIME-001):
+
+| Layer | Where in the demo | Value |
+| --- | --- | --- |
+| Mercure hub HTTP client | `framework.http_client.default_options.timeout` (`config/packages/framework.yaml`) | 5 s |
+| PHP `max_execution_time` (and `max_input_time`) | `docker/php-dev.ini` | 30 s |
+| Caddy / FrankenPHP write timeout | `servers { timeouts { write 60s } }` in `docker/frankenphp/Caddyfile` and `Caddyfile.dev` | 60 s |
+| FrankenPHP `max_wait_time` | `frankenphp { max_wait_time 30s }` in both Caddyfiles | 30 s (wait for a free PHP thread, then 504) |
+
+**HTTP client 5 s < PHP 30 s < Caddy write 60 s.** FrankenPHP `max_wait_time` caps how long a request waits for a free
+PHP thread, so a saturated pool answers 504 instead of growing an endless queue. Raise the three together if you change one. A timed-out publish is logged and the
+request still succeeds; the dock catches up by polling.
+
 ## Troubleshooting
 
 ### Twig or PHP changes do not appear
@@ -124,7 +143,7 @@ Pentatrion needs `public/build/entrypoints.json`. Run `make -C demo/symfony8 ass
 
 ### Browser console: 404 on `nowo-chat.js`
 
-The demo home uses Pentatrion (`vite_entry_script_tags`), not the IIFE. The IIFE is still published under `/bundles/nowochatkit/` for hosts that use `assets:install`. Run `make -C demo/symfony8 assets-install` if you need that path.
+The dock runs from the bundle's IIFE: `base.html.twig` includes `@NowoChatKitBundle/dock.html.twig`, which loads `/bundles/nowochatkit/js/nowo-chat.js` (asset package `nowo_chat_kit`). Pentatrion (`vite_entry_script_tags('app')`) only serves the demo's own `assets/app.ts`. A 404 means the public assets are not installed: run `make -C demo/symfony8 assets-install` (`assets:install public --symlink --relative`, also part of `make install`). If the file itself is stale, rebuild it from the bundle root with `make assets`.
 
 ### Database empty
 

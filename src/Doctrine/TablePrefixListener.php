@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Doctrine;
 
+use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\ORM\Event\LoadClassMetadataEventArgs;
+use Doctrine\ORM\Events;
 
 /**
  * Prepends `doctrine.table_prefix` to the bundle's own tables, indexes and unique constraints (REQ-ORM-002), so several
  * applications can share one database. Only entities of this bundle are touched; an empty prefix changes nothing.
  */
+#[AsDoctrineListener(event: Events::loadClassMetadata)]
 final readonly class TablePrefixListener
 {
     private const string NAMESPACE = 'Nowo\\ChatKitBundle\\Entity\\';

@@ -199,18 +199,14 @@ Every Nowo bundle with Spec Kit must ship:
 **Audit command (maintainers):**
 
 ```bash
-# Production units = lib PHP + src PHP + Twig + SVG icons + translation YAML + TS sources (not Vitest, not Vite IIFE).
-find lib -name '*.php' | wc -l
-find src -name '*.php' | wc -l
-find src -name '*.twig' | wc -l
-find src -name '*.svg' | wc -l
-find src/Resources/translations -name '*.yaml' | wc -l
-find src/Resources/assets/src -name '*.ts' | wc -l
+# Production units = PHP + Twig + translation/config YAML + TS sources + the stylesheet under src/
+# (Vitest files under src/Resources/assets/tests/ excluded; the Vite IIFE nowo-chat.js and
+# src/Resources/assets/README.md are not counted).
+find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) \
+  -not -path 'src/Resources/assets/tests/*' | wc -l
 ```
 
-The **Total production sources** row in `code-inventory.md` must match this count (**206** = 115 + 62 + 1 + 1 + 7 + 20).
-
-In **ChatKitBundle**, the baseline inventory covers **91/91** production units (PHP, Twig, translations, TypeScript sources and the stylesheet; Vitest files excluded) — see [`specs/001-baseline/code-inventory.md`](../specs/001-baseline/code-inventory.md). Vite `nowo-chat.js` is `FR-BUILD-001` output, not an extra row.
+The **Total** row of the coverage summary in [`specs/001-baseline/code-inventory.md`](../specs/001-baseline/code-inventory.md) must match this count: **94** in **ChatKitBundle** (PHP, Twig, translations, TypeScript sources and the stylesheet). The Vite output `src/Resources/public/js/nowo-chat.js` is documented as `FR-BUILD-001` (an output of `index.ts` / `iife.ts`), not an extra row.
 
 ---
 

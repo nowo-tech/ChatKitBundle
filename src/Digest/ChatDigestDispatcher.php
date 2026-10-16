@@ -16,11 +16,15 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Psr\Cache\CacheItemPoolInterface;
+use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
 /**
  * The delayed digest check: still unread conversations the user takes part in, the user reachable, opted in,
  * the app not open in any tab, no digest in the last `interval_minutes` — then one email through the sender.
+ *
+ * Messenger handler (when symfony/messenger is installed); signed (JSON + HMAC) when the application signs its messages.
  */
+#[AsMessageHandler(sign: true)]
 final readonly class ChatDigestDispatcher
 {
     /**

@@ -77,6 +77,7 @@ Update README **Tests and coverage** percentages after each release when coverag
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 1.3.0 | 2026-10-16 | Full bundle-standards compliance: dock Form types (no raw form HTML), no read-state change on GET, `symfony/asset` required, page layout asset blocks. |
 | 1.2.0 | 2026-10-16 | Hide to the side: the dock tucks into a right-edge tab with the unread count. |
 | 1.1.1 | 2026-10-16 | Phones: round launcher above the Symfony toolbar and marked footers. |
 | 1.1.0 | 2026-10-16 | Shape / size tokens, `data-nowo-chat-avoid`, dock above the measured Symfony toolbar. |

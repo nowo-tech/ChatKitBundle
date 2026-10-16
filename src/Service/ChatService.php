@@ -37,7 +37,7 @@ final readonly class ChatService
      * Builds the service from the entity manager, repositories, renderer, notifier and the offered reactions.
      *
      * @param list<string> $reactions emojis offered for reactions (anything else is rejected)
-     * @param ClockInterface $clock Clock for message, edit and delete timestamps
+     * @param ClockInterface $clock Clock for every timestamp it writes (conversations, participants, messages, reactions, resolution)
      * @param EventDispatcherInterface|null $events Receives the chat events; null dispatches none
      */
     public function __construct(
@@ -68,7 +68,7 @@ final readonly class ChatService
             return $conversation;
         }
 
-        return $this->create(ChatConversation::direct($actor, $other), [$actor, $other]);
+        return $this->create(ChatConversation::direct($actor, $other, $this->clock->now()), [$actor, $other]);
     }
 
     /**
@@ -82,7 +82,7 @@ final readonly class ChatService
     public function openChannel(ChatUserInterface $actor, ChatChannel $channel): ChatConversation
     {
         $conversation = $this->conversations->findChannel($channel->key)
-            ?? $this->create(ChatConversation::channel($channel->key), []);
+            ?? $this->create(ChatConversation::channel($channel->key, $this->clock->now()), []);
         $this->participant($conversation, $actor);
         $this->entityManager->flush();
 
@@ -101,7 +101,7 @@ final readonly class ChatService
     public function openSupport(ChatUserInterface $owner, ?array $context = null): ChatConversation
     {
         $conversation = $this->conversations->findSupportFor($owner)
-            ?? $this->create(ChatConversation::support($owner), [$owner]);
+            ?? $this->create(ChatConversation::support($owner, $this->clock->now()), [$owner]);
         if ($context !== null) {
             $conversation->setSupportContext(is_string($context['url'] ?? null) ? $context['url'] : null, is_string($context['label'] ?? null) ? $context['label'] : null);
             $this->entityManager->flush();
@@ -212,7 +212,7 @@ final readonly class ChatService
         if ($existing instanceof ChatReaction) {
             $this->entityManager->remove($existing);
         } else {
-            $this->entityManager->persist(new ChatReaction($message, $user, $emoji));
+            $this->entityManager->persist(new ChatReaction($message, $user, $emoji, $this->clock->now()));
         }
         $this->entityManager->flush();
         $reactions = $this->reactionsOf($message);
@@ -229,7 +229,7 @@ final readonly class ChatService
      */
     public function resolveSupport(ChatUserInterface $agent, ChatConversation $conversation): void
     {
-        $conversation->resolve($agent);
+        $conversation->resolve($agent, $this->clock->now());
         $this->entityManager->flush();
         $this->notifier->supportStatusChanged($conversation);
         $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $agent));
@@ -284,7 +284,7 @@ final readonly class ChatService
     {
         $participant = $this->participants->findOneBy(['conversation' => $conversation, 'user' => $user]);
         if (!$participant instanceof ChatParticipant) {
-            $participant = new ChatParticipant($conversation, $user);
+            $participant = new ChatParticipant($conversation, $user, $this->clock->now());
             $this->entityManager->persist($participant);
         }
 
@@ -335,7 +335,7 @@ final readonly class ChatService
     {
         $this->entityManager->persist($conversation);
         foreach ($participants as $user) {
-            $this->entityManager->persist(new ChatParticipant($conversation, $user));
+            $this->entityManager->persist(new ChatParticipant($conversation, $user, $this->clock->now()));
         }
         $this->entityManager->flush();
 

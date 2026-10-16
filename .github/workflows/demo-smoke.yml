@@ -1,4 +1,5 @@
 # REQ-TEST-011 — Demo smoke: boot FrankenPHP demos and assert HTTP 200.
+# REQ-DEMO-013 — then run the Playwright e2e suite against the running demo (schedule + manual + tags).
 name: Demo smoke
 
 on:
@@ -9,9 +10,12 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
   demo-smoke:
-    name: Demo release-verify (HTTP 200)
+    name: Demo release-verify (HTTP 200) + e2e
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -24,3 +28,12 @@ jobs:
 
       - name: Run demo smoke (REQ-TEST-011)
         run: make demo-smoke
+
+      - name: Run Playwright e2e (REQ-DEMO-013)
+        run: |
+          make -C demo/symfony8 up
+          make -C demo/symfony8 test-e2e
+
+      - name: Stop demo
+        if: always()
+        run: make -C demo/symfony8 down

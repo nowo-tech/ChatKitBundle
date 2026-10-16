@@ -11,6 +11,7 @@ use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
@@ -26,15 +27,17 @@ use const DATE_ATOM;
 final readonly class ChatPersonalData
 {
     /**
-     * Builds the personal data hooks from the entity manager and the chat settings repository.
+     * Builds the personal data hooks from the entity manager and the chat repositories.
      *
      * @param EntityManagerInterface $entityManager Runs the export queries and the bulk erasure
      * @param ChatUserSettingsRepository $settings Loads the user's chat settings for the export
+     * @param ChatConversationRepository $conversations Finds the user's own support thread for the erasure
      * @param ClockInterface $clock Clock stamping the erasure tombstones
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
         private ChatUserSettingsRepository $settings,
+        private ChatConversationRepository $conversations,
         private ClockInterface $clock = new Clock(),
     ) {
     }
@@ -97,7 +100,7 @@ final readonly class ChatPersonalData
         $qb()->delete(ChatParticipant::class, 'p')->where('p.user = :user')->setParameter('user', $user)->getQuery()->execute();
         $qb()->delete(ChatUserSettings::class, 's')->where('s.user = :user')->setParameter('user', $user)->getQuery()->execute();
 
-        $support = $this->entityManager->getRepository(ChatConversation::class)->findOneBy(['supportOwner' => $user]);
+        $support = $this->conversations->findSupportFor($user);
         if ($support instanceof ChatConversation) {
             $messageIds = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->getSingleColumnResult();
             if ($messageIds !== []) {

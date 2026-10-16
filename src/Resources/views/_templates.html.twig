@@ -2,11 +2,15 @@
  # Markup of the floating dock, as <template> elements the dock script clones and fills through `data-part`
  # hooks (text always via textContent). Restyle with the --nowo-chat-* CSS tokens or redefine any block in
  # templates/bundles/NowoChatKitBundle/_templates.html.twig ({% extends '@!NowoChatKitBundle/_templates.html.twig' %}).
- # Keep the data-part / data-icon / data-filter attributes. An empty `data-icon` span gets the built-in SVG;
+ # Keep the data-part / data-icon / data-filter attributes. The search boxes, the composer and the inline editor are
+ # Symfony Form views (nowo_chat_dock_forms(): ChatDockSearchType, ChatDockComposerType, ChatDockEditType) rendered
+ # with form_start / form_widget / form_end; their attributes (class, data-part, rows …) come from those types. An empty `data-icon` span gets the built-in SVG;
  # put your own SVG inside it to replace the icon.
  #}
 {# Same locale as the dock configuration (the request's), whatever the shared translator was left at. #}
 {% set nowo_chat_locale = nowo_chat_locale|default(app.request.locale|default(null)) %}
+{# Symfony Form views of the search boxes, the composer and the inline editor (REQ-TWIG-005): never raw form tags. #}
+{% set nowo_chat_forms = nowo_chat_dock_forms() %}
 {% macro icon_button(icon, label, part, class = '') %}
     <button type="button" class="nowo-chat-icon-btn {{ class }}" data-part="{{ part }}" aria-label="{{ label }}" title="{{ label }}"><span data-icon="{{ icon }}"></span></button>
 {% endmacro %}
@@ -32,7 +36,8 @@
                     <div class="nowo-chat-panel__list">
                         <div class="nowo-chat-search-wrap">
                             <span data-icon="search" data-icon-size="16"></span>
-                            <input type="search" class="nowo-chat-search" data-part="search" placeholder="{{ 'chat.search'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" aria-label="{{ 'chat.search'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" autocomplete="off">
+                            {% set nowo_chat_label = 'chat.search'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                            {{ form_widget(nowo_chat_forms.search.query, {attr: nowo_chat_forms.search.query.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
                         </div>
                         <div class="nowo-chat-filters" role="group" aria-label="{{ 'chat.filter_label'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-part="filters">
                             <button type="button" class="nowo-chat-chip" aria-pressed="true" data-filter="all">{{ 'chat.filter_all'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
@@ -49,7 +54,8 @@
                         </div>
                         <div class="nowo-chat-search-wrap">
                             <span data-icon="search" data-icon-size="16"></span>
-                            <input type="search" class="nowo-chat-search" data-part="picker-input" placeholder="{{ 'chat.search_people'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" aria-label="{{ 'chat.search_people'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" autocomplete="off">
+                            {% set nowo_chat_label = 'chat.search_people'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                            {{ form_widget(nowo_chat_forms.search.people, {attr: nowo_chat_forms.search.people.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
                         </div>
                         <div class="nowo-chat-picker__results" data-part="picker-results"></div>
                     </div>
@@ -160,16 +166,24 @@
                 <button type="button" class="nowo-chat-jump" data-part="jump" hidden></button>
                 <p class="nowo-chat-typing" aria-live="polite" data-part="typing" hidden></p>
                 <p class="nowo-chat-notice" data-part="notice" hidden></p>
-                <form class="nowo-chat-composer" data-part="composer" novalidate>
+                {% set nowo_chat_composer = nowo_chat_forms.composer %}
+                {{ form_start(nowo_chat_composer) }}
                     <div class="nowo-chat-composer__field">
-                        <textarea class="nowo-chat-composer__input" data-part="input" rows="1" placeholder="{{ 'chat.composer_placeholder'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" aria-label="{{ 'chat.composer_placeholder'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}"></textarea>
+                        {% set nowo_chat_label = 'chat.composer_placeholder'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                        {{ form_widget(nowo_chat_composer.body, {attr: nowo_chat_composer.body.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
                         <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__emoji" data-part="emoji-toggle" data-nowo-chat-emoji-toggle aria-label="{{ 'chat.emoji'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" title="{{ 'chat.emoji'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" aria-expanded="false"><span data-icon="smile"></span></button>
                     </div>
+                    {# Fields an application adds through a form type extension. #}
+                    {% for child in nowo_chat_composer %}
+                        {% if not child.rendered %}
+                            {{ form_row(child) }}
+                        {% endif %}
+                    {% endfor %}
                     <button type="submit" class="nowo-chat-composer__send" data-part="send" aria-label="{{ 'chat.send'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" title="{{ 'chat.send'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}"><span data-icon="send"></span></button>
                     <p class="nowo-chat-composer__hint">{{ 'chat.composer_hint'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</p>
                     <span class="nowo-chat-composer__counter" data-part="counter" hidden></span>
                     <span class="nowo-chat-sr-only" aria-live="polite" data-part="counter-announce"></span>
-                </form>
+                {{ form_end(nowo_chat_composer) }}
             </div>
             <div class="nowo-chat-sr-only nowo-chat-window__live" aria-live="polite" aria-atomic="true" data-part="live"></div>
         </section>
@@ -209,13 +223,19 @@
     </template>
     {# Inline editor that replaces the bubble while editing. #}
     <template data-nowo-chat-template="edit-form">
-        <form class="nowo-chat-edit" novalidate>
-            <textarea class="nowo-chat-edit__input" data-part="input" rows="2" aria-label="{{ 'chat.edit'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}"></textarea>
+        {% set nowo_chat_edit = nowo_chat_forms.edit %}
+        {{ form_start(nowo_chat_edit) }}
+            {{ form_widget(nowo_chat_edit.body, {attr: nowo_chat_edit.body.vars.attr|merge({'aria-label': 'chat.edit'|trans({}, 'NowoChatKitBundle', nowo_chat_locale)})}) }}
+            {% for child in nowo_chat_edit %}
+                {% if not child.rendered %}
+                    {{ form_row(child) }}
+                {% endif %}
+            {% endfor %}
             <span class="nowo-chat-edit__actions">
                 <button type="button" class="nowo-chat-edit__cancel" data-part="cancel">{{ 'chat.cancel'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
                 <button type="submit" class="nowo-chat-edit__save" data-part="save">{{ 'chat.save'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
             </span>
-        </form>
+        {{ form_end(nowo_chat_edit) }}
     </template>
     {# Inline confirmation before deleting. #}
     <template data-nowo-chat-template="delete-confirm">

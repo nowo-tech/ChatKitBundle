@@ -5,6 +5,9 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+  # REQ-GH-008: weekly scheduled run (Monday 06:00 UTC) catches upstream dependency drift.
+  schedule:
+    - cron: '0 6 * * 1'
 
 env:
   COMPOSER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -65,7 +68,7 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer dependencies
         uses: actions/cache@v6
@@ -139,7 +142,7 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer dependencies
         uses: actions/cache@v6
@@ -191,7 +194,7 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer dependencies
         uses: actions/cache@v6
@@ -211,9 +214,9 @@ jobs:
         id: verify-changed-files
         run: |
           if [ -n "$(git status --porcelain -- '*.php')" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Commit changes
@@ -243,7 +246,7 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer dependencies
         uses: actions/cache@v6
@@ -280,7 +283,7 @@ jobs:
 
       - name: Get Composer cache directory
         id: composer-cache
-        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Cache Composer dependencies
         uses: actions/cache@v6
@@ -293,8 +296,16 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress --no-interaction
 
+      # REQ-TEST-003: the job fails when tests fail (pipefail) or PHP line coverage is below 99%.
       - name: Run tests with coverage
-        run: composer test-coverage
+        run: |
+          set -o pipefail
+          composer test-coverage | tee coverage-php.txt
+
+      - name: Enforce PHP coverage gate (>= 99% lines)
+        run: |
+          chmod +x .scripts/coverage-fail-under.sh
+          ./.scripts/coverage-fail-under.sh coverage-php.txt 99
 
       - name: Validate coverage file
         run: |
@@ -304,7 +315,9 @@ jobs:
           fi
           echo "coverage.xml generated"
 
+      # REQ-GH-007: skip Codecov for Dependabot PRs (no token, saves quota).
       - name: Upload coverage to Codecov
+        if: ${{ !cancelled() && github.event.pull_request.user.login != 'dependabot[bot]' }}
         uses: codecov/codecov-action@v7
         with:
           files: coverage.xml
@@ -329,5 +342,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # REQ-TEST-003: Vitest thresholds + min(statements/branches/functions/lines) >= 90% gate.
       - name: Run TypeScript tests with coverage
-        run: pnpm run test:coverage
+        run: |
+          set -o pipefail
+          pnpm run test:coverage | tee coverage-ts.txt
+
+      - name: Enforce TS coverage gate (>= 90%)
+        env:
+          TS_COVERAGE_MIN: '90'
+        run: |
+          chmod +x .scripts/ts-coverage-percent.sh
+          ./.scripts/ts-coverage-percent.sh coverage-ts.txt

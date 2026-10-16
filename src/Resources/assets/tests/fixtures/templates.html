@@ -21,7 +21,7 @@
                     <div class="nowo-chat-panel__list">
                         <div class="nowo-chat-search-wrap">
                             <span data-icon="search" data-icon-size="16"></span>
-                            <input type="search" class="nowo-chat-search" data-part="search" placeholder="Search conversations" aria-label="Search conversations" autocomplete="off">
+                                                        <input type="search" id="nowo_chat_search_query" name="nowo_chat_search[query]" class="nowo-chat-search" data-part="search" autocomplete="off" placeholder="Search conversations" aria-label="Search conversations" />
                         </div>
                         <div class="nowo-chat-filters" role="group" aria-label="Filter conversations" data-part="filters">
                             <button type="button" class="nowo-chat-chip" aria-pressed="true" data-filter="all">All</button>
@@ -39,7 +39,7 @@
                         </div>
                         <div class="nowo-chat-search-wrap">
                             <span data-icon="search" data-icon-size="16"></span>
-                            <input type="search" class="nowo-chat-search" data-part="picker-input" placeholder="Search people" aria-label="Search people" autocomplete="off">
+                                                        <input type="search" id="nowo_chat_search_people" name="nowo_chat_search[people]" class="nowo-chat-search" data-part="picker-input" autocomplete="off" placeholder="Search people" aria-label="Search people" />
                         </div>
                         <div class="nowo-chat-picker__results" data-part="picker-results"></div>
                     </div>
@@ -138,12 +138,13 @@
                 <button type="button" class="nowo-chat-jump" data-part="jump" hidden></button>
                 <p class="nowo-chat-typing" aria-live="polite" data-part="typing" hidden></p>
                 <p class="nowo-chat-notice" data-part="notice" hidden></p>
-                <form class="nowo-chat-composer" data-part="composer" novalidate>
+                                <form name="nowo_chat_composer" method="post" class="nowo-chat-composer" data-part="composer" novalidate="novalidate">
                     <div class="nowo-chat-composer__field">
-                        <textarea class="nowo-chat-composer__input" data-part="input" rows="1" placeholder="Write a message…" aria-label="Write a message…"></textarea>
+                                                <textarea id="nowo_chat_composer_body" name="nowo_chat_composer[body]" class="nowo-chat-composer__input" data-part="input" rows="1" placeholder="Write a message…" aria-label="Write a message…"></textarea>
                         <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__emoji" data-part="emoji-toggle" data-nowo-chat-emoji-toggle aria-label="Emoji" title="Emoji" aria-expanded="false"><span data-icon="smile"></span></button>
                     </div>
-                    <button type="submit" class="nowo-chat-composer__send" data-part="send" aria-label="Send" title="Send"><span data-icon="send"></span></button>
+                                                                                                                                        <input type="hidden" id="nowo_chat_composer__token" name="nowo_chat_composer[_token]" data-controller="csrf-protection" value="csrf-token" />
+                                                                <button type="submit" class="nowo-chat-composer__send" data-part="send" aria-label="Send" title="Send"><span data-icon="send"></span></button>
                     <p class="nowo-chat-composer__hint">Enter to send · Shift+Enter for a new line</p>
                     <span class="nowo-chat-composer__counter" data-part="counter" hidden></span>
                     <span class="nowo-chat-sr-only" aria-live="polite" data-part="counter-announce"></span>
@@ -185,9 +186,10 @@
         </a>
     </template>
         <template data-nowo-chat-template="edit-form">
-        <form class="nowo-chat-edit" novalidate>
-            <textarea class="nowo-chat-edit__input" data-part="input" rows="2" aria-label="Edit"></textarea>
-            <span class="nowo-chat-edit__actions">
+                <form name="nowo_chat_edit" method="post" class="nowo-chat-edit" novalidate="novalidate">
+            <textarea id="nowo_chat_edit_body" name="nowo_chat_edit[body]" class="nowo-chat-edit__input" data-part="input" rows="2" aria-label="Edit"></textarea>
+                                                                            <input type="hidden" id="nowo_chat_edit__token" name="nowo_chat_edit[_token]" data-controller="csrf-protection" value="csrf-token" />
+                                        <span class="nowo-chat-edit__actions">
                 <button type="button" class="nowo-chat-edit__cancel" data-part="cancel">Cancel</button>
                 <button type="submit" class="nowo-chat-edit__save" data-part="save">Save</button>
             </span>

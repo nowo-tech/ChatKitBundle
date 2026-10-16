@@ -705,11 +705,11 @@ describe('ChatDock', () => {
     footer.getBoundingClientRect = () => footerRect as DOMRect;
     document.body.append(footer);
     await flush();
-    expect(offset()).toBe('0px', 'footer below the fold: flush with the bottom');
+    expect(offset(), 'footer below the fold: flush with the bottom').toBe('0px');
     footerRect = rect(window.innerHeight - 30, 48);
     window.dispatchEvent(new Event('scroll'));
     vi.advanceTimersByTime(20);
-    expect(offset()).toBe('30px', 'partly scrolled into view');
+    expect(offset(), 'partly scrolled into view').toBe('30px');
     footer.remove();
     document.body.append(toolbar);
     await flush();
@@ -721,7 +721,7 @@ describe('ChatDock', () => {
     dock.destroy();
     document.body.append(toolbar);
     await flush();
-    expect(offset()).toBe('0px', 'observers stop with the dock');
+    expect(offset(), 'observers stop with the dock').toBe('0px');
   });
 
   it('switches to the full-screen sheet on phones', async () => {

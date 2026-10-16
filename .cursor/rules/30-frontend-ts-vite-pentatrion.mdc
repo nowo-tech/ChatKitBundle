@@ -1,16 +1,9 @@
 ---
-description: Frontend rules for bundle assets with TypeScript, Vite and Pentatrion
+description: Frontend rules for the bundle's TypeScript dock (Vite library build to an IIFE, pnpm, Vitest)
 globs:
   - "src/Resources/assets/**/*.ts"
-  - "src/Resources/assets/**/*.tsx"
-  - "src/Resources/assets/**/*.js"
-  - "src/Resources/assets/**/*.jsx"
-  - "src/Resources/assets/**/*.vue"
-  - "src/Resources/assets/**/*.scss"
-  - "src/Resources/assets/**/*.sass"
-  - "src/Resources/assets/**/*.css"
   - "vite.config.ts"
-  - "vite.config.js"
+  - "vitest.config.ts"
 alwaysApply: false
 ---
 
@@ -19,14 +12,21 @@ Work only on the requested entrypoint, module, component, or stylesheet.
 Prefer:
 - strict TypeScript typing
 - small modules and focused edits
-- preserving the current Vite entrypoint strategy
+- preserving the current Vite entrypoint strategy: one library build, entry `src/Resources/assets/src/iife.ts`
+  (`index.ts` exports `mount` / `unmount` for hosts that bundle the sources themselves)
 - editing existing initialization code instead of creating parallel bootstraps
-- assuming assets live under src/Resources/assets
-- assuming generated files may end up under src/Resources/public/build
+- TypeScript sources live in `src/Resources/assets/src/`, Vitest specs in `src/Resources/assets/tests/`
+- the build output is the single IIFE `src/Resources/public/js/nowo-chat.js` (`vite.config.ts` `outDir`
+  `src/Resources/public/js`), produced by `make assets` (`pnpm run build` = `vite build` in the container); the
+  stylesheet `src/Resources/public/css/nowo-chat.css` is hand-written source, not a build output
+- the dock markup comes from Twig `<template>` blocks in `src/Resources/views/_templates.html.twig`; keep `data-part`
+  hooks in sync between Twig and `templates.ts` / `dock.ts` / `thread.ts`
+- running `make test-ts` (Vitest with coverage) after a change
 - preserving integration points used by Twig or Symfony rendering
 - JSDoc in English for exported APIs, non-obvious functions, and complex behavior
 
-Do not inspect dist, build, minified, or generated assets.
+Do not inspect the minified `src/Resources/public/js/nowo-chat.js` or other generated assets.
+The bundle does not use Pentatrion Vite Bundle (only the demo app does, for its own `assets/app.ts`); do not add `vite_entry_*` tags to bundle templates.
 Do not add JSDoc in Spanish.
 Do not edit generated build output.
 Do not rewrite the whole frontend architecture unless explicitly requested.

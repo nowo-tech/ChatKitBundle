@@ -241,6 +241,23 @@ final class ChatEntitiesTest extends TestCase
         self::assertLessThanOrEqual(new DateTimeImmutable(), $reaction->getCreatedAt());
     }
 
+    public function testTimestampsComeFromTheCallerClock(): void
+    {
+        $at    = new DateTimeImmutable('2026-01-02 03:04:05');
+        $user  = $this->user(4);
+        $other = $this->user(9);
+
+        foreach ([ChatConversation::direct($user, $other, $at), ChatConversation::channel('project:acme', $at), ChatConversation::support($user, $at)] as $conversation) {
+            self::assertSame($at, $conversation->getCreatedAt());
+            self::assertSame($at, $conversation->getLastMessageAt());
+        }
+        $support = ChatConversation::support($user);
+        $support->resolve($other, $at);
+        self::assertSame($at, $support->getResolvedAt());
+        self::assertSame($at, (new ChatParticipant($support, $user, $at))->getJoinedAt());
+        self::assertSame($at, (new ChatReaction(new ChatMessage($support, $user, 'x', '<p>x</p>'), $user, '👍', $at))->getCreatedAt());
+    }
+
     public function testBuzzMessage(): void
     {
         $author = $this->user(2);

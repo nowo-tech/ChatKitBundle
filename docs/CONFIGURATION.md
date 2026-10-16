@@ -4,9 +4,12 @@
 
 - [Root key](#root-key)
 - [Profiles](#profiles)
+  - [Two profiles](#two-profiles)
+  - [How the profile is selected](#how-the-profile-is-selected)
 - [Reference](#reference)
 - [Rate limits](#rate-limits)
 - [Container parameters](#container-parameters)
+- [Timeouts](#timeouts)
 
 ## Root key
 
@@ -34,7 +37,42 @@ nowo_chat_kit:
             reactions: ['👍', '❤️', '😂', '🎉']
 ```
 
-`default_profile` **must** be a key of `profiles` (REQ-CFG-002).
+`default_profile` **must** be a key of `profiles` (REQ-CFG-002): an unknown name fails container compilation
+(`nowo_chat_kit.default_profile must reference a key defined under nowo_chat_kit.profiles.`). The profile in use also
+needs a `user_class` when DoctrineBundle is installed.
+
+### Two profiles
+
+```yaml
+nowo_chat_kit:
+    default_profile: production
+    profiles:
+        production:
+            user_class: App\Entity\User
+            realtime: true
+            push: true
+            cache_pool: cache.chat          # Redis: presence shared by every worker
+            limits:
+                send_per_minute: 20
+        staging:
+            user_class: App\Entity\User
+            realtime: false                 # polling only (no hub on staging)
+            push: false
+            cache_pool: cache.app
+```
+
+### How the profile is selected
+
+- **Only `default_profile` is active.** The extension reads that one profile at compile time: it drives the Doctrine
+  `resolve_target_entities` mapping (`user_class`), the rate limiters, the `nowo_chat_kit.<key>` container parameters,
+  the services and the dock.
+- **Other profiles are validated but not used.** Every entry under `profiles` goes through the same configuration tree
+  (types, minimums, enums), so a typo fails the build, but nothing reads it at runtime.
+- **No per-request, per-entity or per-form selection.** There is no request attribute, form option or Twig argument
+  that switches profile; a chat has one user entity and one set of tables. Switch profiles per environment instead,
+  e.g. `default_profile: '%env(CHAT_PROFILE)%'` or a `when@staging:` block that sets `default_profile: staging`.
+- There are no legacy synonym keys (`default_config` / `configs`); a configuration without `profiles` gets one profile
+  named after `default_profile` (default `default`) with every default.
 
 ## Reference
 
@@ -79,3 +117,30 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
 key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `doctrine.table_prefix`,
 `reactions`, `icon_set`, `icons`, `presence_ttl`, `limits`, `digest`).
+
+## Timeouts
+
+The bundle itself opens no subprocess and no outbound HTTP connection, and has no timeout option of its own. The only
+blocking call in a web request is the **Mercure publish**, made through the application's `HubInterface` and its Symfony
+HttpClient; Web Push and email run in Messenger workers through the host's senders. Configure the deadlines so the
+innermost one fires first (REQ-RUNTIME-001):
+
+| Layer (innermost first) | Setting | Demo value |
+| --- | --- | --- |
+| Mercure hub HTTP client | `framework.http_client.default_options.timeout` (or a scoped client for the hub) | 5 s |
+| PHP | `max_execution_time` | 30 s |
+| FrankenPHP / Caddy | `servers { timeouts { write … } }`; `frankenphp { max_wait_time … }` | write 60 s; max_wait_time 30 s |
+
+```yaml
+# config/packages/framework.yaml
+framework:
+    http_client:
+        default_options:
+            timeout: 5     # below max_execution_time
+```
+
+Rule: **HTTP client < PHP `max_execution_time` < FrankenPHP / Caddy write timeout** (and `max_wait_time` when workers
+are used). Raise them together. A failed or timed-out publish is logged and never fails the user's request: clients
+catch up by polling. Set HTTP / SMTP timeouts in your `ChatPushSenderInterface` / `ChatDigestSenderInterface`
+implementations (Messenger workers). See also [USAGE — Timeouts](USAGE.md#timeouts) and
+[DEMO-FRANKENPHP — Timeouts](DEMO-FRANKENPHP.md#timeouts).

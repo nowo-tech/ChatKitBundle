@@ -21,7 +21,7 @@ final class ChatDockIconsTest extends DatabaseTestCase
         self::assertStringContainsString('aria-hidden="true"', (string) $icons['send']);
         self::assertArrayNotHasKey('chat', $icons, 'tabler:message-circle is not in the test icon set');
 
-        $html = $this->twig()->render('@NowoChatKitBundle/_templates.html.twig');
+        $html = $this->renderDockTemplates();
         self::assertStringContainsString('<template data-nowo-chat-icon="send"><svg', $html);
     }
 }

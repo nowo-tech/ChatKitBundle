@@ -1,15 +1,31 @@
 # Dependencies
 /vendor/
 /node_modules/
+/.pnpm-store/
+/demo/**/vendor/
+/demo/**/node_modules/
+/demo/**/.pnpm-store/
 
 # Symfony runtime
 /var/
+/demo/**/var/
 
 # Build outputs
 /dist/
 /build/
-/coverage/
 /.vite/
+/demo/**/public/build/
+/demo/**/public/bundles/
+
+# Coverage reports
+/coverage/
+/coverage-ts/
+/coverage.xml
+/coverage-*.txt
+
+# Playwright output
+/demo/**/e2e/test-results/
+/demo/**/e2e/playwright-report/
 
 # Bundle public generated assets (source maps; IIFE is committed)
 /src/Resources/public/js/*.map
@@ -20,6 +36,9 @@
 .phpstan.result.cache
 /phpunit.xml.cache
 /.phpunit.cache/
+/.phpunit.result.cache
+.eslintcache
+/.twig-cs-fixer.cache
 
 # Package manager locks
 pnpm-lock.yaml
@@ -30,6 +49,9 @@ composer.lock
 # IDE / local
 /.idea/
 /.vscode/
+*.swp
+/.docker/
+.cursor/sandbox.json
 /.env
 /.env.*
 !.env.example
@@ -44,6 +66,9 @@ composer.lock
 *.zip
 *.tar
 *.gz
+*.tgz
+*.rar
+*.7z
 *.mp4
 *.mov
 *.webm

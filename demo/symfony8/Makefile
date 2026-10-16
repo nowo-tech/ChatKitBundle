@@ -2,7 +2,7 @@
 COMPOSE_BIN := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 dc = $(SHELL) -c '$(COMPOSE_BIN) $(1)'
 
-.PHONY: help up down build install shell logs test test-coverage cache-clear update-bundle ensure-up restart setup-db assets-install assets test-e2e demo-screenshots
+.PHONY: help up down build install shell logs test test-coverage cache-clear update-bundle ensure-up restart setup setup-db verify assets-install assets test-e2e demo-screenshots
 
 BUNDLE_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 export DOCKER_CONFIG := $(BUNDLE_ROOT)/.docker
@@ -19,17 +19,19 @@ help:
 	@echo "  make install        Install Composer + pnpm and build Vite assets"
 	@echo "  make assets         pnpm install + Vite build (Pentatrion)"
 	@echo "  make assets-install Publish bundle IIFE to public/bundles/"
-	@echo "  make setup-db       Create database and schema"
+	@echo "  make setup          Create database, schema and demo seed (alias: setup-db)"
 	@echo "  make shell          Open shell in PHP container"
 	@echo "  make test           Run tests"
+	@echo "  make verify         Ensure up and require HTTP 200 on PORT (REQ-TEST-011)"
+	@echo "  make update-deps    composer update inside the demo (REQ-MAKE-008)"
 	@echo "  make update-bundle  Refresh bundle autoload, assets, and cache"
 	@echo "  make test-e2e       Playwright e2e (REQ-DEMO-013)"
 	@echo "  make demo-screenshots  Refresh docs/images/demo/*.webp"
 
-# REQ-DEMO-005: canonical up — Waiting…, Installing…, Demo started at: from PORT
+# REQ-DEMO-005: canonical up — no build here (use `make build`); Waiting…, Installing…, Demo started at: from PORT
 up:
 	@if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || true; fi
-	@$(call dc,up -d --build)
+	@$(call dc,up -d)
 	@echo "Waiting for container to be ready..."
 	@sleep 5
 	@echo "Installing dependencies..."
@@ -76,6 +78,9 @@ assets: ensure-up
 	@$(call dc,restart php)
 	@sleep 3
 
+# REQ-MAKE-003: `setup` prepares schema + fixtures (setup-db kept as the historical name).
+setup: setup-db
+
 setup-db: ensure-up
 	@$(call dc,exec -T php php bin/console doctrine:database:create --if-not-exists --no-interaction) || true
 	@$(call dc,exec -T php php bin/console doctrine:schema:update --force --no-interaction) || true
@@ -94,6 +99,18 @@ test: ensure-up update-bundle setup-db
 test-coverage: ensure-up setup-db
 	@$(call dc,exec -e APP_ENV=test php composer test-coverage)
 
+# REQ-MAKE-003 / REQ-TEST-011: final check — HTTP 200 on PORT (retries while FrankenPHP warms up).
+verify: ensure-up
+	@PORT=$$(grep "^PORT=" .env 2>/dev/null | cut -d= -f2 | tr -d '\r'); \
+	[ -z "$$PORT" ] && PORT=$$(grep "^PORT=" .env.example 2>/dev/null | cut -d= -f2 | tr -d '\r'); \
+	code=000; \
+	for i in $$(seq 1 30); do \
+		code=$$(curl -sL -o /dev/null -w "%{http_code}" http://127.0.0.1:$$PORT/ 2>/dev/null || echo "000"); \
+		[ "$$code" = "200" ] && { echo "OK (HTTP 200 on http://127.0.0.1:$$PORT/)"; exit 0; }; \
+		sleep 2; \
+	done; \
+	echo "Failed (HTTP $$code on http://127.0.0.1:$$PORT/)"; exit 1
+
 cache-clear: ensure-up
 	@$(call dc,exec php php bin/console cache:clear)
 
@@ -104,16 +121,25 @@ update-bundle: ensure-up
 	@$(call dc,exec php php bin/console cache:clear --env=dev --no-warmup) || true
 	@echo "Bundle updated. Reload the page in the browser."
 
-# REQ-MAKE-008: update-deps (REQ-MAKE-008)
-# Optional: monorepo helper absent on standalone GitHub Actions checkout (REQ-MAKE-009).
--include $(BUNDLE_ROOT)/../.scripts/Makefile.demo-update-deps.mk
+# REQ-MAKE-008: update-deps — optional monorepo helper (REQ-MAKE-009: soft include only).
+# A standalone clone gets the in-repo fallback below (ensure-up + composer update in the container).
+DEMO_UPDATE_DEPS_MK := $(BUNDLE_ROOT)/../.scripts/Makefile.demo-update-deps.mk
+ifneq (,$(wildcard $(DEMO_UPDATE_DEPS_MK)))
+-include $(DEMO_UPDATE_DEPS_MK)
+else
+.PHONY: update-deps
+update-deps: ensure-up
+	@$(call dc,exec -T -e COMPOSER_MEMORY_LIMIT=-1 php composer update --no-interaction)
+endif
 
-# Paste into demo/symfony8/Makefile (REQ-DEMO-013). Uses official Playwright image.
+# Playwright e2e + README screenshots (REQ-DEMO-013). Uses the official Playwright image.
+# PORT is read canonically: .env, then .env.example (tr -d '\r' for CRLF files).
 PLAYWRIGHT_IMAGE ?= mcr.microsoft.com/playwright:v1.63.0-jammy
 
 test-e2e: ensure-up
 	@mkdir -p e2e/node_modules
-	@PORT=$$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2); PORT=$${PORT:-8147}; \
+	@PORT=$$(grep "^PORT=" .env 2>/dev/null | cut -d= -f2 | tr -d '\r'); \
+	[ -z "$$PORT" ] && PORT=$$(grep "^PORT=" .env.example 2>/dev/null | cut -d= -f2 | tr -d '\r'); \
 	docker run --rm --network host \
 		-v "$(CURDIR)/e2e:/e2e" -w /e2e \
 		-e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
@@ -122,7 +148,8 @@ test-e2e: ensure-up
 
 demo-screenshots: ensure-up
 	@mkdir -p ../../docs/images/demo e2e/node_modules
-	@PORT=$$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2); PORT=$${PORT:-8147}; \
+	@PORT=$$(grep "^PORT=" .env 2>/dev/null | cut -d= -f2 | tr -d '\r'); \
+	[ -z "$$PORT" ] && PORT=$$(grep "^PORT=" .env.example 2>/dev/null | cut -d= -f2 | tr -d '\r'); \
 	docker run --rm --network host \
 		-v "$(CURDIR)/e2e:/e2e" \
 		-v "$(CURDIR)/../../docs/images/demo:/screenshots" \

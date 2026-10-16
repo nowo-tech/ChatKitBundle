@@ -19,7 +19,9 @@
 
 ## Requirements
 
-- PHP `>=8.3 <8.6`
+- PHP `>=8.3 <8.6`. The floor is **8.3**, above the Nowo minimum of 8.2 (REQ-SF-001), because the bundle uses
+  **typed class constants** (`public const int MAX_LENGTH = 4000;`, `private const int PAGE_SIZE = 30;`, …), a PHP 8.3
+  feature that is a parse error on 8.2. Rector (`withPhpVersion(PHP_83)`) targets the same floor.
 - Symfony 7.4, 8.0 or 8.1+: FrameworkBundle, SecurityBundle (CSRF), TwigBundle, Doctrine ORM, Symfony UX Icons
 - Twig Extra (`twig/extra-bundle`, `twig/string-extra`) — installed as dependencies; register `Twig\Extra\TwigExtraBundle\TwigExtraBundle` when Flex does not.
 - Optional: `symfony/mercure-bundle` (realtime), Symfony Messenger (asynchronous Web Push), a Web Push library behind
@@ -128,7 +130,15 @@ Once, in the layout of signed-in pages:
 ```
 
 Guests and unreachable accounts get nothing. The template loads `css/nowo-chat.css` and `js/nowo-chat.js` from the
-`nowo_chat_kit` asset package; the script mounts the dock after first paint (and again after Turbo visits).
+`nowo_chat_kit` asset package (`symfony/asset`, a dependency of the bundle, maps it to `/bundles/nowochatkit`); the
+script mounts the dock after first paint (and again after Turbo visits). These are the exact tags the bundle templates
+(`dock.html.twig`, `page.html.twig`) emit — use the same ones if you load the assets yourself (e.g. after emptying the
+`nowo_chat_assets` block):
+
+```twig
+<link rel="stylesheet" href="{{ asset('css/nowo-chat.css', 'nowo_chat_kit') }}">
+<script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
+```
 
 ## Publish assets
 

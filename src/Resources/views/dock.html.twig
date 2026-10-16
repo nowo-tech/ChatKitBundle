@@ -11,8 +11,11 @@
 {% set nowo_chat_config = nowo_chat_dock_config() %}
 {% if nowo_chat_config %}
     {% block nowo_chat_assets %}
-        <link rel="stylesheet" href="{{ asset('css/nowo-chat.css', 'nowo_chat_kit') }}">
-        <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
+        {# The full-page chat (page.html.twig) already loads them in the layout head. #}
+        {% if not (nowo_chat_page_assets ?? false) %}
+            <link rel="stylesheet" href="{{ asset('css/nowo-chat.css', 'nowo_chat_kit') }}">
+            <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
+        {% endif %}
     {% endblock %}
     {% block nowo_chat_root %}
         <div class="nowo-chat" data-nowo-chat-config="{{ nowo_chat_config|json_encode|e('html_attr') }}" data-testid="chat-dock">

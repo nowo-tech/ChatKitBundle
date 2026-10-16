@@ -1,7 +1,7 @@
 DEMOS := symfony8
 
 .PHONY: help up down update-bundle test-all release-check release-verify clean
-.PHONY: up-symfony8 down-symfony8 test-symfony8 update-bundle-symfony8
+.PHONY: up-symfony8 down-symfony8 test-symfony8 update-bundle-symfony8 verify-symfony8 test-e2e-symfony8 test-e2e-all
 
 help:
 	@echo "Chat Kit Bundle - Demo Commands"
@@ -12,7 +12,9 @@ help:
 	@echo "  make up-symfony8                 Start Symfony 8 demo"
 	@echo "  make down-symfony8               Stop Symfony 8 demo"
 	@echo "  make test-symfony8               Run Symfony 8 demo tests"
-	@echo "  make release-check               test-all + release-verify"
+	@echo "  make verify-symfony8             Ensure up and require HTTP 200"
+	@echo "  make test-e2e-symfony8           Playwright e2e against the running demo (REQ-DEMO-013)"
+	@echo "  make release-check               test-all + test-e2e-all (stack up) + release-verify"
 	@echo ""
 
 # REQ-MAKE-003: aggregate targets expected on demo/Makefile
@@ -39,6 +41,13 @@ test-symfony8:
 update-bundle-symfony8:
 	@$(MAKE) -C symfony8 update-bundle
 
+verify-symfony8:
+	@$(MAKE) -C symfony8 verify
+
+# REQ-DEMO-013: Playwright e2e needs the stack up (the demo's test-e2e runs ensure-up first).
+test-e2e-symfony8:
+	@$(MAKE) -C symfony8 test-e2e
+
 # REQ-DEMO-007: update-bundle runs via each demo's test target before composer test
 test-all: test-symfony8
 
@@ -54,7 +63,14 @@ release-verify:
 	if [ "$$js" != "200" ]; then echo "Demo Vite asset healthcheck failed (HTTP $$js)"; exit 1; fi; \
 	echo "Symfony 8 demo OK (HTTP $$code, Vite entrypoints HTTP $$js)"
 
-release-check: test-all release-verify
+test-e2e-all: test-e2e-symfony8
+
+# Sequential (safe under make -j): PHPUnit (stack up) → Playwright e2e while the stack is still up
+# (REQ-DEMO-013) → release-verify (fresh up → HTTP 200 → down, REQ-TEST-011).
+release-check:
+	@$(MAKE) test-all
+	@$(MAKE) test-e2e-all
+	@$(MAKE) release-verify
 	@echo "All demo checks passed."
 
 clean:

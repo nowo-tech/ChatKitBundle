@@ -2,7 +2,7 @@
 description: Tests and quality rules
 globs:
   - "tests/**/*.php"
-  - "src/Resources/assets/**/*.test.ts"
+  - "src/Resources/assets/tests/**/*.ts"
   - "phpunit.xml*"
   - "vitest.config.*"
 alwaysApply: false
@@ -18,3 +18,10 @@ Prefer:
 
 Do not introduce new testing frameworks unless explicitly requested.
 Do not rewrite unrelated tests.
+
+Commands (Docker, from the repository root):
+- `make test` — PHPUnit; `make test-coverage` — PHPUnit with coverage (`coverage-php.txt`)
+- `make test-ts` — Vitest with coverage (`coverage-ts.txt`, HTML in `coverage-ts/`)
+- `make qa` — PHP-CS-Fixer check, PHPStan, PHPUnit and Vitest; `make rector-dry` — Rector dry run
+- `make release-check` — full pre-release gate (assets, QA, coverage, Vitest, translations, demos)
+- `make -C demo/symfony8 test-e2e` — Playwright end-to-end tests against the demo

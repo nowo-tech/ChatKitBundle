@@ -50,6 +50,9 @@ final class TestKernel extends Kernel
 
     public const ENTITY_MANAGER_ALIAS = 'nowo_chat_kit_test.entity_manager';
 
+    /** Parameter listing the Messenger / Doctrine tags autoconfiguration gave the bundle services (id → tags). */
+    public const TAGS_PARAMETER = 'nowo_chat_kit_test.tags';
+
     /**
      * @param array<string, mixed> $chatKitConfig
      */
@@ -106,7 +109,7 @@ final class TestKernel extends Kernel
             'providers' => ['test_users' => ['entity' => ['class' => TestUser::class, 'property' => 'publicId']]],
             'firewalls' => ['main' => ['lazy' => true, 'provider' => 'test_users']],
         ]);
-        $container->extension('twig', ['strict_variables' => true, 'auto_reload' => true]);
+        $container->extension('twig', ['strict_variables' => true, 'auto_reload' => true, 'paths' => [__DIR__ . '/templates' => 'ChatKitTest']]);
         // Only `send` and `x` exist: the other dock icons fall back to the built-in SVG.
         $container->extension('ux_icons', ['icon_dir' => __DIR__ . '/icons', 'iconify' => ['enabled' => false]]);
         $container->extension('doctrine', [
@@ -156,15 +159,22 @@ final class TestKernel extends Kernel
 
     protected function build(ContainerBuilder $container): void
     {
-        // Expose the bundle services to the tests.
+        // Expose the bundle services to the tests and record the tags autoconfiguration gave them.
         $container->addCompilerPass(new class implements CompilerPassInterface {
             public function process(ContainerBuilder $container): void
             {
+                $tags = [];
                 foreach ($container->getDefinitions() as $id => $definition) {
                     if (str_starts_with($id, 'Nowo\\ChatKitBundle\\') || str_starts_with($id, 'limiter.nowo_chat')) {
                         $definition->setPublic(true);
                     }
+                    foreach (['messenger.message_handler', 'doctrine.event_listener'] as $tag) {
+                        if (str_starts_with($id, 'Nowo\\ChatKitBundle\\') && $definition->hasTag($tag)) {
+                            $tags[$id][$tag] = $definition->getTag($tag);
+                        }
+                    }
                 }
+                $container->setParameter(TestKernel::TAGS_PARAMETER, $tags);
             }
         });
     }

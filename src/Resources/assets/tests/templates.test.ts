@@ -12,6 +12,25 @@ describe('Templates', () => {
     expect(() => templates.clone('nope')).toThrow('missing <template data-nowo-chat-template="nope">');
   });
 
+  it('gives the form controls of every copy a unique id and moves their labels along', () => {
+    const root = templatesRoot();
+    const labelled = document.createElement('template');
+    labelled.dataset.nowoChatTemplate = 'labelled';
+    labelled.innerHTML = '<form><label for="field">Field</label><label for="other">Other</label><input id="field"><select id="pick"></select></form>';
+    root.append(labelled);
+    const templates = new Templates(root);
+    const first = part<HTMLTextAreaElement>(templates.clone('window'), 'input');
+    const second = part<HTMLTextAreaElement>(templates.clone('window'), 'input');
+    expect(first.id).toMatch(/^nowo_chat_composer_body-\d+$/);
+    expect(second.id).not.toBe(first.id);
+    const copy = templates.clone('labelled');
+    const input = copy.querySelector('input') as HTMLInputElement;
+    expect(input.id).toMatch(/^field-\d+$/);
+    expect((copy.querySelector('label') as HTMLLabelElement).htmlFor).toBe(input.id);
+    expect((copy.querySelectorAll('label')[1] as HTMLLabelElement).htmlFor).toBe('other');
+    expect((copy.querySelector('select') as HTMLSelectElement).id).toMatch(/^pick-\d+$/);
+  });
+
   it('uses the application icons (UX Icons) when the page provides them', () => {
     const root = templatesRoot();
     const custom = document.createElement('template');

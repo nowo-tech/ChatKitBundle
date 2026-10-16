@@ -17,7 +17,7 @@ final class DockTemplatesFixtureTest extends DatabaseTestCase
 
     public function testFixtureMatchesTheTemplates(): void
     {
-        $html = $this->twig()->render('@NowoChatKitBundle/_templates.html.twig') . "\n";
+        $html = $this->renderDockTemplates() . "\n";
 
         if (getenv('UPDATE_FIXTURES') === '1') {
             file_put_contents(self::FIXTURE, $html);

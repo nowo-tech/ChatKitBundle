@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
+use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
@@ -64,12 +65,21 @@ final class ChatPageTest extends DatabaseTestCase
         self::assertCount(1, $crawler->filter('.nowo-chat-page__row.is-unread'));
         self::assertSame('Pick a conversation.', $crawler->filter('.nowo-chat-page__thread .nowo-chat-page__empty')->text());
 
-        // The thread marks it read and offers the composer.
+        // The thread offers the composer; the GET changes nothing (REQ-SEC-005): the page script marks it read
+        // through the CSRF-protected API, with the URL, message id and header token the page carries.
         $crawler = $this->client->request(Request::METHOD_GET, '/chat/' . $dm->getUuid());
         self::assertSame('Luis', $crawler->filter('title')->text());
         self::assertSame('<p>Hola <strong>Ana</strong></p>', $crawler->filter('#nowo-chat-latest .nowo-chat-bubble')->html());
-        self::assertCount(0, $crawler->filter('.nowo-chat-page__row.is-unread'));
+        self::assertCount(0, $crawler->filter('.nowo-chat-page__row.is-unread'), 'the open conversation shows no unread badge');
         self::assertCount(1, $crawler->filter('.nowo-chat-page__row.is-current[aria-current="page"]'));
+        self::assertCount(1, $crawler->filter('link[href="/bundles/nowochatkit/css/nowo-chat.css"]'));
+        self::assertCount(1, $crawler->filter('script[src="/bundles/nowochatkit/js/nowo-chat.js"]'));
+        self::assertSame([$dm->getId() => 1], $this->get(ChatMessageRepository::class)->countUnreadByConversation((int) $ana->getId(), [(int) $dm->getId()]));
+        $page = $crawler->filter('[data-testid="chat-page"]');
+        self::assertSame('/chat/api/conversations/' . $dm->getUuid() . '/read', $page->attr('data-nowo-chat-read-url'));
+        $this->client->request(Request::METHOD_POST, (string) $page->attr('data-nowo-chat-read-url'), server: ['HTTP_X_CSRF_TOKEN' => (string) $page->attr('data-nowo-chat-read-csrf'), 'CONTENT_TYPE' => 'application/json'], content: '{"messageId":' . $page->attr('data-nowo-chat-read-id') . '}');
+        self::assertLessThan(300, $this->client->getResponse()->getStatusCode());
+        self::assertSame([], $this->get(ChatMessageRepository::class)->countUnreadByConversation((int) $ana->getId(), [(int) $dm->getId()]));
         $form = $crawler->filter('.nowo-chat-page__composer')->form(['nowo_chat_message[body]' => 'Hey _Luis_']);
         $this->client->submit($form);
         self::assertSame(303, $this->client->getResponse()->getStatusCode());

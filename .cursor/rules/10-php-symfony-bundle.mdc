@@ -2,9 +2,9 @@
 description: PHP and Symfony bundle rules
 globs:
   - "src/**/*.php"
-  - "config/**/*.php"
-  - "config/**/*.yaml"
-  - "config/**/*.yml"
+  - "tests/**/*.php"
+  - "src/Resources/config/**/*.php"
+  - "src/Resources/translations/**/*.yaml"
 alwaysApply: false
 ---
 

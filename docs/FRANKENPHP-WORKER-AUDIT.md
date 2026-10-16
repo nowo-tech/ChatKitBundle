@@ -5,7 +5,7 @@
 | Package | `nowo-tech/chat-kit-bundle` (`symfony-bundle`) |
 | Audited revision | `1.0` (`main`, 2026-10-16) |
 | Audit date | 2026-10-16 |
-| Method | Manual review of every service under `src/` (91 production units, see `specs/001-baseline/code-inventory.md`) + Igor deep audit (`make igor`: 68 service files, 0 KO) + PHPStan FrankenPHP rulesets |
+| Method | Manual review of every service under `src/` (94 production units, see `specs/001-baseline/code-inventory.md`) + Igor deep audit (`make igor`: 68 service files, 0 KO) + PHPStan FrankenPHP rulesets |
 | **Verdict** | ✅ **Viable under scenario B** — no per-request data is kept in a shared service; the only memo lives on the `Request` object |
 
 ## Execution model assumed

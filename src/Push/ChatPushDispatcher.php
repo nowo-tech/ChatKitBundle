@@ -17,13 +17,17 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
+use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Picks who gets a Web Push for a message, checked at delivery time: participants only (never everyone who
  * could read it), reachable, push enabled, not muted, not yet read, the app not open in any tab, buzzes only
  * to people who accept them. The application's ChatPushSenderInterface delivers the payloads.
+ *
+ * Messenger handler (when symfony/messenger is installed); signed (JSON + HMAC) when the application signs its messages.
  */
+#[AsMessageHandler(sign: true)]
 final readonly class ChatPushDispatcher
 {
     /**

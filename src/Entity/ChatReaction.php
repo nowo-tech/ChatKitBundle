@@ -26,11 +26,12 @@ class ChatReaction
     private DateTimeImmutable $createdAt;
 
     /**
-     * Creates a reaction of a user on a message, now.
+     * Creates a reaction of a user on a message.
      *
      * @param ChatMessage $message The message
      * @param ChatUserInterface $user The reacting user
      * @param string $emoji The emoji (one of the offered reactions)
+     * @param DateTimeImmutable|null $createdAt Reaction time; null for now
      */
     public function __construct(
         #[ORM\ManyToOne(targetEntity: ChatMessage::class)]
@@ -41,8 +42,9 @@ class ChatReaction
         private ChatUserInterface $user,
         #[ORM\Column(length: 32)]
         private string $emoji,
+        ?DateTimeImmutable $createdAt = null,
     ) {
-        $this->createdAt = new DateTimeImmutable();
+        $this->createdAt = $createdAt ?? new DateTimeImmutable();
     }
 
     /**

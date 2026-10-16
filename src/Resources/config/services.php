@@ -57,8 +57,7 @@ return static function (ContainerConfigurator $container): void {
 
     // REQ-ORM-002: bundle tables, indexes and unique constraints get `doctrine.table_prefix`.
     $services->get(TablePrefixListener::class)
-        ->arg('$prefix', param('nowo_chat_kit.doctrine.table_prefix'))
-        ->tag('doctrine.event_listener', ['event' => 'loadClassMetadata']);
+        ->arg('$prefix', param('nowo_chat_kit.doctrine.table_prefix'));
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);
     $services->alias(ChatLinkPreviewProviderInterface::class, NullLinkPreviewProvider::class);
@@ -76,13 +75,15 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$ttl', param('nowo_chat_kit.presence_ttl'));
     $services->get(ChatRecipients::class)
         ->arg('$cache', service('nowo_chat_kit.cache'));
+    // #[AsMessageHandler] on the two dispatchers is read through autoconfiguration only when symfony/messenger is
+    // installed: without it the attribute class does not exist (ChatNotifier then calls the push dispatcher inline).
+    $messenger = interface_exists(MessageBusInterface::class);
     $services->get(ChatPushDispatcher::class)
+        ->autoconfigure($messenger)
         ->arg('$urlTemplate', param('nowo_chat_kit.push_url'))
         ->arg('$icon', param('nowo_chat_kit.push_icon'))
-        ->arg('$preview', param('nowo_chat_kit.push_preview'))
-        // Signed (JSON + HMAC) when the application signs its Messenger messages.
-        ->tag('messenger.message_handler', ['sign' => true]);
-    $bus = interface_exists(MessageBusInterface::class) ? service('messenger.default_bus')->nullOnInvalid() : null;
+        ->arg('$preview', param('nowo_chat_kit.push_preview'));
+    $bus = $messenger ? service('messenger.default_bus')->nullOnInvalid() : null;
     $services->get(ChatNotifier::class)
         ->arg('$pushEnabled', param('nowo_chat_kit.push'))
         ->arg('$bus', $bus)
@@ -93,17 +94,18 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$enabled', param('nowo_chat_kit.digest.enabled'))
         ->arg('$delayMinutes', param('nowo_chat_kit.digest.delay_minutes'));
     $services->get(ChatDigestDispatcher::class)
+        ->autoconfigure($messenger)
         ->arg('$cache', service('nowo_chat_kit.cache'))
         ->arg('$urlTemplate', param('nowo_chat_kit.push_url'))
-        ->arg('$intervalMinutes', param('nowo_chat_kit.digest.interval_minutes'))
-        ->tag('messenger.message_handler', ['sign' => true]);
+        ->arg('$intervalMinutes', param('nowo_chat_kit.digest.interval_minutes'));
     $services->get(ChatService::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'));
     $services->get(ChatDockExtension::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'))
         ->arg('$iconSet', param('nowo_chat_kit.icon_set'))
         ->arg('$icons', param('nowo_chat_kit.icons'))
-        ->arg('$iconRenderer', service(IconRendererInterface::class)->nullOnInvalid());
+        ->arg('$iconRenderer', service(IconRendererInterface::class)->nullOnInvalid())
+        ->arg('$pageLayout', param('nowo_chat_kit.page_layout'));
     $services->get(ChatPurgeCommand::class)
         ->arg('$retentionDays', param('nowo_chat_kit.retention_days'));
 };

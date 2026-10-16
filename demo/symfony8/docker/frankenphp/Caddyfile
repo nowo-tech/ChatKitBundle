@@ -1,6 +1,18 @@
+# REQ-RUNTIME-001: timeout hierarchy, innermost first —
+#   HttpClient 5s (framework.http_client) < PHP max_execution_time 30s (docker/php-dev.ini)
+#   < Caddy servers.timeouts.write 60s (below). FrankenPHP max_wait_time 30s caps how long a
+#   request waits for a free PHP thread (504 instead of an endless queue).
 {
 	order mercure after encode
 	skip_install_trust
+	frankenphp {
+		max_wait_time 30s
+	}
+	servers {
+		timeouts {
+			write 60s
+		}
+	}
 }
 
 # Worker mode: app boots once, handles requests in memory. ChatKitBundle is designed for it

@@ -103,7 +103,13 @@ dependencies current. Security fixes are released as patch versions of the suppo
 - **Browser:** a Content-Security-Policy on pages with the dock is recommended (the bundle needs no inline script; its
   assets load from the `nowo_chat_kit` package).
 - **Retention:** schedule `nowo:chat:purge` (cron / Scheduler).
-- **Accepted:** `GET /chat/{uuid}` marks the conversation read (needs the conversation UUID; harmless state change).
+- **No state change on GET:** `GET /chat/{uuid}` only renders the conversation. The read cursor moves through the
+  CSRF-protected `POST /api/conversations/{uuid}/read` (`X-CSRF-TOKEN` header) that the page script sends on load, or
+  through the page's CSRF-protected message POST when JavaScript is off.
+- **Dock form types:** `ChatDockSearchType`, `ChatDockComposerType` and `ChatDockEditType` only render the dock markup;
+  they are never submitted as HTML forms (the script posts JSON with the `X-CSRF-TOKEN` header, checked fail-closed by
+  the API). Form CSRF is never turned off (REQ-SEC-005): the dock types use the API token id `nowo_chat`, and the
+  full-page `ChatPageMessageType` uses `nowo_chat_page`.
 
 ## AI security audit
 

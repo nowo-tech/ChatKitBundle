@@ -46,9 +46,23 @@ final class TwigPathsPass implements CompilerPassInterface
         $definition->addMethodCall('addPath', [$views, '!' . self::TWIG_NAMESPACE]);
     }
 
+    /**
+     * Native Twig filesystem loader, in the canonical order (REQ-TWIG-001-register): the definition behind the
+     * `twig.loader.native` alias (alias chains followed), then a `twig.loader.native` definition, then
+     * `twig.loader.native_filesystem` (TwigBundle's own).
+     */
     private function loaderId(ContainerBuilder $container): ?string
     {
-        foreach (['twig.loader.native_filesystem', 'twig.loader.filesystem'] as $id) {
+        if ($container->hasAlias('twig.loader.native')) {
+            $id = (string) $container->getAlias('twig.loader.native');
+            for ($hops = 0; $hops < 32 && $container->hasAlias($id); ++$hops) {
+                $id = (string) $container->getAlias($id);
+            }
+            if ($container->hasDefinition($id)) {
+                return $id;
+            }
+        }
+        foreach (['twig.loader.native', 'twig.loader.native_filesystem'] as $id) {
             if ($container->hasDefinition($id)) {
                 return $id;
             }

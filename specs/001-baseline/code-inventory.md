@@ -2,13 +2,14 @@
 
 **Package**: `nowo-tech/chat-kit-bundle`  
 **Last audited**: 2026-10-16  
-**Production units**: **91/91**  
+**Production units**: **94/94**  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
 
 - Vitest files under `src/Resources/assets/tests/` are **excluded** (test code, not shipped behaviour).
 - `src/Resources/public/js/nowo-chat.js` is the Vite **build output** of `index.ts` / `iife.ts` (`FR-BUILD-001`), not a separate unit.
+- Covers the 1.2 "hide the dock to the side" feature (`FR-TS-007`, `FR-TWIG-003`, `FR-THEME-003`): no new file, existing units extended.
 - `src/Resources/assets/README.md` is documentation; `demo/` and `.symfony/` (Flex recipe, see `docs/INSTALLATION.md`) are out of inventory scope.
 
 ## Coverage summary
@@ -23,10 +24,10 @@
 | HTTP | 5 |
 | Realtime, presence & notifications | 15 |
 | Privacy & retention | 2 |
-| Twig, markup & theme | 6 |
+| Twig, markup & theme | 9 |
 | Browser (TypeScript) | 13 |
 | Translations | 7 |
-| **Total** | **91** |
+| **Total** | **94** |
 
 ## Bundle, configuration & DI
 
@@ -34,7 +35,7 @@
 | --- | --- | --- |
 | `src/DependencyInjection/Compiler/RealtimeTransportPass.php` | US-05 | FR-DI-002 |
 | `src/DependencyInjection/Compiler/TwigPathsPass.php` | US-01, US-08 | FR-BUNDLE-001 |
-| `src/DependencyInjection/Configuration.php` | US-01 | FR-CFG-001 |
+| `src/DependencyInjection/Configuration.php` | US-01, US-08 | FR-CFG-001 |
 | `src/DependencyInjection/NowoChatKitExtension.php` | US-01 | FR-CFG-002, FR-DI-001 |
 | `src/NowoChatKitBundle.php` | US-01 | FR-BUNDLE-001 |
 | `src/Resources/config/routes.php` | US-01 | FR-ROUTE-001 |
@@ -137,19 +138,22 @@
 
 | Source path | Spec section | Requirement ID(s) |
 | --- | --- | --- |
-| `src/Resources/public/css/nowo-chat.css` | US-08 | FR-THEME-001 |
-| `src/Resources/views/_templates.html.twig` | US-08 | FR-TWIG-002 |
+| `src/Form/ChatDockComposerType.php` | US-02, US-08 | FR-TWIG-004 |
+| `src/Form/ChatDockEditType.php` | US-02, US-08 | FR-TWIG-004 |
+| `src/Form/ChatDockSearchType.php` | US-02, US-08 | FR-TWIG-004 |
+| `src/Resources/public/css/nowo-chat.css` | US-08 | FR-THEME-001, FR-THEME-002, FR-THEME-003 |
+| `src/Resources/views/_templates.html.twig` | US-08 | FR-TWIG-002, FR-TWIG-003 |
 | `src/Resources/views/dock.html.twig` | US-01 | FR-TWIG-002 |
 | `src/Resources/views/page.html.twig` | US-07 | FR-TWIG-002, FR-PAGE-001 |
 | `src/Resources/views/page_layout.html.twig` | US-07 | FR-TWIG-002 |
-| `src/Twig/ChatDockExtension.php` | US-01, US-08 | FR-TWIG-001 |
+| `src/Twig/ChatDockExtension.php` | US-01, US-08 | FR-TWIG-001, FR-TWIG-004 |
 
 ## Browser (TypeScript)
 
 | Source path | Spec section | Requirement ID(s) |
 | --- | --- | --- |
 | `src/Resources/assets/src/api.ts` | US-02 | FR-TS-004 |
-| `src/Resources/assets/src/dock.ts` | US-02 … US-05, US-10 | FR-TS-002 |
+| `src/Resources/assets/src/dock.ts` | US-02 … US-05, US-08, US-10 | FR-TS-002, FR-TS-006, FR-TS-007 |
 | `src/Resources/assets/src/dom.ts` | US-08 | FR-TS-005 |
 | `src/Resources/assets/src/emoji.ts` | US-02 | FR-TS-005 |
 | `src/Resources/assets/src/format.ts` | US-02 | FR-TS-005 |
@@ -157,10 +161,10 @@
 | `src/Resources/assets/src/index.ts` | US-01 | FR-TS-001, FR-BUILD-001 |
 | `src/Resources/assets/src/realtime.ts` | US-05 | FR-TS-004 |
 | `src/Resources/assets/src/sounds.ts` | US-05 | FR-TS-005 |
-| `src/Resources/assets/src/state.ts` | US-05 | FR-TS-005 |
+| `src/Resources/assets/src/state.ts` | US-05, US-08 | FR-TS-005, FR-TS-007 |
 | `src/Resources/assets/src/templates.ts` | US-08 | FR-TS-005 |
 | `src/Resources/assets/src/thread.ts` | US-02, US-04, US-05 | FR-TS-003 |
-| `src/Resources/assets/src/types.ts` | US-02 | FR-TS-005 |
+| `src/Resources/assets/src/types.ts` | US-02, US-08 | FR-TS-005, FR-TS-007 |
 
 ## Translations
 

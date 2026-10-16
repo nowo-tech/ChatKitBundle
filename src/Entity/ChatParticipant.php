@@ -36,10 +36,11 @@ class ChatParticipant
     private DateTimeImmutable $joinedAt;
 
     /**
-     * Creates the participant row of a user in a conversation, joined now.
+     * Creates the participant row of a user in a conversation.
      *
      * @param ChatConversation $conversation The conversation
      * @param ChatUserInterface $user The participant
+     * @param DateTimeImmutable|null $joinedAt Join time; null for now
      */
     public function __construct(
         #[ORM\ManyToOne(targetEntity: ChatConversation::class)]
@@ -48,8 +49,9 @@ class ChatParticipant
         #[ORM\ManyToOne(targetEntity: ChatUserInterface::class)]
         #[ORM\JoinColumn(name: 'user_id', nullable: false, onDelete: 'CASCADE')]
         private ChatUserInterface $user,
+        ?DateTimeImmutable $joinedAt = null,
     ) {
-        $this->joinedAt = new DateTimeImmutable();
+        $this->joinedAt = $joinedAt ?? new DateTimeImmutable();
     }
 
     /**

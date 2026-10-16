@@ -1,7 +1,7 @@
 # Feature specification: Chat Kit Bundle (baseline)
 
 **Package**: `nowo-tech/chat-kit-bundle`
-**Status**: Active (1.0)
+**Status**: Active (1.2)
 **Last reviewed**: 2026-10-16
 **Inventory**: [`code-inventory.md`](code-inventory.md) — 100% of the production units under `src/`.
 
@@ -13,7 +13,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 - **A Doctrine model** (`nowo_chat_*` tables) for direct conversations, application channels and support threads, with participants, read cursors, messages (Markdown + sanitised HTML, tombstones, buzz), reactions and per-user settings.
 - **Contracts** the application implements: who exists (`ChatDirectoryInterface`) and who may talk to whom (`ChatAccessPolicyInterface`) are required; channels, realtime transport, Web Push, link previews and the email digest are optional with null defaults.
 - **A JSON API** (`/chat/api/*` under the route prefix) used by the dock, and **a server-rendered full-page chat** (`/chat/`, `/chat/{uuid}`) that works without JavaScript.
-- **A TypeScript dock** (IIFE `nowo-chat.js` or importable source) rendered from overridable Twig `<template>` markup and themed with `--nowo-chat-*` CSS tokens; icons through Symfony UX Icons.
+- **A TypeScript dock** (IIFE `nowo-chat.js` or importable source) rendered from overridable Twig `<template>` markup and themed with `--nowo-chat-*` CSS tokens; icons through Symfony UX Icons. It rests above marked footers and the Symfony toolbar and can be hidden to the side (one right-edge tab with the unread count).
 - **Realtime** through Mercure private topics (polling fallback), presence and typing in a PSR-6 pool, **Web Push** and an **email digest** through Messenger, **GDPR** export / erasure helpers and a retention purge command.
 
 ## User scenarios
@@ -55,9 +55,13 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 **When** a user opens `/chat/` or "Open in a page", **then** the list and one thread render on the server inside the configured layout, and a Symfony Form posts a message (CSRF, rate limit, read-only) with a redirect back — without JavaScript.
 
-### US-08 — Customisation (P3)
+### US-08 — Customisation and dock layout (P3)
 
-**When** the host overrides `@NowoChatKitBundle/_templates.html.twig` blocks, the CSS tokens or the icon map, **then** the dock uses them without forking the TypeScript.
+**When** the host overrides `@NowoChatKitBundle/_templates.html.twig` blocks, the CSS tokens or the icon map, **then** the dock uses them without forking the TypeScript; **when** the page marks a footer with `data-nowo-chat-avoid` (or shows the Symfony web debug toolbar), **then** the dock rests just above it.
+
+**Given** an open dock (list and conversation windows),
+**when** the user clicks **Hide to the side** in the list header,
+**then** the list and every window leave the screen and a single tab on the right edge (chat icon + total unread count, positioned by `--nowo-chat-edge-offset`) remains; **when** the user clicks that tab, or opens a conversation from a link, the list or a push notification, **then** the dock comes back exactly as it was; the tucked state is kept across page loads and mirrored to the other browser tabs.
 
 ### US-09 — Privacy and retention (P2)
 
@@ -72,7 +76,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 ### Bundle, configuration and DI
 
 - **FR-BUNDLE-001** — The bundle class registers the Twig namespace (`@NowoChatKitBundle`, `@!NowoChatKitBundle`) and compiler passes.
-- **FR-CFG-001** — `nowo_chat_kit` accepts `default_profile` + `profiles` (enabled, user_class, retention_days ≥ 30, realtime, push, push_url, push_icon, digest, page_layout, cache_pool, reactions, icon_set, icons, presence_ttl, limits); `default_profile` must be a profile key.
+- **FR-CFG-001** — `nowo_chat_kit` accepts `default_profile` + `profiles` (enabled, user_class, retention_days ≥ 30, realtime, push, push_url, push_icon, push_preview, digest, doctrine.table_prefix, page_layout, cache_pool, reactions, icon_set, icons — including `tuck` since 1.2 —, presence_ttl, limits); `default_profile` must be a profile key; only the default profile is active (others are validated, not used).
 - **FR-CFG-002** — The extension exposes `nowo_chat_kit.*` parameters and prepends Doctrine `resolve_target_entities` (from `user_class`), the rate limiters, the `nowo_chat_kit` asset package and Messenger signing.
 - **FR-DI-001** — Services are autowired; every optional contract has a null default the application can alias.
 - **FR-DI-002** — The realtime transport is Mercure when a hub exists, otherwise the null transport (polling).
@@ -128,10 +132,14 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 ### Twig, markup and theme
 
-- **FR-TWIG-001** — `ChatDockExtension`: dock config (endpoints, i18n, prefs, limits, icons) for reachable users; `nowo_chat_icons()`.
+- **FR-TWIG-001** — `ChatDockExtension`: dock config (endpoints, i18n, prefs, limits, icons) for reachable users; `nowo_chat_icons()`; the dock form views (FR-TWIG-004).
 - **FR-TWIG-002** — Views: `dock.html.twig` (root + assets), `_templates.html.twig` (inert `<template>` markup cloned by the TypeScript, overridable per block), `page.html.twig` / `page_layout.html.twig` (full page).
+- **FR-TWIG-003** — Hide to the side (1.2): the list header carries a `data-part="tuck"` button (`chat.tuck`, icon `tuck`) and the `nowo_chat_template_edge` block defines the `edge` template (`.nowo-chat-edge` button, `chat.untuck` label, `edge-badge` unread count), hidden by default.
+- **FR-TWIG-004** — Dock form types `ChatDockSearchType` (conversation search `query`, people picker `people`), `ChatDockComposerType` (`body`) and `ChatDockEditType` (`body`): built by `ChatDockExtension` and rendered with `form_widget` in `_templates.html.twig` so the dock has no raw `<form>` / `<input>` / `<textarea>` (REQ-TWIG-005); they are the markup contract only — the TypeScript cancels the submit and talks JSON to the API (CSRF header).
 - **FR-THEME-001** — `nowo-chat.css`: `--nowo-chat-*` tokens (light / dark), dock, windows, mobile sheet, full page.
-- **FR-I18N-001** — `NowoChatKitBundle` translations in 7 locales (en, es, fr, de, it, pt, nl) with key parity.
+- **FR-THEME-002** — Shape, shadow and size tokens (1.1): `--nowo-chat-radius-*`, `--nowo-chat-shadow`, `-shadow-soft`, `-shadow-dock` (upward dock shadow), `--nowo-chat-window-width`, `-panel-width`, `-font-size`, `--nowo-chat-z-index`.
+- **FR-THEME-003** — Tucked dock (1.2): `.nowo-chat.is-tucked` moves the list and windows off screen (layout kept); `.nowo-chat-edge` is a right-edge tab placed `--nowo-chat-edge-offset` (default `24px`) above the dock baseline (`--nowo-chat-lift`).
+- **FR-I18N-001** — `NowoChatKitBundle` translations in 7 locales (en, es, fr, de, it, pt, nl) with key parity (including `chat.tuck` / `chat.untuck`).
 
 ### Browser (TypeScript)
 
@@ -140,11 +148,40 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 - **FR-TS-003** — `thread.ts`: messages, day separators, receipts, typing, composer (drafts, emoji, edit, delete, reactions), previews, support context.
 - **FR-TS-004** — `api.ts` (JSON client with CSRF header), `realtime.ts` (EventSource with token refresh).
 - **FR-TS-005** — `state.ts` (dock store, thread cache, drafts, BroadcastChannel), `templates.ts`, `dom.ts`, `format.ts`, `emoji.ts`, `sounds.ts`, `types.ts`.
+- **FR-TS-006** — Bottom bars (1.1): `dock.ts` lifts the dock (`--nowo-chat-lift`) above the visible part of elements marked `data-nowo-chat-avoid` and of the Symfony web debug toolbar (real height), recomputed on scroll and resize.
+- **FR-TS-007** — Hide to the side (1.2): `dock.ts` `setTucked()` toggles `is-tucked` on the root, makes the dock `inert`, shows the edge tab (focus moves to it) and keeps its badge in sync with the total unread count; `state.ts` persists `tucked` in the shared dock layout (localStorage, mirrored across tabs by BroadcastChannel); opening a conversation (list, `data-nowo-chat-open` link, `?chat=` / push) untucks.
 - **FR-BUILD-001** — Vite builds the IIFE `Resources/public/js/nowo-chat.js` from the sources (build output, not a unit).
+
+## Key entities
+
+| Entity | Source | Description |
+| --- | --- | --- |
+| **Conversation** | `Entity/ChatConversation`, `Enum/ConversationKind` | Table `nowo_chat_conversation`; public `uuid` (`PublicIdTrait`); `kind` is `direct`, `channel` or `support`; `lastMessageAt` orders the list. |
+| — direct | `directKey` (unique) | Exactly one conversation per pair of users (key built from both user ids). |
+| — channel | `channelKey` (unique, ≤ 120 chars) | Bound to a `ChatChannel` of the host's `ChatChannelProviderInterface`; membership is the provider's decision. |
+| — support | `supportOwner` (unique), `Enum/SupportStatus` | One thread per owner; `open` / `resolved` (`resolvedBy`, `resolvedAt`), optional JSON `supportContext` (page URL / label). Every agent may read and answer. |
+| **Participant** | `Entity/ChatParticipant` | Table `nowo_chat_participant`, unique per conversation + user; holds the **read cursor** (`lastReadMessageId`, only moves forward), `mutedUntil` and `joinedAt`. |
+| **Message** | `Entity/ChatMessage` | Table `nowo_chat_message`; public `uuid`, author (nullable after erasure), Markdown `body` (≤ 4000 chars) and server-rendered `bodyHtml`, `kind` `text` or `buzz`, `editedAt` (15-minute edit window), tombstone `deletedAt` / `deletedBy` (moderated when deleted by someone else). |
+| **Reaction** | `Entity/ChatReaction` | Table `nowo_chat_reaction`, unique per message + user + emoji (emoji from the configured `reactions` list). |
+| **Read cursor** | `ChatParticipant::lastReadMessageId` | Last message id the user has read in a conversation; drives unread counts, receipts ("Seen by N"), push and digest eligibility. |
+| **User settings** | `Entity/ChatUserSettings` | Table `nowo_chat_user_settings`, one row per user: `sound` (`none`, `pop`, `chime`, `ding`), `pushEnabled` (opt-in), `buzzEnabled`, `presenceVisible` (reciprocal), `emailDigest` (opt-out). |
+| **Chat user** | `Model/ChatUserInterface` | Implemented by the host's user entity (mapped through `resolve_target_entities` from `user_class`): `getId()`, `getChatPublicId()`, `getChatDisplayName()`, `getChatInitials()`, `getChatEmail()`, `getChatLocale()`. |
+| **Value objects** | `Model/ChatChannel`, `ChatContact`, `ChatLinkPreview`, `ChatDigestItem` | Data exchanged with the host contracts (channels, picker contacts, link cards, digest lines). |
+
+## Assumptions
+
+- The host application provides the **user entity** (implementing `ChatUserInterface`), authentication (SecurityBundle) and the people directory / access rules through `ChatDirectoryInterface` and `ChatAccessPolicyInterface`.
+- **Doctrine ORM** is installed and the host generates and runs the migrations for the `nowo_chat_*` tables (optionally prefixed by `doctrine.table_prefix`).
+- **Realtime** needs a **Mercure hub** (`symfony/mercure-bundle`; FrankenPHP's built-in hub works) reachable by the browser; without one the dock falls back to polling.
+- **Web Push** needs the host's push stack (VAPID keys, subscription storage, a Web Push library) behind `ChatPushSenderInterface`, plus a service worker that shows the notification.
+- The **email digest** needs a mailer behind `ChatDigestSenderInterface`.
+- **Symfony Messenger** is optional: routed to an async transport, Web Push delivery and the digest check run in workers; without Messenger, Web Push is delivered inline and the digest is not scheduled (it needs a `DelayStamp`, i.e. an async transport).
+- A **shared PSR-6 cache pool** (e.g. Redis) is used in production so presence and recipient lists are consistent across workers / replicas.
+- Twig, Symfony UX Icons and `assets:install` (or the host's bundler importing the TypeScript sources) are available to render the dock.
 
 ## Success criteria
 
-- **SC-01** — `code-inventory.md` maps **91/91** production units (see its audit command).
+- **SC-01** — `code-inventory.md` maps **94/94** production units (see its audit command).
 - **SC-02** — PHPUnit: 100% line coverage of `src/`.
 - **SC-03** — Vitest: 100% line coverage of `Resources/assets/src`.
 - **SC-04** — PHPStan level 8 (with the FrankenPHP rulesets), Rector and PHP-CS-Fixer report nothing; Igor passes.
@@ -155,13 +192,27 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 - User accounts, authentication or the people directory (the application owns them through the contracts).
 - Running a Mercure hub, a Web Push stack or a mailer (the host provides them).
-- File attachments, message search and threads inside conversations (not in 1.0).
+- File attachments, message search and threads inside conversations (not in 1.x).
+- End-to-end encryption, voice / video calls and federation with external chat networks.
+- Per-request (or per-entity) profile selection: only `default_profile` is active.
 
 ## Validation
 
 ```bash
 make release-check          # hygiene, assets, QA, Igor, 100% coverage, Vitest, translations, demos
+make qa                     # cs-check, PHPStan, PHPUnit, Vitest (composer qa inside the container for the PHP part)
 make test-coverage          # PHPUnit with coverage
 make test-ts                # Vitest with coverage
+make validate-translations  # key parity across the 7 locales
 make -C demo/symfony8 test-e2e
+# Inventory count (must equal SC-01):
+find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l
 ```
+
+## Links
+
+- [Spec-driven development](../../docs/SPEC-DRIVEN-DEVELOPMENT.md) — user stories, scope, `REQ-*` anchors
+- [GitHub Spec Kit manual](../../docs/SPEC-KIT.md) — install, structure, maintainer checklist
+- [Code inventory](code-inventory.md) — 100% `src/` traceability
+- [Constitution](../../.specify/memory/constitution.md)
+- Integrator docs: [Installation](../../docs/INSTALLATION.md) · [Configuration](../../docs/CONFIGURATION.md) · [Usage](../../docs/USAGE.md) · [Architecture](../../docs/ARCHITECTURE.md) · [Security](../../docs/SECURITY.md) · [Changelog](../../docs/CHANGELOG.md)

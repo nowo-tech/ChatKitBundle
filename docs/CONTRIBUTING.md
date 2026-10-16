@@ -47,6 +47,7 @@ make install
 - PSR-12 via PHP-CS-Fixer
 - PHP 8.3+ with `declare(strict_types=1);`
 - PHPDoc in English for public classes and methods
+- `demo/` is excluded from the bundle PHP-CS-Fixer Finder (`.php-cs-fixer.dist.php`); demo PHP still declares `strict_types=1`, and the Flex-generated `config/bundles.php` and `config/preload.php` are out of scope (REQ-CS-004)
 
 ```bash
 make cs-check
@@ -75,6 +76,19 @@ make -C demo release-check
 ```
 
 After editing bundle PHP code in a mounted demo, run `make update-bundle` inside the demo directory (or rely on `release-check`, which syncs the bundle first).
+
+#### End-to-end tests and screenshots (REQ-DEMO-013)
+
+The Symfony 8.1 demo has a Playwright suite under `demo/symfony8/e2e/` (official Playwright Docker image; the demo must
+be up):
+
+```bash
+make -C demo/symfony8 test-e2e           # Playwright e2e (dock send, full-page chat) against http://127.0.0.1:$PORT
+make -C demo/symfony8 demo-screenshots   # re-captures the README screenshots as WebP in docs/images/demo/
+```
+
+Re-run `demo-screenshots` when the dock UI changes visibly and commit the updated `.webp` files (PNG intermediates are
+not committed).
 
 #### Release pipeline
 

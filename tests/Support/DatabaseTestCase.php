@@ -10,9 +10,14 @@ use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\TestCase;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpFoundation\Session\Session;
+use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 use Twig\Environment;
 
 use function assert;
+use function preg_replace;
 
 /**
  * Boots the test kernel on in-memory SQLite with the full schema (bundle entities + test user).
@@ -72,6 +77,21 @@ abstract class DatabaseTestCase extends TestCase
         assert($twig instanceof Environment);
 
         return $twig;
+    }
+
+    /**
+     * Renders the dock `<template>` markup inside a request with a session (the dock forms carry the `nowo_chat`
+     * CSRF token, as on a signed-in page) and replaces the random token values with a fixed placeholder.
+     */
+    protected function renderDockTemplates(): string
+    {
+        $request = Request::create('/');
+        $request->setSession(new Session(new MockArraySessionStorage()));
+        $this->get(RequestStack::class)->push($request);
+
+        $html = $this->twig()->render('@NowoChatKitBundle/_templates.html.twig');
+
+        return (string) preg_replace('/(name="[a-z_]+\[_token\]"[^>]*value=")[^"]*"/', '$1csrf-token"', $html);
     }
 
     protected function tearDown(): void

@@ -14,3 +14,9 @@ framework:
 
     php_errors:
         log: true
+
+    # REQ-RUNTIME-001: outbound HTTP never waits unbounded (innermost layer of the hierarchy:
+    # HttpClient 5s < PHP max_execution_time 30s < Caddy write 60s; see docker/frankenphp/Caddyfile).
+    http_client:
+        default_options:
+            timeout: 5

@@ -6,8 +6,11 @@ namespace Nowo\ChatKitBundle\Tests\Integration;
 
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
+use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
+use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\Push\ChatPushDispatcher;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
 use PHPUnit\Framework\TestCase;
@@ -44,6 +47,24 @@ final class BundleBootTest extends TestCase
             $packages = $container->get(TestKernel::ASSET_PACKAGES_ALIAS);
             self::assertInstanceOf(Packages::class, $packages);
             self::assertSame('/bundles/nowochatkit/js/nowo-chat.js', $packages->getUrl('js/nowo-chat.js', 'nowo_chat_kit'));
+        } finally {
+            $kernel->shutdown();
+        }
+    }
+
+    public function testHandlersAndListenerAreWiredByTheirAttributes(): void
+    {
+        $kernel = new TestKernel();
+        $kernel->boot();
+
+        try {
+            $tags = $kernel->getContainer()->getParameter(TestKernel::TAGS_PARAMETER);
+            self::assertIsArray($tags);
+            // #[AsMessageHandler(sign: true)] (symfony/messenger is installed here), #[AsDoctrineListener].
+            foreach ([ChatPushDispatcher::class, ChatDigestDispatcher::class] as $handler) {
+                self::assertTrue($tags[$handler]['messenger.message_handler'][0]['sign'] ?? false, $handler);
+            }
+            self::assertSame('loadClassMetadata', $tags[TablePrefixListener::class]['doctrine.event_listener'][0]['event'] ?? null);
         } finally {
             $kernel->shutdown();
         }

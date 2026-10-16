@@ -1,14 +1,29 @@
 {#
  # Full-page chat: works without JavaScript (links + form POST). Override in
  # templates/bundles/NowoChatKitBundle/page.html.twig ({% extends '@!NowoChatKitBundle/page.html.twig' %}).
+ # Extends `page_layout` (Twig global `nowo_chat_kit_page_layout`; the `layout` variable is kept for overrides).
+ # Opening a conversation never changes state on GET: with JavaScript, nowo-chat.js marks it read through the
+ # CSRF-protected `POST …/read` API (the `data-nowo-chat-read-*` attributes); without it, sending a message does.
  #}
-{% extends layout %}
+{% extends layout ?? nowo_chat_kit_page_layout %}
 {% trans_default_domain 'NowoChatKitBundle' %}
+{# The page loads the chat stylesheet and script itself: a dock included by the layout does not load them again. #}
+{% set nowo_chat_page_assets = true %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="stylesheet" href="{{ asset('css/nowo-chat.css', 'nowo_chat_kit') }}">
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
+{% endblock %}
 
 {% block title %}{{ current ? current.title : 'chat.page_title'|trans }}{% endblock %}
 
 {% block body %}
-    <div class="nowo-chat-page{{ current ? ' has-current' }}" data-testid="chat-page">
+    <div class="nowo-chat-page{{ current ? ' has-current' }}" data-testid="chat-page"{% if read ?? null %} data-nowo-chat-read-url="{{ read.url }}" data-nowo-chat-read-id="{{ read.messageId }}" data-nowo-chat-read-csrf="{{ read.csrf }}"{% endif %}>
         {% block nowo_chat_page_list %}
             <nav class="nowo-chat-page__list" aria-label="{{ 'chat.launcher'|trans }}">
                 <h1 class="nowo-chat-page__heading">{{ 'chat.page_title'|trans }}</h1>

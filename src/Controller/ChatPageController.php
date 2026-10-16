@@ -25,6 +25,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 /**
  * Full-page chat (`/chat`, `/chat/{uuid}`): the dock's "open in a page", the small-screen view and the no-JS
@@ -37,7 +38,8 @@ final class ChatPageController extends AbstractController
     private const int PAGE_SIZE  = 50;
 
     /**
-     * Builds the page controller from the chat services, repositories, the send rate limiter and the layout.
+     * Builds the page controller from the chat services, repositories, the send rate limiter, the CSRF token
+     * manager (header token of the mark-read call) and the layout.
      *
      * @param string $layout Template the chat page extends (`nowo_chat_kit.page_layout`)
      */
@@ -50,6 +52,7 @@ final class ChatPageController extends AbstractController
         private readonly ChatMessageRepository $messages,
         #[Autowire(service: 'limiter.nowo_chat_send')]
         private readonly RateLimiterFactoryInterface $sendLimiter,
+        private readonly CsrfTokenManagerInterface $csrf,
         #[Autowire(param: 'nowo_chat_kit.page_layout')]
         private readonly string $layout = '@NowoChatKitBundle/page_layout.html.twig',
     ) {
@@ -69,8 +72,9 @@ final class ChatPageController extends AbstractController
     }
 
     /**
-     * Renders one conversation (latest page of messages, composer) and marks it read up to the newest message;
-     * 404 when not visible.
+     * Renders one conversation (latest page of messages, composer); 404 when not visible. A GET never changes
+     * state (REQ-SEC-005): the read cursor moves through the CSRF-protected `POST …/read` API call that the page
+     * script makes on load (`read` context), or when the user sends a message from the page.
      *
      * @param string $uuid Conversation uuid
      *
@@ -83,12 +87,14 @@ final class ChatPageController extends AbstractController
         $conversation = $this->find($uuid);
         $page         = $this->messages->findPage($conversation, self::PAGE_SIZE);
         $last         = end($page);
-        if ($last instanceof ChatMessage) {
-            $this->chat->markRead($user, $conversation, (int) $last->getId());
-        }
 
         return $this->render('@NowoChatKitBundle/page.html.twig', [
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $page),
+            'read'     => $last instanceof ChatMessage ? [
+                'url'       => $this->generateUrl('nowo_chat_api_read', ['uuid' => $uuid]),
+                'messageId' => (int) $last->getId(),
+                'csrf'      => $this->csrf->getToken(ChatApiController::CSRF_ID)->getValue(),
+            ] : null,
             'can_send' => $this->isGranted(ChatVoter::SEND, $conversation),
             'composer' => $this->composer($uuid)->createView(),
         ] + $this->context($user, $conversation));
@@ -160,7 +166,8 @@ final class ChatPageController extends AbstractController
             if ($conversation->isDirect() && !isset($latest[$id]) && $conversation !== $current) {
                 continue;
             }
-            $rows[] = $this->summary($conversation, $user, $unread[$id] ?? 0, $latest[$id] ?? null);
+            // The open conversation is being read: the page script moves the cursor once it loads.
+            $rows[] = $this->summary($conversation, $user, $conversation === $current ? 0 : $unread[$id] ?? 0, $latest[$id] ?? null);
         }
 
         return [
@@ -168,6 +175,7 @@ final class ChatPageController extends AbstractController
             'conversations' => $rows,
             'current'       => $current instanceof ChatConversation ? $this->summary($current, $user) : null,
             'messages'      => [],
+            'read'          => null,
             'can_send'      => false,
         ];
     }
