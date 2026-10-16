@@ -42,6 +42,7 @@ final class ChatMarkdownRendererTest extends TestCase
 
     public function testPlainText(): void
     {
+        self::assertSame("a\tb\nc", ChatMarkdownRenderer::clean("a\u{0000}\tb\u{0007}\nc\u{007F}\u{202E}"), 'C0 / DEL / bidi removed, tab and newline kept');
         $renderer = new ChatMarkdownRenderer();
 
         self::assertSame('hola mundo code', $renderer->plainText("**hola**\n\n- _mundo_\n```\ncode\n```"));

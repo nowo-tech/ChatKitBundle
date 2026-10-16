@@ -111,7 +111,10 @@ final class ChatPageController extends AbstractController
         $error        = null;
         $form         = $this->composer($uuid);
         $form->handleRequest($request);
-        if (!$form->isSubmitted() || !$form->isValid()) {
+        /** @var array{_token?: string} $posted */
+        $posted = $request->request->all($form->getName());
+        // Fail-closed even when the application disables form CSRF: isCsrfTokenValid() throws without CSRF support.
+        if (!$form->isSubmitted() || !$form->isValid() || !$this->isCsrfTokenValid(self::CSRF_ID, (string) ($posted['_token'] ?? ''))) {
             $error = 'error';
         } elseif (!$this->isGranted(ChatVoter::SEND, $conversation)) {
             $error = 'read_only';

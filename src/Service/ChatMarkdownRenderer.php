@@ -104,7 +104,8 @@ final class ChatMarkdownRenderer
      */
     public static function clean(string $text): string
     {
-        return (string) preg_replace('/[\x{E000}-\x{F8FF}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $text);
+        // Private-use (placeholders), bidi overrides and C0 / DEL control characters (tab and line breaks kept).
+        return (string) preg_replace('/[\x{E000}-\x{F8FF}\x{202A}-\x{202E}\x{2066}-\x{2069}\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $text);
     }
 
     /**
