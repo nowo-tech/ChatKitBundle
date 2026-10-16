@@ -44,7 +44,7 @@ GitHub repository **About** is not stored in git. Copy the values from [GITHUB.m
 | --- | --- |
 | **Description** | Floating LinkedIn-style chat for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens. |
 | **Website** | https://packagist.org/packages/nowo-tech/chat-kit-bundle |
-| **Topics** | `php`, `symfony`, `symfony-bundle`, `chat`, `mercure`, `realtime`, `web-push`, `frankenphp`, `nowo` |
+| **Topics** | `php`, `symfony`, `symfony-bundle`, `chat`, `mercure`, `realtime`, `web-push`, `frankenphp`, `typescript` |
 
 ## Tag and publish
 
@@ -69,7 +69,7 @@ composer require nowo-tech/chat-kit-bundle
 ## Coverage goals
 
 - **PHP**: **≥99%** line coverage (target **100%**; `make test-coverage`)
-- **TypeScript**: **≥90%** line coverage (`make test-ts`)
+- **TypeScript**: **≥90%** of the minimum of statements / branches / functions / lines (`make test-ts`)
 
 Update README **Tests and coverage** percentages after each release when coverage changes materially.
 
@@ -77,4 +77,4 @@ Update README **Tests and coverage** percentages after each release when coverag
 
 | Version | Date | Notes |
 | --- | --- | --- |
-| — | — | No release yet (`1.0.x-dev` skeleton). |
+| 1.0.0 | 2026-10-16 | First release: floating chat (DMs, channels, support inbox), JSON API + full page, Mercure, Web Push, email digest, link previews, Spec Kit baseline, SEC-004 Pass (good). |

@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-16
+
 ### Added
 
 - Floating LinkedIn-style chat dock: direct messages, application channels (`ChatChannelProviderInterface`), shared
@@ -37,3 +39,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Package infrastructure: QA (PHP-CS-Fixer, PHPStan level 8, Rector, Igor), PHPUnit at 100% lines, Vitest, Flex recipe,
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
+
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/nowo-tech/ChatKitBundle/releases/tag/v1.0.0
