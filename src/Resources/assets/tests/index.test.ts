@@ -45,6 +45,9 @@ describe('nowo-chat entry', () => {
     expect(mount(element)).toBe(dock);
     expect(start).toHaveBeenCalledTimes(1);
     expect(mount(root('not json'))).toBeNull();
+    // A root without the attribute at all (mounted by hand) is skipped too.
+    const bare = document.createElement('div');
+    expect(mount(bare)).toBeNull();
     unmount(element);
     expect(destroy).toHaveBeenCalledTimes(1);
     unmount(element);

@@ -6,6 +6,7 @@
 import type { ChatApi } from './api';
 import type { RealtimeEvent } from './types';
 
+/** Live connection (Mercure / EventSource) to the user's private topic, with token refresh and reconnect backoff. */
 export class ChatRealtime {
   private source: EventSource | null = null;
   private retry = 0;
@@ -16,12 +17,23 @@ export class ChatRealtime {
   private readonly onEvent: (event: RealtimeEvent) => void;
   private readonly onState: (connected: boolean) => void;
 
+  /**
+   * Creates the connection manager (call connect() to open it).
+   *
+   * @param api API client (fetches the hub URL and the subscriber token).
+   * @param onEvent Called with every decoded realtime event.
+   * @param onState Called with true when connected, false when disconnected or disabled.
+   */
   constructor(api: ChatApi, onEvent: (event: RealtimeEvent) => void, onState: (connected: boolean) => void) {
     this.api = api;
     this.onEvent = onEvent;
     this.onState = onState;
   }
 
+  /**
+   * Opens the connection with a fresh token (closing the previous one) and schedules the token refresh.
+   * Errors schedule a reconnect; a disabled hub reports "not connected" and stays closed.
+   */
   async connect(): Promise<void> {
     if (this.stopped) {
       return;
@@ -77,6 +89,7 @@ export class ChatRealtime {
     }
   }
 
+  /** Retries connect() with exponential backoff (1 s doubling up to 60 s, plus up to 1 s of jitter); nothing after stop(). */
   private scheduleReconnect(): void {
     if (this.stopped) {
       return;
@@ -89,6 +102,7 @@ export class ChatRealtime {
     }, delay);
   }
 
+  /** Closes the current EventSource and cancels the pending token refresh. */
   private close(): void {
     if (this.refreshTimer !== null) {
       window.clearTimeout(this.refreshTimer);

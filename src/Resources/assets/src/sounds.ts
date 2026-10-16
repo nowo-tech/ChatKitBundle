@@ -4,7 +4,7 @@
  */
 import type { SoundName } from './types';
 
-type Note = { freq: number; at: number; length: number; type?: OscillatorType; gain?: number };
+type Note = { freq: number; at: number; length: number; type: OscillatorType; gain: number };
 
 const SOUNDS: Record<Exclude<SoundName, 'none'> | 'buzz', Note[]> = {
   pop: [{ freq: 880, at: 0, length: 0.09, type: 'sine', gain: 0.22 }],
@@ -22,6 +22,11 @@ const SOUNDS: Record<Exclude<SoundName, 'none'> | 'buzz', Note[]> = {
 
 let context: AudioContext | null = null;
 
+/**
+ * The shared AudioContext, created on first use.
+ *
+ * @returns The context, or null when the browser has no Web Audio.
+ */
 function audio(): AudioContext | null {
   const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (Ctor === undefined) {
@@ -31,6 +36,11 @@ function audio(): AudioContext | null {
   return context;
 }
 
+/**
+ * Plays a sound synthesised from its notes (oscillator + gain envelope); "none" and browsers without Web Audio are a no-op.
+ *
+ * @param name Sound to play.
+ */
 export function playSound(name: SoundName | 'buzz'): void {
   if (name === 'none') {
     return;
@@ -46,10 +56,10 @@ export function playSound(name: SoundName | 'buzz'): void {
   for (const note of SOUNDS[name]) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = note.type ?? 'sine';
+    osc.type = note.type;
     osc.frequency.setValueAtTime(note.freq, start + note.at);
     gain.gain.setValueAtTime(0.0001, start + note.at);
-    gain.gain.exponentialRampToValueAtTime(note.gain ?? 0.2, start + note.at + 0.012);
+    gain.gain.exponentialRampToValueAtTime(note.gain, start + note.at + 0.012);
     gain.gain.exponentialRampToValueAtTime(0.0001, start + note.at + note.length);
     osc.connect(gain).connect(ctx.destination);
     osc.start(start + note.at);
@@ -59,6 +69,9 @@ export function playSound(name: SoundName | 'buzz'): void {
 
 /**
  * Several browser tabs receive the same event: only one of them plays it (first to claim the message id).
+ *
+ * @param key Event key shared by the tabs (e.g. "msg-<id>"); claimed for 10 s.
+ * @param name Sound to play.
  */
 export function playOnce(key: string, name: SoundName | 'buzz'): void {
   const lock = `nowo-chat-sound:${key}`;

@@ -22,6 +22,10 @@ const MINIMISED_WIDTH = 232;
 const LIST_WIDTH = 312;
 const GAP = 8;
 
+/**
+ * The floating dock of one page: launcher, conversation list, people picker and the conversation windows.
+ * Hosts the ThreadView windows (ThreadHost) and keeps them in step with the server, realtime and other tabs.
+ */
 export class ChatDock implements ThreadHost {
   readonly api: ChatApi;
   readonly config: ChatConfig;
@@ -76,6 +80,12 @@ export class ChatDock implements ThreadHost {
   private readonly overflowMenu: HTMLElement;
   private readonly mobileQuery: MediaQueryList;
 
+  /**
+   * Builds the dock markup from the templates and binds its events (call start() to load and connect).
+   *
+   * @param root Dock root holding the `<template>` elements; the dock is appended to it.
+   * @param config Dock configuration rendered by Twig.
+   */
   constructor(root: HTMLElement, config: ChatConfig) {
     this.root = root;
     this.config = config;
@@ -110,6 +120,7 @@ export class ChatDock implements ThreadHost {
     this.store.subscribe((event) => this.onSync(event));
   }
 
+  /** Starts the dock: leader election, restored layout, first list load, `?chat=` link, polling, realtime and presence. */
   async start(): Promise<void> {
     if (!this.leader) {
       // Held until the tab closes; the next tab in line takes over automatically.
@@ -153,13 +164,23 @@ export class ChatDock implements ThreadHost {
     this.dock.remove();
   }
 
+  /**
+   * A conversation summary changed (resolved, renamed…): update the window and the list.
+   *
+   * @param summary Fresh summary from the server.
+   */
   conversationChanged(summary: ConversationSummary): void {
     this.conversations.set(summary.uuid, summary);
     this.windows.get(summary.uuid)?.applySummary(summary);
     this.renderList();
   }
 
-  /** Preview of a link for this viewer, batched (one request per tick, at most 10 links) and cached. */
+  /**
+   * Preview of a link for this viewer, batched (one request per tick, at most 10 links) and cached.
+   *
+   * @param url Link found in a message.
+   * @returns The preview, or null when the application shows none (or the request failed).
+   */
   linkPreview(url: string): Promise<LinkPreview | null> {
     let pending = this.previews.get(url);
     if (pending === undefined) {
@@ -177,6 +198,11 @@ export class ChatDock implements ThreadHost {
     return pending;
   }
 
+  /**
+   * Opens the batch of link previews of this tick; it is sent in chunks of ten on the next microtask.
+   *
+   * @returns The batch (its URLs and the resolver that delivers the merged answers).
+   */
   private startPreviewBatch(): { urls: string[]; resolve: (map: Record<string, LinkPreview>) => void } {
     const batch = { urls: [] as string[], resolve: (_map: Record<string, LinkPreview>): void => undefined };
     this.previewBatch = batch;
@@ -192,18 +218,41 @@ export class ChatDock implements ThreadHost {
     return batch;
   }
 
+  /**
+   * Whether the phone layout (full-screen sheet) applies.
+   *
+   * @returns True below the mobile breakpoint.
+   */
   isMobile(): boolean {
     return this.mobileQuery.matches;
   }
 
+  /**
+   * Stored draft of a conversation.
+   *
+   * @param uuid Conversation uuid.
+   * @returns The draft text ("" when none).
+   */
   draft(uuid: string): string {
     return this.drafts.get(uuid);
   }
 
+  /**
+   * Stores the draft of a conversation (a blank value removes it).
+   *
+   * @param uuid Conversation uuid.
+   * @param value Composer text.
+   */
   saveDraft(uuid: string, value: string): void {
     this.drafts.set(uuid, value);
   }
 
+  /**
+   * Minimises or expands a window (shared with the other tabs); on phones, leaves or shows the full-screen thread.
+   *
+   * @param uuid Conversation uuid.
+   * @param minimised True to minimise, false to expand.
+   */
   minimise(uuid: string, minimised: boolean): void {
     if (this.isMobile()) {
       this.mobileActive = minimised ? null : uuid;
@@ -219,6 +268,11 @@ export class ChatDock implements ThreadHost {
     this.applyState();
   }
 
+  /**
+   * Closes a window (in every tab); focus moves to the next window or the launcher when it had it.
+   *
+   * @param uuid Conversation uuid.
+   */
   close(uuid: string): void {
     if (this.isMobile()) {
       this.mobileActive = null;
@@ -241,6 +295,15 @@ export class ChatDock implements ThreadHost {
     }
   }
 
+  /**
+   * A window's messages changed: update the cache and the list row, count unread on a minimised window and share
+   * the new messages with the other tabs.
+   *
+   * @param uuid Conversation uuid.
+   * @param messages Every message of the thread, oldest first.
+   * @param hasMore Whether older messages exist on the server.
+   * @param fresh Messages that were not there before (sent to the other tabs).
+   */
   messagesChanged(uuid: string, messages: ChatMessage[], hasMore: boolean, fresh: ChatMessage[]): void {
     this.cache.write(uuid, messages, hasMore);
     const last = messages.at(-1);
@@ -260,6 +323,12 @@ export class ChatDock implements ThreadHost {
     }
   }
 
+  /**
+   * A window was read: clear its unread count, tell the other tabs and the server.
+   *
+   * @param uuid Conversation uuid.
+   * @param messageId Newest message id seen.
+   */
   read(uuid: string, messageId: number): void {
     const summary = this.conversations.get(uuid);
     if (summary !== undefined) {
@@ -270,7 +339,12 @@ export class ChatDock implements ThreadHost {
     void this.api.markRead(uuid, messageId).catch(() => undefined);
   }
 
-  /** Open (or focus) a conversation window; from the list, the picker or another browser tab. */
+  /**
+   * Open (or focus) a conversation window; from the list, the picker or another browser tab.
+   *
+   * @param summary Conversation to open (merged into the known summary).
+   * @param focus Whether to focus the composer of the window.
+   */
   async open(summary: ConversationSummary, focus = true): Promise<void> {
     this.conversations.set(summary.uuid, { ...this.conversations.get(summary.uuid), ...summary });
     if (!this.windows.has(summary.uuid)) {
@@ -290,6 +364,10 @@ export class ChatDock implements ThreadHost {
     }
   }
 
+  /**
+   * Wires the panel controls and the page-level listeners (links, logout, keyboard, resize, visibility); the
+   * document / window ones are removed by destroy().
+   */
   private bind(): void {
     const signal = this.abort.signal;
     this.launcher.addEventListener('click', () => this.toggleList());
@@ -417,6 +495,12 @@ export class ChatDock implements ThreadHost {
     );
   }
 
+  /**
+   * Opens the conversation a `data-nowo-chat-open` link points to ("support", "user:<id>", "channel:<key>",
+   * "conversation:<uuid>"); other values are ignored.
+   *
+   * @param trigger The clicked element.
+   */
   private async openTarget(trigger: HTMLElement): Promise<void> {
     const target = trigger.dataset.nowoChatOpen ?? '';
     if (target === 'support') {
@@ -437,12 +521,21 @@ export class ChatDock implements ThreadHost {
     }
   }
 
+  /**
+   * Shows or hides the "+N" menu of windows that do not fit.
+   *
+   * @param open True to show it.
+   */
   private toggleOverflow(open: boolean): void {
     this.overflowMenu.hidden = !open;
     this.overflowBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
 
-  /** "Reconnecting…" while the live connection is down, a short "Back online" when it returns. */
+  /**
+   * "Reconnecting…" while the live connection is down, a short "Back online" when it returns.
+   *
+   * @param key Status message key; null hides the status. Every key except "reconnecting" hides itself after a few seconds.
+   */
   private showStatus(key: 'reconnecting' | 'reconnected' | 'error' | null): void {
     window.clearTimeout(this.statusTimer);
     if (key === null) {
@@ -474,6 +567,11 @@ export class ChatDock implements ThreadHost {
     void this.api.conversation(uuid).then((summary) => this.open(summary)).catch(() => undefined);
   }
 
+  /**
+   * Applies a realtime event: new / updated messages, read cursors, typing, or a changed conversation.
+   *
+   * @param event Event from the user's private topic.
+   */
   private onRealtime(event: RealtimeEvent): void {
     if (event.type === 'message' || event.type === 'message_updated') {
       const message: ChatMessage = { ...event.message, mine: event.message.authorUuid === this.config.userUuid };
@@ -529,7 +627,12 @@ export class ChatDock implements ThreadHost {
     void this.api.conversation(event.conversationUuid).then((summary) => this.conversationChanged(summary)).catch(() => undefined);
   }
 
-  /** Sound / buzz for an incoming message: once across tabs, only when it is not already in front of the user. */
+  /**
+   * Sound / buzz for an incoming message: once across tabs, only when it is not already in front of the user.
+   *
+   * @param uuid Conversation uuid.
+   * @param message The incoming message (a buzz also opens and shakes its window).
+   */
   private alert(uuid: string, message: ChatMessage): void {
     const view = this.windows.get(uuid);
     if (message.kind === 'buzz') {
@@ -552,6 +655,7 @@ export class ChatDock implements ThreadHost {
 
   /** Heartbeat every 30 s (visible or not); the answer lights the online dots of direct contacts. */
   private startPresence(): void {
+    /** One heartbeat (followers skip it while hidden): updates the online dots that changed. */
     const beat = (): void => {
       if (document.visibilityState !== 'visible' && !this.leader) {
         return;
@@ -588,6 +692,11 @@ export class ChatDock implements ThreadHost {
     );
   }
 
+  /**
+   * Opens or closes the conversation list (shared layout); opening focuses the search.
+   *
+   * @param force True to open, false to close; toggles when omitted.
+   */
   private toggleList(force?: boolean): void {
     const open = force ?? !this.store.get().listOpen;
     this.store.update((state) => {
@@ -603,11 +712,17 @@ export class ChatDock implements ThreadHost {
     }
   }
 
+  /**
+   * Plays the entry animation (CSS `is-entering`) on a panel or window.
+   *
+   * @param element Element that just appeared.
+   */
   private playEntry(element: HTMLElement): void {
     element.classList.add('is-entering');
     window.setTimeout(() => element.classList.remove('is-entering'), 260);
   }
 
+  /** Switches the panel to the people picker (opening the list first) and loads the suggestions. */
   private openPicker(): void {
     if (!this.store.get().listOpen) {
       this.toggleList(true);
@@ -620,6 +735,7 @@ export class ChatDock implements ThreadHost {
     this.pickerInput.focus({ preventScroll: true });
   }
 
+  /** Back from the people picker to the conversation list. */
   private closePicker(): void {
     if (this.mode !== 'picker') {
       return;
@@ -732,6 +848,10 @@ export class ChatDock implements ThreadHost {
     );
   }
 
+  /**
+   * Reloads the conversation list: updates open windows (catching up the ones whose last message changed),
+   * toggles the offline state, then renders the list and the layout.
+   */
   private async refreshList(): Promise<void> {
     try {
       const { conversations } = await this.api.conversations();
@@ -756,6 +876,14 @@ export class ChatDock implements ThreadHost {
     this.applyState();
   }
 
+  /**
+   * Empty / loading / no-results block of the list.
+   *
+   * @param title Main text.
+   * @param body Secondary text (null hides it).
+   * @param start Whether to show the "start a conversation" button.
+   * @returns The state element.
+   */
   private listState(title: string, body: string | null = null, start = false): HTMLElement {
     const state = this.templates.clone('list-state');
     text(state, 'title', title);
@@ -766,6 +894,12 @@ export class ChatDock implements ThreadHost {
     return state;
   }
 
+  /**
+   * Second line of a list row: who is typing, the buzz / deleted label, or the last message with its author.
+   *
+   * @param summary Conversation of the row.
+   * @returns The preview text.
+   */
   private previewOf(summary: ConversationSummary): string {
     const i18n = this.config.i18n;
     if (this.listTyping.has(summary.uuid)) {
@@ -789,6 +923,7 @@ export class ChatDock implements ThreadHost {
     return `${author}${last.preview}`;
   }
 
+  /** Renders the conversation list (filter, search, newest first) and the launcher badge. */
   private renderList(): void {
     const i18n = this.config.i18n;
     const rows = [...this.conversations.values()]
@@ -834,12 +969,20 @@ export class ChatDock implements ThreadHost {
     this.renderBadge();
   }
 
+  /** Total unread count on the launcher badge (and the `has-unread` root class). */
   private renderBadge(): void {
     const total = [...this.conversations.values()].reduce((sum, summary) => sum + summary.unread, 0);
     setBadge(this.launcherBadge, total, t(this.config.i18n, 'unread', { count: total }));
     this.root.classList.toggle('has-unread', total > 0);
   }
 
+  /**
+   * A section of the people picker.
+   *
+   * @param heading Section heading (null hides it).
+   * @param rows Picker rows.
+   * @returns The section element.
+   */
   private section(heading: string | null, rows: HTMLElement[]): HTMLElement {
     const section = this.templates.clone('picker-section');
     text(section, 'heading', heading);
@@ -847,6 +990,13 @@ export class ChatDock implements ThreadHost {
     return section;
   }
 
+  /**
+   * Message block of the people picker (nobody found, error).
+   *
+   * @param message Text to show.
+   * @param alert Whether it is announced as an alert.
+   * @returns The state element.
+   */
   private pickerState(message: string, alert = false): HTMLElement {
     const state = this.templates.clone('picker-state');
     text(state, 'text', message);
@@ -856,6 +1006,12 @@ export class ChatDock implements ThreadHost {
     return state;
   }
 
+  /**
+   * Fills the people picker: pinned support / context channel, recent people (empty query) and one section per
+   * directory source; answers for an outdated query are dropped.
+   *
+   * @param query Search text.
+   */
   private async loadContacts(query: string): Promise<void> {
     const i18n = this.config.i18n;
     this.contactsQuery = query;
@@ -921,6 +1077,15 @@ export class ChatDock implements ThreadHost {
     this.pickerResults.replaceChildren(...sections);
   }
 
+  /**
+   * A clickable row of the people picker; a failing pick marks the row and shows an error.
+   *
+   * @param title Row title.
+   * @param subtitle Second line.
+   * @param picture Avatar element.
+   * @param onPick Opens the conversation.
+   * @returns The row button.
+   */
   private pickerRow(title: string, subtitle: string, picture: HTMLElement, onPick: () => Promise<void>): HTMLElement {
     const row = this.templates.clone<HTMLButtonElement>('picker-row');
     part(row, 'avatar').replaceWith(picture);
@@ -945,6 +1110,11 @@ export class ChatDock implements ThreadHost {
     return row;
   }
 
+  /**
+   * Applies an event from another tab: a new layout, messages for a conversation, or a read cursor.
+   *
+   * @param event Sync event.
+   */
   private onSync(event: SyncEvent): void {
     if (event.type === 'state') {
       this.applyState();
@@ -984,6 +1154,11 @@ export class ChatDock implements ThreadHost {
     }, delay);
   }
 
+  /**
+   * One poll tick: refresh the list (forced, live, every 4th tick or hidden tab), else catch up the open windows.
+   *
+   * @param force Refresh the list now (reconnect, tab visible again).
+   */
   private async poll(force: boolean): Promise<void> {
     this.tick += 1;
     if (force || this.live || this.tick % 4 === 0 || document.visibilityState !== 'visible') {
@@ -1004,6 +1179,9 @@ export class ChatDock implements ThreadHost {
 /**
  * Moves `element` right after `anchor` only when it is not there already: re-inserting a node resets the scroll
  * position of everything inside it (an open thread would jump back to its first message).
+ *
+ * @param anchor Element to follow.
+ * @param element Element to place.
  */
 function placeAfter(anchor: Element, element: Element): void {
   if (anchor.nextElementSibling !== element) {

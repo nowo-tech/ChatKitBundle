@@ -12,11 +12,17 @@ export type SyncEvent =
   | { type: 'messages'; uuid: string; messages: ChatMessage[] }
   | { type: 'read'; uuid: string; messageId: number };
 
+/** Shared dock layout of one user (localStorage), mirrored to the other tabs (BroadcastChannel, storage events as fallback). */
 export class DockStore {
   private state: DockState;
   private readonly channel: BroadcastChannel | null;
   private readonly key: string;
   private readonly listeners = new Set<(event: SyncEvent) => void>();
+  /**
+   * Fallback without BroadcastChannel: reloads the layout when another tab writes it.
+   *
+   * @param event Storage event of the window.
+   */
   private readonly onStorage = (event: StorageEvent): void => {
     if (event.key === this.key && this.channel === null) {
       this.state = this.load();
@@ -24,6 +30,11 @@ export class DockStore {
     }
   };
 
+  /**
+   * Loads the stored layout and starts listening to the other tabs.
+   *
+   * @param userUuid Current user (the storage key and channel name are per user).
+   */
   constructor(userUuid: string) {
     this.key = `nowo-chat:${userUuid}`;
     this.state = this.load();
@@ -39,10 +50,20 @@ export class DockStore {
     this.listeners.clear();
   }
 
+  /**
+   * Current layout.
+   *
+   * @returns The layout state (do not mutate; use update()).
+   */
   get(): DockState {
     return this.state;
   }
 
+  /**
+   * Changes the layout: applies the mutation to a copy, stores it and sends it to the other tabs.
+   *
+   * @param mutate Callback that edits the copy of the state in place.
+   */
   update(mutate: (state: DockState) => void): void {
     const next: DockState = structuredClone(this.state);
     mutate(next);
@@ -55,16 +76,31 @@ export class DockStore {
     this.channel?.postMessage({ type: 'state', state: next } satisfies SyncEvent);
   }
 
-  /** Share freshly fetched / sent messages with the other tabs so they paint without polling. */
+  /**
+   * Share freshly fetched / sent messages with the other tabs so they paint without polling.
+   *
+   * @param event Messages or read event for the other tabs.
+   */
   broadcast(event: Exclude<SyncEvent, { type: 'state' }>): void {
     this.channel?.postMessage(event);
   }
 
+  /**
+   * Listens to layout changes and messages coming from other tabs.
+   *
+   * @param listener Called with every sync event.
+   * @returns A function that removes the listener.
+   */
   subscribe(listener: (event: SyncEvent) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
 
+  /**
+   * Handles a message from another tab: adopts a new layout, then notifies the listeners.
+   *
+   * @param event Event received over the BroadcastChannel.
+   */
   private receive(event: SyncEvent): void {
     if (event.type === 'state') {
       this.state = event.state;
@@ -72,10 +108,20 @@ export class DockStore {
     this.emit(event);
   }
 
+  /**
+   * Notifies every listener.
+   *
+   * @param event Event to deliver.
+   */
   private emit(event: SyncEvent): void {
     this.listeners.forEach((listener) => listener(event));
   }
 
+  /**
+   * Reads the stored layout, keeping only well-formed fields.
+   *
+   * @returns The stored layout, or an empty one when missing, invalid or storage is unavailable.
+   */
   private load(): DockState {
     try {
       const raw = window.localStorage.getItem(this.key);
@@ -100,11 +146,20 @@ export class DockStore {
 export class ThreadCache {
   private readonly key: string;
 
+  /**
+   * Creates the cache of one user.
+   *
+   * @param userUuid Current user (part of the storage key).
+   */
   constructor(userUuid: string) {
     this.key = `nowo-chat-cache:${userUuid}`;
   }
 
-  /** Keep only the conversations that are still open (the cache never grows past the open windows). */
+  /**
+   * Keep only the conversations that are still open (the cache never grows past the open windows).
+   *
+   * @param openUuids Uuids of the conversations whose windows are open.
+   */
   prune(openUuids: string[]): void {
     try {
       const all = JSON.parse(window.sessionStorage.getItem(this.key) ?? '{}') as Record<string, unknown>;
@@ -115,6 +170,12 @@ export class ThreadCache {
     }
   }
 
+  /**
+   * Cached messages of a conversation.
+   *
+   * @param uuid Conversation uuid.
+   * @returns The cached messages and the "has more" flag, or null when nothing is cached.
+   */
   read(uuid: string): { messages: ChatMessage[]; hasMore: boolean } | null {
     try {
       const all = JSON.parse(window.sessionStorage.getItem(this.key) ?? '{}') as Record<string, { messages: ChatMessage[]; hasMore: boolean }>;
@@ -124,6 +185,13 @@ export class ThreadCache {
     }
   }
 
+  /**
+   * Caches the last 40 messages of a conversation (best effort).
+   *
+   * @param uuid Conversation uuid.
+   * @param messages Messages of the thread, oldest first.
+   * @param hasMore Whether older messages exist on the server (forced true when messages were trimmed).
+   */
   write(uuid: string, messages: ChatMessage[], hasMore: boolean): void {
     try {
       const all = JSON.parse(window.sessionStorage.getItem(this.key) ?? '{}') as Record<string, unknown>;
@@ -142,14 +210,31 @@ export class ThreadCache {
 export class DraftStore {
   private readonly key: string;
 
+  /**
+   * Creates the draft store of one user.
+   *
+   * @param userUuid Current user (part of the storage key).
+   */
   constructor(userUuid: string) {
     this.key = `nowo-chat-drafts:${userUuid}`;
   }
 
+  /**
+   * Draft of a conversation.
+   *
+   * @param uuid Conversation uuid.
+   * @returns The draft text ("" when none).
+   */
   get(uuid: string): string {
     return this.all()[uuid] ?? '';
   }
 
+  /**
+   * Stores a draft; a blank text removes it.
+   *
+   * @param uuid Conversation uuid.
+   * @param text Composer text.
+   */
   set(uuid: string, text: string): void {
     const drafts = this.all();
     if (text.trim() === '') {
@@ -164,6 +249,11 @@ export class DraftStore {
     }
   }
 
+  /**
+   * Every stored draft of this user.
+   *
+   * @returns Drafts keyed by conversation uuid (empty when missing, invalid or storage is unavailable).
+   */
   private all(): Record<string, string> {
     try {
       const parsed = JSON.parse(window.localStorage.getItem(this.key) ?? '{}') as unknown;

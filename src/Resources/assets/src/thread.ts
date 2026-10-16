@@ -10,21 +10,72 @@ import { dayLabel, isNewDay, startsGroup, t, timeLabel } from './format';
 import { part, text, type Templates } from './templates';
 import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader } from './types';
 
+/** What a conversation window needs from the dock that hosts it (ChatDock). */
 export interface ThreadHost {
   config: ChatConfig;
   api: ChatApi;
   templates: Templates;
+  /**
+   * Minimise or expand a window.
+   *
+   * @param uuid Conversation uuid.
+   * @param minimised True to minimise.
+   */
   minimise(uuid: string, minimised: boolean): void;
+  /**
+   * Close a window.
+   *
+   * @param uuid Conversation uuid.
+   */
   close(uuid: string): void;
+  /**
+   * Store the composer draft.
+   *
+   * @param uuid Conversation uuid.
+   * @param text Composer text.
+   */
   saveDraft(uuid: string, text: string): void;
+  /**
+   * Stored composer draft.
+   *
+   * @param uuid Conversation uuid.
+   * @returns The draft ("" when none).
+   */
   draft(uuid: string): string;
-  /** A message arrived or was sent here: keep the list row, other tabs and the cache in step. */
+  /**
+   * A message arrived or was sent here: keep the list row, other tabs and the cache in step.
+   *
+   * @param uuid Conversation uuid.
+   * @param messages Every message of the thread, oldest first.
+   * @param hasMore Whether older messages exist on the server.
+   * @param fresh Messages that were not there before.
+   */
   messagesChanged(uuid: string, messages: ChatMessage[], hasMore: boolean, fresh: ChatMessage[]): void;
+  /**
+   * The user has seen the thread up to a message.
+   *
+   * @param uuid Conversation uuid.
+   * @param messageId Newest message id seen.
+   */
   read(uuid: string, messageId: number): void;
+  /**
+   * Whether the phone layout applies.
+   *
+   * @returns True on phones.
+   */
   isMobile(): boolean;
-  /** An agent resolved a support thread: refresh its summary everywhere. */
+  /**
+   * An agent resolved a support thread: refresh its summary everywhere.
+   *
+   * @param summary Updated summary.
+   */
   conversationChanged(summary: ConversationSummary): void;
-  /** Card for a link, as the viewer may see it (null: none). */
+  /**
+   * Card for a link, as the viewer may see it (null: none).
+   *
+   * @param url Link found in a message.
+   * @returns The preview, or null.
+   */
   linkPreview(url: string): Promise<LinkPreview | null>;
 }
 
@@ -32,6 +83,7 @@ const TYPING_SEND_EVERY_MS = 3_000;
 const TYPING_SHOW_MS = 5_000;
 const NEAR_BOTTOM_PX = 48;
 
+/** One conversation window: header, thread (messages, receipts, reactions, previews) and composer. */
 export class ThreadView {
   readonly element: HTMLElement;
   private summary: ConversationSummary;
@@ -79,6 +131,12 @@ export class ThreadView {
 
   private readonly host: ThreadHost;
 
+  /**
+   * Builds the window from the `window` template, restores the draft and binds its controls.
+   *
+   * @param host Dock hosting the window.
+   * @param summary Conversation shown.
+   */
   constructor(host: ThreadHost, summary: ConversationSummary) {
     this.host = host;
     this.summary = summary;
@@ -156,18 +214,39 @@ export class ThreadView {
     this.applySummary(summary);
   }
 
+  /**
+   * Uuid of the conversation shown.
+   *
+   * @returns The conversation uuid.
+   */
   get uuid(): string {
     return this.summary.uuid;
   }
 
+  /**
+   * Whether the window is minimised.
+   *
+   * @returns True when minimised.
+   */
   get isMinimised(): boolean {
     return this.minimised;
   }
 
+  /**
+   * Id of the newest message loaded.
+   *
+   * @returns The id, or 0 without messages.
+   */
   lastId(): number {
     return this.messages.at(-1)?.id ?? 0;
   }
 
+  /**
+   * Applies a conversation summary: header (title, subtitle, avatar, context), buttons, unread badge and the
+   * read-only state of the composer.
+   *
+   * @param summary Current summary.
+   */
   applySummary(summary: ConversationSummary): void {
     this.summary = summary;
     const i18n = this.host.config.i18n;
@@ -192,7 +271,11 @@ export class ThreadView {
     this.updateComposerState();
   }
 
-  /** Support threads: "Reported from …" chip, a link when the page is known. */
+  /**
+   * Support threads: "Reported from …" chip, a link when the page is known.
+   *
+   * @param summary Current summary.
+   */
   private applyContext(summary: ConversationSummary): void {
     const chip = part(this.element, 'context');
     const context = summary.kind === 'support' ? summary.supportContext ?? null : null;
@@ -209,6 +292,12 @@ export class ThreadView {
     }
   }
 
+  /**
+   * Shows the window minimised or expanded; expanding clears the badge, scrolls to the latest and marks it read.
+   * Applying the same state again does nothing.
+   *
+   * @param minimised True to minimise.
+   */
   setMinimised(minimised: boolean): void {
     if (this.minimisedApplied && this.minimised === minimised) {
       // Same state (another tab synced the layout): never move the reader's scroll position.
@@ -236,6 +325,7 @@ export class ThreadView {
     this.maybeMarkRead();
   }
 
+  /** Moves focus to the header button (keyboard navigation between windows). */
   focusHeader(): void {
     this.identity.focus({ preventScroll: true });
   }
@@ -245,13 +335,18 @@ export class ThreadView {
     this.maybeMarkRead();
   }
 
+  /** Moves focus to the composer, unless the thread is read-only. */
   focusComposer(): void {
     if (!this.input.disabled) {
       this.input.focus({ preventScroll: true });
     }
   }
 
-  /** First paint from the per-tab cache (instant after navigation), then the server catches up. */
+  /**
+   * First paint from the per-tab cache (instant after navigation), then the server catches up.
+   *
+   * @param cached Cached messages, or null (shows the loading state).
+   */
   hydrate(cached: { messages: ChatMessage[]; hasMore: boolean } | null): void {
     if (cached !== null && cached.messages.length > 0) {
       this.messages = cached.messages;
@@ -263,6 +358,7 @@ export class ThreadView {
     }
   }
 
+  /** Loads the newest page from the server (or catches up after a cache paint); failures show the error state. */
   async load(): Promise<void> {
     try {
       if (this.messages.length > 0) {
@@ -298,7 +394,12 @@ export class ThreadView {
     this.merge(page.messages, true);
   }
 
-  /** Messages from another browser tab, a poll or our own send. */
+  /**
+   * Messages from another browser tab, a poll or our own send.
+   *
+   * @param incoming Messages to add or replace (by id).
+   * @param notify Whether to report the new ones to the host (false when they came from another tab).
+   */
   merge(incoming: ChatMessage[], notify: boolean): void {
     const known = new Map(this.messages.map((message) => [message.id, message]));
     const fresh: ChatMessage[] = [];
@@ -351,7 +452,11 @@ export class ThreadView {
     this.maybeMarkRead();
   }
 
-  /** Edit, delete or reaction change (here, in another tab or by someone else): replace the line in place. */
+  /**
+   * Edit, delete or reaction change (here, in another tab or by someone else): replace the line in place.
+   *
+   * @param message Updated message (unknown ids are ignored; `mine` is kept from the loaded one).
+   */
   update(message: ChatMessage): void {
     const index = this.messages.findIndex((item) => item.id === message.id);
     if (index < 0) {
@@ -369,12 +474,23 @@ export class ThreadView {
     this.host.messagesChanged(this.summary.uuid, this.messages, this.hasMore, []);
   }
 
+  /**
+   * The thread was read elsewhere (another tab or device): move the read cursor and clear the badge.
+   *
+   * @param messageId Newest message id read.
+   */
   markReadLocally(messageId: number): void {
     this.readUpTo = Math.max(this.readUpTo, messageId);
     this.setUnread(0);
   }
 
-  /** Realtime: another participant moved their read cursor. */
+  /**
+   * Realtime: another participant moved their read cursor.
+   *
+   * @param userUuid Reader uuid.
+   * @param name Reader display name.
+   * @param messageId Newest message id they have read (older cursors are ignored).
+   */
   readBy(userUuid: string, name: string, messageId: number): void {
     const current = this.readers.get(userUuid);
     if (current === undefined || current.messageId < messageId) {
@@ -383,7 +499,12 @@ export class ThreadView {
     }
   }
 
-  /** Realtime: someone is typing (hidden after 5 s without a new ping, or when their message arrives). */
+  /**
+   * Realtime: someone is typing (hidden after 5 s without a new ping, or when their message arrives).
+   *
+   * @param userUuid Typist uuid.
+   * @param name Typist display name.
+   */
   typingBy(userUuid: string, name: string): void {
     const previous = this.typists.get(userUuid);
     if (previous !== undefined) {
@@ -397,6 +518,11 @@ export class ThreadView {
     this.renderTyping();
   }
 
+  /**
+   * "Ana is typing", "Ana and Luis are typing" or "Several people are typing".
+   *
+   * @returns The label, or null when nobody is typing.
+   */
   typingLabel(): string | null {
     const names = [...this.typists.values()].map((typist) => typist.name);
     const i18n = this.host.config.i18n;
@@ -452,6 +578,11 @@ export class ThreadView {
     }
   }
 
+  /**
+   * Warm halo around the window (keeps its own box shadow); skipped without Web Animations.
+   *
+   * @param duration Animation length in milliseconds.
+   */
   private halo(duration: number): void {
     if (typeof this.element.animate !== 'function') {
       return;
@@ -470,6 +601,12 @@ export class ThreadView {
     );
   }
 
+  /**
+   * Pulse on the buzz bolt; skipped without Web Animations.
+   *
+   * @param element Element to animate.
+   * @param reduced Reduced motion: an opacity fade instead of the scale / rotate.
+   */
   private pulse(element: HTMLElement, reduced: boolean): void {
     if (typeof element.animate !== 'function') {
       return;
@@ -482,10 +619,16 @@ export class ThreadView {
     );
   }
 
+  /**
+   * Replaces the read cursors of the other participants.
+   *
+   * @param readers Read cursors from the server.
+   */
   private setReaders(readers: Reader[]): void {
     this.readers = new Map(readers.map((reader) => [reader.userUuid, reader]));
   }
 
+  /** Updates the "typing…" line (the live region only changes when its text does). */
   private renderTyping(): void {
     const label = this.typingLabel() ?? '';
     // Rewriting the same text would make the live region repeat it on every ping.
@@ -495,6 +638,7 @@ export class ThreadView {
     this.typingEl.hidden = label === '';
   }
 
+  /** Tells the server the user is typing, at most every 3 s and only with text in the composer. */
   private pingTyping(): void {
     const now = Date.now();
     if (this.input.value.trim() === '' || now - this.lastTypingSent < TYPING_SEND_EVERY_MS) {
@@ -504,6 +648,7 @@ export class ThreadView {
     void this.host.api.typing(this.summary.uuid).catch(() => undefined);
   }
 
+  /** Sends a buzz; "too soon" shows a notice; the button stays disabled for 1.5 s. */
   private async sendBuzz(): Promise<void> {
     this.buzzBtn.disabled = true;
     // The bolt reacts at once so the sender knows it left.
@@ -521,6 +666,11 @@ export class ThreadView {
     }
   }
 
+  /**
+   * Shows a notice for 3 s, then restores the read-only notice (or hides it).
+   *
+   * @param message Text to show.
+   */
   private flashNotice(message: string): void {
     this.notice.hidden = false;
     this.notice.textContent = message;
@@ -543,6 +693,12 @@ export class ThreadView {
     }
   }
 
+  /**
+   * Closes the open popover on a click outside it and its opener.
+   *
+   * @param panel Popover element.
+   * @param opener Button that opened it.
+   */
   private watchOutside(panel: HTMLElement, opener: HTMLElement): void {
     this.popoverOutside = (event: MouseEvent): void => {
       if (!panel.contains(event.target as Node) && !opener.contains(event.target as Node)) {
@@ -552,6 +708,7 @@ export class ThreadView {
     document.addEventListener('click', this.popoverOutside, true);
   }
 
+  /** Opens or closes the emoji picker of the composer. */
   private toggleEmoji(): void {
     const open = this.emojiPanel === null;
     this.closePopovers();
@@ -576,7 +733,12 @@ export class ThreadView {
     this.watchOutside(panel, this.emojiBtn);
   }
 
-  /** Quick reaction bar (the configured emojis) next to a message. */
+  /**
+   * Quick reaction bar (the configured emojis) next to a message.
+   *
+   * @param message Message to react to.
+   * @param opener React button (a second click on it closes the bar).
+   */
   private openReactions(message: ChatMessage, opener: HTMLButtonElement): void {
     const wasOpenHere = this.reactionPanel !== null && opener.parentElement?.contains(this.reactionPanel) === true;
     this.closePopovers();
@@ -607,6 +769,12 @@ export class ThreadView {
     this.watchOutside(panel, opener);
   }
 
+  /**
+   * Toggles the user's reaction on a message; failures show a notice.
+   *
+   * @param message Message reacted to.
+   * @param emoji Reaction emoji.
+   */
   private async toggleReaction(message: ChatMessage, emoji: string): Promise<void> {
     try {
       const reactions = await this.host.api.react(this.summary.uuid, message.uuid, emoji);
@@ -616,7 +784,12 @@ export class ThreadView {
     }
   }
 
-  /** Inline editor in place of the bubble; Enter saves, Escape cancels. */
+  /**
+   * Inline editor in place of the bubble; Enter saves, Escape cancels.
+   *
+   * @param message Own message to edit.
+   * @param article Rendered line of the message.
+   */
   private startEdit(message: ChatMessage, article: HTMLElement): void {
     this.closePopovers();
     this.editing = message.id;
@@ -624,11 +797,13 @@ export class ThreadView {
     const input = part<HTMLTextAreaElement>(form, 'input');
     input.value = plain(message.html, true);
     input.maxLength = this.host.config.maxLength;
+    /** Leaves the editor and repaints the line from the current message. */
     const stop = (): void => {
       this.editing = null;
       const current = this.messages.find((item) => item.id === message.id) ?? message;
       article.replaceWith(this.renderMessage(current, article.classList.contains('nowo-chat-msg--group-start')));
     };
+    /** Saves a non-blank edit; on failure, leaves the editor with an error notice. */
     const save = async (): Promise<void> => {
       const body = input.value.trim();
       if (body === '') {
@@ -664,11 +839,17 @@ export class ThreadView {
     input.focus();
   }
 
-  /** "Delete this message?" in place of the actions. */
+  /**
+   * "Delete this message?" in place of the actions.
+   *
+   * @param message Message to delete.
+   * @param article Rendered line of the message.
+   */
   private confirmDelete(message: ChatMessage, article: HTMLElement): void {
     this.closePopovers();
     const actions = part(article, 'actions');
     const confirm = this.host.templates.clone('delete-confirm');
+    /** Removes the confirmation and shows the actions again. */
     const restore = (): void => {
       confirm.remove();
       actions.hidden = false;
@@ -688,6 +869,10 @@ export class ThreadView {
     part(confirm, 'cancel').focus();
   }
 
+  /**
+   * Sends the composer text: appended at once as pending, the composer and draft cleared, then delivered.
+   * Blank, read-only or too long texts are not sent.
+   */
   private async submit(): Promise<void> {
     const body = this.input.value.trim();
     if (body === '' || !this.summary.canSend) {
@@ -713,6 +898,11 @@ export class ThreadView {
     await this.deliver(pending);
   }
 
+  /**
+   * Sends a pending message; on failure it stays in the thread with the reason and a retry button.
+   *
+   * @param pending Message waiting for the server.
+   */
   private async deliver(pending: PendingMessage): Promise<void> {
     pending.status = 'sending';
     this.render();
@@ -739,12 +929,18 @@ export class ThreadView {
     }
   }
 
+  /**
+   * Replaces the thread with a loading / error state.
+   *
+   * @param key Message key.
+   */
   private logState(key: 'loading' | 'error'): void {
     const state = this.host.templates.clone('thread-state');
     text(state, 'text', t(this.host.config.i18n, key));
     this.log.replaceChildren(state);
   }
 
+  /** Full render of the thread: "load more" row, empty state, lines, "Seen by" and pending messages. */
   private render(): void {
     const i18n = this.host.config.i18n;
     const fragment = document.createDocumentFragment();
@@ -779,6 +975,11 @@ export class ThreadView {
   /**
    * Nodes for one line: an optional day separator and "New messages" divider, then the bubble or the buzz line.
    * `previous` is the last text message of the current author group (undefined after a buzz or a new day).
+   *
+   * @param message Message to render.
+   * @param previous Previous text message of the group, if any.
+   * @param previousAny Previous message of any kind, if any (day separators).
+   * @returns The nodes to append, in order.
    */
   private messageNodes(message: ChatMessage, previous: ChatMessage | undefined, previousAny: ChatMessage | undefined): HTMLElement[] {
     const i18n = this.host.config.i18n;
@@ -808,6 +1009,10 @@ export class ThreadView {
   /**
    * Fast path: new messages that only extend the thread are appended — no rebuild of the whole log, so long
    * threads stay cheap. Returns false when a full render is needed.
+   *
+   * @param fresh New messages, oldest first.
+   * @param previousLast Newest message before the merge, if any.
+   * @returns True when appended, false when a full render is needed.
    */
   private appendFresh(fresh: ChatMessage[], previousLast: ChatMessage | undefined): boolean {
     if (
@@ -835,6 +1040,14 @@ export class ThreadView {
     return true;
   }
 
+  /**
+   * One message line: avatar, author, bubble (or tombstone), time, edited mark, receipt, reactions, actions and
+   * link previews.
+   *
+   * @param message Message to render.
+   * @param groupStart Whether it starts an author group (avatar and name shown).
+   * @returns The message element.
+   */
   private renderMessage(message: ChatMessage, groupStart: boolean): HTMLElement {
     const i18n = this.host.config.i18n;
     const templates = this.host.templates;
@@ -882,7 +1095,12 @@ export class ThreadView {
     return article;
   }
 
-  /** Cards for the links of a message (the application decides what the viewer may see). */
+  /**
+   * Cards for the links of a message (the application decides what the viewer may see).
+   *
+   * @param article Rendered line of the message.
+   * @param message The message (deleted ones get none; at most three distinct links).
+   */
   private loadPreviews(article: HTMLElement, message: ChatMessage): void {
     const holder = part(article, 'previews');
     holder.hidden = true;
@@ -900,6 +1118,13 @@ export class ThreadView {
     }
   }
 
+  /**
+   * Card of a link preview.
+   *
+   * @param url Link target.
+   * @param preview Title, subtitle and badge of the card.
+   * @returns The card link.
+   */
   private previewCard(url: string, preview: LinkPreview): HTMLElement {
     const card = this.host.templates.clone<HTMLAnchorElement>('link-preview');
     card.href = url;
@@ -909,6 +1134,12 @@ export class ThreadView {
     return card;
   }
 
+  /**
+   * Reaction chips under a message (count, pressed when the user reacted; disabled when read-only).
+   *
+   * @param article Rendered line of the message.
+   * @param message The message.
+   */
   private renderReactions(article: HTMLElement, message: ChatMessage): void {
     const holder = part(article, 'reactions');
     const entries = Object.entries(message.reactions ?? {}).filter(([, people]) => people.length > 0);
@@ -929,6 +1160,13 @@ export class ThreadView {
     );
   }
 
+  /**
+   * Shows the actions that apply (react, edit and delete within the edit window, moderation for agents) and binds
+   * them, plus tap-to-show on touch screens.
+   *
+   * @param article Rendered line of the message.
+   * @param message The message.
+   */
   private wireActions(article: HTMLElement, message: ChatMessage): void {
     const config = this.host.config;
     const actions = part(article, 'actions');
@@ -955,7 +1193,12 @@ export class ThreadView {
     remove.addEventListener('click', () => this.confirmDelete(message, article));
   }
 
-  /** In a DM: ✓ sent, ✓✓ (accent) once the other person has read it. */
+  /**
+   * In a DM: ✓ sent, ✓✓ (accent) once the other person has read it.
+   *
+   * @param receipt Receipt element of the line.
+   * @param messageId Id of the message.
+   */
   private paintReceipt(receipt: HTMLElement, messageId: number): void {
     const read = [...this.readers.values()].some((reader) => reader.messageId >= messageId);
     receipt.classList.toggle('is-read', read);
@@ -963,7 +1206,11 @@ export class ThreadView {
     receipt.title = t(this.host.config.i18n, read ? 'seen' : 'sent');
   }
 
-  /** In channels / support: "Seen by Ana, Luis" under the newest own message. */
+  /**
+   * In channels / support: "Seen by Ana, Luis" under the newest own message.
+   *
+   * @returns The line, or null in DMs, when the newest message is not the user's own or nobody has seen it.
+   */
   private seenLine(): HTMLElement | null {
     if (this.summary.kind === 'direct') {
       return null;
@@ -982,6 +1229,12 @@ export class ThreadView {
     return seen;
   }
 
+  /**
+   * A message not confirmed by the server yet: "Sending…", or the error and a retry button.
+   *
+   * @param pending Pending message.
+   * @returns The line element.
+   */
   private renderPending(pending: PendingMessage): HTMLElement {
     const i18n = this.host.config.i18n;
     const article = this.host.templates.clone('pending');
@@ -998,6 +1251,7 @@ export class ThreadView {
     return article;
   }
 
+  /** Near the top: load older messages; near the bottom: clear the unseen count and mark read. */
   private onScroll(): void {
     if (this.body.scrollTop < 80 && this.hasMore && !this.loadingOlder) {
       void this.loadOlder();
@@ -1009,6 +1263,7 @@ export class ThreadView {
     }
   }
 
+  /** Prepends the previous page, keeping the reader's position; failures are retried on the next scroll. */
   private async loadOlder(): Promise<void> {
     const first = this.messages[0];
     if (first === undefined) {
@@ -1030,6 +1285,7 @@ export class ThreadView {
     this.body.scrollTop += this.body.scrollHeight - previousHeight;
   }
 
+  /** Marks the thread read when the user can see its newest message (expanded, visible tab, scrolled to the bottom). */
   private maybeMarkRead(): void {
     const last = this.messages.at(-1);
     if (last === undefined || this.minimised || document.visibilityState !== 'visible' || !this.isNearBottom() || last.id <= this.readUpTo) {
@@ -1040,16 +1296,27 @@ export class ThreadView {
     this.host.read(this.summary.uuid, last.id);
   }
 
+  /**
+   * Whether the thread is scrolled (almost) to the bottom.
+   *
+   * @returns True within 48 px of the bottom.
+   */
   private isNearBottom(): boolean {
     return this.body.scrollHeight - this.body.scrollTop - this.body.clientHeight < NEAR_BOTTOM_PX;
   }
 
+  /**
+   * Scrolls to the newest message and clears the unseen count.
+   *
+   * @param smooth Smooth scrolling (unless the user prefers reduced motion).
+   */
   private scrollToBottom(smooth: boolean): void {
     this.body.scrollTo({ top: this.body.scrollHeight, behavior: smooth && !prefersReducedMotion() ? 'smooth' : 'auto' });
     this.unseenBelow = 0;
     this.updateJump();
   }
 
+  /** Shows the jump button ("New messages" / "Latest") when there is unseen content or the reader is far up. */
   private updateJump(): void {
     const i18n = this.host.config.i18n;
     const show = this.unseenBelow > 0 || (!this.isNearBottom() && this.body.scrollHeight > this.body.clientHeight * 2);
@@ -1057,6 +1324,11 @@ export class ThreadView {
     this.jumpBtn.replaceChildren(this.host.templates.icon('arrowDown', 14), ` ${this.unseenBelow > 0 ? t(i18n, 'new_messages') : t(i18n, 'jump_latest')}`);
   }
 
+  /**
+   * Sets the unread badge of the window header.
+   *
+   * @param count Unread count (0 hides it).
+   */
   private setUnread(count: number): void {
     setBadge(this.badge, count, t(this.host.config.i18n, 'unread', { count }));
   }
@@ -1075,6 +1347,7 @@ export class ThreadView {
     this.input.style.overflowY = wanted > max ? 'auto' : 'hidden';
   }
 
+  /** Send button state and remaining-characters counter (announced only when crossing the 100 / 20 / 0 bands). */
   private updateComposerState(): void {
     const length = this.input.value.trim().length;
     const max = this.host.config.maxLength;
@@ -1096,6 +1369,10 @@ export class ThreadView {
 /**
  * Text of a server-rendered message: for previews and live announcements, or — with `lines` — for the editor
  * (paragraphs and line breaks become newlines; the Markdown markers are not recovered).
+ *
+ * @param html Message HTML from the server.
+ * @param lines Keep line breaks (editor) instead of one line (previews).
+ * @returns The plain text, trimmed.
  */
 export function plain(html: string, lines = false): string {
   const doc = new DOMParser().parseFromString(html.replace(/<br\s*\/?>/g, '\n').replace(/<\/(p|li|pre)>/g, '\n'), 'text/html');

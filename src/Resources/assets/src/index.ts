@@ -17,7 +17,12 @@ export const CSS_TOKEN_PREFIX = '--nowo-chat-';
 
 const mounted = new WeakMap<HTMLElement, ChatDock>();
 
-/** Mounts the dock on one root (idempotent); returns null when the root has no valid configuration. */
+/**
+ * Mounts the dock on one root (idempotent); returns null when the root has no valid configuration.
+ *
+ * @param root Element carrying the JSON `data-nowo-chat-config`.
+ * @returns The dock of that root, or null when the configuration is missing or invalid.
+ */
 export function mount(root: HTMLElement): ChatDock | null {
   const existing = mounted.get(root);
   if (existing !== undefined) {
@@ -35,14 +40,23 @@ export function mount(root: HTMLElement): ChatDock | null {
   return dock;
 }
 
-/** Stops the dock of a root (connection, timers, listeners). */
+/**
+ * Stops the dock of a root (connection, timers, listeners).
+ *
+ * @param root Root element previously passed to mount().
+ */
 export function unmount(root: HTMLElement): void {
   mounted.get(root)?.destroy();
   mounted.delete(root);
 }
 
-/** Mounts every dock root in the document, when the browser is idle (the page paints first). */
+/**
+ * Mounts every dock root in the document, when the browser is idle (the page paints first).
+ *
+ * @param scope Where to look for `[data-nowo-chat-config]` roots.
+ */
 export function mountAll(scope: ParentNode = document): void {
+  /** Mounts every root found in the scope. */
   const run = (): void => scope.querySelectorAll<HTMLElement>('[data-nowo-chat-config]').forEach((root) => mount(root));
   if (typeof window.requestIdleCallback === 'function') {
     window.requestIdleCallback(run, { timeout: 1500 });

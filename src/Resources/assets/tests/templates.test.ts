@@ -27,6 +27,15 @@ describe('Templates', () => {
     // A slot that already holds an SVG (custom markup) is left alone.
     const window = templates.clone('window');
     expect(part(window, 'buzz').querySelector('svg.ux')).not.toBeNull();
+
+    // A template slot the application already filled (its own markup) keeps it.
+    const prefilled = document.createElement('template');
+    prefilled.dataset.nowoChatTemplate = 'prefilled';
+    prefilled.innerHTML = '<div><span data-icon="close"><i class="own"></i></span></div>';
+    root.append(prefilled);
+    const slot = templates.clone('prefilled').querySelector('[data-icon]') as HTMLElement;
+    expect(slot.querySelector('i.own')).not.toBeNull();
+    expect(slot.querySelector('svg')).toBeNull();
   });
 
   it('builds avatars for people, channels and the support inbox', () => {

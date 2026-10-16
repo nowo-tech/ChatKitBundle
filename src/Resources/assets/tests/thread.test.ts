@@ -482,6 +482,67 @@ describe('ThreadView', () => {
     expect(chip.hidden).toBe(true);
   });
 
+  it('fills a context chip that is not a link (custom template)', () => {
+    const { q, view } = setup({ kind: 'support', supportStatus: 'open' });
+    const anchor = q('.nowo-chat-window__context');
+    const chip = document.createElement('span');
+    chip.dataset.part = 'context';
+    chip.append(...anchor.childNodes);
+    anchor.replaceWith(chip);
+    view.applySummary(summary({ kind: 'support', supportStatus: 'open', supportContext: { url: '/x', label: 'Issue #1' } }));
+    expect(chip.hidden).toBe(false);
+    expect(chip.textContent).toContain('Issue #1');
+    expect(chip.hasAttribute('href')).toBe(false);
+  });
+
+  it('covers the rarer paths: known messages, halo over a shadow, read-only notice, older page loading, new day, tall and nearly full composer', async () => {
+    const { view, api, q } = setup();
+    // A message merged twice (another tab, then a poll) is replaced, not duplicated.
+    const first = msg({ createdAt: '2026-10-15T10:00:00Z' });
+    view.merge([first], false);
+    view.merge([{ ...first, html: '<p>again</p>' }], false);
+    expect(view.element.querySelectorAll('.nowo-chat-msg')).toHaveLength(1);
+    expect(q('.nowo-chat-bubble').textContent).toBe('again');
+
+    // A message on the next day is appended with its own day separator.
+    view.merge([msg({ createdAt: '2026-10-16T10:00:00Z' })], false);
+    expect(view.element.querySelectorAll('.nowo-chat-day')).toHaveLength(2);
+
+    // The halo keeps the window's own shadow.
+    const animate = vi.fn();
+    HTMLElement.prototype.animate = animate;
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({ getPropertyValue: () => '', boxShadow: '0 1px 2px red' } as unknown as CSSStyleDeclaration);
+    view.shake();
+    expect(JSON.stringify(animate.mock.calls)).toContain(', 0 1px 2px red');
+    vi.mocked(window.getComputedStyle).mockRestore();
+
+    // While an older page loads, a re-render shows the "Loading" row.
+    api.messages.mockReturnValueOnce(new Promise(() => undefined));
+    view.hydrate({ messages: [msg()], hasMore: true });
+    scrolled(view, 10).dispatchEvent(new Event('scroll'));
+    view.hydrate({ messages: [msg()], hasMore: true });
+    expect(q('.nowo-chat-thread__more').textContent).toBe('Loading');
+
+    // The composer grows up to its maximum, then scrolls; the counter announces the last 20 characters.
+    const input = q<HTMLTextAreaElement>('.nowo-chat-composer__input');
+    Object.defineProperty(input, 'scrollHeight', { configurable: true, value: 300 });
+    input.value = 'x'.repeat(35);
+    input.dispatchEvent(new Event('input'));
+    expect(input.style.overflowY).toBe('auto');
+    expect(q('[data-part="counter-announce"]').textContent).toBe('15');
+
+    // A failed action on a read-only thread restores the read-only notice.
+    const readOnly = setup({ kind: 'support', supportStatus: 'open', canSend: false }, { resolve: vi.fn().mockRejectedValue(new Error('x')) }, { isAgent: true });
+    readOnly.q<HTMLButtonElement>('.nowo-chat-window__resolve').click();
+    for (let i = 0; i < 5; i += 1) {
+      await Promise.resolve();
+    }
+    expect(readOnly.q('.nowo-chat-notice').textContent).toBe('Error');
+    vi.advanceTimersByTime(3_000);
+    expect(readOnly.q('.nowo-chat-notice').textContent).toBe('Read only');
+    expect(readOnly.q('.nowo-chat-notice').hidden).toBe(false);
+  });
+
     describe('edit, delete and reactions', () => {
     const now = new Date('2026-10-15T10:05:00Z');
     async function loaded(messages: ChatMessage[], over: Partial<ConversationSummary> = {}, configOver: Partial<ChatConfig> = {}) {
@@ -600,6 +661,19 @@ describe('ThreadView', () => {
       await Promise.resolve();
       expect(article(mine.id).querySelector('.nowo-chat-edit')).toBeNull();
       expect(view.element.querySelector('.nowo-chat-notice')?.textContent).toBe('Error');
+    });
+
+    it('cancels an edit whose message left the thread (cache repaint) with the original text', async () => {
+      const mine = msg({ mine: true, authorUuid: 'me', uuid: 'e2', html: '<p>original</p>' });
+      const { action, article, view } = await loaded([mine]);
+      const editing = article(mine.id);
+      action(mine.id, 'edit').click();
+      view.hydrate({ messages: [msg()], hasMore: false });
+      const log = view.element.querySelector('[data-part="log"]') as HTMLElement;
+      log.append(editing);
+      (editing.querySelector('[data-part="cancel"]') as HTMLButtonElement).click();
+      expect(log.querySelector('.nowo-chat-edit')).toBeNull();
+      expect(log.lastElementChild?.querySelector('.nowo-chat-bubble')?.textContent).toBe('original');
     });
 
     it('deletes after confirming; cancel and errors restore the actions', async () => {

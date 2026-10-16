@@ -5,14 +5,26 @@
  */
 import { builtinIcon, h } from './dom';
 
+/** Clones the Twig `<template>` markup of the dock and resolves its icons. */
 export class Templates {
   private readonly root: ParentNode;
 
+  /**
+   * Creates the template source.
+   *
+   * @param root Element (or document) that holds the `<template>` elements.
+   */
   constructor(root: ParentNode) {
     this.root = root;
   }
 
-  /** A fresh copy of the template's first element, icons filled in. */
+  /**
+   * A fresh copy of the template's first element, icons filled in.
+   *
+   * @param name Value of `data-nowo-chat-template`.
+   * @returns The cloned element.
+   * @throws Error When the template is missing or has no element.
+   */
   clone<T extends HTMLElement = HTMLElement>(name: string): T {
     const template = this.root.querySelector<HTMLTemplateElement>(`template[data-nowo-chat-template="${name}"]`);
     const element = template?.content.firstElementChild?.cloneNode(true);
@@ -23,7 +35,13 @@ export class Templates {
     return element as T;
   }
 
-  /** Icon by name: the application's (ux_icon) when provided, else the built-in SVG. */
+  /**
+   * Icon by name: the application's (ux_icon) when provided, else the built-in SVG.
+   *
+   * @param name Icon name.
+   * @param size Width and height in pixels.
+   * @returns The icon element (aria-hidden).
+   */
   icon(name: string, size = 18): Element {
     const custom = this.root.querySelector<HTMLTemplateElement>(`template[data-nowo-chat-icon="${name}"]`)?.content.firstElementChild;
     if (custom instanceof Element) {
@@ -36,7 +54,15 @@ export class Templates {
     return builtinIcon(name, size);
   }
 
-  /** Avatar bubble: initials for people, an icon for channels and the support inbox. */
+  /**
+   * Avatar bubble: initials for people, an icon for channels and the support inbox.
+   *
+   * @param initials Initials shown for a person (ignored for channels and support).
+   * @param kind Conversation kind.
+   * @param size Avatar size.
+   * @param online Adds the online dot.
+   * @returns The avatar element (aria-hidden).
+   */
   avatar(initials: string, kind: 'direct' | 'channel' | 'support' = 'direct', size: 'sm' | 'md' = 'md', online = false): HTMLElement {
     const element = h('span', { class: `nowo-chat-avatar nowo-chat-avatar--${kind} nowo-chat-avatar--${size}${online ? ' is-online' : ''}`, 'aria-hidden': 'true' });
     if (kind === 'direct') {
@@ -47,6 +73,11 @@ export class Templates {
     return element;
   }
 
+  /**
+   * Fills every empty `data-icon` slot of a cloned template (`data-icon-size`, default 18); slots that already hold markup are kept.
+   *
+   * @param scope Cloned element.
+   */
   private fillIcons(scope: Element): void {
     scope.querySelectorAll<HTMLElement>('[data-icon]').forEach((slot) => {
       if (slot.childElementCount === 0) {
@@ -56,7 +87,14 @@ export class Templates {
   }
 }
 
-/** Required hook of a cloned template. */
+/**
+ * Required hook of a cloned template.
+ *
+ * @param scope Cloned element (matches itself too).
+ * @param name Value of `data-part`.
+ * @returns The hook element.
+ * @throws Error When the template has no such hook.
+ */
 export function part<T extends HTMLElement = HTMLElement>(scope: Element, name: string): T {
   const element = scope.matches(`[data-part="${name}"]`) ? scope : scope.querySelector(`[data-part="${name}"]`);
   if (!(element instanceof HTMLElement)) {
@@ -65,7 +103,14 @@ export function part<T extends HTMLElement = HTMLElement>(scope: Element, name: 
   return element as T;
 }
 
-/** Sets a hook's text and hides it when empty. */
+/**
+ * Sets a hook's text and hides it when empty.
+ *
+ * @param scope Cloned element.
+ * @param name Value of `data-part`.
+ * @param value Text to show; null or "" hides the hook.
+ * @returns The hook element.
+ */
 export function text(scope: Element, name: string, value: string | null): HTMLElement {
   const element = part(scope, name);
   element.textContent = value ?? '';

@@ -733,4 +733,47 @@ describe('ChatDock', () => {
     follower.dock.destroy();
   });
 
+  it('handles the edge cases: list already open, viewport without height, undated rows, contacts without e-mail, sync into an open window', async () => {
+    const viewport = new EventTarget();
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+    api.contacts.mockResolvedValue([{ uuid: 'u9', name: 'Nadia', email: null, initials: 'NA', source: 'search', via: '' }]);
+    const { dock, q, all, root } = mount([
+      summary('c1', { kind: 'channel', lastMessageAt: null }),
+      summary('a', { lastMessageAt: '2026-10-15T09:00:00Z' }),
+      summary('c2', { kind: 'channel', lastMessageAt: null }),
+      summary('r1', { lastMessageAt: null }),
+      summary('b', { lastMessageAt: '2026-10-15T10:00:00Z' }),
+      summary('r2', { lastMessageAt: null }),
+    ]);
+    await dock.start();
+
+    // A viewport that reports no height falls back to the window height.
+    viewport.dispatchEvent(new Event('resize'));
+    expect(root.style.getPropertyValue('--nowo-chat-vvh')).toBe(`${window.innerHeight}px`);
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: undefined });
+
+    // Undated rows sort after the dated ones.
+    const titles = all('.nowo-chat-list .nowo-chat-row .nowo-chat-row__title').map((title) => title.textContent);
+    expect(titles.slice(0, 2)).toEqual(['T b', 'T a']);
+    expect(titles).toHaveLength(6);
+
+    // "/" while the list is already open only focuses the search.
+    q('.nowo-chat-launcher').click();
+    q('.nowo-chat-launcher').focus();
+    q('.nowo-chat-launcher').dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }));
+    expect(q('.nowo-chat-panel').classList.contains('is-open')).toBe(true);
+    expect(document.activeElement).toBe(q('.nowo-chat-panel__list .nowo-chat-search'));
+
+    // Recent people (undated ones last) and a contact with neither e-mail nor "via".
+    q('.nowo-chat-panel__compose').click();
+    await flush();
+    const results = q('.nowo-chat-picker__results').textContent ?? '';
+    expect(results.indexOf('T b')).toBeLessThan(results.indexOf('T r1'));
+    expect(results).toContain('Nadia');
+
+    // Messages from another tab for a window that is open (not minimised) add no unread count.
+    await dock.open(summary('a', { lastMessageAt: '2026-10-15T09:00:00Z' }));
+    (dock as unknown as { onSync: (e: unknown) => void }).onSync({ type: 'messages', uuid: 'a', messages: [message()] });
+    expect(q('.nowo-chat-launcher .nowo-chat-badge').hidden).toBe(true);
+  });
 });

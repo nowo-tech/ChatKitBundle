@@ -1,5 +1,13 @@
 /** text helpers for the chat dock (i18n interpolation, times, day separators). */
 
+/**
+ * Translation lookup with `%name%` placeholders.
+ *
+ * @param i18n Translated strings.
+ * @param key Message key (returned as is when missing).
+ * @param params Values for the `%name%` placeholders.
+ * @returns The translated text.
+ */
 export function t(i18n: Record<string, string>, key: string, params: Record<string, string | number> = {}): string {
   let text = i18n[key] ?? key;
   for (const [name, value] of Object.entries(params)) {
@@ -8,11 +16,26 @@ export function t(i18n: Record<string, string>, key: string, params: Record<stri
   return text;
 }
 
+/**
+ * Whether two dates fall on the same local calendar day.
+ *
+ * @param a First date.
+ * @param b Second date.
+ * @returns True on the same day.
+ */
 function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-/** "Today" / "Yesterday" / a localised date, for the day separators of a thread. */
+/**
+ * "Today" / "Yesterday" / a localised date, for the day separators of a thread.
+ *
+ * @param iso ISO 8601 date of the message.
+ * @param i18n Translated strings (`today`, `yesterday`).
+ * @param locale Locale for the date.
+ * @param now Reference date (tests).
+ * @returns The label (the year only when it is not the current one).
+ */
 export function dayLabel(iso: string, i18n: Record<string, string>, locale: string, now: Date = new Date()): string {
   const date = new Date(iso);
   if (sameDay(date, now)) {
@@ -30,11 +53,25 @@ export function dayLabel(iso: string, i18n: Record<string, string>, locale: stri
   });
 }
 
+/**
+ * Localised time of a message (hours and minutes).
+ *
+ * @param iso ISO 8601 date.
+ * @param locale Locale for the time.
+ * @returns The time label.
+ */
 export function timeLabel(iso: string, locale: string): string {
   return new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
 }
 
-/** Compact time for the conversation list: time today, weekday this week, else a short date. */
+/**
+ * Compact time for the conversation list: time today, weekday this week, else a short date.
+ *
+ * @param iso ISO 8601 date of the last message, or null.
+ * @param locale Locale for the label.
+ * @param now Reference date (tests).
+ * @returns The label ("" without a date).
+ */
 export function listTimeLabel(iso: string | null, locale: string, now: Date = new Date()): string {
   if (iso === null) {
     return '';
@@ -50,7 +87,13 @@ export function listTimeLabel(iso: string | null, locale: string, now: Date = ne
   return date.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
 }
 
-/** Messages of the same author within 5 minutes share one header (avatar + name). */
+/**
+ * Messages of the same author within 5 minutes share one header (avatar + name).
+ *
+ * @param previous Previous message, if any.
+ * @param current Message being rendered.
+ * @returns True when the current message starts a new group.
+ */
 export function startsGroup(
   previous: { authorUuid: string | null; createdAt: string } | undefined,
   current: { authorUuid: string | null; createdAt: string },
@@ -62,6 +105,13 @@ export function startsGroup(
   return gap > 5 * 60_000 || !sameDay(new Date(previous.createdAt), new Date(current.createdAt));
 }
 
+/**
+ * Whether a message needs a day separator before it.
+ *
+ * @param previous Previous message, if any.
+ * @param current Message being rendered.
+ * @returns True for the first message or a different day than the previous one.
+ */
 export function isNewDay(previous: { createdAt: string } | undefined, current: { createdAt: string }): boolean {
   return previous === undefined || !sameDay(new Date(previous.createdAt), new Date(current.createdAt));
 }

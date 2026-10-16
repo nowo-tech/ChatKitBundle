@@ -5,6 +5,15 @@
 
 type Child = Node | string | null | undefined | false;
 
+/**
+ * Builds an element: `class` sets the class name, `text` the text content, other attributes are set as given
+ * (true → empty attribute; null, undefined and false are skipped). String children become text nodes.
+ *
+ * @param tag Tag name.
+ * @param attrs Attributes (plus the `class` and `text` shortcuts).
+ * @param children Child nodes or strings; null, undefined and false are skipped.
+ * @returns The new element.
+ */
 export function h<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   attrs: Record<string, string | number | boolean | null | undefined> = {},
@@ -54,7 +63,13 @@ const ICONS: Record<string, string> = {
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />',
 };
 
-/** Decorative inline SVG (aria-hidden) from the built-in set; the accessible name lives on the button. */
+/**
+ * Decorative inline SVG (aria-hidden) from the built-in set; the accessible name lives on the button.
+ *
+ * @param name Icon name (an unknown name gives an empty SVG).
+ * @param size Width and height in pixels.
+ * @returns The SVG element.
+ */
 export function builtinIcon(name: string, size = 18): SVGSVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   for (const [attribute, value] of Object.entries({
@@ -76,6 +91,11 @@ export function builtinIcon(name: string, size = 18): SVGSVGElement {
   return svg;
 }
 
+/**
+ * Whether the user asked the system for reduced motion.
+ *
+ * @returns True when `prefers-reduced-motion: reduce` matches (false without matchMedia).
+ */
 export function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
@@ -83,6 +103,10 @@ export function prefersReducedMotion(): boolean {
 /**
  * Unread badge: the visible number is decorative; screen readers get the sentence ("Unread messages: 3")
  * as text — an aria-label on a generic span is not reliably announced.
+ *
+ * @param badge Badge element (hidden when the count is zero).
+ * @param count Unread count ("99+" above 99).
+ * @param label Sentence for screen readers.
  */
 export function setBadge(badge: HTMLElement, count: number, label: string): void {
   badge.hidden = count <= 0;
