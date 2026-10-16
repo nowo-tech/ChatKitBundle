@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-16
+
+### Added
+
+- **Hide to the side**: a list header button tucks the whole dock (list and windows) into one tab on the right edge with
+  the chat icon and the unread count; the tab brings it back as it was. Kept across pages and browser tabs; opening a
+  conversation shows the dock again. New `tuck` icon (`tabler:arrow-bar-to-right`), `chat.tuck` / `chat.untuck`
+  translations, `nowo_chat_template_edge` block, `--nowo-chat-edge-offset` token.
+- Docs: stacking the dock with drawers and modals (`--nowo-chat-z-index`).
+
+### Fixed
+
+- Development: `make coverage-check` (part of `release-check`) failed silently on a failing PHPUnit test (the pipe ran
+  in the container's `sh` without `pipefail`); every test run starts from a fresh test kernel cache.
+
 ## [1.1.1] - 2026-10-16
 
 ### Fixed
@@ -64,7 +79,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/nowo-tech/ChatKitBundle/releases/tag/v1.0.0

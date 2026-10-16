@@ -59,11 +59,11 @@ describe('chat dock state', () => {
 
   it('sanitises stored state and falls back to storage events without BroadcastChannel', () => {
     vi.stubGlobal('BroadcastChannel', undefined);
-    window.localStorage.setItem('nowo-chat:u2', JSON.stringify({ listOpen: 'yes', tabs: [{ uuid: 'ok', minimised: 1 }, { nope: true }, null], drafts: null }));
+    window.localStorage.setItem('nowo-chat:u2', JSON.stringify({ listOpen: 'yes', tucked: 1, tabs: [{ uuid: 'ok', minimised: 1 }, { nope: true }, null], drafts: null }));
     const store = new DockStore('u2');
-    expect(store.get()).toEqual({ listOpen: false, tabs: [{ uuid: 'ok', minimised: false }], drafts: {} });
+    expect(store.get()).toEqual({ listOpen: false, tucked: false, tabs: [{ uuid: 'ok', minimised: false }], drafts: {} });
     window.localStorage.setItem('nowo-chat:u3', JSON.stringify({}));
-    expect(new DockStore('u3').get()).toEqual({ listOpen: false, tabs: [], drafts: {} });
+    expect(new DockStore('u3').get()).toEqual({ listOpen: false, tucked: false, tabs: [], drafts: {} });
     window.localStorage.setItem('nowo-chat:u4', '{broken');
     expect(new DockStore('u4').get().tabs).toEqual([]);
 

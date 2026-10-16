@@ -23,6 +23,8 @@
   - [Forms](#forms)
 - [Theme tokens](#theme-tokens)
   - [Bottom bars](#bottom-bars)
+  - [Tucking the dock away](#tucking-the-dock-away)
+  - [Stacking with drawers and modals](#stacking-with-drawers-and-modals)
 - [Translations](#translations)
 - [Front end: IIFE or your bundler](#front-end-iife-or-your-bundler)
 - [User settings](#user-settings)
@@ -303,6 +305,27 @@ resize). The Symfony web debug toolbar is detected automatically at its real hei
 
 ```twig
 <footer class="site-footer" data-nowo-chat-avoid>…</footer>
+```
+
+### Tucking the dock away
+
+The list header has a **Hide to the side** button (`data-part="tuck"`): the list and every open window leave the screen
+and a single tab on the right edge (`.nowo-chat-edge`, chat icon and unread count) brings them back exactly as they were.
+The choice is part of the shared dock layout (kept across pages, mirrored to the other browser tabs); opening a
+conversation from a link, the list or a push notification shows the dock again. Move the tab with
+`--nowo-chat-edge-offset` (distance above the dock baseline, default `24px`); restyle it through `.nowo-chat-edge` or the
+`nowo_chat_template_edge` block.
+
+### Stacking with drawers and modals
+
+The dock is fixed at `z-index: var(--nowo-chat-z-index, 60)`. Native `<dialog>` modals (top layer) always cover it. A
+drawer or overlay that lives inside a lower stacking context (for example a main column with its own `z-index`) is
+painted under the dock: lower the dock while it is open, e.g.
+
+```css
+body:has(.my-drawer.is-open) .nowo-chat {
+  z-index: 1;
+}
 ```
 
 ## Translations

@@ -11,6 +11,8 @@
                     </button>
                         <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__compose" data-part="compose" aria-label="New message" title="New message"><span data-icon="compose"></span></button>
 
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__tuck" data-part="tuck" aria-label="Hide to the side" title="Hide to the side"><span data-icon="tuck"></span></button>
+
                         <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__close" data-part="close-panel" aria-label="Close" title="Close"><span data-icon="close"></span></button>
 
                 </div>
@@ -219,6 +221,13 @@
             <p class="nowo-chat-thread__empty-title" data-part="title"></p>
             <p data-part="hint"></p>
         </div>
+    </template>
+
+        <template data-nowo-chat-template="edge">
+        <button type="button" class="nowo-chat-edge" data-part="edge" aria-label="Show messaging" title="Show messaging" hidden>
+            <span data-icon="chat" data-icon-size="20"></span>
+            <span class="nowo-chat-badge" data-part="edge-badge" hidden></span>
+        </button>
     </template>
 
                 <template data-nowo-chat-icon="close"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"></path></svg></template>

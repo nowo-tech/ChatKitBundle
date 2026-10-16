@@ -22,6 +22,8 @@ chat:
   failed: 'Niet verzonden'
   retry: 'Opnieuw'
   minimise: 'Minimaliseren'
+  tuck: 'Naar de zijkant verbergen'
+  untuck: 'Berichten tonen'
   expand: 'Uitklappen'
   close: 'Sluiten'
   back: 'Terug'

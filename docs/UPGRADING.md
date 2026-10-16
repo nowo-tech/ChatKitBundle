@@ -2,6 +2,12 @@
 
 This guide lists the changes integrators must apply when upgrading between versions.
 
+## 1.2.0 (2026-10-16)
+
+No breaking change. With `icon_set: ux_icon`, import the new icon: `php bin/console ux:icons:import
+tabler:arrow-bar-to-right`. If you override `_templates.html.twig` without extending the bundle's, add the `tuck` button
+and the `edge` template (see the `nowo_chat_template_edge` block).
+
 ## 1.1.1 (2026-10-16)
 
 No breaking change (CSS fix only).

@@ -105,7 +105,10 @@ test-coverage: ensure-up
 	@./.scripts/php-coverage-percent.sh coverage-php.txt
 
 coverage-check: ensure-up
-	@$(COMPOSE) exec -T $(SERVICE_PHP) sh -lc 'composer test-coverage | tee coverage-php.txt'
+	@# The pipe runs on the host (bash + pipefail), so a failing test fails the target; the report is recreated by the
+	@# host user (an older one written by the container's root would not be writable).
+	@rm -f coverage-php.txt
+	@$(COMPOSE) exec -T $(SERVICE_PHP) composer test-coverage | tee coverage-php.txt
 	@./.scripts/coverage-fail-under.sh coverage-php.txt 99
 
 test-coverage-100: coverage-check

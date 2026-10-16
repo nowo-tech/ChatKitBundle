@@ -57,7 +57,7 @@ nowo_chat_kit:
 | `profiles.<name>.cache_pool` | string | `cache.app` | PSR-6 pool for presence and recipient lists. Share it between workers / replicas. |
 | `profiles.<name>.reactions` | list | `👍 ❤️ 😂 😮 😢 🎉` | Emojis offered as reactions (anything else is refused). |
 | `profiles.<name>.icon_set` | `ux_icon` \| `svg_inline` | `ux_icon` | Dock icons from Symfony UX Icons, or the built-in SVG only. |
-| `profiles.<name>.icons` | map | Tabler set | UX Icons name per dock icon (`chat`, `compose`, `chevronUp`, `chevronDown`, `close`, `send`, `back`, `arrowDown`, `search`, `hash`, `lifebuoy`, `retry`, `buzz`, `smile`, `check`, `edit`, `trash`, `link`, `external`). |
+| `profiles.<name>.icons` | map | Tabler set | UX Icons name per dock icon (`chat`, `compose`, `chevronUp`, `chevronDown`, `tuck`, `close`, `send`, `back`, `arrowDown`, `search`, `hash`, `lifebuoy`, `retry`, `buzz`, `smile`, `check`, `edit`, `trash`, `link`, `external`). |
 | `profiles.<name>.presence_ttl` | int ≥ 30 | `90` | Seconds a heartbeat keeps someone online. |
 | `profiles.<name>.limits.*` | int | see below | Rate limits. |
 

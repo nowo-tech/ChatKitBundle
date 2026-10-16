@@ -222,6 +222,55 @@ describe('ChatDock', () => {
     expect(root.querySelectorAll('.nowo-chat-window')).toHaveLength(0);
   });
 
+  it('tucks the whole dock into an edge tab and brings it back as it was', async () => {
+    const { dock, q, all, root } = mount([summary('a', { unread: 2 }), summary('b')]);
+    await dock.start();
+    const edge = q<HTMLButtonElement>('.nowo-chat-edge');
+    expect(edge.hidden).toBe(true);
+    expect(edge.getAttribute('aria-label')).toBeTruthy();
+    q('.nowo-chat-launcher').click();
+    all('.nowo-chat-list .nowo-chat-row')[0]?.click();
+    await flush();
+    expect(all('.nowo-chat-window')).toHaveLength(1);
+
+    // Tuck: list and windows leave the screen (inert), the edge tab shows the unread count and takes focus.
+    q<HTMLButtonElement>('.nowo-chat-panel__tuck').click();
+    expect(root.classList.contains('is-tucked')).toBe(true);
+    expect(q<HTMLElement>('.nowo-chat-dock').inert).toBe(true);
+    expect(edge.hidden).toBe(false);
+    expect(document.activeElement).toBe(edge);
+    expect(q('.nowo-chat-edge .nowo-chat-badge').hidden).toBe(false);
+    expect(q('.nowo-chat-edge .nowo-chat-badge').textContent).toContain('2');
+    dock.setTucked(true);
+    expect(edge.hidden).toBe(false);
+
+    // The next page keeps it tucked, with the same layout behind it.
+    const again = new ChatDock(templatesRoot(), config());
+    mounted.push(again);
+    const againRoot = (again as unknown as { root: HTMLElement }).root;
+    document.body.append(againRoot);
+    await again.start();
+    expect(againRoot.classList.contains('is-tucked')).toBe(true);
+    expect(againRoot.querySelectorAll('.nowo-chat-window')).toHaveLength(1);
+
+    // Back: same list and window, focus on the launcher.
+    edge.click();
+    expect(root.classList.contains('is-tucked')).toBe(false);
+    expect(q<HTMLElement>('.nowo-chat-dock').inert).toBe(false);
+    expect(edge.hidden).toBe(true);
+    expect(document.activeElement).toBe(q('.nowo-chat-launcher'));
+    expect(q('.nowo-chat-panel').classList.contains('is-open')).toBe(true);
+    expect(all('.nowo-chat-window')).toHaveLength(1);
+
+    // Opening a conversation (link, push, list) while tucked shows the dock again.
+    dock.setTucked(true);
+    await dock.open(summary('b'));
+    expect(root.classList.contains('is-tucked')).toBe(false);
+
+    dock.destroy();
+    expect(root.querySelector('.nowo-chat-edge')).toBeNull();
+  });
+
   it('puts windows that do not fit into the "+N" menu', async () => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 800 });
     const { dock, q, all } = mount([summary('a'), summary('b'), summary('c')]);

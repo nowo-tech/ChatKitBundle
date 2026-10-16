@@ -1,11 +1,11 @@
 /**
- * the dock layout (open / minimised tabs, list open, drafts) lives in localStorage per
+ * the dock layout (open / minimised tabs, list open, tucked to the edge, drafts) lives in localStorage per
  * user and is mirrored live to every other browser tab through BroadcastChannel (storage events as the
  * fallback), so opening, minimising or closing a conversation in one tab does the same in all of them.
  */
 import type { ChatMessage, DockState } from './types';
 
-const EMPTY: DockState = { listOpen: false, tabs: [], drafts: {} };
+const EMPTY: DockState = { listOpen: false, tucked: false, tabs: [], drafts: {} };
 
 export type SyncEvent =
   | { type: 'state'; state: DockState }
@@ -131,6 +131,7 @@ export class DockStore {
       const parsed = JSON.parse(raw) as Partial<DockState>;
       return {
         listOpen: parsed.listOpen === true,
+        tucked: parsed.tucked === true,
         tabs: Array.isArray(parsed.tabs)
           ? parsed.tabs.filter((tab) => typeof tab?.uuid === 'string').map((tab) => ({ uuid: tab.uuid, minimised: tab.minimised === true }))
           : [],

@@ -32,6 +32,7 @@ final class Configuration implements ConfigurationInterface
         'compose'     => 'tabler:edit',
         'chevronUp'   => 'tabler:chevron-up',
         'chevronDown' => 'tabler:chevron-down',
+        'tuck'        => 'tabler:arrow-bar-to-right',
         'close'       => 'tabler:x',
         'send'        => 'tabler:send',
         'back'        => 'tabler:arrow-left',

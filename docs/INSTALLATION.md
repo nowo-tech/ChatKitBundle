@@ -142,7 +142,7 @@ The dock draws its icons with **Symfony UX Icons** (`icon_set: ux_icon`, Tabler 
 are served locally (no Iconify request at runtime):
 
 ```bash
-php bin/console ux:icons:import tabler:message-circle tabler:edit tabler:chevron-up tabler:chevron-down tabler:x \
+php bin/console ux:icons:import tabler:message-circle tabler:edit tabler:chevron-up tabler:chevron-down tabler:arrow-bar-to-right tabler:x \
     tabler:send tabler:arrow-left tabler:arrow-down tabler:search tabler:hash tabler:lifebuoy tabler:refresh \
     tabler:bolt tabler:mood-smile tabler:check tabler:pencil tabler:trash tabler:link tabler:external-link
 ```

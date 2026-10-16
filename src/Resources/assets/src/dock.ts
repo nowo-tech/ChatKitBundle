@@ -78,6 +78,8 @@ export class ChatDock implements ThreadHost {
   private readonly overflow: HTMLElement;
   private readonly overflowBtn: HTMLButtonElement;
   private readonly overflowMenu: HTMLElement;
+  private readonly edge: HTMLButtonElement;
+  private readonly edgeBadge: HTMLElement;
   private readonly mobileQuery: MediaQueryList;
 
   /**
@@ -113,8 +115,10 @@ export class ChatDock implements ThreadHost {
     this.overflow = part(this.dock, 'overflow');
     this.overflowBtn = part<HTMLButtonElement>(this.dock, 'overflow-btn');
     this.overflowMenu = part(this.dock, 'overflow-menu');
-    // The templates stay in the root (cloned again for every row / window); the dock goes after them.
-    root.append(this.dock);
+    this.edge = part<HTMLButtonElement>(this.templates.clone('edge'), 'edge');
+    this.edgeBadge = part(this.edge, 'edge-badge');
+    // The templates stay in the root (cloned again for every row / window); the dock and its edge tab go after them.
+    root.append(this.dock, this.edge);
 
     this.bind();
     this.store.subscribe((event) => this.onSync(event));
@@ -209,6 +213,7 @@ export class ChatDock implements ThreadHost {
     window.clearInterval(this.presenceTimer ?? undefined);
     window.clearTimeout(this.statusTimer);
     this.dock.remove();
+    this.edge.remove();
   }
 
   /**
@@ -394,6 +399,8 @@ export class ChatDock implements ThreadHost {
    */
   async open(summary: ConversationSummary, focus = true): Promise<void> {
     this.conversations.set(summary.uuid, { ...this.conversations.get(summary.uuid), ...summary });
+    // Opening a conversation (list, link, push) brings a tucked dock back.
+    this.setTucked(false, false);
     if (!this.windows.has(summary.uuid)) {
       this.entering.add(summary.uuid);
     }
@@ -423,6 +430,8 @@ export class ChatDock implements ThreadHost {
       this.launcher.focus();
     });
     this.compose.addEventListener('click', () => this.openPicker());
+    part(this.dock, 'tuck').addEventListener('click', () => this.setTucked(true));
+    this.edge.addEventListener('click', () => this.setTucked(false));
     part(this.dock, 'picker-back').addEventListener('click', () => {
       this.closePicker();
       this.compose.focus();
@@ -761,6 +770,32 @@ export class ChatDock implements ThreadHost {
   }
 
   /**
+   * Tucks the whole dock (list and windows) into a tab on the right edge, or brings it back as it was (shared
+   * layout: every tab of the browser follows). Focus moves to the control that stays visible.
+   *
+   * @param tucked True to tuck the dock away, false to show it again.
+   * @param moveFocus Whether to move focus (false when a conversation is being opened, which focuses its window).
+   */
+  setTucked(tucked: boolean, moveFocus = true): void {
+    if (this.store.get().tucked === tucked) {
+      return;
+    }
+    this.store.update((state) => {
+      state.tucked = tucked;
+    });
+    this.applyState();
+    if (!moveFocus) {
+      return;
+    }
+    if (tucked) {
+      this.edge.focus({ preventScroll: true });
+    } else {
+      this.playEntry(this.panel);
+      this.launcher.focus({ preventScroll: true });
+    }
+  }
+
+  /**
    * Plays the entry animation (CSS `is-entering`) on a panel or window.
    *
    * @param element Element that just appeared.
@@ -798,6 +833,9 @@ export class ChatDock implements ThreadHost {
     const state = this.store.get();
     const mobile = this.isMobile();
     this.root.classList.toggle('is-mobile', mobile);
+    this.root.classList.toggle('is-tucked', state.tucked);
+    this.dock.inert = state.tucked;
+    this.edge.hidden = !state.tucked;
     this.panel.classList.toggle('is-open', state.listOpen);
     this.launcher.setAttribute('aria-expanded', state.listOpen ? 'true' : 'false');
     this.launcherChevron.replaceChildren(this.templates.icon(state.listOpen ? 'chevronDown' : 'chevronUp', 16));
@@ -1021,6 +1059,7 @@ export class ChatDock implements ThreadHost {
   private renderBadge(): void {
     const total = [...this.conversations.values()].reduce((sum, summary) => sum + summary.unread, 0);
     setBadge(this.launcherBadge, total, t(this.config.i18n, 'unread', { count: total }));
+    setBadge(this.edgeBadge, total, t(this.config.i18n, 'unread', { count: total }));
     this.root.classList.toggle('has-unread', total > 0);
   }
 

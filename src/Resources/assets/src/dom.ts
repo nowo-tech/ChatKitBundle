@@ -47,6 +47,7 @@ const ICONS: Record<string, string> = {
   chevronUp: '<path d="m6 15 6-6 6 6" />',
   chevronDown: '<path d="m6 9 6 6 6-6" />',
   close: '<path d="M6 6l12 12M18 6 6 18" />',
+  tuck: '<path d="M4 12h10M10 8l4 4-4 4M20 4v16" />',
   send: '<path d="M4 12 20 4l-6 16-3-7-7-1Z" />',
   back: '<path d="M15 6 9 12l6 6" />',
   arrowDown: '<path d="M12 5v14M6 13l6 6 6-6" />',

@@ -24,6 +24,7 @@
                         <span class="nowo-chat-launcher__chevron" data-part="launcher-chevron"></span>
                     </button>
                     {{ ui.icon_button('compose', 'chat.new_message'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'compose', 'nowo-chat-panel__compose') }}
+                    {{ ui.icon_button('tuck', 'chat.tuck'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'tuck', 'nowo-chat-panel__tuck') }}
                     {{ ui.icon_button('close', 'chat.close'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'close-panel', 'nowo-chat-panel__close') }}
                 </div>
                 <p class="nowo-chat-status" role="status" data-part="status" hidden></p>
@@ -246,6 +247,16 @@
             <p class="nowo-chat-thread__empty-title" data-part="title"></p>
             <p data-part="hint"></p>
         </div>
+    </template>
+{% endblock %}
+
+{% block nowo_chat_template_edge %}
+    {# The whole dock tucked away: one tab on the right edge (chat icon + unread count) brings it back as it was. #}
+    <template data-nowo-chat-template="edge">
+        <button type="button" class="nowo-chat-edge" data-part="edge" aria-label="{{ 'chat.untuck'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" title="{{ 'chat.untuck'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" hidden>
+            <span data-icon="chat" data-icon-size="20"></span>
+            <span class="nowo-chat-badge" data-part="edge-badge" hidden></span>
+        </button>
     </template>
 {% endblock %}
 

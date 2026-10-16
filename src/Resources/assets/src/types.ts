@@ -129,6 +129,8 @@ export interface SupportContext {
 /** Layout shared by every browser tab of the same user (localStorage + BroadcastChannel). */
 export interface DockState {
   listOpen: boolean;
+  /** Whole dock tucked into a tab on the right edge (list and windows hidden, layout kept). */
+  tucked: boolean;
   tabs: { uuid: string; minimised: boolean }[];
   drafts: Record<string, string>;
 }

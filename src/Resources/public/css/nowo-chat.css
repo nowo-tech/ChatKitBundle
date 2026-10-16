@@ -114,6 +114,56 @@
   width: var(--nowo-chat-panel-width);
 }
 
+/* Tucked: the list and every window leave the screen (layout kept); one tab on the right edge brings them back. */
+.nowo-chat.is-tucked .nowo-chat-dock {
+  display: none;
+}
+
+.nowo-chat-edge {
+  position: fixed;
+  right: 0;
+  bottom: calc(var(--nowo-chat-lift, 0px) + var(--nowo-chat-edge-offset, 24px));
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 44px;
+  padding: 0 0 0 2px;
+  border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
+  border-right: 0;
+  border-radius: var(--nowo-chat-radius-control) 0 0 var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  box-shadow: var(--nowo-chat-shadow-soft);
+  color: var(--nowo-chat-accent);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: width 0.15s ease;
+}
+.nowo-chat-edge[hidden] {
+  display: none;
+}
+.nowo-chat-edge:hover {
+  width: 46px;
+}
+.nowo-chat-edge:focus-visible {
+  outline: 2px solid var(--nowo-chat-accent);
+  outline-offset: 2px;
+}
+.nowo-chat-edge .nowo-chat-badge {
+  position: absolute;
+  top: -6px;
+  left: -6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nowo-chat-edge {
+    transition: none;
+  }
+}
+@media print {
+  .nowo-chat-edge {
+    display: none;
+  }
+}
+
 .nowo-chat-panel__header,
 .nowo-chat-window__header {
   display: flex;
@@ -1010,6 +1060,7 @@
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__label,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__chevron,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__compose,
+.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__tuck,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__close {
   display: none;
 }

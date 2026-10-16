@@ -22,6 +22,8 @@ chat:
   failed: 'No enviado'
   retry: 'Reintentar'
   minimise: 'Minimizar'
+  tuck: 'Ocultar en el lateral'
+  untuck: 'Mostrar la mensajería'
   expand: 'Desplegar'
   close: 'Cerrar'
   back: 'Volver'
