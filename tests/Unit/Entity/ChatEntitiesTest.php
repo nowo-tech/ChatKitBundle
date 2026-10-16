@@ -121,8 +121,10 @@ final class ChatEntitiesTest extends TestCase
 
         $conversation->setSupportContext('/projects/x/issues', "  Error   500\n on export ");
         self::assertSame(['url' => '/projects/x/issues', 'label' => 'Error 500 on export'], $conversation->getSupportContext());
-        $conversation->setSupportContext('https://app.test/a', null);
-        self::assertSame(['url' => 'https://app.test/a'], $conversation->getSupportContext());
+        $conversation->setSupportContext('https://evil.test/a', null);
+        self::assertNull($conversation->getSupportContext(), 'CHAT-SEC-04: absolute URLs are dropped (no off-site link for agents)');
+        $conversation->setSupportContext('/\\evil.test/x', "Billing\u{202E}page\u{0007}");
+        self::assertSame(['label' => 'Billing page'], $conversation->getSupportContext(), 'backslash host trick dropped, control / bidi characters removed');
         $conversation->setSupportContext('javascript:alert(1)', str_repeat('x', 200));
         self::assertSame(['label' => str_repeat('x', 120)], $conversation->getSupportContext(), 'no other schemes, label capped');
         $conversation->setSupportContext('//evil.test/x', '');

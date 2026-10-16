@@ -21,6 +21,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingDigestSender;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -108,6 +109,25 @@ final class ChatDigestTest extends DatabaseTestCase
         $this->dispatcher($other, new ArrayAdapter())(new SendChatDigestMessage((int) $disabled->getId()));
         self::assertSame([], $other->sent);
         self::assertTrue($this->em->getRepository(ChatUserSettings::class)->forUser($ana)->isEmailDigest());
+    }
+
+    public function testNoSnippetsFromConversationsTheUserCanNoLongerRead(): void
+    {
+        $chat    = $this->get(ChatService::class);
+        $ana     = $this->user('Ana');
+        $luis    = $this->user('Luis');
+        $channel = $chat->openChannel($ana, $this->get(ChatAccess::class)->channel(TestChannelProvider::KEY) ?? self::fail('channel'));
+        $chat->openChannel($luis, $this->get(ChatAccess::class)->channel(TestChannelProvider::KEY) ?? self::fail('channel'));
+        $chat->send($luis, $channel, 'secret roadmap');
+        // Ana leaves the channel (the provider no longer allows her); her participant row stays.
+        $this->em->createQuery('UPDATE ' . TestUser::class . ' u SET u.name = :name WHERE u.id = :id')
+            ->setParameters(['name' => 'Stranger Ana', 'id' => $ana->getId()])->execute();
+        $this->em->clear();
+        $this->get(ChatAccess::class)->reset();
+
+        $sender = new RecordingDigestSender();
+        $this->dispatcher($sender, new ArrayAdapter())(new SendChatDigestMessage((int) $ana->getId()));
+        self::assertSame([], $sender->sent, 'CHAT-SEC-01: no email with snippets of a channel she left');
     }
 
     private function dispatcher(RecordingDigestSender $sender, ArrayAdapter $cache): ChatDigestDispatcher

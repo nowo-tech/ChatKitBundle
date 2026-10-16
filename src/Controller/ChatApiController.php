@@ -113,10 +113,14 @@ final class ChatApiController extends AbstractController
     {
         $user        = $this->reader();
         $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
-        $list        = $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT);
-        $ids         = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $unread      = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
-        $latest      = $this->messages->findLatestByConversationIds($ids);
+        // Participant rows outlive access (left channel, demoted agent): list only what the user may read today.
+        $list = array_values(array_filter(
+            $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT),
+            fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
+        ));
+        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $latest = $this->messages->findLatestByConversationIds($ids);
         // Peers of direct threads in one query and their presence in one cache round trip.
         $peerIds = [];
         foreach ($list as $conversation) {

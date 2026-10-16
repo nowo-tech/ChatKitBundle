@@ -53,6 +53,28 @@ final class ChatAccess implements ResetInterface
     }
 
     /**
+     * Whether the user may read the conversation now: a direct thread stays readable for both people; a support
+     * thread for its owner and the current agents; a channel for whoever the provider allows today. Used by the voter,
+     * the conversation lists and the email digest (participant rows alone never grant access).
+     *
+     * @param ChatConversation $conversation The conversation to check
+     * @param ChatUserInterface $user The reader
+     *
+     * @return bool True when the user may read it
+     */
+    public function canView(ChatConversation $conversation, ChatUserInterface $user): bool
+    {
+        if ($conversation->isDirect()) {
+            return $conversation->involvesDirectly($user);
+        }
+        if ($conversation->isSupport()) {
+            return $conversation->getSupportOwner()?->getId() === $user->getId() || $this->isSupportAgent($user);
+        }
+
+        return $this->canUseChannel($user, (string) $conversation->getChannelKey());
+    }
+
+    /**
      * Whether the user is persisted and the policy lets them use the chat.
      *
      * @param ChatUserInterface $user The user to check

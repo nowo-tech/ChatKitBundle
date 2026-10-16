@@ -144,11 +144,14 @@ final class ChatPageController extends AbstractController
     private function context(ChatUserInterface $user, ?ChatConversation $current): array
     {
         $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
-        $list        = $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT);
-        $ids         = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $unread      = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
-        $latest      = $this->messages->findLatestByConversationIds($ids);
-        $rows        = [];
+        $list        = array_values(array_filter(
+            $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT),
+            fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
+        ));
+        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $latest = $this->messages->findLatestByConversationIds($ids);
+        $rows   = [];
         foreach ($list as $conversation) {
             $id = (int) $conversation->getId();
             if ($conversation->isDirect() && !isset($latest[$id]) && $conversation !== $current) {

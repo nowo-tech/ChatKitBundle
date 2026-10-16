@@ -28,6 +28,7 @@ final class ConfigurationTest extends TestCase
             'push'           => false,
             'push_url'       => '/?chat={uuid}',
             'push_icon'      => null,
+            'push_preview'   => false,
             'digest'         => ['enabled' => false, 'delay_minutes' => 15, 'interval_minutes' => 60],
             'page_layout'    => '@NowoChatKitBundle/page_layout.html.twig',
             'cache_pool'     => 'cache.app',

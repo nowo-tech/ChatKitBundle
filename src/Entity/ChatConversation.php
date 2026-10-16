@@ -342,10 +342,12 @@ class ChatConversation
     }
 
     /**
-     * Relative URL (`/…`) or http(s) URL and a short label; anything else is dropped.
+     * Root-relative path of the application (`/…`) and a short label; anything else is dropped. The context comes from
+     * the reporter's browser, so absolute, protocol-relative (`//host`, `/\host`) URLs and control characters never
+     * reach the agents (no off-site link behind a trusted label).
      *
-     * @param string|null $url Page URL (trimmed, at most 500 characters)
-     * @param string|null $label Page label (whitespace collapsed, at most 120 characters)
+     * @param string|null $url Page path (trimmed, at most 500 characters)
+     * @param string|null $label Page label (control and format characters removed, whitespace collapsed, at most 120 characters)
      *
      * @throws LogicException When the conversation is not a support thread
      */
@@ -353,10 +355,11 @@ class ChatConversation
     {
         $this->assertSupport();
         $url = $url === null ? '' : mb_substr(trim($url), 0, 500);
-        if ($url !== '' && preg_match('~^(/(?!/)|https?://)~i', $url) !== 1) {
+        if ($url !== '' && preg_match('~^/(?![/\\\\])[^\x00-\x1F\x7F\\\\]*$~', $url) !== 1) {
             $url = '';
         }
-        $label                = $label === null ? '' : mb_substr(trim((string) preg_replace('/\s+/u', ' ', $label)), 0, 120);
+        $label                = $label === null ? '' : (string) preg_replace('/[\p{Cc}\p{Cf}]/u', ' ', $label);
+        $label                = mb_substr(trim((string) preg_replace('/\s+/u', ' ', $label)), 0, 120);
         $context              = array_filter(['url' => $url, 'label' => $label], static fn (string $value): bool => $value !== '');
         $this->supportContext = $context === [] ? null : $context;
     }

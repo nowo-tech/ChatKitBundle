@@ -9,12 +9,17 @@ use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Push\ChatPushDispatcher;
 use Nowo\ChatKitBundle\Push\DeliverChatPushMessage;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
+use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
+use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
+use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingPushSender;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Web Push selection at delivery time (push on, inline delivery without Messenger).
@@ -23,7 +28,7 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
 {
     protected function chatKitConfig(): array
     {
-        return ['profiles' => ['default' => ['push' => true, 'push_url' => '/inbox?chat={uuid}', 'push_icon' => '/icon.png']]];
+        return ['profiles' => ['default' => ['push' => true, 'push_url' => '/inbox?chat={uuid}', 'push_icon' => '/icon.png', 'push_preview' => true]]];
     }
 
     public function testOnlyParticipantsWhoWantItAndAreAway(): void
@@ -119,5 +124,30 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
         $this->em->flush();
 
         return $user;
+    }
+
+    public function testGenericBodyWithoutPreview(): void
+    {
+        $sender = $this->get(RecordingPushSender::class);
+        $chat   = $this->get(ChatService::class);
+        $ana    = $this->user('Ana');
+        $luis   = $this->enablePush($this->user('Luis'));
+        $dm     = $chat->openDirect($ana, $luis);
+        $this->get(ChatPushDispatcher::class); // container-built with push_preview: true (see chatKitConfig)
+
+        $dispatcher = new ChatPushDispatcher(
+            $this->get(ChatMessageRepository::class),
+            $this->get(ChatParticipantRepository::class),
+            $this->get(ChatUserSettingsRepository::class),
+            $this->get(ChatPresence::class),
+            $this->get(ChatAccess::class),
+            $this->get(ChatMarkdownRenderer::class),
+            $this->get(TranslatorInterface::class),
+            $sender,
+        );
+        $message      = $chat->send($ana, $dm, 'salary review is on Friday');
+        $sender->sent = [];
+        $dispatcher(new DeliverChatPushMessage((int) $message->getId(), [(int) $luis->getId()]));
+        self::assertSame('New message', $sender->sent[$luis->getChatPublicId()]['body'] ?? null, 'CHAT-SEC-03: no message text on lock screens by default');
     }
 }

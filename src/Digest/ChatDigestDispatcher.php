@@ -65,11 +65,15 @@ final readonly class ChatDigestDispatcher
         if ($sent->isHit()) {
             return;
         }
-        $conversations = $this->conversations->findParticipating($user, 50);
-        $ids           = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $conversations);
-        $unread        = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
-        $latest        = $this->messages->findLatestByConversationIds($ids);
-        $items         = [];
+        // Only conversations the user may still read (left channels and lost agent rights send nothing).
+        $conversations = array_values(array_filter(
+            $this->conversations->findParticipating($user, 50),
+            fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
+        ));
+        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $conversations);
+        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $latest = $this->messages->findLatestByConversationIds($ids);
+        $items  = [];
         foreach ($conversations as $conversation) {
             $count = $unread[(int) $conversation->getId()] ?? 0;
             if ($count === 0) {

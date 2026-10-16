@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
+use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
@@ -278,6 +279,28 @@ final class ChatApiTest extends DatabaseTestCase
 
         // The stranger on the project page gets no channel shortcut.
         self::assertNull($this->login($stranger, '/projects/acme/page')['contextChannel']);
+    }
+
+    public function testDemotedAgentNoLongerSeesSupportThreads(): void
+    {
+        $chat    = $this->get(ChatService::class);
+        $ana     = $this->user('Ana');
+        $agent   = $this->user('Agent Smith');
+        $support = $chat->openSupport($ana);
+        $chat->send($ana, $support, 'my invoice is wrong');
+        $chat->send($agent, $support, 'looking into it'); // the agent now has a participant row
+        // The agent loses the role.
+        $this->em->createQuery('UPDATE ' . TestUser::class . ' u SET u.name = :name WHERE u.id = :id')
+            ->setParameters(['name' => 'Former Smith', 'id' => $agent->getId()])->execute();
+        $this->em->clear();
+        $this->get(ChatAccess::class)->reset();
+        $former = $this->em->find(TestUser::class, $agent->getId()) ?? self::fail('user');
+
+        $this->login($former);
+        $titles = array_column($this->getJson('/chat/api/conversations')['conversations'], 'uuid');
+        self::assertNotContains($support->getUuid(), $titles, 'CHAT-SEC-01: no preview of a support thread after losing the role');
+        $this->client->request(Request::METHOD_GET, '/chat/');
+        self::assertStringNotContainsString('my invoice is wrong', (string) $this->client->getResponse()->getContent());
     }
 
     /**

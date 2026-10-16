@@ -32,6 +32,7 @@ final readonly class ChatPushDispatcher
      * @param string $urlTemplate Notification click URL; `{uuid}` is replaced by the conversation id
      * @param string|null $icon Icon and badge URL of the notification; null omits them
      * @param ClockInterface $clock Clock used for the mute check
+     * @param bool $preview Whether the body carries the message text (`push_preview`); otherwise a generic "New message"
      */
     public function __construct(
         private ChatMessageRepository $messages,
@@ -45,6 +46,7 @@ final readonly class ChatPushDispatcher
         private string $urlTemplate = '/?chat={uuid}',
         private ?string $icon = null,
         private ClockInterface $clock = new Clock(),
+        private bool $preview = false,
     ) {
     }
 
@@ -103,9 +105,12 @@ final readonly class ChatPushDispatcher
             $conversation->isSupport() && $author?->getId() !== $conversation->getSupportOwner()?->getId() => $this->translator->trans('chat.support_title', [], 'NowoChatKitBundle', $locale),
             default                                                                                        => $authorName,
         };
-        $body = $message->isBuzz()
-            ? $this->translator->trans('chat.buzz_received', ['%name%' => $authorName], 'NowoChatKitBundle', $locale)
-            : $this->markdown->plainText($message->getBody(), 140);
+        $body = match (true) {
+            $message->isBuzz() => $this->translator->trans('chat.buzz_received', ['%name%' => $authorName], 'NowoChatKitBundle', $locale),
+            // `push_preview`: message text on lock screens only when the application opts in.
+            $this->preview => $this->markdown->plainText($message->getBody(), 140),
+            default        => $this->translator->trans('chat.new_message', [], 'NowoChatKitBundle', $locale),
+        };
 
         return array_filter([
             'event' => 'chat.message',

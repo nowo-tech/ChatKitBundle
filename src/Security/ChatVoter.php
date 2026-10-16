@@ -90,15 +90,7 @@ final class ChatVoter extends Voter
 
     private function canView(ChatConversation $conversation, ChatUserInterface $user): bool
     {
-        if ($conversation->isDirect()) {
-            // A direct thread stays readable for both people, also after they stop sharing a context.
-            return $conversation->involvesDirectly($user);
-        }
-        if ($conversation->isSupport()) {
-            return $conversation->getSupportOwner()?->getId() === $user->getId() || $this->access->isSupportAgent($user);
-        }
-
-        return $this->access->canUseChannel($user, (string) $conversation->getChannelKey());
+        return $this->access->canView($conversation, $user);
     }
 
     private function canSend(ChatConversation $conversation, ChatUserInterface $user): bool
