@@ -87,6 +87,9 @@ jobs:
         run: |
           composer config minimum-stability dev
           composer config prefer-stable true
+          # symfony/mercure (dev only) does not allow symfony/web-link 8.x yet: test 8.2 without it
+          # (MercureChatRealtime tests are skipped; the null transport is used).
+          composer remove --dev symfony/mercure --no-update
 
       - name: Install dependencies with Symfony ${{ matrix.symfony }}
         run: |

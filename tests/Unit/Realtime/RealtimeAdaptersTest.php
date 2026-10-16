@@ -17,6 +17,7 @@ use Nowo\ChatKitBundle\Realtime\MercureChatRealtime;
 use Nowo\ChatKitBundle\Realtime\NullChatRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use PHPUnit\Framework\Attributes\RequiresMethod;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
 use Stringable;
@@ -57,6 +58,7 @@ final class RealtimeAdaptersTest extends TestCase
         self::assertFalse($called);
     }
 
+    #[RequiresMethod(HubInterface::class, 'publish')]
     public function testMercureAdapterPublishesPrivateUpdatesAndSignsTokens(): void
     {
         $hub = new class implements HubInterface {
