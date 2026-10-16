@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-16
+
+### Fixed
+
+- Phones: the round launcher stays above the Symfony web debug toolbar and `data-nowo-chat-avoid` footers again
+  (1.1.0 kept it at a fixed 12 px from the bottom, under an open toolbar).
+
 ## [1.1.0] - 2026-10-16
 
 ### Added
@@ -57,6 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/nowo-tech/ChatKitBundle/releases/tag/v1.0.0

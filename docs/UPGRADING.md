@@ -2,6 +2,10 @@
 
 This guide lists the changes integrators must apply when upgrading between versions.
 
+## 1.1.1 (2026-10-16)
+
+No breaking change (CSS fix only).
+
 ## 1.1.0 (2026-10-16)
 
 No breaking change. If you set `--nowo-chat-bottom-offset` only to clear a footer, mark the footer with

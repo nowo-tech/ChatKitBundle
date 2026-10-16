@@ -990,7 +990,8 @@
 
 .nowo-chat.is-mobile {
   right: 12px;
-  bottom: 12px;
+  /* The round launcher also stays above the Symfony toolbar and [data-nowo-chat-avoid] footers. */
+  bottom: calc(12px + var(--nowo-chat-lift, 0px));
 }
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) {
   width: auto;
