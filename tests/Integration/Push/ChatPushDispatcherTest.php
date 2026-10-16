@@ -128,7 +128,7 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
 
     public function testGenericBodyWithoutPreview(): void
     {
-        $sender = $this->get(RecordingPushSender::class);
+        $sender = new RecordingPushSender();
         $chat   = $this->get(ChatService::class);
         $ana    = $this->user('Ana');
         $luis   = $this->enablePush($this->user('Luis'));
@@ -146,7 +146,6 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
             $sender,
         );
         $message      = $chat->send($ana, $dm, 'salary review is on Friday');
-        $sender->sent = [];
         $dispatcher(new DeliverChatPushMessage((int) $message->getId(), [(int) $luis->getId()]));
         self::assertSame('New message', $sender->sent[$luis->getChatPublicId()]['body'] ?? null, 'CHAT-SEC-03: no message text on lock screens by default');
     }
