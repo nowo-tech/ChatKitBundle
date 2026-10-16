@@ -11,6 +11,7 @@ use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Contracts\Service\ResetInterface;
 
@@ -179,7 +180,7 @@ final class ChatAccess implements ResetInterface
     private function memo(string $key, Closure $compute): mixed
     {
         $request = $this->requests?->getMainRequest();
-        if ($request === null) {
+        if (!$request instanceof Request) {
             return $compute();
         }
         /** @var array<string, mixed> $memo */
