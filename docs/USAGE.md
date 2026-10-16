@@ -126,8 +126,9 @@ shown to the agents as a "Reported from" banner.
 
 Support agents (`ChatAccessPolicyInterface::isSupportAgent()`) see every support thread in the dock. For an inbox page of
 your own, `GET /api/support/inbox?status=open|resolved|mine|all&q=` returns the threads (each with its `owner`) and the
-`open` count; `ChatSupportInbox` gives the same data in PHP (e.g. a menu counter: `countOpen()`). Agents resolve threads;
-a new message from the owner reopens them.
+`open` count; `ChatSupportInbox` gives the same data in PHP (e.g. a menu counter: `countOpen()`). Agents resolve and
+reopen threads (`ChatService::resolveSupport()` / `reopenSupport()`, or the API); a new message from the owner reopens
+them too.
 
 ## Full-page chat
 
@@ -282,7 +283,9 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | GET / POST | `/api/conversations/{uuid}/messages` (`?before=` / `?after=`) | page / send `{body}` |
 | PATCH / DELETE | `/api/conversations/{uuid}/messages/{messageUuid}` | edit `{body}` / delete |
 | POST | `/api/conversations/{uuid}/messages/{messageUuid}/reactions` `{emoji}` | toggle a reaction |
-| POST | `/api/conversations/{uuid}/read` `{messageId}` · `/typing` · `/buzz` · `/resolve` | |
+| POST | `/api/conversations/{uuid}/read` `{messageId}` · `/typing` · `/buzz` · `/resolve` · `/reopen` | |
+| GET | `/api/support/inbox?status=open\|resolved\|mine\|all&q=` | agents only: support threads + open count |
+| GET | `/api/link-previews?url[]=…` | previews from your provider, per viewer |
 | GET | `/api/realtime` | hub URL + subscriber token for the caller's topic |
 | POST | `/api/presence` `{visible}` | heartbeat; online direct contacts |
 

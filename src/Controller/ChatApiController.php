@@ -405,6 +405,17 @@ final class ChatApiController extends AbstractController
         return $this->json(['conversation' => $this->present($conversation, $user)]);
     }
 
+    /** A support agent reopens a resolved support thread. */
+    #[Route('/conversations/{uuid}/reopen', name: 'reopen', requirements: ['uuid' => self::UUID], methods: ['POST'])]
+    public function reopen(string $uuid, Request $request): JsonResponse
+    {
+        $user = $this->writer($request);
+        $conversation = $this->find($uuid, ChatVoter::RESOLVE);
+        $this->chat->reopenSupport($user, $conversation);
+
+        return $this->json(['conversation' => $this->present($conversation, $user)]);
+    }
+
     /**
      * Chat data is private and changes constantly: never cached by the browser, a proxy or a service worker.
      *

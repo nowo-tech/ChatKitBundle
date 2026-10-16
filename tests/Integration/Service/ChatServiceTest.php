@@ -114,6 +114,9 @@ final class ChatServiceTest extends DatabaseTestCase
 
         $chat->send($agent, $support, 'anything else?');
         self::assertTrue($support->isResolved(), 'an agent reply does not reopen');
+        $chat->reopenSupport($agent, $support);
+        self::assertFalse($support->isResolved(), 'an agent reopens it explicitly');
+        $chat->resolveSupport($agent, $support);
         $chat->send($ana, $support, 'yes, one more thing');
         self::assertFalse($support->isResolved(), 'the owner writing again reopens');
 

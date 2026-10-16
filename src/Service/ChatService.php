@@ -170,6 +170,18 @@ final readonly class ChatService
         $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $agent));
     }
 
+    /** An agent reopens a resolved support thread (no-op when it is open). */
+    public function reopenSupport(ChatUserInterface $agent, ChatConversation $conversation): void
+    {
+        if (!$conversation->isResolved()) {
+            return;
+        }
+        $conversation->reopen();
+        $this->entityManager->flush();
+        $this->notifier->supportStatusChanged($conversation);
+        $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $agent));
+    }
+
     public function markRead(ChatUserInterface $user, ChatConversation $conversation, int $messageId): bool
     {
         $moved = $this->participant($conversation, $user)->markReadUpTo($messageId);

@@ -190,6 +190,8 @@ final class ChatApiTest extends DatabaseTestCase
         self::assertStringEndsWith('/chat/api/support/inbox', $agentConfig['endpoints']['supportInbox']);
         $resolved = $this->postJson('/chat/api/conversations/'.$support['uuid'].'/resolve', [], $agentConfig['csrf'])['conversation'];
         self::assertSame('resolved', $resolved['supportStatus']);
+        self::assertSame('open', $this->postJson('/chat/api/conversations/'.$support['uuid'].'/reopen', [], $agentConfig['csrf'])['conversation']['supportStatus']);
+        self::assertSame('open', $this->postJson('/chat/api/conversations/'.$support['uuid'].'/reopen', [], $agentConfig['csrf'])['conversation']['supportStatus'], 'reopening an open thread is a no-op');
 
         // A direct thread the policy no longer allows is read-only (stranger ↔ Ana, opened by the agent route).
         $strangerCsrf = $this->login($stranger)['csrf'];
