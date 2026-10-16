@@ -51,7 +51,8 @@ final class ChatRepositoriesTest extends DatabaseTestCase
         $deleted = new ChatMessage($dm, $luis, 'gone', '<p>gone</p>');
         $deleted->delete($luis);
         $channelMsg = new ChatMessage($channel, $luis, 'hello all', '<p>hello all</p>');
-        foreach ([$old, $m1, $m2, $m3, $deleted, $channelMsg] as $message) {
+        $question = new ChatMessage($anaSupport, $ana, 'help', '<p>help</p>');
+        foreach ([$old, $m1, $m2, $m3, $deleted, $channelMsg, $question] as $message) {
             $em->persist($message);
         }
         $anaInDm = new ChatParticipant($dm, $ana);
@@ -85,9 +86,12 @@ final class ChatRepositoriesTest extends DatabaseTestCase
 
         // Support agent: every support thread, never someone else's DM.
         $agentList = $conversations->findListForUser($ana, [], true, 10);
-        self::assertContains($eveSupport, $agentList);
+        self::assertContains($anaSupport, $agentList);
+        self::assertNotContains($eveSupport, $conversations->findListForUser($luis, [], true, 10), 'an empty support thread stays out of other agents\' lists');
         self::assertNotContains($foreignDm, $agentList);
         self::assertSame(1, $conversations->countOpenSupport());
+        self::assertSame([$anaSupport], $conversations->findSupportInbox('open', $ana, 10));
+        self::assertSame([$anaSupport], $conversations->findSupportInbox(null, $ana, 10), 'never-written threads are left out');
 
         // Cursor pages, oldest first; catch-up after an id.
         self::assertSame([$m3, $deleted], $messages->findPage($dm, 2));

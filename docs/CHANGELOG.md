@@ -21,7 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `nowo_chat_icons()`; CSS tokens `--nowo-chat-*` with light / dark defaults; Symfony UX Icons (`icon_set`, Tabler).
 - TypeScript dock (IIFE `nowo-chat.js` + importable source): windows that survive navigation and sync across tabs,
   typing, receipts, presence, buzz, sounds, emoji picker, inline edit / delete, reactions, mobile sheet.
-- Support: agents' inbox endpoint and `ChatSupportInbox` (open count), agents resolve and reopen threads, thread context (`Reported from`), links anywhere
+- Support: agents' inbox endpoint and `ChatSupportInbox` (open count), agents resolve and reopen threads, threads never written to stay out of the inbox and counts, thread context (`Reported from`), links anywhere
   on the page (`data-nowo-chat-open="support|user:…|channel:…"`).
 - Events `ChatMessageSentEvent`, `ChatMessageDeletedEvent` (`moderated`), `ChatSupportStatusChangedEvent`.
 - Link previews through `ChatLinkPreviewProviderInterface` (per viewer, batched); email digest of unread conversations

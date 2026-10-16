@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
+use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
@@ -17,6 +18,9 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
  */
 class ChatConversationRepository extends ServiceEntityRepository
 {
+    /** Support threads opened but never written to are not in the inbox (nor counted). */
+    private const string HAS_MESSAGES = 'EXISTS (SELECT 1 FROM '.ChatMessage::class.' hm WHERE hm.conversation = c)';
+
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, ChatConversation::class);
@@ -81,7 +85,8 @@ class ChatConversationRepository extends ServiceEntityRepository
         }
         if ($isSupportAgent) {
             $rows = [...$rows, ...$branch(static function ($qb): void {
-                $qb->andWhere('c.kind = :support')->setParameter('support', ConversationKind::Support);
+                // Other people's support threads only once they hold a message.
+                $qb->andWhere('c.kind = :support')->andWhere(self::HAS_MESSAGES)->setParameter('support', ConversationKind::Support);
             })];
         }
 
@@ -128,6 +133,7 @@ class ChatConversationRepository extends ServiceEntityRepository
         $qb = $this->createQueryBuilder('c')
             ->leftJoin('c.supportOwner', 'owner')->addSelect('owner')
             ->where('c.kind = :support')
+            ->andWhere(self::HAS_MESSAGES)
             ->setParameter('support', ConversationKind::Support)
             ->orderBy('c.lastMessageAt', 'DESC')
             ->addOrderBy('c.id', 'DESC')
@@ -170,6 +176,7 @@ class ChatConversationRepository extends ServiceEntityRepository
         return (int) $this->createQueryBuilder('c')
             ->select('COUNT(c.id)')
             ->where('c.kind = :support AND c.supportStatus = :open')
+            ->andWhere(self::HAS_MESSAGES)
             ->setParameter('support', ConversationKind::Support)
             ->setParameter('open', SupportStatus::Open)
             ->getQuery()
