@@ -12,6 +12,7 @@ use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
+use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Push\ChatPushDispatcher;
 use Nowo\ChatKitBundle\Push\NullChatPushSender;
@@ -54,6 +55,10 @@ return static function (ContainerConfigurator $container): void {
     $services->load('Nowo\\ChatKitBundle\\Repository\\', '../../Repository/')
         ->tag('doctrine.repository_service');
 
+    // REQ-ORM-002: bundle tables, indexes and unique constraints get `doctrine.table_prefix`.
+    $services->get(TablePrefixListener::class)
+        ->arg('$prefix', param('nowo_chat_kit.doctrine.table_prefix'))
+        ->tag('doctrine.event_listener', ['event' => 'loadClassMetadata']);
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);
     $services->alias(ChatLinkPreviewProviderInterface::class, NullLinkPreviewProvider::class);

@@ -51,6 +51,8 @@ nowo_chat_kit:
 | `profiles.<name>.digest.enabled` | bool | `false` | Email the conversations still unread (needs Messenger and a `ChatDigestSenderInterface`). |
 | `profiles.<name>.digest.delay_minutes` | int ≥ 1 | `15` | How long a message stays unread before it counts. |
 | `profiles.<name>.digest.interval_minutes` | int ≥ 1 | `60` | At most one email per user in this window. |
+| `profiles.<name>.push_preview` | bool | `false` | Put the first 140 characters of the message in the Web Push body (lock screens). Off: a generic "New message". |
+| `profiles.<name>.doctrine.table_prefix` | string | `''` | Prepended to every bundle table, index and unique constraint (lowercase letters, digits, `_`). `app_` gives `app_nowo_chat_conversation`, `app_nowo_chat_message`, … Generate a migration after changing it. |
 | `profiles.<name>.page_layout` | string | `@NowoChatKitBundle/page_layout.html.twig` | Layout the full-page chat extends (`title` and `body` blocks). |
 | `profiles.<name>.cache_pool` | string | `cache.app` | PSR-6 pool for presence and recipient lists. Share it between workers / replicas. |
 | `profiles.<name>.reactions` | list | `👍 ❤️ 😂 😮 😢 🎉` | Emojis offered as reactions (anything else is refused). |
@@ -75,5 +77,5 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 ## Container parameters
 
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
-key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `cache_pool`, `page_layout`,
+key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `doctrine.table_prefix`,
 `reactions`, `icon_set`, `icons`, `presence_ttl`, `limits`, `digest`).

@@ -9,6 +9,7 @@ use Symfony\Component\Config\Definition\ConfigurationInterface;
 
 use function array_key_exists;
 use function is_array;
+use function is_string;
 
 /**
  * Configuration tree for `nowo_chat_kit` (REQ-CFG-001: `default_profile` + `profiles`).
@@ -108,6 +109,19 @@ final class Configuration implements ConfigurationInterface
                             ->booleanNode('push_preview')
                                 ->info('Put the first 140 characters of the message in the Web Push body (shown on lock screens). Off: a generic "New message".')
                                 ->defaultFalse()
+                            ->end()
+                            ->arrayNode('doctrine')
+                                ->addDefaultsIfNotSet()
+                                ->children()
+                                    ->scalarNode('table_prefix')
+                                        ->info('Prepended to every table, index and unique constraint of the bundle (e.g. "app_" gives app_nowo_chat_message). Empty: none.')
+                                        ->defaultValue('')
+                                        ->validate()
+                                            ->ifTrue(static fn (mixed $prefix): bool => !is_string($prefix) || preg_match('/^[a-z0-9_]*$/', $prefix) !== 1)
+                                            ->thenInvalid('table_prefix may only contain lowercase letters, digits and underscores.')
+                                        ->end()
+                                    ->end()
+                                ->end()
                             ->end()
                             ->arrayNode('digest')
                                 ->info('Email of the conversations still unread a while after a message (needs Messenger and a ChatDigestSenderInterface).')
