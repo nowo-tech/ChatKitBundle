@@ -2,7 +2,7 @@
 
 **Package**: `nowo-tech/chat-kit-bundle`  
 **Last audited**: 2026-10-16  
-**Production units**: **90/90**  
+**Production units**: **91/91**  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -15,7 +15,7 @@
 
 | Category | Mapped |
 | --- | ---: |
-| Bundle, configuration & DI | 7 |
+| Bundle, configuration & DI | 8 |
 | Domain model & persistence | 13 |
 | Contracts & value objects | 13 |
 | Access control | 2 |
@@ -26,7 +26,7 @@
 | Twig, markup & theme | 6 |
 | Browser (TypeScript) | 13 |
 | Translations | 7 |
-| **Total** | **90** |
+| **Total** | **91** |
 
 ## Bundle, configuration & DI
 
@@ -38,6 +38,7 @@
 | `src/DependencyInjection/NowoChatKitExtension.php` | US-01 | FR-CFG-002, FR-DI-001 |
 | `src/NowoChatKitBundle.php` | US-01 | FR-BUNDLE-001 |
 | `src/Resources/config/routes.php` | US-01 | FR-ROUTE-001 |
+| `src/Doctrine/TablePrefixListener.php` | US-01 | FR-ORM-001 |
 | `src/Resources/config/services.php` | US-01 | FR-DI-001 |
 
 ## Domain model & persistence

@@ -210,7 +210,7 @@ find src/Resources/assets/src -name '*.ts' | wc -l
 
 The **Total production sources** row in `code-inventory.md` must match this count (**206** = 115 + 62 + 1 + 1 + 7 + 20).
 
-In **ChatKitBundle**, the baseline inventory covers **90/90** production units (PHP, Twig, translations, TypeScript sources and the stylesheet; Vitest files excluded) — see [`specs/001-baseline/code-inventory.md`](../specs/001-baseline/code-inventory.md). Vite `nowo-chat.js` is `FR-BUILD-001` output, not an extra row.
+In **ChatKitBundle**, the baseline inventory covers **91/91** production units (PHP, Twig, translations, TypeScript sources and the stylesheet; Vitest files excluded) — see [`specs/001-baseline/code-inventory.md`](../specs/001-baseline/code-inventory.md). Vite `nowo-chat.js` is `FR-BUILD-001` output, not an extra row.
 
 ---
 

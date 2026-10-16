@@ -76,6 +76,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 - **FR-CFG-002** — The extension exposes `nowo_chat_kit.*` parameters and prepends Doctrine `resolve_target_entities` (from `user_class`), the rate limiters, the `nowo_chat_kit` asset package and Messenger signing.
 - **FR-DI-001** — Services are autowired; every optional contract has a null default the application can alias.
 - **FR-DI-002** — The realtime transport is Mercure when a hub exists, otherwise the null transport (polling).
+- **FR-ORM-001** — `TablePrefixListener` prepends `doctrine.table_prefix` to the bundle's tables, indexes and unique constraints (bundle entities only).
 - **FR-ROUTE-001** — One attribute-route loader (`Resources/config/routes.php`) imported with a prefix.
 
 ### Domain model and persistence
@@ -143,7 +144,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 ## Success criteria
 
-- **SC-01** — `code-inventory.md` maps **90/90** production units (see its audit command).
+- **SC-01** — `code-inventory.md` maps **91/91** production units (see its audit command).
 - **SC-02** — PHPUnit: 100% line coverage of `src/`.
 - **SC-03** — Vitest: 100% line coverage of `Resources/assets/src`.
 - **SC-04** — PHPStan level 8 (with the FrankenPHP rulesets), Rector and PHP-CS-Fixer report nothing; Igor passes.
