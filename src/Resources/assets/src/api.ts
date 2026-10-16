@@ -303,6 +303,11 @@ export class ChatApi {
    * @throws ChatApiError When the status is not 2xx (code from the body `error`, else "error").
    */
   private async decode<T>(response: Response): Promise<T> {
+    // A firewall that redirects to its login page (302 → HTML 200) means the session is gone too (CHAT-SEC-12).
+    if (response.redirected === true) {
+      clearChatStorage();
+      throw new ChatApiError(401, 'unauthorized');
+    }
     let payload: unknown;
     try {
       payload = await response.json();

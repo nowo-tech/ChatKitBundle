@@ -47,8 +47,8 @@ whom).
 | **Unauthenticated access** | Every API and page action requires a signed-in `ChatUserInterface` user the policy says is reachable (401 / 403). No access policy or directory ships: the container fails closed until the application provides them. |
 | **Authorization / IDOR** | Conversations and messages are looked up by UUID, messages scoped to their conversation, then checked with `ChatVoter` (VIEW, SEND, MODERATE, RESOLVE, EDIT, DELETE, REACT). Unknown or foreign → **404**, never 403 (no existence oracle). |
 | **Stale access after revocation** | `ChatAccess::canView()` is the single read rule for the voter, both conversation lists and the email digest — participant rows left behind by a channel the user left or a lost agent role grant nothing. Access answers are memoized on the request object only (no cross-request cache, also in FrankenPHP workers). Realtime recipient lists are cached ≤ 30 s; `ChatRecipients::forget()` drops them at once. |
-| **CSRF** | API mutations require the `X-CSRF-TOKEN` header (token id `nowo_chat`); the page form uses Symfony Form CSRF (`nowo_chat_page`). Fail-closed. |
-| **XSS** | `ChatMarkdownRenderer` escapes everything first (`ENT_QUOTES`), then adds a closed set of tags; autolinks are http(s) only with `rel="noopener nofollow ugc"`; control, private-use and bidi characters are stripped. The dock fills text with `textContent`; only the server-rendered message HTML is inserted as HTML (`innerHTML` / `|raw`). `bodyHtml` must only ever come from the renderer. |
+| **CSRF** | API mutations require the `X-CSRF-TOKEN` header (token id `nowo_chat`); the page form uses Symfony Form CSRF (`nowo_chat_page`) and is re-checked with `isCsrfTokenValid()`, so it fails closed even when the application disables form CSRF. |
+| **XSS** | `ChatMarkdownRenderer` escapes everything first (`ENT_QUOTES`), then adds a closed set of tags; autolinks are http(s) only with `rel="noopener nofollow ugc"`; C0 / DEL control, private-use and bidi characters are stripped from every message. The dock fills text with `textContent`; only the server-rendered message HTML is inserted as HTML (`innerHTML` / `|raw`). `bodyHtml` must only ever come from the renderer. |
 | **Phishing of agents** | The support "Reported from" context comes from the reporter's browser: only root-relative paths of the application are kept (no absolute, `//host` or `/\host` URLs), control / bidi characters are removed from the label. |
 | **Injection** | Doctrine query builder / parameters only; no raw SQL with user input; no shell, no `eval`, no `unserialize`. JSON bodies are decoded with depth 16 and `JSON_THROW_ON_ERROR`, capped at 32 KB. |
 | **SSRF** | The bundle makes no outbound HTTP call. Link-preview URLs go to the host provider, which must resolve its **own routes only** (no remote fetch) and check them for the viewer. |
@@ -56,7 +56,7 @@ whom).
 | **Realtime eavesdropping** | Mercure updates are `private`, on per-user topics; the subscriber JWT is limited to the caller's topic, subscribe-only, 15 minutes. |
 | **Abuse / DoS** | Sliding-window rate limits per user: send, actions, typing, reads, buzz (per conversation and per minute); 4000-character bodies; edit / delete window 15 minutes; paging limits on every list; purge in bounded batches. |
 | **Tampered async messages** | Messenger messages carry ids only; handlers are registered with `sign: true` and re-check reachability, settings, mute, read state and open tabs at delivery. |
-| **Shared devices** | Chat browser storage is cleared on logout links / forms and when the API answers 401 (expired session). |
+| **Shared devices** | Chat browser storage is cleared on logout links / forms and when the API answers 401 or is redirected (a firewall sending the expired session to its login page). |
 | **Worker-mode state leaks** | No per-request data in shared services (see [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md)); Igor audit in `release-check`. |
 
 ## Secrets and cryptography
@@ -69,7 +69,7 @@ UUIDs (no sequential ids in URLs).
 ## Logging
 
 The bundle logs **no message content and no personal data**: failed hub publishes (`ChatPublisher`: the event type and the
-exception, never the payload), and `nowo:chat:purge` start / end / failure with counts only. Host senders should follow the same rule.
+exception, never the payload), and `nowo:chat:purge` start / end with counts, and on failure the exception class and message (no message content). Host senders should follow the same rule.
 
 ## Dependencies
 
@@ -112,6 +112,7 @@ dependencies current. Security fixes are released as patch versions of the suppo
 | Date | 2026-10-16 |
 | Method | Independent AI static review (Claude Code agent) against BUNDLES_SECURITY_ANALYSIS.md §1 / REQ-SEC-004 |
 | First result | Overall **Medium**, **Pass (conditional)** — no Critical / High |
+| Re-audit | Overall **Low**, **Pass (good)**; CHAT-SEC-11 (Low) page CSRF with form CSRF disabled → **fixed** (`isCsrfTokenValid()`); CHAT-SEC-12 (Low) storage kept after a login redirect → **fixed** (redirected responses = session lost); CHAT-SEC-13 (Info) doc accuracy and C0 control characters → **fixed** |
 | Findings | CHAT-SEC-01 (Medium) revoked-access previews → **fixed** (`ChatAccess::canView()` on lists and digest); CHAT-SEC-02 (Medium) outdated security doc → **fixed** (this document); CHAT-SEC-03 (Low) push body text → **fixed** (`push_preview`, default off); CHAT-SEC-04 (Low) off-site support context → **fixed** (root-relative paths only, label sanitised); CHAT-SEC-05 (Low) 30 s recipient cache → **mitigated** (`ChatRecipients::forget()`, documented); CHAT-SEC-10 (Info) storage after session timeout → **fixed** (cleared on 401); CHAT-SEC-06 / 07 / 08 / 09 (Info) → documented above as host responsibilities / accepted |
 | Recorded in | `BUNDLES_SECURITY_ANALYSIS.md` (monorepo security report) |
 

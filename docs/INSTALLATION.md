@@ -85,7 +85,7 @@ nowo_chat_kit:
 ```
 
 The JSON API answers under `/chat/api/…` (route names `nowo_chat_api_*`). Every endpoint checks the signed-in user
-itself (401 for guests); you can also cover `^/chat` in `access_control`.
+itself (401 for guests); you can also cover `^/chat` in `access_control` (when your firewall redirects to a login page, the dock treats the redirect as an expired session and clears its browser storage).
 
 ## Database
 

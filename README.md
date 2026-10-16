@@ -129,7 +129,7 @@ make -C demo up
 
 ## Tests and coverage
 
-PHP line coverage target: **100%** of includable `src/` (gate **≥ 99%**). TypeScript coverage is reported as the minimum of statements / branches / functions / lines (REQ-TEST-009): **97.04%** today (branches; the other three are 100%), gate **≥ 90%**.
+PHP line coverage target: **100%** of includable `src/` (gate **≥ 99%**). TypeScript coverage is reported as the minimum of statements / branches / functions / lines (REQ-TEST-009): **99.34%** today (branches; the other three are 100% — the remaining branches are unreachable defensive fallbacks), gate **≥ 90%**.
 
 ```bash
 make test
@@ -141,7 +141,7 @@ make qa
 | Language | Latest reported |
 | --- | --- |
 | PHP | 100% lines (`make test-coverage`) |
-| TypeScript | 97.04% (min of the four metrics; lines, statements and functions 100%, branches 97.04%) — `pnpm run test:coverage` |
+| TypeScript | 99.34% (min of the four metrics; lines, statements and functions 100%, branches 99.34%) — `pnpm run test:coverage` |
 
 ## License
 

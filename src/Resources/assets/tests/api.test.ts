@@ -89,6 +89,12 @@ describe('chat api client', () => {
     expect(window.localStorage.getItem('nowo-chat.draft')).toBeNull();
     expect(window.localStorage.getItem('other-app')).toBe('kept');
     window.localStorage.removeItem('other-app');
+
+    // A login redirect (firewall entry point) counts as an expired session.
+    window.localStorage.setItem('nowo-chat.layout', 'x');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200, redirected: true, json: () => Promise.reject(new Error('html')) }));
+    await expect(new ChatApi(config).conversations()).rejects.toMatchObject({ status: 401, code: 'unauthorized' });
+    expect(window.localStorage.getItem('nowo-chat.layout')).toBeNull();
     vi.stubGlobal('fetch', respond(['list'], false, 400));
     await expect(new ChatApi(config).conversations()).rejects.toMatchObject({ code: 'error' });
   });
