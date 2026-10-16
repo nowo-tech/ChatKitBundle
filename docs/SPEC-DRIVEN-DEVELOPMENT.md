@@ -42,10 +42,16 @@ There is no separate executable spec language (for example Gherkin); Spec Kit sp
 
 **Goal:** floating LinkedIn-style chat for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens.
 
-**Current state:** `1.0.x-dev` skeleton — configuration (`default_profile` + `profiles`), asset package and tooling only. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the planned design.
+**Current state:** `1.0` — implemented and covered by the baseline spec [`specs/001-baseline/spec.md`](../specs/001-baseline/spec.md) (user scenarios US-01…US-10, `FR-*` by domain) and its 100% code inventory. See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the design.
 
 **In scope**
 
+- Direct messages, application channels (`ChatChannelProviderInterface`) and a support inbox (agents, resolve / reopen, context, moderation, events).
+- JSON API for the dock and a server-rendered full-page chat (Symfony Form, works without JavaScript).
+- Realtime through Mercure private topics (polling fallback), presence, typing, read receipts, buzz, reactions, edit / delete window.
+- Web Push and an unread-messages email digest through Messenger; link previews through the host's provider.
+- GDPR export / erasure helpers and the `nowo:chat:purge` retention command.
+- Overridable Twig `<template>` markup, `--nowo-chat-*` tokens, Symfony UX Icons; 7 locales.
 - Documented integration (root `README.md` and `docs/`).
 - Configuration in [`CONFIGURATION.md`](CONFIGURATION.md) and runtime behavior in [`USAGE.md`](USAGE.md).
 - Browser entry `nowo-chat.js` built from TypeScript via Vite.
@@ -53,7 +59,9 @@ There is no separate executable spec language (for example Gherkin); Spec Kit sp
 
 **Explicit non-goals**
 
-- Managing host users, roles or permissions (delegated to host providers).
+- Managing host users, roles or permissions (delegated to host providers through the contracts).
+- Running a Mercure hub, a Web Push stack or a mailer (the host provides them).
+- Attachments, message search and threads inside conversations (not in 1.0).
 - **`demo/`** UI: illustrative unless explicitly documented as stable API.
 
 ---
