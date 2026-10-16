@@ -21,6 +21,7 @@
 
 - PHP `>=8.3 <8.6`
 - Symfony 7.4, 8.0 or 8.1+: FrameworkBundle, SecurityBundle (CSRF), TwigBundle, Doctrine ORM, Symfony UX Icons
+- Twig Extra (`twig/extra-bundle`, `twig/string-extra`) — installed as dependencies; register `Twig\Extra\TwigExtraBundle\TwigExtraBundle` when Flex does not.
 - Optional: `symfony/mercure-bundle` (realtime), Symfony Messenger (asynchronous Web Push), a Web Push library behind
   `ChatPushSenderInterface`
 

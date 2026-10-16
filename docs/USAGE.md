@@ -19,11 +19,15 @@
 - [Link previews](#link-previews)
 - [Email digest](#email-digest)
 - [Customising the markup](#customising-the-markup)
+  - [Overridable templates](#overridable-templates)
+  - [Forms](#forms)
 - [Theme tokens](#theme-tokens)
 - [Translations](#translations)
 - [Front end: IIFE or your bundler](#front-end-iife-or-your-bundler)
 - [User settings](#user-settings)
 - [Web Push](#web-push)
+- [Messenger: retries and failures](#messenger-retries-and-failures)
+- [Timeouts](#timeouts)
 - [Privacy](#privacy)
 - [JSON API](#json-api)
 - [Naming conventions](#naming-conventions)
@@ -210,6 +214,36 @@ ships them) and `nowo_chat_root`.
 Rules: keep every `data-part` (the script throws a clear error naming a missing one), `data-filter` on the filter chips
 and `data-icon` on icon slots. An empty `data-icon` span gets the icon; put your own SVG inside it to replace one icon.
 
+### Overridable templates
+
+Any file below can be overridden by creating `templates/bundles/NowoChatKitBundle/<subpath>` in the application; the
+application's copy always wins.
+
+| `<subpath>` | What it renders | Blocks |
+| --- | --- | --- |
+| `dock.html.twig` | Dock root (config attribute) and assets | `nowo_chat_assets`, `nowo_chat_root` |
+| `_templates.html.twig` | Every `<template>` the dock clones | `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`, `nowo_chat_icons` |
+| `page.html.twig` | Full-page chat (list + thread + composer form) | `title`, `body`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
+| `page_layout.html.twig` | Default standalone layout of the full page (or set `page_layout`) | `title`, `body` |
+
+**Procedure.** Create the file under `templates/bundles/NowoChatKitBundle/`, start it with
+`{% extends '@!NowoChatKitBundle/<subpath>' %}` and override only the blocks you need, then
+`php bin/console cache:clear`.
+
+**Freeze vs upgrade.** Extending and overriding single blocks keeps you on the bundle's markup for everything else, so
+upgrades bring fixes automatically. Copying a whole file freezes it: you own it from then on and must re-apply
+upstream changes yourself (check `UPGRADING.md` on every upgrade). Prefer the smallest override.
+
+### Forms
+
+The full-page composer is a Symfony Form (`ChatPageMessageType`, CSRF token id `nowo_chat_page`) rendered with
+`form_start` / the `{% for child in form %}{% if not child.rendered %}{{ form_row(child) }}…` loop / `form_end`; overrides
+of `page.html.twig` must keep that pattern and never reintroduce hand-written form tags or inputs.
+
+The one documented exception is `_templates.html.twig`: its composer and search fields are inert `<template>` markup
+that the TypeScript clones and sends as JSON to the API (CSRF in the `X-CSRF-TOKEN` header). They are never submitted
+as an HTML form, so they are not Symfony Form views; `make check-no-raw-html-form` allowlists only this file.
+
 ## Theme tokens
 
 `css/nowo-chat.css` defines the tokens on `:where(:root)` (light, dark under `prefers-color-scheme`, or forced with
@@ -270,6 +304,31 @@ With `push: true`, each new message queues `DeliverChatPushMessage` (route it to
 without Messenger). At delivery time the bundle keeps participants who enabled push, have not read it, have not muted
 the conversation and do not have the app open in any visible tab (buzzes only to people who accept them), then calls
 your `ChatPushSenderInterface`. One notification per conversation (`tag`), replaced by the next.
+
+## Messenger: retries and failures
+
+`DeliverChatPushMessage` and `SendChatDigestMessage` carry ids only; their handlers are registered with `sign: true` and
+re-check everything at delivery time (reachability, settings, mute, read state, open tabs). Without Messenger they run
+inline.
+
+- **Transport:** route both to an asynchronous transport (`SendChatDigestMessage` needs one: it uses a `DelayStamp`).
+- **Retries:** the transport's retry strategy applies (Symfony default: 3 retries with backoff). An exception thrown by
+  your `ChatPushSenderInterface` / `ChatDigestSenderInterface` triggers a retry; catch and log the errors you do not want
+  retried (e.g. an expired push subscription).
+- **Failure transport:** configure `framework.messenger.failure_transport` to keep messages that exhausted their retries.
+- **Idempotency:** a redelivered digest message is a no-op inside `digest.interval_minutes` (a "sent" marker in the
+  cache pool); a redelivered push message sends the notification again with the same `tag`, which replaces the first one
+  on the device.
+
+## Timeouts
+
+The bundle makes no outbound HTTP call or subprocess itself:
+
+- **Mercure** publishing goes through the application's `HubInterface` (Symfony HttpClient). Give that client explicit
+  timeouts (e.g. `framework.http_client.default_options.timeout: 5`) **below** PHP's `max_execution_time` and the
+  FrankenPHP / proxy request timeout (innermost first: HttpClient < PHP < web server). A failed publish is logged and
+  never fails the user's request (clients catch up by polling).
+- **Web Push and email** run in Messenger workers through your senders: set the HTTP / SMTP timeouts there.
 
 ## Privacy
 
