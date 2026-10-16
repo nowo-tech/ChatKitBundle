@@ -8,10 +8,10 @@ assignees: ''
 ---
 
 <!--
-- Please do not report an issue for a version of ChatKitBundle that is no longer supported.
+- Please do not report an issue for a version of `chat-kit-bundle` that is no longer supported. Currently supported versions are listed here: https://github.com/nowo-tech/ChatKitBundle#version-information
 - Please fill in this template according to your issue.
 - Please keep the table shown below at the top of your issue.
-- You can retrieve `ChatKitBundle` version by running `composer info | grep "ChatKitBundle"`.
+- You can retrieve `chat-kit-bundle` version by running `composer info | grep "chat-kit-bundle"`.
 - You can retrieve PHP version by running `php -v`.
 - Please post code as text (using proper markup). Do not post screenshots of code.
 - Please remove this comment before submitting your issue.
@@ -19,10 +19,9 @@ assignees: ''
 
 | Q                           | A
 | ----------------------------| -----------------------
-| `ChatKitBundle` version | x.y.z
+| `ChatKitBundle` version        | x.y.z
 | PHP version                 | x.y.z
-| Symfony version             | x.y.z
-| UI theme                    | bootstrap / tailwind
+| Database                    | MySQL / PostgreSQL / SQLite / Other
 
 #### Summary
 

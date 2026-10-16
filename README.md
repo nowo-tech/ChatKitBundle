@@ -14,6 +14,8 @@ This bundle is **FrankenPHP worker mode friendly**. See [docs/FRANKENPHP-WORKER-
 
 ## Features
 
+![The chat dock in the demo: the conversation list and an open conversation](docs/images/demo/overview.webp)
+
 - **Direct messages** between people your application allows to talk (you decide: same team, same project, anyone…)
 - **Channels**: one group conversation per resource of your application (project, room, team) — `project:<uuid>`-style keys from your own provider
 - **Support inbox**: every user has a thread with "Support"; your support agents answer, resolve and moderate
@@ -45,13 +47,6 @@ return [
 ];
 ```
 
-## Requirements
-
-- PHP `>=8.3 <8.6`
-- Symfony 7.4, 8.0, and 8.1+
-- Doctrine ORM, SecurityBundle, TwigBundle, Symfony UX Icons
-- Optional: `symfony/mercure-bundle` (realtime), Symfony Messenger (async push), a Web Push library behind `ChatPushSenderInterface`
-
 ## Quick start
 
 1. Configure the profile (your user entity implements `Nowo\ChatKitBundle\Model\ChatUserInterface`):
@@ -82,6 +77,19 @@ nowo_chat_kit:
 
 Full guide: [docs/INSTALLATION.md](docs/INSTALLATION.md) · options: [docs/CONFIGURATION.md](docs/CONFIGURATION.md) · contracts, templates, theme, JS: [docs/USAGE.md](docs/USAGE.md).
 
+## Requirements
+
+- PHP `>=8.3 <8.6`
+- Symfony 7.4, 8.0, and 8.1+
+- Doctrine ORM, SecurityBundle, TwigBundle, Symfony UX Icons
+- Optional: `symfony/mercure-bundle` (realtime), Symfony Messenger (async push), a Web Push library behind `ChatPushSenderInterface`
+
+### Version information
+
+| Version | PHP | Symfony | Status |
+| --- | --- | --- | --- |
+| 1.x | 8.3 – 8.5 | 7.4, 8.0, 8.1+ | Supported (bug and security fixes) |
+
 ## Demo
 
 A Symfony 8.1 demo runs on FrankenPHP (worker mode by default) with MySQL:
@@ -93,8 +101,6 @@ make -C demo up
 
 `make -C demo/symfony8 setup-db` seeds the accounts **alice**, **bob**, **carol** and **support** (password
 `password`); sign in with two of them in two browsers. See [docs/DEMO-FRANKENPHP.md](docs/DEMO-FRANKENPHP.md).
-
-![The chat dock in the demo: the conversation list and an open conversation](docs/images/demo/overview.webp)
 
 ## Documentation
 
