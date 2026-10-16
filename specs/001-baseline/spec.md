@@ -1,7 +1,7 @@
 # Feature specification: Chat Kit Bundle (baseline)
 
 **Package**: `nowo-tech/chat-kit-bundle`
-**Status**: Active (1.2)
+**Status**: Active (1.3)
 **Last reviewed**: 2026-10-16
 **Inventory**: [`code-inventory.md`](code-inventory.md) — 100% of the production units under `src/`.
 
@@ -53,7 +53,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 ### US-07 — Full-page chat (P2)
 
-**When** a user opens `/chat/` or "Open in a page", **then** the list and one thread render on the server inside the configured layout, and a Symfony Form posts a message (CSRF, rate limit, read-only) with a redirect back — without JavaScript.
+**When** a user opens `/chat/` or "Open in a page", **then** the list and one thread render on the server inside the configured layout, and a Symfony Form posts a message (CSRF, rate limit, read-only) with a redirect back — without JavaScript. Opening the page does not change state (GET): the page script marks the conversation read with a CSRF-protected POST once the tab is visible; without JavaScript, sending a message does.
 
 ### US-08 — Customisation and dock layout (P3)
 
@@ -114,7 +114,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 - **FR-API-001** — `ChatApiController`: list, contacts, open (direct / channel / support with context), messages (cursor pages, send, edit, delete, reactions), read, typing, buzz, resolve / reopen, support inbox, link previews, realtime token, presence; CSRF header on writes, rate limits, bounded bodies, foreign UUID → 404, `no-store`.
 - **FR-API-002** — `ChatApiException` + listener turn API failures into JSON errors with stable codes.
-- **FR-PAGE-001** — `ChatPageController` + `ChatPageMessageType`: server-rendered list and thread, Symfony Form post with redirect, same permissions and limits as the API.
+- **FR-PAGE-001** — `ChatPageController` + `ChatPageMessageType`: server-rendered list and thread, Symfony Form post with redirect, same permissions and limits as the API. `GET` never moves the read cursor (1.3, REQ-SEC-005): the page wrapper carries `data-nowo-chat-read-url` / `-id` / `-csrf` for the page script (FR-TS-008).
 
 ### Realtime, presence and notifications
 
@@ -133,7 +133,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 ### Twig, markup and theme
 
 - **FR-TWIG-001** — `ChatDockExtension`: dock config (endpoints, i18n, prefs, limits, icons) for reachable users; `nowo_chat_icons()`; the dock form views (FR-TWIG-004).
-- **FR-TWIG-002** — Views: `dock.html.twig` (root + assets), `_templates.html.twig` (inert `<template>` markup cloned by the TypeScript, overridable per block), `page.html.twig` / `page_layout.html.twig` (full page).
+- **FR-TWIG-002** — Views: `dock.html.twig` (root + assets), `_templates.html.twig` (inert `<template>` markup cloned by the TypeScript, overridable per block), `page.html.twig` / `page_layout.html.twig` (full page; 1.3: extends the Twig global `nowo_chat_kit_page_layout`, adds the chat CSS / JS through the layout's `stylesheets` / `javascripts` blocks, each asset loaded once with the dock).
 - **FR-TWIG-003** — Hide to the side (1.2): the list header carries a `data-part="tuck"` button (`chat.tuck`, icon `tuck`) and the `nowo_chat_template_edge` block defines the `edge` template (`.nowo-chat-edge` button, `chat.untuck` label, `edge-badge` unread count), hidden by default.
 - **FR-TWIG-004** — Dock form types `ChatDockSearchType` (conversation search `query`, people picker `people`), `ChatDockComposerType` (`body`) and `ChatDockEditType` (`body`): built by `ChatDockExtension` and rendered with `form_widget` in `_templates.html.twig` so the dock has no raw `<form>` / `<input>` / `<textarea>` (REQ-TWIG-005); they are the markup contract only — the TypeScript cancels the submit and talks JSON to the API (CSRF header).
 - **FR-THEME-001** — `nowo-chat.css`: `--nowo-chat-*` tokens (light / dark), dock, windows, mobile sheet, full page.
@@ -150,6 +150,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 - **FR-TS-005** — `state.ts` (dock store, thread cache, drafts, BroadcastChannel), `templates.ts`, `dom.ts`, `format.ts`, `emoji.ts`, `sounds.ts`, `types.ts`.
 - **FR-TS-006** — Bottom bars (1.1): `dock.ts` lifts the dock (`--nowo-chat-lift`) above the visible part of elements marked `data-nowo-chat-avoid` and of the Symfony web debug toolbar (real height), recomputed on scroll and resize.
 - **FR-TS-007** — Hide to the side (1.2): `dock.ts` `setTucked()` toggles `is-tucked` on the root, makes the dock `inert`, shows the edge tab (focus moves to it) and keeps its badge in sync with the total unread count; `state.ts` persists `tucked` in the shared dock layout (localStorage, mirrored across tabs by BroadcastChannel); opening a conversation (list, `data-nowo-chat-open` link, `?chat=` / push) untucks.
+- **FR-TS-008** — Page read state (1.3): `page.ts` `markPageRead()` (called by `autoStart`) POSTs `/api/conversations/{uuid}/read` with the `X-CSRF-TOKEN` header once the full-page tab is visible.
 - **FR-BUILD-001** — Vite builds the IIFE `Resources/public/js/nowo-chat.js` from the sources (build output, not a unit).
 
 ## Key entities
@@ -181,7 +182,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 ## Success criteria
 
-- **SC-01** — `code-inventory.md` maps **94/94** production units (see its audit command).
+- **SC-01** — `code-inventory.md` maps **95/95** production units (see its audit command).
 - **SC-02** — PHPUnit: 100% line coverage of `src/`.
 - **SC-03** — Vitest: 100% line coverage of `Resources/assets/src`.
 - **SC-04** — PHPStan level 8 (with the FrankenPHP rulesets), Rector and PHP-CS-Fixer report nothing; Igor passes.

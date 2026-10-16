@@ -2,7 +2,7 @@
 
 **Package**: `nowo-tech/chat-kit-bundle`  
 **Last audited**: 2026-10-16  
-**Production units**: **94/94**  
+**Production units**: **95/95**  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -10,6 +10,7 @@
 - Vitest files under `src/Resources/assets/tests/` are **excluded** (test code, not shipped behaviour).
 - `src/Resources/public/js/nowo-chat.js` is the Vite **build output** of `index.ts` / `iife.ts` (`FR-BUILD-001`), not a separate unit.
 - Covers the 1.2 "hide the dock to the side" feature (`FR-TS-007`, `FR-TWIG-003`, `FR-THEME-003`): no new file, existing units extended.
+- Covers 1.3: dock Form types (`FR-TWIG-004`), page mark-read script `page.ts` (`FR-TS-008`), page layout global and asset blocks (`FR-TWIG-002`).
 - `src/Resources/assets/README.md` is documentation; `demo/` and `.symfony/` (Flex recipe, see `docs/INSTALLATION.md`) are out of inventory scope.
 
 ## Coverage summary
@@ -25,9 +26,9 @@
 | Realtime, presence & notifications | 15 |
 | Privacy & retention | 2 |
 | Twig, markup & theme | 9 |
-| Browser (TypeScript) | 13 |
+| Browser (TypeScript) | 14 |
 | Translations | 7 |
-| **Total** | **94** |
+| **Total** | **95** |
 
 ## Bundle, configuration & DI
 
@@ -159,6 +160,7 @@
 | `src/Resources/assets/src/format.ts` | US-02 | FR-TS-005 |
 | `src/Resources/assets/src/iife.ts` | US-01 | FR-TS-001, FR-BUILD-001 |
 | `src/Resources/assets/src/index.ts` | US-01 | FR-TS-001, FR-BUILD-001 |
+| `src/Resources/assets/src/page.ts` | US-07 | FR-TS-008 |
 | `src/Resources/assets/src/realtime.ts` | US-05 | FR-TS-004 |
 | `src/Resources/assets/src/sounds.ts` | US-05 | FR-TS-005 |
 | `src/Resources/assets/src/state.ts` | US-05, US-08 | FR-TS-005, FR-TS-007 |

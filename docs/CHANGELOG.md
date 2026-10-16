@@ -7,21 +7,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.3.1] - 2026-10-16](#131---2026-10-16)
+  - [Fixed](#fixed)
 - [[1.3.0] - 2026-10-16](#130---2026-10-16)
   - [Added](#added)
   - [Changed](#changed)
 - [[1.2.0] - 2026-10-16](#120---2026-10-16)
   - [Added](#added-1)
-  - [Fixed](#fixed)
-- [[1.1.1] - 2026-10-16](#111---2026-10-16)
   - [Fixed](#fixed-1)
+- [[1.1.1] - 2026-10-16](#111---2026-10-16)
+  - [Fixed](#fixed-2)
 - [[1.1.0] - 2026-10-16](#110---2026-10-16)
   - [Added](#added-2)
-  - [Fixed](#fixed-2)
+  - [Fixed](#fixed-3)
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
   - [Added](#added-3)
 
 ## [Unreleased]
+
+## [1.3.1] - 2026-10-16
+
+### Fixed
+
+- Spec Kit baseline: `page.ts` (page read-state script) was missing from the code inventory (now **95/95** units); the
+  spec covers the 1.3 behaviour (`FR-TS-008` page mark-read POST, `FR-PAGE-001` no state change on GET, `FR-TWIG-002`
+  page layout global and asset blocks) and is marked Active (1.3); SDD current state 1.3.x; worker audit counts updated.
 
 ## [1.3.0] - 2026-10-16
 

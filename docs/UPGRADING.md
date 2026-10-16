@@ -4,11 +4,16 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Table of contents
 
+- [1.3.1 (2026-10-16)](#131-2026-10-16)
 - [1.3.0 (2026-10-16)](#130-2026-10-16)
 - [1.2.0 (2026-10-16)](#120-2026-10-16)
 - [1.1.1 (2026-10-16)](#111-2026-10-16)
 - [1.1.0 (2026-10-16)](#110-2026-10-16)
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
+
+## 1.3.1 (2026-10-16)
+
+No breaking change (Spec Kit baseline and docs only).
 
 ## 1.3.0 (2026-10-16)
 
