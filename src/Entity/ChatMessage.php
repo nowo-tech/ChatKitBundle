@@ -218,8 +218,11 @@ class ChatMessage
      */
     public function edit(string $body, string $bodyHtml, ?DateTimeImmutable $at = null): void
     {
-        $this->body     = $body;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->body = $body;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->bodyHtml = $bodyHtml;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->editedAt = $at ?? new DateTimeImmutable();
     }
 
@@ -273,9 +276,13 @@ class ChatMessage
      */
     public function delete(ChatUserInterface $by, ?DateTimeImmutable $at = null): void
     {
-        $this->body      = '';
-        $this->bodyHtml  = '';
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->body = '';
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->bodyHtml = '';
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->deletedBy = $by;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->deletedAt = $at ?? new DateTimeImmutable();
     }
 

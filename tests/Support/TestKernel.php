@@ -31,6 +31,7 @@ use Symfony\Component\HttpKernel\Kernel;
 use Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator;
 use Symfony\UX\Icons\UXIconsBundle;
 use Twig\Environment;
+use Twig\Extra\TwigExtraBundle\TwigExtraBundle;
 
 use function dirname;
 
@@ -62,6 +63,8 @@ final class TestKernel extends Kernel
         yield new FrameworkBundle();
         yield new SecurityBundle();
         yield new TwigBundle();
+        // REQ-TWIG-004: Twig Extra registered like in a Flex application.
+        yield new TwigExtraBundle();
         yield new DoctrineBundle();
         yield new UXIconsBundle();
         yield new NowoChatKitBundle();

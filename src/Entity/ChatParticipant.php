@@ -104,6 +104,7 @@ class ChatParticipant
         if ($this->lastReadMessageId !== null && $messageId <= $this->lastReadMessageId) {
             return false;
         }
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->lastReadMessageId = $messageId;
 
         return true;
@@ -138,6 +139,7 @@ class ChatParticipant
      */
     public function muteUntil(?DateTimeImmutable $until): void
     {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->mutedUntil = $until;
     }
 

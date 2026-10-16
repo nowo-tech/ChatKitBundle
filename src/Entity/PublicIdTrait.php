@@ -27,6 +27,7 @@ trait PublicIdTrait
 
     private function initUuid(): void
     {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->uuid = Uuid::v7()->toRfc4122();
     }
 }

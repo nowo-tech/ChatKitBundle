@@ -98,6 +98,7 @@ class ChatUserSettings
      */
     public function setPresenceVisible(bool $visible): void
     {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->presenceVisible = $visible;
     }
 
@@ -118,6 +119,7 @@ class ChatUserSettings
      */
     public function setPushEnabled(bool $enabled): void
     {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->pushEnabled = $enabled;
     }
 
@@ -143,6 +145,7 @@ class ChatUserSettings
         if (!in_array($sound, self::SOUNDS, true)) {
             throw new InvalidArgumentException(sprintf('Unknown chat sound "%s".', $sound));
         }
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->sound = $sound;
     }
 
@@ -163,6 +166,7 @@ class ChatUserSettings
      */
     public function setEmailDigest(bool $enabled): void
     {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->emailDigest = $enabled;
     }
 
@@ -183,6 +187,7 @@ class ChatUserSettings
      */
     public function setBuzzEnabled(bool $enabled): void
     {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->buzzEnabled = $enabled;
     }
 }

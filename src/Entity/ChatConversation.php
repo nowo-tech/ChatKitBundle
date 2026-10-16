@@ -313,9 +313,12 @@ class ChatConversation
     public function resolve(ChatUserInterface $agent): void
     {
         $this->assertSupport();
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->supportStatus = SupportStatus::Resolved;
-        $this->resolvedBy    = $agent;
-        $this->resolvedAt    = new DateTimeImmutable();
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->resolvedBy = $agent;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->resolvedAt = new DateTimeImmutable();
     }
 
     /**
@@ -326,9 +329,12 @@ class ChatConversation
     public function reopen(): void
     {
         $this->assertSupport();
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->supportStatus = SupportStatus::Open;
-        $this->resolvedBy    = null;
-        $this->resolvedAt    = null;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->resolvedBy = null;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->resolvedAt = null;
     }
 
     /**
@@ -358,9 +364,10 @@ class ChatConversation
         if ($url !== '' && preg_match('~^/(?![/\\\\])[^\x00-\x1F\x7F\\\\]*$~', $url) !== 1) {
             $url = '';
         }
-        $label                = $label === null ? '' : (string) preg_replace('/[\p{Cc}\p{Cf}]/u', ' ', $label);
-        $label                = mb_substr(trim((string) preg_replace('/\s+/u', ' ', $label)), 0, 120);
-        $context              = array_filter(['url' => $url, 'label' => $label], static fn (string $value): bool => $value !== '');
+        $label   = $label === null ? '' : (string) preg_replace('/[\p{Cc}\p{Cf}]/u', ' ', $label);
+        $label   = mb_substr(trim((string) preg_replace('/\s+/u', ' ', $label)), 0, 120);
+        $context = array_filter(['url' => $url, 'label' => $label], static fn (string $value): bool => $value !== '');
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->supportContext = $context === [] ? null : $context;
     }
 
@@ -401,6 +408,7 @@ class ChatConversation
      */
     public function touch(DateTimeImmutable $at): void
     {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->lastMessageAt = $at;
     }
 
