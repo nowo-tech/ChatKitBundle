@@ -80,6 +80,15 @@ describe('chat api client', () => {
     const error = await new ChatApi(config).conversations().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ChatApiError);
     expect(error).toMatchObject({ status: 500, code: 'error' });
+
+    // An expired session clears the chat data of this browser.
+    window.localStorage.setItem('nowo-chat.draft', 'secret draft');
+    window.localStorage.setItem('other-app', 'kept');
+    vi.stubGlobal('fetch', respond({ error: 'unauthorized' }, false, 401));
+    await expect(new ChatApi(config).conversations()).rejects.toMatchObject({ status: 401 });
+    expect(window.localStorage.getItem('nowo-chat.draft')).toBeNull();
+    expect(window.localStorage.getItem('other-app')).toBe('kept');
+    window.localStorage.removeItem('other-app');
     vi.stubGlobal('fetch', respond(['list'], false, 400));
     await expect(new ChatApi(config).conversations()).rejects.toMatchObject({ code: 'error' });
   });

@@ -25,7 +25,12 @@ VALUE="$(
       }
       END {
         if (lines=="") exit 1
-        printf "%.2f", lines+0
+        # REQ-TEST-009: the reported TS coverage is the minimum of the four metrics.
+        min=lines+0
+        if (statements!="" && statements+0 < min) min=statements+0
+        if (branches!="" && branches+0 < min) min=branches+0
+        if (functions!="" && functions+0 < min) min=functions+0
+        printf "%.2f", min
       }
     '
 )"
@@ -35,7 +40,7 @@ if [ -z "${VALUE:-}" ]; then
   exit 1
 fi
 
-echo "Global TS coverage (Lines): ${VALUE}%"
+echo "Global TS coverage (min of statements / branches / functions / lines): ${VALUE}%"
 
 MIN_THRESHOLD="${TS_COVERAGE_MIN:-90}"
 if awk "BEGIN { exit !(${VALUE} < ${MIN_THRESHOLD}) }"; then

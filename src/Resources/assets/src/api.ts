@@ -1,4 +1,5 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
+import { clearChatStorage } from './state';
 import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, Reactions, Reader, SupportContext } from './types';
 
 export class ChatApiError extends Error {
@@ -139,6 +140,10 @@ export class ChatApi {
       payload = await response.json();
     } catch {
       payload = null;
+    }
+    if (response.status === 401) {
+      // Session gone (timeout, logout elsewhere): drafts, layout and cached threads leave this device (CHAT-SEC-10).
+      clearChatStorage();
     }
     if (!response.ok) {
       const code =
