@@ -68,7 +68,7 @@ final class ChatPageTest extends DatabaseTestCase
         self::assertSame('<p>Hola <strong>Ana</strong></p>', $crawler->filter('#nowo-chat-latest .nowo-chat-bubble')->html());
         self::assertCount(0, $crawler->filter('.nowo-chat-page__row.is-unread'));
         self::assertCount(1, $crawler->filter('.nowo-chat-page__row.is-current[aria-current="page"]'));
-        $form = $crawler->filter('.nowo-chat-page__composer')->form(['body' => 'Hey _Luis_']);
+        $form = $crawler->filter('.nowo-chat-page__composer')->form(['nowo_chat_message[body]' => 'Hey _Luis_']);
         $this->client->submit($form);
         self::assertSame(303, $this->client->getResponse()->getStatusCode());
         self::assertStringEndsWith('/chat/'.$dm->getUuid().'#nowo-chat-latest', (string) $this->client->getResponse()->headers->get('Location'));
@@ -77,19 +77,19 @@ final class ChatPageTest extends DatabaseTestCase
         self::assertCount(0, $crawler->filter('[role="alert"]'));
 
         // Errors come back through the redirect.
-        $this->client->request(Request::METHOD_POST, '/chat/'.$dm->getUuid(), ['_token' => 'bad', 'body' => 'x']);
+        $this->client->request(Request::METHOD_POST, '/chat/'.$dm->getUuid(), ['nowo_chat_message' => ['_token' => 'bad', 'body' => 'x']]);
         self::assertStringContainsString('error=error', (string) $this->client->getResponse()->headers->get('Location'));
         $crawler = $this->client->followRedirect();
         self::assertSame('Something went wrong. Try again.', $crawler->filter('[role="alert"]')->text());
-        $this->client->submit($form, ['body' => str_repeat('a', 4001)]);
+        $this->client->submit($form, ['nowo_chat_message[body]' => str_repeat('a', 4001)]);
         self::assertStringContainsString('error=too_long', (string) $this->client->getResponse()->headers->get('Location'));
-        $this->client->submit($form, ['body' => 'third']);
+        $this->client->submit($form, ['nowo_chat_message[body]' => 'third']);
         self::assertStringContainsString('error=rate_limited', (string) $this->client->getResponse()->headers->get('Location'));
 
         // IDOR: someone else's conversation is a 404, read or write.
         $this->client->request(Request::METHOD_GET, '/chat/'.$foreign->getUuid());
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
-        $this->client->request(Request::METHOD_POST, '/chat/'.$foreign->getUuid(), ['body' => 'x']);
+        $this->client->request(Request::METHOD_POST, '/chat/'.$foreign->getUuid(), ['nowo_chat_message' => ['body' => 'x']]);
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
     }
 
@@ -101,7 +101,7 @@ final class ChatPageTest extends DatabaseTestCase
         $dm = $chat->openDirect($ana, $luis);
         $chat->send($ana, $dm, 'Hola');
         $this->client->loginUser($ana);
-        $token = $this->client->request(Request::METHOD_GET, '/chat/'.$dm->getUuid())->filter('input[name="_token"]')->attr('value');
+        $token = $this->client->request(Request::METHOD_GET, '/chat/'.$dm->getUuid())->filter('input[name="nowo_chat_message[_token]"]')->attr('value');
         // Luis loses the right to be messaged: the conversation stays readable, never writable.
         $this->em->createQuery('UPDATE '.TestUser::class.' u SET u.name = :name WHERE u.id = :id')
             ->setParameters(['name' => 'Stranger Luis', 'id' => $luis->getId()])->execute();
@@ -110,7 +110,7 @@ final class ChatPageTest extends DatabaseTestCase
         $crawler = $this->client->request(Request::METHOD_GET, '/chat/'.$dm->getUuid());
         self::assertCount(0, $crawler->filter('.nowo-chat-page__composer'));
         self::assertSame('You can no longer message this person.', $crawler->filter('.nowo-chat-page__thread .nowo-chat-notice')->text());
-        $this->client->request(Request::METHOD_POST, '/chat/'.$dm->getUuid(), ['_token' => $token, 'body' => 'x']);
+        $this->client->request(Request::METHOD_POST, '/chat/'.$dm->getUuid(), ['nowo_chat_message' => ['_token' => $token, 'body' => 'x']]);
         self::assertStringContainsString('error=read_only', (string) $this->client->getResponse()->headers->get('Location'));
     }
 }

@@ -118,6 +118,52 @@ jobs:
           SYMFONY_DEPRECATIONS_HELPER: max[direct]=0
         run: composer test-coverage
 
+  static-analysis:
+    name: Static analysis (PHPStan, Rector, Igor)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php-8.4-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-8.4-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      # REQ-CS-006: PHPStan errors fail the build; Rector must have nothing left to change.
+      - name: PHPStan
+        run: composer phpstan
+
+      - name: Rector (dry run)
+        run: composer rector-dry
+
+      # REQ-CS-008: FrankenPHP worker-state audit.
+      - name: Igor
+        run: composer igor
+
+      # REQ-TWIG-005: no raw form controls in bundle or demo Twig.
+      - name: No raw HTML form controls in Twig
+        run: bash .scripts/check-no-raw-html-form.sh
+
   code-style:
     name: Code Style
     runs-on: ubuntu-latest

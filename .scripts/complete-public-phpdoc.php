@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 /**
  * Adds missing @return tags to public methods that already have PHPDoc.
+ * With --check it only reports them and exits 1 (release-check never rewrites sources).
  */
 $srcDir = dirname(__DIR__) . '/src';
+$check = in_array('--check', $argv, true);
+$pending = 0;
 
 foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($srcDir)) as $file) {
     if (!$file->isFile() || $file->getExtension() !== 'php') {
@@ -52,7 +55,14 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($srcDir)) 
     );
 
     if (is_string($updated) && $updated !== $content) {
+        ++$pending;
+        if ($check) {
+            echo 'Missing @return: ' . str_replace($srcDir . '/', '', $path) . PHP_EOL;
+            continue;
+        }
         file_put_contents($path, $updated);
         echo 'Updated: ' . str_replace($srcDir . '/', '', $path) . PHP_EOL;
     }
 }
+
+exit($check && $pending > 0 ? 1 : 0);

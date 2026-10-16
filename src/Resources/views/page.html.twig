@@ -61,12 +61,15 @@
                         {% endfor %}
                     </ol>
                     {% if can_send %}
-                        <form class="nowo-chat-page__composer" method="post" action="{{ path('nowo_chat_page_send', {uuid: current.uuid}) }}">
-                            <input type="hidden" name="_token" value="{{ csrf_token(csrf_id) }}">
-                            <label class="nowo-chat-sr-only" for="nowo-chat-page-body">{{ 'chat.composer_placeholder'|trans }}</label>
-                            <textarea id="nowo-chat-page-body" name="body" rows="3" maxlength="4000" required placeholder="{{ 'chat.composer_placeholder'|trans }}"></textarea>
+                        {# Symfony Form (ChatPageMessageType), never hand-written form tags (REQ-TWIG-005). #}
+                        {{ form_start(composer, {attr: {class: 'nowo-chat-page__composer'}}) }}
+                            {% for child in composer %}
+                                {% if not child.rendered %}
+                                    {{ form_row(child) }}
+                                {% endif %}
+                            {% endfor %}
                             <button type="submit">{{ 'chat.send'|trans }}</button>
-                        </form>
+                        {{ form_end(composer) }}
                     {% else %}
                         <p class="nowo-chat-notice">{{ 'chat.read_only'|trans }}</p>
                     {% endif %}

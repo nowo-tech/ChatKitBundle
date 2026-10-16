@@ -1770,7 +1770,15 @@ body:has(.sf-minitoolbar):not(:has(.sf-toolbar-opened)) .nowo-chat {
   padding: 12px 16px;
   border-top: 1px solid var(--nowo-chat-border);
 }
+/* The form row (label + textarea, from the host's form theme) takes the free width. */
+.nowo-chat-page__composer > :not(button) {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
 .nowo-chat-page__composer textarea {
+  box-sizing: border-box;
+  width: 100%;
   flex: 1;
   padding: 8px 10px;
   border: 1px solid var(--nowo-chat-border);

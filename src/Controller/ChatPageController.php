@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Controller;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Form\ChatPageMessageType;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
@@ -17,6 +18,7 @@ use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -69,6 +71,7 @@ final class ChatPageController extends AbstractController
         return $this->render('@NowoChatKitBundle/page.html.twig', [
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $page),
             'can_send' => $this->isGranted(ChatVoter::SEND, $conversation),
+            'composer' => $this->composer($uuid)->createView(),
         ] + $this->context($user, $conversation));
     }
 
@@ -78,7 +81,9 @@ final class ChatPageController extends AbstractController
         $user = $this->chatUser();
         $conversation = $this->find($uuid);
         $error = null;
-        if (!$this->isCsrfTokenValid(self::CSRF_ID, (string) $request->request->get('_token'))) {
+        $form = $this->composer($uuid);
+        $form->handleRequest($request);
+        if (!$form->isSubmitted() || !$form->isValid()) {
             $error = 'error';
         } elseif (!$this->isGranted(ChatVoter::SEND, $conversation)) {
             $error = 'read_only';
@@ -86,13 +91,23 @@ final class ChatPageController extends AbstractController
             $error = 'rate_limited';
         } else {
             try {
-                $this->chat->send($user, $conversation, (string) $request->request->get('body', ''));
+                $this->chat->send($user, $conversation, (string) $form->get('body')->getData());
             } catch (\InvalidArgumentException $exception) {
                 $error = 'too_long' === $exception->getMessage() ? 'too_long' : 'error';
             }
         }
 
         return $this->redirectToRoute('nowo_chat_page_conversation', ['uuid' => $uuid, 'error' => $error, '_fragment' => 'nowo-chat-latest'], Response::HTTP_SEE_OTHER);
+    }
+
+    /**
+     * @return FormInterface<mixed>
+     */
+    private function composer(string $uuid): FormInterface
+    {
+        return $this->createForm(ChatPageMessageType::class, null, [
+            'action' => $this->generateUrl('nowo_chat_page_send', ['uuid' => $uuid]),
+        ]);
     }
 
     /**
@@ -120,7 +135,6 @@ final class ChatPageController extends AbstractController
             'current' => $current instanceof ChatConversation ? $this->summary($current, $user) : null,
             'messages' => [],
             'can_send' => false,
-            'csrf_id' => self::CSRF_ID,
         ];
     }
 
