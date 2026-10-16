@@ -4,12 +4,24 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Table of contents
 
+- [1.4.0 (2026-10-16)](#140-2026-10-16)
 - [1.3.1 (2026-10-16)](#131-2026-10-16)
 - [1.3.0 (2026-10-16)](#130-2026-10-16)
 - [1.2.0 (2026-10-16)](#120-2026-10-16)
 - [1.1.1 (2026-10-16)](#111-2026-10-16)
 - [1.1.0 (2026-10-16)](#110-2026-10-16)
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
+
+## 1.4.0 (2026-10-16)
+
+- **Deleting is author-only now:** support agents can no longer delete someone else's message (channels and support
+  threads); `DELETE /api/conversations/{uuid}/messages/{messageUuid}` answers 404 for them, like any message the caller
+  may not delete. If your application relied on agent moderation, remove the offending content another way (for
+  example an admin tool over `ChatService::delete()`); `ChatMessageDeletedEvent::$moderated` stays for old tombstones.
+- **Overridden `_templates.html.twig`:** the `edit-form` template has a new `.nowo-chat-edit__hint` span (copy it if you
+  override the block; optional). Overridden translations: add `chat.just_now`, `chat.edit_hint` and
+  `chat.deleted_message_mine` (`chat.deleted_message` now reads "This message was deleted").
+- With `icon_set: ux_icon`, make sure `tabler:ban` is available (local icons: `bin/console ux:icons:import tabler:ban`).
 
 ## 1.3.1 (2026-10-16)
 

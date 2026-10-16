@@ -7,25 +7,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.4.0] - 2026-10-16](#140---2026-10-16)
+  - [Added](#added)
+  - [Changed](#changed)
 - [[1.3.1] - 2026-10-16](#131---2026-10-16)
   - [Fixed](#fixed)
 - [[1.3.0] - 2026-10-16](#130---2026-10-16)
-  - [Added](#added)
-  - [Changed](#changed)
-- [[1.2.0] - 2026-10-16](#120---2026-10-16)
   - [Added](#added-1)
+  - [Changed](#changed-1)
+- [[1.2.0] - 2026-10-16](#120---2026-10-16)
+  - [Added](#added-2)
   - [Fixed](#fixed-1)
 - [[1.1.1] - 2026-10-16](#111---2026-10-16)
   - [Fixed](#fixed-2)
 - [[1.1.0] - 2026-10-16](#110---2026-10-16)
-  - [Added](#added-2)
+  - [Added](#added-3)
   - [Fixed](#fixed-3)
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
-  - [Added](#added-3)
+  - [Added](#added-4)
 
 ## [Unreleased]
 
-## [1.3.1] - 2026-10-16
+## [1.4.0] - 2026-10-16
+
+### Added
+
+- Today's messages show a **relative time** ("now", "5 min ago", "2 hr ago", `Intl.RelativeTimeFormat` in the dock
+  locale), refreshed by one page-wide 30 s ticker; every message time has the **exact date and time** as its tooltip
+  (also on the full-page chat). New `format.ts` helpers `relativeTimeLabel`, `exactTimeLabel`, `paintMessageTime`,
+  `refreshRelativeTimes`; new strings `chat.just_now`, `chat.edit_hint`, `chat.deleted_message_mine`.
+- Deleted messages read like WhatsApp: a ban icon (new `ban` icon, `tabler:ban` with `icon_set: ux_icon`) and
+  "You deleted this message" for your own / "This message was deleted" for someone else's.
+
+### Changed
+
+- **Only the author deletes a message**, within the same 15-minute window as editing: support agents no longer delete
+  other people's messages in channels or support threads (`ChatVoter::DELETE`, and the dock never offers it).
+  Existing moderated tombstones still read "Removed by a moderator".
+- Inline editor and delete confirmation no longer squeeze the message: the line being edited takes the whole thread
+  width (taller field, "Esc to cancel · Enter to save" hint, scrolled into view) and the delete confirmation is a
+  full-width strip under the message.
 
 ### Fixed
 

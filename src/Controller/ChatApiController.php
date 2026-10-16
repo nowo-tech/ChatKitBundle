@@ -383,7 +383,7 @@ final class ChatApiController extends AbstractController
     }
 
     /**
-     * Deletes a message (own message within the window, or moderation by a support agent).
+     * Deletes the caller's own message within the edit window (nobody deletes someone else's message).
      *
      * @param string $uuid Conversation uuid
      * @param string $messageUuid Message uuid

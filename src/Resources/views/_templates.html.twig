@@ -232,6 +232,7 @@
                 {% endif %}
             {% endfor %}
             <span class="nowo-chat-edit__actions">
+                <span class="nowo-chat-edit__hint">{{ 'chat.edit_hint'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</span>
                 <button type="button" class="nowo-chat-edit__cancel" data-part="cancel">{{ 'chat.cancel'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
                 <button type="submit" class="nowo-chat-edit__save" data-part="save">{{ 'chat.save'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
             </span>

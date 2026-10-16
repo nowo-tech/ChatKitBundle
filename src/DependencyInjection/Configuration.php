@@ -46,6 +46,7 @@ final class Configuration implements ConfigurationInterface
         'check'       => 'tabler:check',
         'edit'        => 'tabler:pencil',
         'trash'       => 'tabler:trash',
+        'ban'         => 'tabler:ban',
         'link'        => 'tabler:link',
         'external'    => 'tabler:external-link',
     ];

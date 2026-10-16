@@ -785,10 +785,17 @@
 
 .nowo-chat-bubble--deleted,
 .nowo-chat-msg--mine .nowo-chat-bubble--deleted {
-  border: 1px dashed color-mix(in srgb, var(--nowo-chat-text) 25%, transparent);
-  background: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid color-mix(in srgb, var(--nowo-chat-text) 14%, transparent);
+  background: color-mix(in srgb, var(--nowo-chat-text) 4%, transparent);
   color: var(--nowo-chat-muted);
   font-style: italic;
+}
+.nowo-chat-bubble--deleted svg {
+  flex-shrink: 0;
+  opacity: 0.8;
 }
 
 .nowo-chat-msg--pending .nowo-chat-bubble {
@@ -1532,23 +1539,34 @@
   transform: scale(1.15);
 }
 
-/* Inline editor and delete confirmation. */
+/* Inline editor (the line takes the whole thread width) and delete confirmation (a strip under the message). */
+.nowo-chat-msg.is-editing .nowo-chat-msg__content {
+  flex: 1;
+  max-width: 100%;
+}
 .nowo-chat-edit {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: min(100%, 260px);
+  width: 100%;
 }
 .nowo-chat-edit__input {
+  box-sizing: border-box;
   width: 100%;
-  min-height: 3.2em;
+  min-height: 4.5em;
+  max-height: 12em;
   padding: 8px 10px;
   border: 1px solid var(--nowo-chat-accent);
   border-radius: var(--nowo-chat-radius-window);
   background: var(--nowo-chat-surface);
   color: var(--nowo-chat-text);
   font: inherit;
+  line-height: 1.4;
   resize: vertical;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nowo-chat-accent) 15%, transparent);
+}
+.nowo-chat-edit__input:focus {
+  outline: none;
 }
 .nowo-chat-edit__actions,
 .nowo-chat-confirm {
@@ -1558,9 +1576,31 @@
   gap: 6px;
   font-size: 0.75rem;
 }
-.nowo-chat-confirm {
-  align-self: center;
+.nowo-chat-edit__hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
   color: var(--nowo-chat-muted);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nowo-chat-msg.is-confirming {
+  flex-wrap: wrap;
+}
+.nowo-chat-msg.is-confirming .nowo-chat-confirm {
+  flex-basis: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--nowo-chat-danger) 30%, transparent);
+  border-radius: var(--nowo-chat-radius-window);
+  background: color-mix(in srgb, var(--nowo-chat-danger) 7%, var(--nowo-chat-surface));
+  color: var(--nowo-chat-text);
+}
+.nowo-chat-confirm__text {
+  flex: 1;
+  min-width: 0;
 }
 .nowo-chat-edit__cancel,
 .nowo-chat-edit__save,

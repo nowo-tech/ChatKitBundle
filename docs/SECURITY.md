@@ -82,7 +82,7 @@ dependencies current. Security fixes are released as patch versions of the suppo
 | Exposure | Restriction |
 | --- | --- |
 | `/chat/api/*`, `/chat/`, `/chat/{uuid}` | Behind the host's session firewall; the bundle re-checks the user on every request |
-| Support inbox endpoint, resolve / reopen, moderation | Support agents only (policy); others get 404 |
+| Support inbox endpoint, resolve / reopen | Support agents only (policy); others get 404 |
 | Contacts endpoint | Exactly what `ChatDirectoryInterface::contactsFor()` returns (it may include e-mail addresses — decide in the directory) |
 | Mercure topics | `/nowo-chat/users/<public id>`, private |
 

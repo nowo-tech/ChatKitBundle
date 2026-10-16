@@ -133,7 +133,7 @@ final class ChatVoterTest extends DatabaseTestCase
 
         $support  = $chat->openSupport($luis);
         $reported = $chat->send($luis, $support, 'spam');
-        self::assertTrue($this->can($agent, ChatVoter::DELETE, $reported), 'agents moderate support threads');
+        self::assertFalse($this->can($agent, ChatVoter::DELETE, $reported), 'nobody deletes someone else\'s message, not even an agent');
         $reported->delete($agent);
         self::assertFalse($this->can($agent, ChatVoter::DELETE, $reported), 'already deleted');
         self::assertFalse($this->can($luis, ChatVoter::REACT, $reported));

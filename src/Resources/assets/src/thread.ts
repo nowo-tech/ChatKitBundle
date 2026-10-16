@@ -6,7 +6,7 @@
 import { ChatApiError, type ChatApi } from './api';
 import { h, prefersReducedMotion, setBadge } from './dom';
 import { emojiPicker, insertAtCaret } from './emoji';
-import { dayLabel, isNewDay, startsGroup, t, timeLabel } from './format';
+import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from './format';
 import { part, text, type Templates } from './templates';
 import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader } from './types';
 
@@ -836,7 +836,11 @@ export class ThreadView {
     part(form, 'cancel').addEventListener('click', stop);
     part(article, 'bubble').replaceWith(form);
     part(article, 'actions').hidden = true;
+    // Full thread width while editing (the bubble's 82 % cap squeezed the editor).
+    article.classList.add('is-editing');
     input.focus();
+    // The taller editor and its buttons may end under the fold: bring the whole form into view.
+    form.scrollIntoView?.({ block: 'nearest' });
   }
 
   /**
@@ -852,6 +856,7 @@ export class ThreadView {
     /** Removes the confirmation and shows the actions again. */
     const restore = (): void => {
       confirm.remove();
+      article.classList.remove('is-confirming');
       actions.hidden = false;
     };
     part(confirm, 'cancel').addEventListener('click', restore);
@@ -865,7 +870,9 @@ export class ThreadView {
         });
     });
     actions.hidden = true;
-    actions.after(confirm);
+    // Its own full-width strip under the message (inline it squeezed the bubble).
+    article.classList.add('is-confirming');
+    article.append(confirm);
     part(confirm, 'cancel').focus();
   }
 
@@ -1068,8 +1075,10 @@ export class ThreadView {
 
     const bubble = part(article, 'bubble');
     if (message.deleted) {
+      // WhatsApp-style tombstone: a ban icon and "You deleted this message" / "This message was deleted".
       bubble.classList.add('nowo-chat-bubble--deleted');
-      bubble.textContent = t(i18n, message.moderated ? 'moderated_message' : 'deleted_message');
+      const key = message.moderated ? 'moderated_message' : message.mine ? 'deleted_message_mine' : 'deleted_message';
+      bubble.replaceChildren(this.host.templates.icon('ban', 14), h('span', { text: t(i18n, key) }));
     } else {
       // Server-sanitised Markdown render (ChatMarkdownRenderer): escape-first, closed tag set.
       // eslint-disable-next-line no-restricted-syntax -- sanitised on the server, see ChatMarkdownRenderer
@@ -1077,8 +1086,7 @@ export class ThreadView {
     }
 
     const time = part(article, 'time');
-    time.setAttribute('datetime', message.createdAt);
-    time.textContent = timeLabel(message.createdAt, this.host.config.locale);
+    paintMessageTime(time, message.createdAt, i18n, this.host.config.locale);
     part(article, 'edited').hidden = !message.edited || message.deleted;
     const receipt = part(article, 'receipt');
     if (message.mine && this.summary.kind === 'direct') {
@@ -1177,7 +1185,8 @@ export class ThreadView {
     const usable = !message.deleted && message.kind === 'text';
     react.hidden = !(usable && this.summary.canSend && config.reactions.length > 0);
     edit.hidden = !(usable && message.mine && inWindow && this.summary.canSend);
-    remove.hidden = !(usable && ((message.mine && inWindow) || (config.isAgent && this.summary.kind !== 'direct')));
+    // Only the author, within the edit window (others' messages are never deletable).
+    remove.hidden = !(usable && message.mine && inWindow);
     actions.hidden = react.hidden && edit.hidden && remove.hidden;
     // Touch screens have no hover: tapping a message shows its actions (one message at a time).
     article.addEventListener('click', (event) => {

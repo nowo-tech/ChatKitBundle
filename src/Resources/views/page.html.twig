@@ -63,12 +63,12 @@
                                     {% if message.kind == 'buzz' %}
                                         <p class="nowo-chat-buzz-line">{{ 'chat.buzz_sent'|trans({'%name%': message.authorName}) }}</p>
                                     {% elseif message.deleted %}
-                                        <div class="nowo-chat-bubble nowo-chat-bubble--deleted">{{ (message.moderated ? 'chat.moderated_message' : 'chat.deleted_message')|trans }}</div>
+                                        <div class="nowo-chat-bubble nowo-chat-bubble--deleted">{{ (message.moderated ? 'chat.moderated_message' : (message.mine ? 'chat.deleted_message_mine' : 'chat.deleted_message'))|trans }}</div>
                                     {% else %}
                                         {# Server-sanitised Markdown render (escape-first, closed tag set). #}
                                         <div class="nowo-chat-bubble">{{ message.html|raw }}</div>
                                     {% endif %}
-                                    <span class="nowo-chat-msg__meta"><time datetime="{{ message.createdAt }}">{{ message.createdAt|date('Y-m-d H:i') }}</time>{% if message.edited and not message.deleted %} · {{ 'chat.edited'|trans }}{% endif %}</span>
+                                    <span class="nowo-chat-msg__meta"><time datetime="{{ message.createdAt }}" title="{{ message.createdAt|date('Y-m-d H:i:s') }}">{{ message.createdAt|date('Y-m-d H:i') }}</time>{% if message.edited and not message.deleted %} · {{ 'chat.edited'|trans }}{% endif %}</span>
                                 </div>
                             </li>
                         {% else %}

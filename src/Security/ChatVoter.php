@@ -81,10 +81,10 @@ final class ChatVoter extends Voter
         $ownInWindow = $message->isAuthoredBy($user) && $message->isWithinEditWindow($this->clock->now());
 
         return match ($attribute) {
-            self::EDIT   => $ownInWindow && !$message->isBuzz() && $this->canSend($conversation, $user),
-            self::DELETE => ($ownInWindow && $this->canView($conversation, $user))
-                || (!$conversation->isDirect() && $this->access->isSupportAgent($user) && $this->canView($conversation, $user)),
-            default => !$message->isBuzz() && $this->canSend($conversation, $user), // REACT
+            self::EDIT => $ownInWindow && !$message->isBuzz() && $this->canSend($conversation, $user),
+            // Only the author, within the edit window: nobody deletes someone else's message.
+            self::DELETE => $ownInWindow && $this->canView($conversation, $user),
+            default      => !$message->isBuzz() && $this->canSend($conversation, $user), // REACT
         };
     }
 

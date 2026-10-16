@@ -65,6 +65,96 @@ export function timeLabel(iso: string, locale: string): string {
 }
 
 /**
+ * Today's messages: "now" under a minute, then "5 min ago" / "2 hours ago" (Intl.RelativeTimeFormat); null for older
+ * days (the clock time is shown instead).
+ *
+ * @param iso ISO 8601 date of the message.
+ * @param i18n Translated strings (`just_now`).
+ * @param locale Locale for the label.
+ * @param now Reference date (tests).
+ * @returns The relative label, or null when the message is not from today.
+ */
+export function relativeTimeLabel(iso: string, i18n: Record<string, string>, locale: string, now: Date = new Date()): string | null {
+  const date = new Date(iso);
+  if (!sameDay(date, now)) {
+    return null;
+  }
+  const minutes = Math.floor((now.getTime() - date.getTime()) / 60_000);
+  if (minutes < 1) {
+    return t(i18n, 'just_now');
+  }
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: 'always', style: 'short' });
+  return minutes < 60 ? format.format(-minutes, 'minute') : format.format(-Math.floor(minutes / 60), 'hour');
+}
+
+/**
+ * Exact date and time of a message, for the tooltip of its time.
+ *
+ * @param iso ISO 8601 date.
+ * @param locale Locale for the label.
+ * @returns e.g. "Thursday, 16 October 2026, 14:05:09".
+ */
+export function exactTimeLabel(iso: string, locale: string): string {
+  return new Date(iso).toLocaleString(locale, { dateStyle: 'full', timeStyle: 'medium' });
+}
+
+/**
+ * Paints a message time: relative today (kept fresh by refreshRelativeTimes), the clock time on older days, and the
+ * exact date and time as its tooltip.
+ *
+ * @param time The <time> element.
+ * @param iso ISO 8601 date.
+ * @param i18n Translated strings.
+ * @param locale Locale.
+ * @param now Reference date (tests).
+ */
+export function paintMessageTime(time: HTMLElement, iso: string, i18n: Record<string, string>, locale: string, now: Date = new Date()): void {
+  const relative = relativeTimeLabel(iso, i18n, locale, now);
+  time.setAttribute('datetime', iso);
+  time.textContent = relative ?? timeLabel(iso, locale);
+  time.title = exactTimeLabel(iso, locale);
+  if (relative === null) {
+    delete time.dataset.relative;
+  } else {
+    // What the shared ticker needs to re-paint it without the thread (locale, "now" label).
+    time.dataset.relative = '';
+    time.dataset.locale = locale;
+    time.dataset.justNow = t(i18n, 'just_now');
+  }
+  startRelativeTicker();
+}
+
+/**
+ * Re-paints every relative message time on the page ("5 min ago" → "6 min ago"; yesterday's turn into clock times).
+ *
+ * @param scope Root to look in.
+ * @param now Reference date (tests).
+ */
+export function refreshRelativeTimes(scope: ParentNode = document, now: Date = new Date()): void {
+  scope.querySelectorAll<HTMLElement>('time[data-relative]').forEach((time) => {
+    const iso = time.getAttribute('datetime');
+    if (iso !== null) {
+      paintMessageTime(time, iso, { just_now: time.dataset.justNow ?? '' }, time.dataset.locale ?? 'en', now);
+    }
+  });
+}
+
+let ticker: number | undefined;
+
+/** One page-wide 30 s ticker for every open thread (started by the first relative time painted). */
+export function startRelativeTicker(): void {
+  if (ticker === undefined) {
+    ticker = window.setInterval(() => refreshRelativeTimes(), 30_000);
+  }
+}
+
+/** Stops the shared ticker (tests). */
+export function stopRelativeTicker(): void {
+  window.clearInterval(ticker);
+  ticker = undefined;
+}
+
+/**
  * Compact time for the conversation list: time today, weekday this week, else a short date.
  *
  * @param iso ISO 8601 date of the last message, or null.

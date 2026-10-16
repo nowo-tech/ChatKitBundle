@@ -9,7 +9,7 @@ const i18n: Record<string, string> = {
   typing_one: '%name% is typing', typing_two: '%first% and %second% are typing', typing_many: 'Several typing',
   buzz_sent: '%name% sent a buzz', you: 'You', buzz_too_soon: 'Too soon', rate_limited: 'Slow down', too_long: 'Max %max%',
   error: 'Error', sending: 'Sending', retry: 'Retry', failed: 'Failed', seen_by: 'Seen by %names%', new_messages: 'New', jump_latest: 'Latest',
-  deleted_message: 'Deleted', moderated_message: 'Moderated', edited: 'edited', loading: 'Loading', start_chat: 'Start', support_hint: 'Help',
+  deleted_message: 'Deleted', deleted_message_mine: 'You deleted', just_now: 'now', moderated_message: 'Moderated', edited: 'edited', loading: 'Loading', start_chat: 'Start', support_hint: 'Help',
   today: 'Today', unread: '%count% unread', minimise: 'Minimise', expand: 'Expand', seen: 'Seen', send: 'Send', emoji: 'Emoji', emoji_smileys: 'Smileys',
 };
 
@@ -167,6 +167,7 @@ describe('ThreadView', () => {
     view.merge([...earlier, mine], false);
     expect(view.element.querySelectorAll('.nowo-chat-day')).toHaveLength(2);
     expect(q('.nowo-chat-bubble--deleted').textContent).toBe('Deleted');
+    expect(view.element.querySelectorAll('.nowo-chat-bubble--deleted')[1]?.textContent).toBe('Moderated');
     expect(view.element.querySelectorAll('.nowo-chat-buzz-line')).toHaveLength(2);
     expect(q('.nowo-chat-buzz-line').textContent).toContain('Luis sent a buzz');
     expect(view.element.querySelector('.nowo-chat-msg__receipt')?.textContent).toBe(' ✓');
@@ -569,10 +570,10 @@ describe('ThreadView', () => {
       expect(article(gone.id).querySelector<HTMLElement>('[data-part="actions"]')?.hidden).toBe(true);
     });
 
-    it('lets agents moderate channels but not direct threads', async () => {
+    it('never offers deleting someone else\'s message, not even to agents', async () => {
       const theirs = msg();
       const channel = await loaded([theirs], { kind: 'channel' }, { isAgent: true });
-      expect(channel.action(theirs.id, 'delete').hidden).toBe(false);
+      expect(channel.action(theirs.id, 'delete').hidden).toBe(true);
       document.body.replaceChildren();
       const direct = await loaded([msg({ id: theirs.id + 100 })], {}, { isAgent: true, reactions: [] });
       expect(direct.action(theirs.id + 100, 'delete').hidden).toBe(true);
@@ -699,7 +700,10 @@ describe('ThreadView', () => {
       (confirm().querySelector('[data-part="confirm"]') as HTMLButtonElement).click();
       await Promise.resolve();
       await Promise.resolve();
-      expect(article(mine.id).querySelector('.nowo-chat-bubble--deleted')?.textContent).toBe('Deleted');
+      const tombstone = article(mine.id).querySelector('.nowo-chat-bubble--deleted');
+      expect(tombstone?.textContent).toBe('You deleted');
+      expect(tombstone?.querySelector('svg')).not.toBeNull();
+      expect(article(mine.id).classList.contains('is-confirming')).toBe(false);
     });
 
     it('tapping a message shows its actions, one message at a time', async () => {

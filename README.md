@@ -18,10 +18,10 @@ This bundle is **FrankenPHP worker mode friendly**. See [docs/FRANKENPHP-WORKER-
 
 - **Direct messages** between people your application allows to talk (you decide: same team, same project, anyone…)
 - **Channels**: one group conversation per resource of your application (project, room, team) — `project:<uuid>`-style keys from your own provider
-- **Support inbox**: every user has a thread with "Support"; your support agents answer, resolve and moderate
+- **Support inbox**: every user has a thread with "Support"; your support agents answer and resolve
 - **Realtime** through **Mercure** (FrankenPHP's built-in hub or standalone) with private per-user topics — polling fallback when it is off
 - **Presence** (online dot, reciprocal opt-out), **typing** indicator and **read receipts** (✓✓ / "Seen by")
-- **Edit and delete** your own messages within 15 minutes, **emoji reactions**, **buzz**, configurable **sounds**, **emoji picker**, light **Markdown** (sanitised on the server)
+- **Edit and delete** your own messages within 15 minutes ("You deleted this message" tombstone; nobody deletes someone else's), **relative times** today with the exact time on hover, **emoji reactions**, **buzz**, configurable **sounds**, **emoji picker**, light **Markdown** (sanitised on the server)
 - **Support inbox page data**, "report a problem" links with context (`data-nowo-chat-open`), moderation events
 - **Full-page chat** (`/chat/`) that also works without JavaScript; "open in a page" from every window
 - **Link previews** of your own pages (checked per viewer) and an optional **email digest** of unread conversations

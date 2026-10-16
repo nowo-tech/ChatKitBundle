@@ -34,7 +34,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 **Given** a channel provider (e.g. one channel per project),
 **when** a user with access opens the channel (or the page's context channel in the picker),
-**then** every member can read and write; losing access hides it; agents can moderate.
+**then** every member can read and write; losing access hides it; only authors delete their own messages (edit window).
 
 ### US-04 — Support (P1)
 

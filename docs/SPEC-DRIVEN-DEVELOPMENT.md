@@ -50,7 +50,7 @@ The IDs match the user scenarios of the baseline spec ([`specs/001-baseline/spec
 
 **In scope**
 
-- Direct messages, application channels (`ChatChannelProviderInterface`) and a support inbox (agents, resolve / reopen, context, moderation, events).
+- Direct messages, application channels (`ChatChannelProviderInterface`) and a support inbox (agents, resolve / reopen, context, events).
 - JSON API for the dock and a server-rendered full-page chat (Symfony Form, works without JavaScript).
 - Realtime through Mercure private topics (polling fallback), presence, typing, read receipts, buzz, reactions, edit / delete window.
 - Web Push and an unread-messages email digest through Messenger; link previews through the host's provider.

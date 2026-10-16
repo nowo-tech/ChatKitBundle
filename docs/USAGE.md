@@ -61,7 +61,7 @@ picks the heading `chat.people_<source>` (fallback `chat.people_other`); `via` f
 
 ```php
 public function isReachable(ChatUserInterface $user): bool;          // active account?
-public function isSupportAgent(ChatUserInterface $user): bool;       // answers support, resolves, moderates
+public function isSupportAgent(ChatUserInterface $user): bool;       // answers support, resolves
 public function canMessage(ChatUserInterface $actor, ChatUserInterface $other): bool;
 ```
 
@@ -114,11 +114,11 @@ See [Email digest](#email-digest).
 | Kind | Who | Notes |
 | --- | --- | --- |
 | Direct | two people the policy allows | Stays readable for both when the policy stops allowing it; writable again only if allowed (or replying to a support agent). |
-| Channel | everyone `canUse()` allows | One per key; agents moderate. |
+| Channel | everyone `canUse()` allows | One per key. |
 | Support | the owner and every support agent | Agents resolve; the owner's next message reopens it. |
 
 Messages: Markdown rendered and sanitised on the server (escape first, closed tag set, http(s) links only). The author
-edits or deletes within 15 minutes (tombstone kept); agents delete in channels and support threads. Reactions: the
+edits or deletes within 15 minutes (tombstone kept); nobody, agents included, deletes someone else's message. Reactions: the
 configured emojis. Buzz: direct conversations only, rate limited.
 
 Unknown or foreign UUIDs answer 404 (never 403); every response is `Cache-Control: no-store`.
@@ -179,7 +179,7 @@ markup. With the route prefix `/chat`, the list lives at `/chat/` (Symfony redir
 | Event | When | Typical use |
 | --- | --- | --- |
 | `ChatMessageSentEvent` | a message or buzz was stored and published | counters, bots, audit |
-| `ChatMessageDeletedEvent` | a message was deleted; `moderated` when an agent removed someone else's | audit moderation |
+| `ChatMessageDeletedEvent` | a message was deleted (by its author; `moderated` is true only on tombstones from before 1.4) | audit |
 | `ChatSupportStatusChangedEvent` | a support thread was resolved (`by` = agent) or reopened (`by` = owner) | inbox counters, notifications |
 
 ## Link previews
