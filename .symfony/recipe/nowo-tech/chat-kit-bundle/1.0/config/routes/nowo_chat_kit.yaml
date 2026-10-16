@@ -1,0 +1,4 @@
+# Chat Kit Bundle: JSON API under /chat/api and the full-page chat at /chat/.
+nowo_chat_kit:
+    resource: '@NowoChatKitBundle/Resources/config/routes.php'
+    prefix: /chat

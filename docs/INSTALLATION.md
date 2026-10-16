@@ -30,7 +30,7 @@
 composer require nowo-tech/chat-kit-bundle
 ```
 
-With **Symfony Flex**, the recipe registers the bundle and copies `config/packages/nowo_chat_kit.yaml`.
+With **Symfony Flex**, the recipe registers the bundle and copies `config/packages/nowo_chat_kit.yaml` (with `user_class: App\Entity\User` — adjust it) and `config/routes/nowo_chat_kit.yaml`.
 
 ## Register the bundle (without Flex)
 

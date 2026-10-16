@@ -36,7 +36,7 @@ This bundle is **FrankenPHP worker mode friendly**. See [docs/FRANKENPHP-WORKER-
 composer require nowo-tech/chat-kit-bundle
 ```
 
-With **Symfony Flex**, the recipe registers the bundle and creates `config/packages/nowo_chat_kit.yaml`. Without Flex, see [docs/INSTALLATION.md](docs/INSTALLATION.md).
+With **Symfony Flex**, the recipe registers the bundle and creates `config/packages/nowo_chat_kit.yaml` (set `user_class`) and `config/routes/nowo_chat_kit.yaml` (prefix `/chat`). Without Flex, see [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 ```php
 // config/bundles.php

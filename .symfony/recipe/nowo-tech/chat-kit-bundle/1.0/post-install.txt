@@ -1,12 +1,16 @@
-Chat Kit Bundle has been installed!
+<bg=blue;fg=white>                         </>
+<bg=blue;fg=white> Chat Kit Bundle installed </>
+<bg=blue;fg=white>                         </>
 
-The following file has been created:
-  - config/packages/nowo_chat_kit.yaml (configuration: default_profile + profiles)
+Created: config/packages/nowo_chat_kit.yaml and config/routes/nowo_chat_kit.yaml.
 
 Next steps:
-1. Publish assets: php bin/console assets:install
-2. Load the browser entry with the named asset package:
-   <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
+  1. Point <comment>user_class</comment> in config/packages/nowo_chat_kit.yaml to your user entity and implement
+     Nowo\ChatKitBundle\Model\ChatUserInterface on it.
+  2. Implement and alias the two required contracts (config/services.yaml):
+     Nowo\ChatKitBundle\Contract\ChatDirectoryInterface and Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface.
+  3. Create the tables: <comment>php bin/console doctrine:migrations:diff</comment> then <comment>doctrine:migrations:migrate</comment>.
+  4. Render the dock in your signed-in layout: <comment>{{ include('@NowoChatKitBundle/dock.html.twig') }}</comment>
+  5. Publish the assets: <comment>php bin/console assets:install</comment>
 
-The 1.0 development line is a skeleton: the floating chat dock, routes and Doctrine
-mapping are added in upcoming releases. See docs/INSTALLATION.md and docs/CONFIGURATION.md.
+Read docs/INSTALLATION.md (contracts, Mercure, Web Push, digest) and docs/USAGE.md.

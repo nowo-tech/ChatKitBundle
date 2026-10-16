@@ -1,8 +1,8 @@
-# Chat Kit Bundle — default configuration
-# See docs/CONFIGURATION.md for all options.
-
+# Chat Kit Bundle — see docs/CONFIGURATION.md for every option.
 nowo_chat_kit:
     default_profile: default
     profiles:
         default:
             enabled: true
+            # Your user entity; it must implement Nowo\ChatKitBundle\Model\ChatUserInterface.
+            user_class: App\Entity\User
