@@ -26,7 +26,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Events `ChatMessageSentEvent`, `ChatMessageDeletedEvent` (`moderated`), `ChatSupportStatusChangedEvent`.
 - Link previews through `ChatLinkPreviewProviderInterface` (per viewer, batched); email digest of unread conversations
   through `ChatDigestSenderInterface` (`digest.*`, Messenger delay, per-user opt-out).
-- Full-page chat (`/chat/`, `/chat/{uuid}`, no JavaScript needed, `page_layout`) and an "open in a page" link per window.
+- Full-page chat (`/chat/`, `/chat/{uuid}`, no JavaScript needed, `page_layout`, Symfony Form composer) and an "open in
+  a page" link per window; `data-nowo-chat-open="conversation:<uuid>"`.
+- `push_preview` (Web Push bodies carry the message text only when enabled), `doctrine.table_prefix` (tables, indexes and
+  unique constraints), `ChatRecipients::forget()`; the session expiring (401) clears the dock's browser storage.
+- Security: one read rule (`ChatAccess::canView()`) for the voter, the conversation lists and the digest; access answers
+  memoized on the request only (FrankenPHP worker safe); support context restricted to application paths. Independent AI
+  security audit recorded in `docs/SECURITY.md`.
 - Translations in 7 locales (domain `NowoChatKitBundle`).
-- Package infrastructure: QA (PHP-CS-Fixer, PHPStan level 8, Rector, Igor), PHPUnit and Vitest at 100% lines,
-  Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and screenshot.
+- Package infrastructure: QA (PHP-CS-Fixer, PHPStan level 8, Rector, Igor), PHPUnit at 100% lines, Vitest, Flex recipe,
+  Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
+  screenshot.
