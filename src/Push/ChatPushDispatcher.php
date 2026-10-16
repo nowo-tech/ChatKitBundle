@@ -26,6 +26,13 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  */
 final readonly class ChatPushDispatcher
 {
+    /**
+     * Builds the dispatcher from the repositories, presence, access checks and the application's push sender.
+     *
+     * @param string $urlTemplate Notification click URL; `{uuid}` is replaced by the conversation id
+     * @param string|null $icon Icon and badge URL of the notification; null omits them
+     * @param ClockInterface $clock Clock used for the mute check
+     */
     public function __construct(
         private ChatMessageRepository $messages,
         private ChatParticipantRepository $participants,
@@ -41,6 +48,12 @@ final readonly class ChatPushDispatcher
     ) {
     }
 
+    /**
+     * Filters the candidate recipients of the message (reachable, push enabled, app not open, not muted, not
+     * read yet, buzzes accepted) and hands the remaining ones to the push sender.
+     *
+     * @param DeliverChatPushMessage $command The message id and the candidate recipient ids
+     */
     public function __invoke(DeliverChatPushMessage $command): void
     {
         $message = $this->messages->find($command->messageId);

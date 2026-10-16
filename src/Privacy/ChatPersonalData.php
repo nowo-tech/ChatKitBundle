@@ -24,6 +24,12 @@ use const DATE_ATOM;
  */
 final readonly class ChatPersonalData
 {
+    /**
+     * Builds the personal data hooks from the entity manager and the chat settings repository.
+     *
+     * @param EntityManagerInterface $entityManager Runs the export queries and the bulk erasure
+     * @param ChatUserSettingsRepository $settings Loads the user's chat settings for the export
+     */
     public function __construct(
         private EntityManagerInterface $entityManager,
         private ChatUserSettingsRepository $settings,
@@ -31,7 +37,11 @@ final readonly class ChatPersonalData
     }
 
     /**
-     * @return array{settings: array<string, bool|string>, messages: list<array<string, string|null>>}
+     * Exports the user's chat settings and their own non-deleted messages, oldest first.
+     *
+     * @param ChatUserInterface $user The user whose data is exported
+     *
+     * @return array{settings: array<string, bool|string>, messages: list<array<string, string|null>>} Settings and authored messages
      */
     public function export(ChatUserInterface $user): array
     {
@@ -63,6 +73,12 @@ final readonly class ChatPersonalData
         ];
     }
 
+    /**
+     * Erases the user's chat data: authored messages become author-less, text-less tombstones; reactions,
+     * read cursors, settings and the user's own support thread (with its messages) are deleted.
+     *
+     * @param ChatUserInterface $user The user whose data is erased
+     */
     public function erase(ChatUserInterface $user): void
     {
         $qb = $this->entityManager->createQueryBuilder(...);

@@ -13,15 +13,30 @@ use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 
 /**
+ * Queries for messages: cursor pages, latest message per conversation, unread counts and the retention purge.
+ *
  * @extends ServiceEntityRepository<ChatMessage>
  */
 class ChatMessageRepository extends ServiceEntityRepository
 {
+    /**
+     * Builds the repository for ChatMessage entities.
+     *
+     * @param ManagerRegistry $registry Doctrine manager registry
+     */
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, ChatMessage::class);
     }
 
+    /**
+     * Finds a message by its public uuid within the given conversation.
+     *
+     * @param ChatConversation $conversation The conversation the message must belong to
+     * @param string $uuid Public message id
+     *
+     * @return ChatMessage|null The message, or null when not in that conversation
+     */
     public function findOneInConversation(ChatConversation $conversation, string $uuid): ?ChatMessage
     {
         return $this->findOneBy(['conversation' => $conversation, 'uuid' => $uuid]);
@@ -31,7 +46,12 @@ class ChatMessageRepository extends ServiceEntityRepository
      * Cursor page: the `limit` messages older than `beforeId` (newest page when null), returned
      * oldest first for rendering. `afterId` instead returns what arrived after it (reconnect catch-up).
      *
-     * @return list<ChatMessage>
+     * @param ChatConversation $conversation The conversation
+     * @param int $limit Page size
+     * @param int|null $beforeId Return messages older than this id; null for the newest page
+     * @param int|null $afterId Return messages newer than this id instead (takes precedence)
+     *
+     * @return list<ChatMessage> The page, oldest first
      */
     public function findPage(ChatConversation $conversation, int $limit, ?int $beforeId = null, ?int $afterId = null): array
     {
@@ -57,6 +77,13 @@ class ChatMessageRepository extends ServiceEntityRepository
         return array_reverse($rows);
     }
 
+    /**
+     * Finds the newest message of the conversation.
+     *
+     * @param ChatConversation $conversation The conversation
+     *
+     * @return ChatMessage|null The newest message, or null when the conversation is empty
+     */
     public function findLatest(ChatConversation $conversation): ?ChatMessage
     {
         return $this->findOneBy(['conversation' => $conversation], ['id' => 'DESC']);
@@ -66,9 +93,10 @@ class ChatMessageRepository extends ServiceEntityRepository
      * Unread counts per conversation id for one user, one query: messages newer than the read cursor
      * and not written by the user. Conversations without a participant row count every foreign message.
      *
-     * @param list<int> $conversationIds
+     * @param int $userId Doctrine id of the reader
+     * @param list<int> $conversationIds Conversations to count
      *
-     * @return array<int, int>
+     * @return array<int, int> conversation id => unread count (conversations with none are left out)
      */
     public function countUnreadByConversation(int $userId, array $conversationIds): array
     {
@@ -98,7 +126,7 @@ class ChatMessageRepository extends ServiceEntityRepository
     /**
      * Newest message of each conversation in one query (list previews).
      *
-     * @param list<int> $conversationIds
+     * @param list<int> $conversationIds Conversations to look up
      *
      * @return array<int, ChatMessage> conversation id => message
      */
@@ -132,7 +160,14 @@ class ChatMessageRepository extends ServiceEntityRepository
         return $byConversation;
     }
 
-    /** one batch of messages older than the retention window; returns rows deleted. */
+    /**
+     * Deletes one batch of messages older than the retention window, with their reactions.
+     *
+     * @param DateTimeImmutable $cutoff Messages created before this are deleted
+     * @param int $batchSize Maximum number of messages per batch
+     *
+     * @return int The number of messages deleted
+     */
     public function purgeOlderThan(DateTimeImmutable $cutoff, int $batchSize): int
     {
         $ids = $this->createQueryBuilder('m')

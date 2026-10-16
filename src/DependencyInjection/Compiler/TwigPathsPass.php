@@ -19,6 +19,12 @@ final class TwigPathsPass implements CompilerPassInterface
 {
     public const string TWIG_NAMESPACE = 'NowoChatKitBundle';
 
+    /**
+     * Adds the application override directory (prepended), the bundle views and the `!` namespace to the Twig
+     * filesystem loader; does nothing when Twig is not installed.
+     *
+     * @param ContainerBuilder $container The container being compiled
+     */
     public function process(ContainerBuilder $container): void
     {
         $loaderId = $this->loaderId($container);

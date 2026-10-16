@@ -9,6 +9,14 @@ namespace Nowo\ChatKitBundle\Model;
  */
 final readonly class ChatDigestItem
 {
+    /**
+     * Builds one digest line from the conversation title, its unread count, the last message preview and a link.
+     *
+     * @param string $title Conversation title (person, channel or support)
+     * @param int $unread Number of unread messages
+     * @param string $preview Plain text of the newest message
+     * @param string $url Link that opens the conversation
+     */
     public function __construct(
         public string $title,
         public int $unread,

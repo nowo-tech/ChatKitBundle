@@ -38,6 +38,8 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     /**
      * Registers the Doctrine mapping, maps ChatUserInterface to the configured user class and registers the
      * `nowo_chat_kit` asset package.
+     *
+     * @param ContainerBuilder $container The container being built
      */
     public function prepend(ContainerBuilder $container): void
     {
@@ -77,7 +79,8 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     /**
      * Processes the configuration and loads `Resources/config/services.php`.
      *
-     * @param array<array<string, mixed>> $configs
+     * @param array<array<string, mixed>> $configs Raw `nowo_chat_kit` configs
+     * @param ContainerBuilder $container The container being built
      */
     public function load(array $configs, ContainerBuilder $container): void
     {
@@ -150,6 +153,8 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
 
     /**
      * Returns the configuration alias (`nowo_chat_kit`).
+     *
+     * @return string The alias
      */
     public function getAlias(): string
     {

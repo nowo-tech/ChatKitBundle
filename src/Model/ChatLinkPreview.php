@@ -9,6 +9,13 @@ namespace Nowo\ChatKitBundle\Model;
  */
 final readonly class ChatLinkPreview
 {
+    /**
+     * Builds a link preview card from plain-text title, subtitle and badge.
+     *
+     * @param string $title Card title
+     * @param string $subtitle Secondary line; empty hides it
+     * @param string $badge Short status / type label; empty hides it
+     */
     public function __construct(
         public string $title,
         public string $subtitle = '',
@@ -18,7 +25,9 @@ final readonly class ChatLinkPreview
     }
 
     /**
-     * @return array{title: string, subtitle: string, badge: string}
+     * Serializes the card for the JSON API.
+     *
+     * @return array{title: string, subtitle: string, badge: string} The card fields
      */
     public function toArray(): array
     {

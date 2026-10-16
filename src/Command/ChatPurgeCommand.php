@@ -24,6 +24,12 @@ final class ChatPurgeCommand extends Command
     public const int MIN_DAYS = 30;
     private const int BATCH   = 1000;
 
+    /**
+     * Builds the command from the message repository and the configured retention.
+     *
+     * @param ChatMessageRepository $messages Deletes the old messages in batches
+     * @param int $retentionDays Retention window in days (never less than MIN_DAYS)
+     */
     public function __construct(
         private readonly ChatMessageRepository $messages,
         private readonly int $retentionDays = 365,

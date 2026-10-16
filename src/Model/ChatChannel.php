@@ -9,6 +9,12 @@ namespace Nowo\ChatKitBundle\Model;
  */
 final readonly class ChatChannel
 {
+    /**
+     * Builds a channel from its stable key and its display label.
+     *
+     * @param string $key Stable, unique key such as `project:<uuid>`
+     * @param string $label Human-readable channel name
+     */
     public function __construct(
         /** Stable, unique key such as `project:<uuid>` (max. 120 characters). */
         public string $key,

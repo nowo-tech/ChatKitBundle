@@ -36,6 +36,11 @@ final class ChatPageController extends AbstractController
     private const int LIST_LIMIT = 50;
     private const int PAGE_SIZE  = 50;
 
+    /**
+     * Builds the page controller from the chat services, repositories, the send rate limiter and the layout.
+     *
+     * @param string $layout Template the chat page extends (`nowo_chat_kit.page_layout`)
+     */
     public function __construct(
         private readonly ChatService $chat,
         private readonly ChatPresenter $presenter,
@@ -50,6 +55,11 @@ final class ChatPageController extends AbstractController
     ) {
     }
 
+    /**
+     * Renders the full-page conversation list without an open conversation.
+     *
+     * @return Response The rendered page
+     */
     #[Route('', name: 'nowo_chat_page', methods: ['GET'])]
     public function index(): Response
     {
@@ -58,6 +68,14 @@ final class ChatPageController extends AbstractController
         return $this->render('@NowoChatKitBundle/page.html.twig', $this->context($user, null));
     }
 
+    /**
+     * Renders one conversation (latest page of messages, composer) and marks it read up to the newest message;
+     * 404 when not visible.
+     *
+     * @param string $uuid Conversation uuid
+     *
+     * @return Response The rendered page
+     */
     #[Route('/{uuid}', name: 'nowo_chat_page_conversation', requirements: ['uuid' => ChatApiController::UUID], methods: ['GET'])]
     public function conversation(string $uuid): Response
     {
@@ -76,6 +94,15 @@ final class ChatPageController extends AbstractController
         ] + $this->context($user, $conversation));
     }
 
+    /**
+     * Handles the composer form POST and redirects back to the conversation (PRG) with an `error` code on failure
+     * (`error`, `read_only`, `rate_limited`, `too_long`).
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request The form submission
+     *
+     * @return RedirectResponse 303 redirect to the conversation page
+     */
     #[Route('/{uuid}', name: 'nowo_chat_page_send', requirements: ['uuid' => ChatApiController::UUID], methods: ['POST'])]
     public function send(string $uuid, Request $request): RedirectResponse
     {

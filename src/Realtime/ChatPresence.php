@@ -22,6 +22,12 @@ final readonly class ChatPresence
 {
     public const int WINDOW_SECONDS = 60;
 
+    /**
+     * Builds the presence tracker from the cache pool and the settings repository (presence visibility).
+     *
+     * @param int $ttl Cache lifetime of a heartbeat, in seconds
+     * @param ClockInterface $clock Clock used for heartbeat timestamps
+     */
     public function __construct(
         private CacheItemPoolInterface $cache,
         private ChatUserSettingsRepository $settings,
@@ -30,6 +36,12 @@ final readonly class ChatPresence
     ) {
     }
 
+    /**
+     * Records a tab heartbeat for the user (and the "visible" timestamp when the tab is visible).
+     *
+     * @param ChatUserInterface $user The user whose tab is alive
+     * @param bool $visible Whether the tab is currently visible
+     */
     public function heartbeat(ChatUserInterface $user, bool $visible): void
     {
         $item          = $this->cache->getItem($this->key($user));
@@ -42,6 +54,11 @@ final readonly class ChatPresence
         $this->cache->save($item->set($state)->expiresAfter($this->ttl));
     }
 
+    /**
+     * Drops the user's presence entry (e.g. on logout), so they appear offline at once.
+     *
+     * @param ChatUserInterface $user The user to forget
+     */
     public function forget(ChatUserInterface $user): void
     {
         $this->cache->deleteItem($this->key($user));
@@ -50,7 +67,7 @@ final readonly class ChatPresence
     /**
      * One cache round trip and one settings query for many users.
      *
-     * @param list<ChatUserInterface> $users
+     * @param list<ChatUserInterface> $users The users to check
      *
      * @return array<string, array{online: bool, appOpen: bool}> keyed by public id
      */

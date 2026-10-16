@@ -12,6 +12,13 @@ use function sprintf;
  */
 final class ChatTopics
 {
+    /**
+     * Builds the private topic of a user.
+     *
+     * @param string $publicId The user's public chat identifier
+     *
+     * @return string The topic, `/nowo-chat/users/<publicId>`
+     */
     public static function forUser(string $publicId): string
     {
         return sprintf('/nowo-chat/users/%s', $publicId);

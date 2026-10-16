@@ -19,6 +19,12 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  */
 final class ChatPageMessageType extends AbstractType
 {
+    /**
+     * Adds the message body textarea (translated placeholder, `maxlength` from the `max_length` option).
+     *
+     * @param FormBuilderInterface<array{body?: string|null}|null> $builder The form builder
+     * @param array<string, mixed> $options The resolved options
+     */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add('body', TextareaType::class, [
@@ -32,6 +38,11 @@ final class ChatPageMessageType extends AbstractType
         ]);
     }
 
+    /**
+     * Sets the translation domain, the CSRF token id and the `max_length` option (int, default ChatMessage::MAX_LENGTH).
+     *
+     * @param OptionsResolver $resolver The options resolver
+     */
     public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults([
@@ -42,6 +53,11 @@ final class ChatPageMessageType extends AbstractType
         $resolver->setAllowedTypes('max_length', 'int');
     }
 
+    /**
+     * Block prefix of the form theme and field names.
+     *
+     * @return string `nowo_chat_message`
+     */
     public function getBlockPrefix(): string
     {
         return 'nowo_chat_message';

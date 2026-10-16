@@ -19,6 +19,14 @@ use const ENT_SUBSTITUTE;
  */
 final class ChatMarkdownRenderer
 {
+    /**
+     * Renders a message body to safe HTML: escapes everything, then applies fenced / inline code, bold, italic,
+     * strike, lists, line breaks and http(s) autolinks.
+     *
+     * @param string $markdown The raw message text
+     *
+     * @return string The sanitized HTML; empty for an empty message
+     */
     public function render(string $markdown): string
     {
         $text = str_replace(["\r\n", "\r"], "\n", trim(self::clean($markdown)));
@@ -89,13 +97,24 @@ final class ChatMarkdownRenderer
     /**
      * Characters a message may not contain: the Private Use Area (the renderer's own
      * placeholders live there) and bidirectional overrides / isolates, which can make a link display reversed.
+     *
+     * @param string $text The text to clean
+     *
+     * @return string The text without those characters
      */
     public static function clean(string $text): string
     {
         return (string) preg_replace('/[\x{E000}-\x{F8FF}\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $text);
     }
 
-    /** Plain text for previews, push bodies and email digests (no Markdown markers, collapsed whitespace). */
+    /**
+     * Plain text for previews, push bodies and email digests (no Markdown markers, collapsed whitespace).
+     *
+     * @param string $markdown The raw message text
+     * @param int $maxLength Maximum length in characters; longer text is cut and ends with an ellipsis
+     *
+     * @return string The plain text
+     */
     public function plainText(string $markdown, int $maxLength = 120): string
     {
         $text = (string) preg_replace(['/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)])[ \t]+/m', '/\s+/'], ['', '', '', ' '], self::clean($markdown));

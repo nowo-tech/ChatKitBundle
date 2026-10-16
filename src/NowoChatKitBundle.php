@@ -22,6 +22,11 @@ use Symfony\Component\HttpKernel\Bundle\Bundle;
  */
 final class NowoChatKitBundle extends Bundle
 {
+    /**
+     * Registers the bundle compiler passes (realtime transport selection and Twig template paths).
+     *
+     * @param ContainerBuilder $container The container being compiled
+     */
     public function build(ContainerBuilder $container): void
     {
         parent::build($container);
@@ -31,6 +36,8 @@ final class NowoChatKitBundle extends Bundle
 
     /**
      * Returns the bundle extension (alias `nowo_chat_kit`).
+     *
+     * @return ExtensionInterface The lazily created NowoChatKitExtension
      */
     public function getContainerExtension(): ExtensionInterface
     {

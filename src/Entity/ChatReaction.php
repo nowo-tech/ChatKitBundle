@@ -10,7 +10,7 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 
 /**
- * one emoji reaction of one user on one message.
+ * One emoji reaction of one user on one message.
  */
 #[ORM\Entity(repositoryClass: ChatReactionRepository::class)]
 #[ORM\Table(name: 'nowo_chat_reaction')]
@@ -25,6 +25,13 @@ class ChatReaction
     #[ORM\Column(name: 'created_at')]
     private DateTimeImmutable $createdAt;
 
+    /**
+     * Creates a reaction of a user on a message, now.
+     *
+     * @param ChatMessage $message The message
+     * @param ChatUserInterface $user The reacting user
+     * @param string $emoji The emoji (one of the offered reactions)
+     */
     public function __construct(
         #[ORM\ManyToOne(targetEntity: ChatMessage::class)]
         #[ORM\JoinColumn(name: 'message_id', nullable: false, onDelete: 'CASCADE')]
@@ -38,26 +45,51 @@ class ChatReaction
         $this->createdAt = new DateTimeImmutable();
     }
 
+    /**
+     * Doctrine identifier.
+     *
+     * @return int|null The id; null before the reaction is persisted
+     */
     public function getId(): ?int
     {
         return $this->id;
     }
 
+    /**
+     * The message reacted to.
+     *
+     * @return ChatMessage The message
+     */
     public function getMessage(): ChatMessage
     {
         return $this->message;
     }
 
+    /**
+     * The reacting user.
+     *
+     * @return ChatUserInterface The user
+     */
     public function getUser(): ChatUserInterface
     {
         return $this->user;
     }
 
+    /**
+     * The reaction emoji.
+     *
+     * @return string The emoji
+     */
     public function getEmoji(): string
     {
         return $this->emoji;
     }
 
+    /**
+     * When the reaction was added.
+     *
+     * @return DateTimeImmutable The creation time
+     */
     public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;

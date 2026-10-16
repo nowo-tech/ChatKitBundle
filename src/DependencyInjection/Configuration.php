@@ -50,6 +50,8 @@ final class Configuration implements ConfigurationInterface
 
     /**
      * Builds the `nowo_chat_kit` tree.
+     *
+     * @return TreeBuilder The tree with `default_profile` and the `profiles` prototype
      */
     public function getConfigTreeBuilder(): TreeBuilder
     {

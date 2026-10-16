@@ -15,6 +15,13 @@ use Symfony\Component\Messenger\Stamp\DelayStamp;
  */
 final readonly class ChatDigestScheduler
 {
+    /**
+     * Builds the scheduler from the cache (pending markers), the Messenger bus and the digest settings.
+     *
+     * @param MessageBusInterface|null $bus Bus for the delayed check; null disables scheduling
+     * @param bool $enabled Whether the digest is enabled
+     * @param int $delayMinutes Delay before the unread check
+     */
     public function __construct(
         private CacheItemPoolInterface $cache,
         private ?MessageBusInterface $bus = null,
@@ -24,7 +31,9 @@ final readonly class ChatDigestScheduler
     }
 
     /**
-     * @param list<ChatUserInterface> $recipients
+     * Dispatches one delayed digest check per recipient who has none pending.
+     *
+     * @param list<ChatUserInterface> $recipients Users who just received a message
      */
     public function schedule(array $recipients): void
     {

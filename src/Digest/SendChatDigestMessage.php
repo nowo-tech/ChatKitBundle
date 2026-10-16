@@ -9,6 +9,11 @@ namespace Nowo\ChatKitBundle\Digest;
  */
 final readonly class SendChatDigestMessage
 {
+    /**
+     * Builds the message for one user.
+     *
+     * @param int $userId Doctrine id of the user to check
+     */
     public function __construct(
         public int $userId,
     ) {

@@ -17,6 +17,12 @@ use Symfony\Component\Mercure\HubInterface;
  */
 final class RealtimeTransportPass implements CompilerPassInterface
 {
+    /**
+     * Removes the Mercure transport when no hub exists and points ChatRealtimeInterface at the null transport
+     * when the hub is missing or realtime is disabled (unless the application aliased its own transport).
+     *
+     * @param ContainerBuilder $container The container being compiled
+     */
     public function process(ContainerBuilder $container): void
     {
         $hubAvailable = $container->has(HubInterface::class);

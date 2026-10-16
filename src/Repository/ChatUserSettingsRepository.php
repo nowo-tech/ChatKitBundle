@@ -10,16 +10,29 @@ use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
 /**
+ * Loads per-user chat settings, falling back to unsaved defaults.
+ *
  * @extends ServiceEntityRepository<ChatUserSettings>
  */
 class ChatUserSettingsRepository extends ServiceEntityRepository
 {
+    /**
+     * Builds the repository for ChatUserSettings entities.
+     *
+     * @param ManagerRegistry $registry Doctrine manager registry
+     */
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, ChatUserSettings::class);
     }
 
-    /** Stored settings, or unsaved defaults (persisted only when the user changes something). */
+    /**
+     * Stored settings, or unsaved defaults (persisted only when the user changes something).
+     *
+     * @param ChatUserInterface $user The user
+     *
+     * @return ChatUserSettings The stored or default settings
+     */
     public function forUser(ChatUserInterface $user): ChatUserSettings
     {
         return $this->findOneBy(['user' => $user]) ?? new ChatUserSettings($user);
@@ -28,7 +41,7 @@ class ChatUserSettingsRepository extends ServiceEntityRepository
     /**
      * Settings of several users in one query, defaults for the rest.
      *
-     * @param list<ChatUserInterface> $users
+     * @param list<ChatUserInterface> $users The users
      *
      * @return array<int, ChatUserSettings> user id => settings
      */

@@ -39,8 +39,13 @@ final class ChatDockExtension extends AbstractExtension
     private const string PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 
     /**
-     * @param list<string> $reactions
+     * Builds the extension from security, routing, CSRF, translation, access checks and the dock settings.
+     *
+     * @param list<string> $reactions Emojis offered as reactions
+     * @param int $pollMs Polling interval of the dock without realtime, in milliseconds
+     * @param string $iconSet `ux_icon` or `svg_inline`
      * @param array<string, string> $icons dock icon → UX Icons name (icon_set: ux_icon)
+     * @param IconRendererInterface|null $iconRenderer UX Icons renderer; null when symfony/ux-icons is not installed
      */
     public function __construct(
         private readonly Security $security,
@@ -60,6 +65,11 @@ final class ChatDockExtension extends AbstractExtension
     ) {
     }
 
+    /**
+     * Registers `nowo_chat_dock_config()` and `nowo_chat_icons()`.
+     *
+     * @return list<TwigFunction> The Twig functions
+     */
     public function getFunctions(): array
     {
         return [
@@ -69,7 +79,9 @@ final class ChatDockExtension extends AbstractExtension
     }
 
     /**
-     * @return array<string, mixed>|null
+     * Dock configuration for the signed-in user (endpoints, CSRF token, preferences, UI strings, page channel).
+     *
+     * @return array<string, mixed>|null The configuration, or null for guests and unreachable accounts
      */
     public function config(): ?array
     {

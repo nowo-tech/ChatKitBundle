@@ -12,6 +12,12 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
  */
 final readonly class ChatSupportStatusChangedEvent
 {
+    /**
+     * Builds the event from the support thread and who changed its status.
+     *
+     * @param ChatConversation $conversation The support thread (its new status is on the entity)
+     * @param ChatUserInterface|null $by The agent or owner who changed it; null when unknown
+     */
     public function __construct(
         public ChatConversation $conversation,
         public ?ChatUserInterface $by,

@@ -9,6 +9,13 @@ namespace Nowo\ChatKitBundle\Model;
  */
 final readonly class ChatContact
 {
+    /**
+     * Builds a picker contact from the user, the source group key and the shared-context label.
+     *
+     * @param ChatUserInterface $user The person the actor may message
+     * @param string $source Free-form source key used to group the picker
+     * @param string $via Label of the shared context; empty when not applicable
+     */
     public function __construct(
         public ChatUserInterface $user,
         /** Free-form source key used to group the picker (e.g. `group`, `project`, `search`). */

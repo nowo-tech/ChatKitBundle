@@ -23,6 +23,13 @@ use Psr\Cache\CacheItemPoolInterface;
  */
 final readonly class ChatDigestDispatcher
 {
+    /**
+     * Builds the dispatcher from the directory, repositories, presence, access checks, presenter, renderer,
+     * the application's digest sender and the cache that throttles emails.
+     *
+     * @param string $urlTemplate Link of each conversation; `{uuid}` is replaced by the conversation id
+     * @param int $intervalMinutes Minimum minutes between two digests to the same user
+     */
     public function __construct(
         private ChatDirectoryInterface $directory,
         private ChatConversationRepository $conversations,
@@ -39,6 +46,12 @@ final readonly class ChatDigestDispatcher
     ) {
     }
 
+    /**
+     * Emails the user a digest of their still unread conversations, unless they are unreachable, opted out,
+     * have the app open or already got one within the interval.
+     *
+     * @param SendChatDigestMessage $command The user to check
+     */
     public function __invoke(SendChatDigestMessage $command): void
     {
         $user = $this->directory->findByIds([$command->userId])[0] ?? null;

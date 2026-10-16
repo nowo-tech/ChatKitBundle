@@ -20,6 +20,13 @@ use Symfony\Component\Messenger\MessageBusInterface;
  */
 final readonly class ChatNotifier
 {
+    /**
+     * Builds the notifier from the recipient resolver, the publisher, the presenter and the push dispatcher.
+     *
+     * @param bool $pushEnabled Whether Web Push is configured
+     * @param MessageBusInterface|null $bus Messenger bus for async push; null delivers inline
+     * @param ChatDigestScheduler|null $digest Unread-email scheduler; null when the digest is disabled
+     */
     public function __construct(
         private ChatRecipients $recipients,
         private ChatPublisher $publisher,
@@ -32,7 +39,11 @@ final readonly class ChatNotifier
     }
 
     /**
-     * @param array<string, list<string>> $reactions
+     * Publishes a new message to every recipient, schedules the unread digest for the others and queues
+     * (or delivers inline) their Web Push.
+     *
+     * @param ChatMessage $message The stored message
+     * @param array<string, list<string>> $reactions Reactions by emoji (public ids of the reacting users)
      */
     public function messageCreated(ChatMessage $message, array $reactions = []): void
     {
@@ -63,7 +74,8 @@ final readonly class ChatNotifier
     /**
      * Edit, delete or reaction change: the clients replace the message in place.
      *
-     * @param array<string, list<string>> $reactions
+     * @param ChatMessage $message The changed message
+     * @param array<string, list<string>> $reactions Reactions by emoji (public ids of the reacting users)
      */
     public function messageUpdated(ChatMessage $message, array $reactions = []): void
     {
@@ -73,6 +85,10 @@ final readonly class ChatNotifier
     /**
      * Read cursor: to the reader's other tabs / devices and, in a direct thread, to the other person (✓✓).
      * Channels do not fan read receipts out to every member; "Seen by" refreshes on catch-up.
+     *
+     * @param ChatConversation $conversation The conversation that was read
+     * @param ChatUserInterface $reader The user who read it
+     * @param int $messageId The new read cursor (last read message id)
      */
     public function read(ChatConversation $conversation, ChatUserInterface $reader, int $messageId): void
     {
@@ -88,7 +104,12 @@ final readonly class ChatNotifier
         ], $recipients);
     }
 
-    /** Ephemeral: never stored. */
+    /**
+     * Sends a "typing" ping to the other recipients. Ephemeral: never stored.
+     *
+     * @param ChatConversation $conversation The conversation being typed in
+     * @param ChatUserInterface $typist The user who is typing
+     */
     public function typing(ChatConversation $conversation, ChatUserInterface $typist): void
     {
         $this->publisher->publish('typing', [
@@ -101,6 +122,11 @@ final readonly class ChatNotifier
         )));
     }
 
+    /**
+     * Tells every recipient that the support thread was resolved or reopened, so they reload it.
+     *
+     * @param ChatConversation $conversation The support thread
+     */
     public function supportStatusChanged(ChatConversation $conversation): void
     {
         $this->publisher->publish('conversation', ['conversationUuid' => $conversation->getUuid()], $this->recipients->of($conversation));

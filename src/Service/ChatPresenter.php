@@ -20,6 +20,12 @@ final readonly class ChatPresenter
 {
     public const string DOMAIN = 'NowoChatKitBundle';
 
+    /**
+     * Builds the presenter from the Markdown renderer (previews) and the translator (fallback titles).
+     *
+     * @param ChatMarkdownRenderer $markdown Builds plain-text previews of the last message
+     * @param TranslatorInterface $translator Translates fallback titles in the bundle domain
+     */
     public function __construct(
         private ChatMarkdownRenderer $markdown,
         private TranslatorInterface $translator,
@@ -27,7 +33,20 @@ final readonly class ChatPresenter
     }
 
     /**
-     * @return array<string, mixed>
+     * Conversation summary for the dock list and header: title / subtitle / initials by kind, status, unread
+     * count and a preview of the last message.
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $viewer The user the summary is built for
+     * @param ChatUserInterface|null $peer The other person of a direct thread; null otherwise or when gone
+     * @param ChatChannel|null $channel The channel of a channel conversation; null otherwise
+     * @param bool $canSend Whether the viewer may write
+     * @param int $unread Unread messages for the viewer
+     * @param ChatMessage|null $last The newest message; null when none is known
+     * @param bool $viewerIsAgent Whether the viewer is a support agent (support thread titles)
+     * @param bool $peerOnline Whether the direct peer is online
+     *
+     * @return array<string, mixed> The JSON shape
      */
     public function conversation(
         ChatConversation $conversation,
@@ -75,9 +94,13 @@ final readonly class ChatPresenter
     }
 
     /**
+     * Message shape for the dock (sanitized HTML, author, flags and reactions).
+     *
+     * @param ChatMessage $message The message
+     * @param ChatUserInterface|null $viewer The reader (sets `mine`); null for viewer-neutral realtime payloads
      * @param array<string, list<string>> $reactions emoji => public ids of the people who reacted
      *
-     * @return array<string, mixed>
+     * @return array<string, mixed> The JSON shape
      */
     public function message(ChatMessage $message, ?ChatUserInterface $viewer, array $reactions = []): array
     {

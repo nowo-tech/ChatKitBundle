@@ -16,6 +16,12 @@ use Throwable;
  */
 final readonly class ChatPublisher
 {
+    /**
+     * Builds the publisher from the realtime transport and a logger for failed publishes.
+     *
+     * @param ChatRealtimeInterface $realtime The transport (Mercure or null)
+     * @param LoggerInterface $logger Receives a warning when a publish fails
+     */
     public function __construct(
         private ChatRealtimeInterface $realtime,
         private LoggerInterface $logger = new NullLogger(),
@@ -23,8 +29,11 @@ final readonly class ChatPublisher
     }
 
     /**
-     * @param list<ChatUserInterface> $recipients
-     * @param array<string, mixed> $payload
+     * Publishes the event to the recipients' private topics; failures are logged, never thrown.
+     *
+     * @param string $type Event type (`message`, `read`, `typing` …)
+     * @param array<string, mixed> $payload Viewer-neutral event data
+     * @param list<ChatUserInterface> $recipients Users who receive the event
      */
     public function publish(string $type, array $payload, array $recipients): void
     {

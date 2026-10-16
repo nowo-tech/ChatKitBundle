@@ -21,6 +21,13 @@ final readonly class ChatSupportInbox
     public const array FILTERS = ['open', 'resolved', 'mine', 'all'];
     private const int SCAN     = 200;
 
+    /**
+     * Builds the inbox from the conversation and message repositories and the presenter.
+     *
+     * @param ChatConversationRepository $conversations Loads support threads and counts open ones
+     * @param ChatMessageRepository $messages Unread counts and last messages
+     * @param ChatPresenter $presenter Builds the conversation summaries
+     */
     public function __construct(
         private ChatConversationRepository $conversations,
         private ChatMessageRepository $messages,
@@ -29,6 +36,13 @@ final readonly class ChatSupportInbox
     }
 
     /**
+     * Lists support threads for the agent, filtered by status and by the owner's name or email.
+     *
+     * @param ChatUserInterface $agent The support agent
+     * @param string $filter `open`, `resolved`, `mine` or `all` (anything else: `open`)
+     * @param string|null $query Search text matched against the owner's name and email; null for none
+     * @param int $limit Maximum number of threads
+     *
      * @return list<array<string, mixed>> conversation summaries (as the agent sees them) plus `owner`
      */
     public function list(ChatUserInterface $agent, string $filter, ?string $query, int $limit = 50): array
@@ -58,6 +72,11 @@ final readonly class ChatSupportInbox
         }, $threads);
     }
 
+    /**
+     * Counts open support threads that hold at least one message.
+     *
+     * @return int The number of open threads
+     */
     public function countOpen(): int
     {
         return $this->conversations->countOpenSupport();

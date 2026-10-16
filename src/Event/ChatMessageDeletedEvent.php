@@ -12,6 +12,13 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
  */
 final readonly class ChatMessageDeletedEvent
 {
+    /**
+     * Builds the event from the deleted message, who deleted it and whether it was a moderation.
+     *
+     * @param ChatMessage $message The deleted message (now a tombstone)
+     * @param ChatUserInterface $by The user who deleted it
+     * @param bool $moderated True when someone other than the author removed it
+     */
     public function __construct(
         public ChatMessage $message,
         public ChatUserInterface $by,

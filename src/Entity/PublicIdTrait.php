@@ -15,6 +15,11 @@ trait PublicIdTrait
     #[ORM\Column(length: 36)]
     private string $uuid;
 
+    /**
+     * Public identifier used in URLs, the API and realtime payloads.
+     *
+     * @return string The RFC 4122 UUID (v7)
+     */
     public function getUuid(): string
     {
         return $this->uuid;

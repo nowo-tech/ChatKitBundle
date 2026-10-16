@@ -49,6 +49,11 @@ class ChatUserSettings
     #[ORM\Column(name: 'buzz_enabled', options: ['default' => true])]
     private bool $buzzEnabled = true;
 
+    /**
+     * Creates default settings for the user (not persisted until changed).
+     *
+     * @param ChatUserInterface $user The owner of the settings
+     */
     public function __construct(
         #[ORM\ManyToOne(targetEntity: ChatUserInterface::class)]
         #[ORM\JoinColumn(name: 'user_id', nullable: false, onDelete: 'CASCADE')]
@@ -56,41 +61,83 @@ class ChatUserSettings
     ) {
     }
 
+    /**
+     * Doctrine identifier.
+     *
+     * @return int|null The id; null for unsaved defaults
+     */
     public function getId(): ?int
     {
         return $this->id;
     }
 
+    /**
+     * The owner of the settings.
+     *
+     * @return ChatUserInterface The user
+     */
     public function getUser(): ChatUserInterface
     {
         return $this->user;
     }
 
+    /**
+     * Whether others see the user's online dot (and the user sees theirs).
+     *
+     * @return bool True when presence is shown
+     */
     public function isPresenceVisible(): bool
     {
         return $this->presenceVisible;
     }
 
+    /**
+     * Shows or hides the user's presence (reciprocal).
+     *
+     * @param bool $visible True to show presence
+     */
     public function setPresenceVisible(bool $visible): void
     {
         $this->presenceVisible = $visible;
     }
 
+    /**
+     * Whether Web Push is enabled for new messages.
+     *
+     * @return bool True when enabled
+     */
     public function isPushEnabled(): bool
     {
         return $this->pushEnabled;
     }
 
+    /**
+     * Enables or disables Web Push for new messages.
+     *
+     * @param bool $enabled True to enable
+     */
     public function setPushEnabled(bool $enabled): void
     {
         $this->pushEnabled = $enabled;
     }
 
+    /**
+     * Notification sound.
+     *
+     * @return string One of SOUNDS
+     */
     public function getSound(): string
     {
         return $this->sound;
     }
 
+    /**
+     * Sets the notification sound.
+     *
+     * @param string $sound One of SOUNDS
+     *
+     * @throws InvalidArgumentException When the sound is unknown
+     */
     public function setSound(string $sound): void
     {
         if (!in_array($sound, self::SOUNDS, true)) {
@@ -99,21 +146,41 @@ class ChatUserSettings
         $this->sound = $sound;
     }
 
+    /**
+     * Whether the unread-messages email is enabled.
+     *
+     * @return bool True when enabled
+     */
     public function isEmailDigest(): bool
     {
         return $this->emailDigest;
     }
 
+    /**
+     * Enables or disables the unread-messages email.
+     *
+     * @param bool $enabled True to enable
+     */
     public function setEmailDigest(bool $enabled): void
     {
         $this->emailDigest = $enabled;
     }
 
+    /**
+     * Whether a buzz opens, shakes and rings the dock (otherwise it is only a line in the thread).
+     *
+     * @return bool True when buzzes are accepted
+     */
     public function isBuzzEnabled(): bool
     {
         return $this->buzzEnabled;
     }
 
+    /**
+     * Accepts or mutes buzzes.
+     *
+     * @param bool $enabled True to accept buzzes
+     */
     public function setBuzzEnabled(bool $enabled): void
     {
         $this->buzzEnabled = $enabled;

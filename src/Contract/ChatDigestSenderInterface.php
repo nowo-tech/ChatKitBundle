@@ -15,6 +15,9 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 interface ChatDigestSenderInterface
 {
     /**
+     * Sends one unread-messages email to the user.
+     *
+     * @param ChatUserInterface $user The recipient
      * @param list<ChatDigestItem> $items newest activity first
      */
     public function send(ChatUserInterface $user, array $items): void;

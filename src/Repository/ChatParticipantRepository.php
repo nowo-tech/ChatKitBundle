@@ -11,10 +11,17 @@ use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
 /**
+ * Queries for participant rows (read cursors, mute state).
+ *
  * @extends ServiceEntityRepository<ChatParticipant>
  */
 class ChatParticipantRepository extends ServiceEntityRepository
 {
+    /**
+     * Builds the repository for ChatParticipant entities.
+     *
+     * @param ManagerRegistry $registry Doctrine manager registry
+     */
     public function __construct(ManagerRegistry $registry)
     {
         parent::__construct($registry, ChatParticipant::class);
@@ -23,7 +30,11 @@ class ChatParticipantRepository extends ServiceEntityRepository
     /**
      * Read cursors of the other participants.
      *
-     * @return list<ChatParticipant>
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $except The viewer, left out
+     * @param int $limit Maximum number of rows
+     *
+     * @return list<ChatParticipant> Participants with a read cursor, furthest read first
      */
     public function findReaders(ChatConversation $conversation, ChatUserInterface $except, int $limit = 50): array
     {

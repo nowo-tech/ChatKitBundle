@@ -66,6 +66,10 @@ final class ChatApiController extends AbstractController
     private const int PAGE_SIZE           = 30;
     private const int CONTACTS_LIMIT      = 30;
 
+    /**
+     * Builds the API controller from the chat services, repositories, realtime helpers and the rate limiters
+     * (send, action, typing, buzz per conversation, buzz per minute, read).
+     */
     public function __construct(
         private readonly ChatService $chat,
         private readonly ChatPresenter $presenter,
@@ -98,6 +102,12 @@ final class ChatApiController extends AbstractController
     ) {
     }
 
+    /**
+     * Lists the caller's conversations (newest activity first) with unread counts, last messages and peer
+     * presence, plus the total unread count.
+     *
+     * @return JsonResponse `{conversations, unreadTotal}`
+     */
     #[Route('/conversations', name: 'conversations', methods: ['GET'])]
     public function conversations(): JsonResponse
     {
@@ -128,6 +138,13 @@ final class ChatApiController extends AbstractController
         return $this->json(['conversations' => $rows, 'unreadTotal' => array_sum($unread)]);
     }
 
+    /**
+     * People the caller may start a direct conversation with (`?q=` search, at most 80 characters).
+     *
+     * @param Request $request The request (query `q`)
+     *
+     * @return JsonResponse `{contacts}`
+     */
     #[Route('/contacts', name: 'contacts', methods: ['GET'])]
     public function contacts(Request $request): JsonResponse
     {
@@ -150,6 +167,13 @@ final class ChatApiController extends AbstractController
         ]);
     }
 
+    /**
+     * Opens (or creates) the direct conversation with the user of the posted `userUuid`; 404 when not allowed.
+     *
+     * @param Request $request JSON body `{userUuid}`
+     *
+     * @return JsonResponse `{conversation}`
+     */
     #[Route('/direct', name: 'open_direct', methods: ['POST'])]
     public function openDirect(Request $request): JsonResponse
     {
@@ -162,6 +186,13 @@ final class ChatApiController extends AbstractController
         return $this->json(['conversation' => $this->present($this->chat->openDirect($user, $other), $user)]);
     }
 
+    /**
+     * Opens (or creates) the conversation of the posted `channelKey`; 404 when the channel is unknown or not usable.
+     *
+     * @param Request $request JSON body `{channelKey}`
+     *
+     * @return JsonResponse `{conversation}`
+     */
     #[Route('/channel', name: 'open_channel', methods: ['POST'])]
     public function openChannel(Request $request): JsonResponse
     {
@@ -175,6 +206,13 @@ final class ChatApiController extends AbstractController
         return $this->json(['conversation' => $this->present($this->chat->openChannel($user, $channel), $user)]);
     }
 
+    /**
+     * Opens (or creates) the caller's support thread, recording the optional `context` (`url`, `label`).
+     *
+     * @param Request $request JSON body `{context?}`
+     *
+     * @return JsonResponse `{conversation}`
+     */
     #[Route('/support', name: 'open_support', methods: ['POST'])]
     public function openSupport(Request $request): JsonResponse
     {
@@ -185,7 +223,13 @@ final class ChatApiController extends AbstractController
         return $this->json(['conversation' => $this->present($this->chat->openSupport($user, is_array($context) ? $context : null), $user)]);
     }
 
-    /** Previews of the given links for the caller (`?url[]=…`, at most 10; invisible ones are left out). */
+    /**
+     * Previews of the given links for the caller (`?url[]=…`, at most 10; invisible ones are left out).
+     *
+     * @param Request $request The request (query `url[]`)
+     *
+     * @return JsonResponse `{previews}` keyed by URL
+     */
     #[Route('/link-previews', name: 'link_previews', methods: ['GET'])]
     public function linkPreviews(Request $request): JsonResponse
     {
@@ -203,7 +247,13 @@ final class ChatApiController extends AbstractController
         return $this->json(['previews' => array_map(static fn (ChatLinkPreview $preview): array => $preview->toArray(), array_intersect_key($previews, array_flip($urls)))]);
     }
 
-    /** Support agents' inbox (`?status=open|resolved|mine|all&q=`); 404 for everyone else. */
+    /**
+     * Support agents' inbox (`?status=open|resolved|mine|all&q=`); 404 for everyone else.
+     *
+     * @param Request $request The request (query `status`, `q`)
+     *
+     * @return JsonResponse `{threads, open}`
+     */
     #[Route('/support/inbox', name: 'support_inbox', methods: ['GET'])]
     public function supportInbox(Request $request): JsonResponse
     {
@@ -217,6 +267,13 @@ final class ChatApiController extends AbstractController
         ]);
     }
 
+    /**
+     * One conversation summary as the caller sees it (404 when not visible).
+     *
+     * @param string $uuid Conversation uuid
+     *
+     * @return JsonResponse `{conversation}`
+     */
     #[Route('/conversations/{uuid}', name: 'conversation', requirements: ['uuid' => self::UUID], methods: ['GET'])]
     public function conversation(string $uuid): JsonResponse
     {
@@ -233,6 +290,15 @@ final class ChatApiController extends AbstractController
         )]);
     }
 
+    /**
+     * A page of messages (`?before=` older page, `?after=` catch-up) with reactions, the caller's read cursor
+     * and the other readers' cursors.
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request The request (query `before`, `after`)
+     *
+     * @return JsonResponse `{messages, hasMore, readUpTo, readers}`
+     */
     #[Route('/conversations/{uuid}/messages', name: 'messages', requirements: ['uuid' => self::UUID], methods: ['GET'])]
     public function messages(string $uuid, Request $request): JsonResponse
     {
@@ -261,6 +327,14 @@ final class ChatApiController extends AbstractController
         ]);
     }
 
+    /**
+     * Sends a message (rate limited); 403 `read_only` when the caller may not write, 422 for an empty or too long body.
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request JSON body `{body}`
+     *
+     * @return JsonResponse `{message}` with status 201
+     */
     #[Route('/conversations/{uuid}/messages', name: 'send', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function send(string $uuid, Request $request): JsonResponse
     {
@@ -277,6 +351,15 @@ final class ChatApiController extends AbstractController
         return $this->json(['message' => $this->presenter->message($message, $user)], Response::HTTP_CREATED);
     }
 
+    /**
+     * Edits one of the caller's messages within the edit window; 422 for an empty or too long body.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request JSON body `{body}`
+     *
+     * @return JsonResponse `{message}`
+     */
     #[Route('/conversations/{uuid}/messages/{messageUuid}', name: 'edit', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['PATCH'])]
     public function edit(string $uuid, string $messageUuid, Request $request): JsonResponse
     {
@@ -291,6 +374,15 @@ final class ChatApiController extends AbstractController
         return $this->json(['message' => $this->presenter->message($message, $user, $this->reactionsOf($message))]);
     }
 
+    /**
+     * Deletes a message (own message within the window, or moderation by a support agent).
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{message}` (the tombstone)
+     */
     #[Route('/conversations/{uuid}/messages/{messageUuid}', name: 'delete', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['DELETE'])]
     public function delete(string $uuid, string $messageUuid, Request $request): JsonResponse
     {
@@ -301,6 +393,15 @@ final class ChatApiController extends AbstractController
         return $this->json(['message' => $this->presenter->message($message, $user)]);
     }
 
+    /**
+     * Toggles the caller's reaction with the posted emoji; 422 when the emoji is not offered.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request JSON body `{emoji}`
+     *
+     * @return JsonResponse `{reactions}` after the change
+     */
     #[Route('/conversations/{uuid}/messages/{messageUuid}/reactions', name: 'react', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST'])]
     public function react(string $uuid, string $messageUuid, Request $request): JsonResponse
     {
@@ -315,6 +416,14 @@ final class ChatApiController extends AbstractController
         return $this->json(['reactions' => $reactions]);
     }
 
+    /**
+     * Moves the caller's read cursor to the posted `messageId`, capped at the conversation's newest message.
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request JSON body `{messageId}`
+     *
+     * @return JsonResponse `{ok: true}`
+     */
     #[Route('/conversations/{uuid}/read', name: 'read', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function read(string $uuid, Request $request): JsonResponse
     {
@@ -331,7 +440,13 @@ final class ChatApiController extends AbstractController
         return $this->json(['ok' => true]);
     }
 
-    /** Hub URL and a short-lived subscriber token for the caller's own topic only. */
+    /**
+     * Hub URL and a short-lived subscriber token for the caller's own topic only.
+     *
+     * @param Request $request The request (to build the browser hub URL)
+     *
+     * @return JsonResponse `{enabled, hubUrl, token, topic, expiresAt}`
+     */
     #[Route('/realtime', name: 'realtime', methods: ['GET'])]
     public function realtime(Request $request): JsonResponse
     {
@@ -352,7 +467,13 @@ final class ChatApiController extends AbstractController
         ]);
     }
 
-    /** Tab heartbeat; answers who of the caller's direct contacts is online (reciprocal opt-out). */
+    /**
+     * Tab heartbeat; answers who of the caller's direct contacts is online (reciprocal opt-out).
+     *
+     * @param Request $request JSON body `{visible}`
+     *
+     * @return JsonResponse `{online}` public ids of online peers
+     */
     #[Route('/presence', name: 'presence', methods: ['POST'])]
     public function presence(Request $request): JsonResponse
     {
@@ -372,7 +493,14 @@ final class ChatApiController extends AbstractController
         return $this->json(['online' => $online]);
     }
 
-    /** "Is typing" — ephemeral, never stored. */
+    /**
+     * "Is typing" — ephemeral, never stored.
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{ok: true}`, also when the ping is dropped by the rate limiter
+     */
     #[Route('/conversations/{uuid}/typing', name: 'typing', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function typing(string $uuid, Request $request): JsonResponse
     {
@@ -388,7 +516,14 @@ final class ChatApiController extends AbstractController
         return $this->json(['ok' => true]);
     }
 
-    /** Buzz: direct conversations only, one per conversation and sender per interval, capped per minute. */
+    /**
+     * Buzz: direct conversations only, one per conversation and sender per interval, capped per minute.
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{message}` (the buzz) with status 201
+     */
     #[Route('/conversations/{uuid}/buzz', name: 'buzz', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function buzz(string $uuid, Request $request): JsonResponse
     {
@@ -407,7 +542,14 @@ final class ChatApiController extends AbstractController
         return $this->json(['message' => $this->presenter->message($this->chat->buzz($user, $conversation), $user)], Response::HTTP_CREATED);
     }
 
-    /** A support agent marks a support thread resolved (the owner's next message reopens it). */
+    /**
+     * A support agent marks a support thread resolved (the owner's next message reopens it).
+     *
+     * @param string $uuid Support thread uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{conversation}`
+     */
     #[Route('/conversations/{uuid}/resolve', name: 'resolve', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function resolve(string $uuid, Request $request): JsonResponse
     {
@@ -418,7 +560,14 @@ final class ChatApiController extends AbstractController
         return $this->json(['conversation' => $this->present($conversation, $user)]);
     }
 
-    /** A support agent reopens a resolved support thread. */
+    /**
+     * A support agent reopens a resolved support thread.
+     *
+     * @param string $uuid Support thread uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{conversation}`
+     */
     #[Route('/conversations/{uuid}/reopen', name: 'reopen', requirements: ['uuid' => self::UUID], methods: ['POST'])]
     public function reopen(string $uuid, Request $request): JsonResponse
     {

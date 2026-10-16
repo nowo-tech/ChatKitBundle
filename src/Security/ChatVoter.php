@@ -35,6 +35,12 @@ final class ChatVoter extends Voter
     private const array CONVERSATION_ATTRIBUTES = [self::VIEW, self::SEND, self::MODERATE, self::RESOLVE];
     private const array MESSAGE_ATTRIBUTES      = [self::EDIT, self::DELETE, self::REACT];
 
+    /**
+     * Builds the voter from the access checks and a clock (edit window).
+     *
+     * @param ChatAccess $access Reachability, agent and channel checks
+     * @param ClockInterface $clock Clock used for the edit / delete window
+     */
     public function __construct(
         private readonly ChatAccess $access,
         private readonly ClockInterface $clock = new Clock(),

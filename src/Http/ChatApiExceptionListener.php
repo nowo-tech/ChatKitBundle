@@ -15,6 +15,11 @@ use Symfony\Component\HttpKernel\KernelEvents;
 #[AsEventListener(event: KernelEvents::EXCEPTION, priority: 10)]
 final class ChatApiExceptionListener
 {
+    /**
+     * Replaces the response of a ChatApiException with `{ok: false, error: <code>}` and its HTTP status.
+     *
+     * @param ExceptionEvent $event The kernel exception event
+     */
     public function __invoke(ExceptionEvent $event): void
     {
         $exception = $event->getThrowable();

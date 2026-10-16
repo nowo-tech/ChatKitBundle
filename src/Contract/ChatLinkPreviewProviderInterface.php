@@ -14,6 +14,9 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 interface ChatLinkPreviewProviderInterface
 {
     /**
+     * Resolves preview cards for the given URLs as seen by the viewer.
+     *
+     * @param ChatUserInterface $viewer The user reading the messages
      * @param list<string> $urls http(s) or root-relative URLs found in messages (at most 10 per call)
      *
      * @return array<string, ChatLinkPreview> url => preview; unknown or invisible URLs are left out

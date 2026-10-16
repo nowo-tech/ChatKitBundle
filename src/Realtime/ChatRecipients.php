@@ -27,6 +27,9 @@ final readonly class ChatRecipients
 {
     private const int TTL_SECONDS = 30;
 
+    /**
+     * Builds the resolver from the cache pool, the user directory, the channel provider and the access checks.
+     */
     public function __construct(
         private CacheItemPoolInterface $cache,
         private ChatDirectoryInterface $directory,
@@ -36,7 +39,11 @@ final readonly class ChatRecipients
     }
 
     /**
-     * @return list<ChatUserInterface>
+     * Returns the reachable users who receive the conversation's realtime events (cached for 30 s).
+     *
+     * @param ChatConversation $conversation The conversation
+     *
+     * @return list<ChatUserInterface> The recipients
      */
     public function of(ChatConversation $conversation): array
     {
