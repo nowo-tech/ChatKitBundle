@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Integration\Push;
 
 use DateTimeImmutable;
+use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Push\ChatPushDispatcher;
 use Nowo\ChatKitBundle\Push\DeliverChatPushMessage;
@@ -19,6 +20,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingPushSender;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use RuntimeException;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
@@ -148,5 +150,34 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
         $message = $chat->send($ana, $dm, 'salary review is on Friday');
         $dispatcher(new DeliverChatPushMessage((int) $message->getId(), [(int) $luis->getId()]));
         self::assertSame('New message', $sender->sent[$luis->getChatPublicId()]['body'] ?? null, 'CHAT-SEC-03: no message text on lock screens by default');
+    }
+
+    public function testSenderFailuresPropagateForMessengerRetries(): void
+    {
+        $chat    = $this->get(ChatService::class);
+        $ana     = $this->user('Ana');
+        $luis    = $this->enablePush($this->user('Luis'));
+        $dm      = $chat->openDirect($ana, $luis);
+        $message = $chat->send($ana, $dm, 'hello');
+        $failing = new class implements ChatPushSenderInterface {
+            public function send(array $recipients, callable $payloadFor): void
+            {
+                throw new RuntimeException('push service down');
+            }
+        };
+        $dispatcher = new ChatPushDispatcher(
+            $this->get(ChatMessageRepository::class),
+            $this->get(ChatParticipantRepository::class),
+            $this->get(ChatUserSettingsRepository::class),
+            $this->get(ChatPresence::class),
+            $this->get(ChatAccess::class),
+            $this->get(ChatMarkdownRenderer::class),
+            $this->get(TranslatorInterface::class),
+            $failing,
+        );
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('push service down');
+        $dispatcher(new DeliverChatPushMessage((int) $message->getId(), [(int) $luis->getId()]));
     }
 }
