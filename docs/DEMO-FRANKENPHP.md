@@ -7,9 +7,17 @@ This document describes how the **Chat Kit Bundle** demo runs under **FrankenPHP
 - [Overview](#overview)
 - [What the demo includes](#what-the-demo-includes)
 - [Development configuration](#development-configuration)
+  - [Caddyfile (development)](#caddyfile-development)
+  - [PHP and Twig (development)](#php-and-twig-development)
+  - [Start (development)](#start-development)
 - [Production configuration](#production-configuration)
 - [Switching classic vs worker (`FRANKENPHP_MODE`)](#switching-classic-vs-worker-frankenphp_mode)
 - [Troubleshooting](#troubleshooting)
+  - [Twig or PHP changes do not appear](#twig-or-php-changes-do-not-appear)
+  - [Demo does not start](#demo-does-not-start)
+  - [Browser console: 404 on `/build/…` or missing Vite entry](#browser-console-404-on-build-or-missing-vite-entry)
+  - [Browser console: 404 on `nowo-chat.js`](#browser-console-404-on-nowo-chatjs)
+  - [Database empty](#database-empty)
 
 ## Overview
 
@@ -46,7 +54,9 @@ make -C demo up-symfony8
 - **Symfony Web Profiler** — `dev` and `test`
 - **Nowo Twig Inspector** and **Nowo Hot Reload** — `dev`/`test` only (Caddyfile Mercure hub + `hot_reload`; do not enable Hot Reload in production)
 - **Twig Extra Bundle** (`twig/extra-bundle` + `twig/string-extra`)
-- **Chat Kit Bundle** — landing page (`/en`, `/es`) with the planned feature list and the compiled browser entry, plus in-memory sign-in (`/en/login`) for users `alice`, `bob` and `support` (password `password`). The floating dock is added as the chat features ship.
+- **Chat Kit Bundle** — Symfony 8.1 (PHP 8.5) app with the real chat: Doctrine users seeded by `make -C demo/symfony8 setup-db` (`alice`, `bob`, `carol` and the support agent `support`, password `password`), the dock on every signed-in page, a **General** channel, a support thread and the full-page chat at `/chat/`. See [`demo/README.md`](../demo/README.md).
+- **Tests**: `make -C demo/symfony8 test` (PHPUnit), `make -C demo/symfony8 test-e2e` (Playwright: dock send, full page), `make -C demo/symfony8 demo-screenshots` (README image), `make demo-smoke` from the bundle root (boot + HTTP 200, REQ-TEST-011).
+- **PHP / Symfony policy**: the demo tracks the latest PHP (8.5) and Symfony 8.1; the bundle itself supports PHP 8.3+ and Symfony 7.4 / 8.x (see the README requirements).
 - **Pentatrion Vite + pnpm** — demo entry `assets/app.ts` compiles bundle TypeScript (`@bundle`)
 - **MySQL** — ready for the chat Doctrine schema (no SQLite / `*.db`)
 

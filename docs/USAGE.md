@@ -4,6 +4,13 @@
 
 - [How it fits together](#how-it-fits-together)
 - [Contracts](#contracts)
+  - [`ChatDirectoryInterface` (required)](#chatdirectoryinterface-required)
+  - [`ChatAccessPolicyInterface` (required)](#chataccesspolicyinterface-required)
+  - [`ChatChannelProviderInterface` (optional)](#chatchannelproviderinterface-optional)
+  - [`ChatRealtimeInterface` (optional)](#chatrealtimeinterface-optional)
+  - [`ChatPushSenderInterface` (optional)](#chatpushsenderinterface-optional)
+  - [`ChatLinkPreviewProviderInterface` (optional)](#chatlinkpreviewproviderinterface-optional)
+  - [`ChatDigestSenderInterface` (optional)](#chatdigestsenderinterface-optional)
 - [Conversations and permissions](#conversations-and-permissions)
 - [Opening conversations from your pages](#opening-conversations-from-your-pages)
 - [Support inbox](#support-inbox)
