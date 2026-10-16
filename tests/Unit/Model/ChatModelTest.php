@@ -19,7 +19,7 @@ final class ChatModelTest extends TestCase
         self::assertSame($user, $contact->user);
         self::assertSame('group', $contact->source);
         self::assertSame('Backend', $contact->via);
-        self::assertSame('', new ChatContact($user, 'search')->via);
+        self::assertSame('', (new ChatContact($user, 'search'))->via);
     }
 
     public function testChannel(): void

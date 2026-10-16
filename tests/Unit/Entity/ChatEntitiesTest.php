@@ -282,7 +282,7 @@ final class ChatEntitiesTest extends TestCase
     private function user(int $id): TestUser
     {
         $user = new TestUser('User ' . $id);
-        new ReflectionProperty(TestUser::class, 'id')->setValue($user, $id);
+        (new ReflectionProperty(TestUser::class, 'id'))->setValue($user, $id);
 
         return $user;
     }

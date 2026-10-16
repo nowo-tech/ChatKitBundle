@@ -37,7 +37,7 @@ final class ChatMarkdownRendererTest extends TestCase
     #[DataProvider('cases')]
     public function testRender(string $markdown, string $html): void
     {
-        self::assertSame($html, new ChatMarkdownRenderer()->render($markdown));
+        self::assertSame($html, (new ChatMarkdownRenderer())->render($markdown));
     }
 
     public function testPlainText(): void
