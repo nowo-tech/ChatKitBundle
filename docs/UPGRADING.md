@@ -4,6 +4,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Table of contents
 
+- [1.4.1 (2026-10-18)](#141-2026-10-18)
 - [1.4.0 (2026-10-16)](#140-2026-10-16)
 - [1.3.1 (2026-10-16)](#131-2026-10-16)
 - [1.3.0 (2026-10-16)](#130-2026-10-16)
@@ -11,6 +12,11 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.1.1 (2026-10-16)](#111-2026-10-16)
 - [1.1.0 (2026-10-16)](#110-2026-10-16)
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
+
+## 1.4.1 (2026-10-18)
+
+No changes required. If you redefine `_templates.html.twig` blocks and pass an already translated `placeholder` (or
+`title`) to `form_widget`, add `translation_domain: false` as the bundle template now does.
 
 ## 1.4.0 (2026-10-16)
 
