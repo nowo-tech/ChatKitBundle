@@ -29,11 +29,13 @@ use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigura
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Kernel;
 use Symfony\Component\Routing\Loader\Configurator\RoutingConfigurator;
+use Symfony\Component\Translation\DataCollectorTranslator;
 use Symfony\UX\Icons\UXIconsBundle;
 use Twig\Environment;
 use Twig\Extra\TwigExtraBundle\TwigExtraBundle;
 
 use function dirname;
+use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 /**
  * Kernel for integration and functional tests: SQLite in memory, the test user, in-memory contracts and the
@@ -49,6 +51,9 @@ final class TestKernel extends Kernel
     public const ASSET_PACKAGES_ALIAS = 'nowo_chat_kit_test.assets_packages';
 
     public const ENTITY_MANAGER_ALIAS = 'nowo_chat_kit_test.entity_manager';
+
+    /** Records every translation lookup, like the profiler does (missing messages included). */
+    public const TRANSLATOR_COLLECTOR = 'nowo_chat_kit_test.translator_collector';
 
     /** Parameter listing the Messenger / Doctrine tags autoconfiguration gave the bundle services (id → tags). */
     public const TAGS_PARAMETER = 'nowo_chat_kit_test.tags';
@@ -142,6 +147,7 @@ final class TestKernel extends Kernel
         $services->alias(ChatLinkPreviewProviderInterface::class, TestLinkPreviewProvider::class);
         $services->alias(self::ASSET_PACKAGES_ALIAS, 'assets.packages');
         $services->alias(self::ENTITY_MANAGER_ALIAS, 'doctrine.orm.entity_manager');
+        $services->set(self::TRANSLATOR_COLLECTOR, DataCollectorTranslator::class)->decorate('translator')->args([service('.inner')]);
     }
 
     protected function configureRoutes(RoutingConfigurator $routes): void

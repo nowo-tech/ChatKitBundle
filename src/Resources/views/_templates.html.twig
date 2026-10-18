@@ -37,7 +37,7 @@
                         <div class="nowo-chat-search-wrap">
                             <span data-icon="search" data-icon-size="16"></span>
                             {% set nowo_chat_label = 'chat.search'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
-                            {{ form_widget(nowo_chat_forms.search.query, {attr: nowo_chat_forms.search.query.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
+                            {{ form_widget(nowo_chat_forms.search.query, {translation_domain: false, attr: nowo_chat_forms.search.query.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
                         </div>
                         <div class="nowo-chat-filters" role="group" aria-label="{{ 'chat.filter_label'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-part="filters">
                             <button type="button" class="nowo-chat-chip" aria-pressed="true" data-filter="all">{{ 'chat.filter_all'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
@@ -55,7 +55,7 @@
                         <div class="nowo-chat-search-wrap">
                             <span data-icon="search" data-icon-size="16"></span>
                             {% set nowo_chat_label = 'chat.search_people'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
-                            {{ form_widget(nowo_chat_forms.search.people, {attr: nowo_chat_forms.search.people.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
+                            {{ form_widget(nowo_chat_forms.search.people, {translation_domain: false, attr: nowo_chat_forms.search.people.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
                         </div>
                         <div class="nowo-chat-picker__results" data-part="picker-results"></div>
                     </div>
@@ -170,7 +170,7 @@
                 {{ form_start(nowo_chat_composer) }}
                     <div class="nowo-chat-composer__field">
                         {% set nowo_chat_label = 'chat.composer_placeholder'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
-                        {{ form_widget(nowo_chat_composer.body, {attr: nowo_chat_composer.body.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
+                        {{ form_widget(nowo_chat_composer.body, {translation_domain: false, attr: nowo_chat_composer.body.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
                         <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__emoji" data-part="emoji-toggle" data-nowo-chat-emoji-toggle aria-label="{{ 'chat.emoji'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" title="{{ 'chat.emoji'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" aria-expanded="false"><span data-icon="smile"></span></button>
                     </div>
                     {# Fields an application adds through a form type extension. #}
