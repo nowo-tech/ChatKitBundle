@@ -77,6 +77,7 @@ Update README **Tests and coverage** percentages after each release when coverag
 
 | Version | Date | Notes |
 | --- | --- | --- |
+| 1.4.1 | 2026-10-18 | Fix: dock placeholders are no longer translated a second time by the form theme (profiler "missing message"). |
 | 1.3.1 | 2026-10-16 | Spec Kit baseline aligned with 1.3 (`page.ts` in the 95-unit inventory, FR-TS-008). |
 | 1.3.0 | 2026-10-16 | Full bundle-standards compliance: dock Form types (no raw form HTML), no read-state change on GET, `symfony/asset` required, page layout asset blocks. |
 | 1.2.0 | 2026-10-16 | Hide to the side: the dock tucks into a right-edge tab with the unread count. |

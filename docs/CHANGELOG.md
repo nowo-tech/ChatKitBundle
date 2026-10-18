@@ -7,26 +7,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.4.1] - 2026-10-18](#141---2026-10-18)
+  - [Fixed](#fixed)
 - [[1.4.0] - 2026-10-16](#140---2026-10-16)
   - [Added](#added)
   - [Changed](#changed)
-- [[1.3.1] - 2026-10-16](#131---2026-10-16)
-  - [Fixed](#fixed)
+  - [Fixed](#fixed-1)
 - [[1.3.0] - 2026-10-16](#130---2026-10-16)
   - [Added](#added-1)
   - [Changed](#changed-1)
 - [[1.2.0] - 2026-10-16](#120---2026-10-16)
   - [Added](#added-2)
-  - [Fixed](#fixed-1)
-- [[1.1.1] - 2026-10-16](#111---2026-10-16)
   - [Fixed](#fixed-2)
+- [[1.1.1] - 2026-10-16](#111---2026-10-16)
+  - [Fixed](#fixed-3)
 - [[1.1.0] - 2026-10-16](#110---2026-10-16)
   - [Added](#added-3)
-  - [Fixed](#fixed-3)
+  - [Fixed](#fixed-4)
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
   - [Added](#added-4)
 
 ## [Unreleased]
+
+## [1.4.1] - 2026-10-18
+
+### Fixed
+
+- The dock search boxes and the composer placeholders are translated once: `_templates.html.twig` renders those
+  widgets with `translation_domain: false`. The form theme looked the already translated text (`Search
+  conversations`, `Search people`, `Write a message…`) up again in the `NowoChatKitBundle` domain and the request
+  locale — a "missing message" in the Symfony profiler, and a lookup in the wrong locale when `nowo_chat_locale`
+  differs from the request one.
 
 ## [1.4.0] - 2026-10-16
 
