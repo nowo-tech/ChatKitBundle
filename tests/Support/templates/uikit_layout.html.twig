@@ -1,0 +1,4 @@
+{# A host layout on the UiKit contract (web_ui.layout_template in ChatPageUiKitTest): canonical blocks + the dock. #}
+{% extends '@NowoUiKit/layout/admin.html.twig' %}
+{% block nowo_ui_styles %}{{ parent() }}<link rel="stylesheet" href="/host-uikit.css">{% endblock %}
+{% block nowo_ui_modals %}{{ parent() }}{{ include('@NowoChatKitBundle/dock.html.twig') }}{% endblock %}

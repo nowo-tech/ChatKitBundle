@@ -1,0 +1,3 @@
+{# Host override of one block of the chat page (web_ui.templates.page in ChatPageUiKitTest). #}
+{% extends '@!NowoChatKitBundle/page.html.twig' %}
+{% block nowo_chat_page_list %}<nav class="host-chat-list" data-host-list>{{ conversations|length }} conversations</nav>{% endblock %}

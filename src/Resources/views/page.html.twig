@@ -1,34 +1,54 @@
 {#
- # Full-page chat: works without JavaScript (links + form POST). Override in
- # templates/bundles/NowoChatKitBundle/page.html.twig ({% extends '@!NowoChatKitBundle/page.html.twig' %}).
- # Extends `page_layout` (Twig global `nowo_chat_kit_page_layout`; the `layout` variable is kept for overrides).
+ # Full-page chat (REQ-UI-003 unique page — see docs/TEMPLATES.md): works without JavaScript (links + form POST).
+ # Extends `layout ?? nowo_ui_layout.admin` (`layout` = web_ui.layout_template; null = nowo_ui_kit.layouts.admin) and
+ # fills the canonical blocks: nowo_ui_document_title, nowo_ui_styles / nowo_ui_scripts (chat stylesheet and script,
+ # stacked with parent()), nowo_ui_page_header (UiKit page_header partial, `header` = View\ChatPage::header()) and
+ # nowo_ui_content (conversation list + thread). Classes: nowo-chat-page__* (painted from the --nowo-chat-* tokens,
+ # which default to the UiKit --nowo-ui-* tokens) plus the theme slots section, muted, empty, flash_error, btn_link,
+ # btn_primary of NowoChatKitBundle.
+ # Change one part: nowo_chat_kit.profiles.<p>.web_ui.templates.page → a template that
+ # {% extends '@!NowoChatKitBundle/page.html.twig' %} and redefines nowo_chat_page_list or nowo_chat_page_thread.
  # Opening a conversation never changes state on GET: with JavaScript, nowo-chat.js marks it read through the
  # CSRF-protected `POST …/read` API (the `data-nowo-chat-read-*` attributes); without it, sending a message does.
  #}
-{% extends layout ?? nowo_chat_kit_page_layout %}
+{% extends layout ?? nowo_ui_layout.admin %}
 {% trans_default_domain 'NowoChatKitBundle' %}
+{% set nowo_ui_bundle = bundle|default('NowoChatKitBundle') %}
 {# The page loads the chat stylesheet and script itself: a dock included by the layout does not load them again. #}
 {% set nowo_chat_page_assets = true %}
 
-{% block stylesheets %}
+{% block nowo_ui_document_title %}{{ current ? current.title : 'chat.page_title'|trans }}{% endblock %}
+
+{% block nowo_ui_styles %}
     {{ parent() }}
     <link rel="stylesheet" href="{{ asset('css/nowo-chat.css', 'nowo_chat_kit') }}">
 {% endblock %}
 
-{% block javascripts %}
+{% block nowo_ui_scripts %}
     {{ parent() }}
     <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
 {% endblock %}
 
-{% block title %}{{ current ? current.title : 'chat.page_title'|trans }}{% endblock %}
+{% block nowo_ui_page_header %}
+    {{ include(nowo_ui_partial('page_header', nowo_ui_bundle), {
+        header: header,
+        actions: header.actions,
+        title: header.title|nowo_ui_trans,
+        intro: header.intro is null ? null : header.intro|nowo_ui_trans,
+        toolbar: null,
+        header_actions_rendered: true,
+        region: 'header',
+        bundle: nowo_ui_bundle,
+    }, false) }}
+{% endblock %}
 
-{% block body %}
-    <div class="nowo-chat-page{{ current ? ' has-current' }}" data-testid="chat-page"{% if read ?? null %} data-nowo-chat-read-url="{{ read.url }}" data-nowo-chat-read-id="{{ read.messageId }}" data-nowo-chat-read-csrf="{{ read.csrf }}"{% endif %}>
+{% block nowo_ui_content %}
+    {% set _b = nowo_ui_bundle %}
+    <div class="{{ nowo_ui_class('section', _b) }} nowo-chat-page{{ current ? ' has-current' }}" data-testid="chat-page" data-nowo-ui-region="section"{{ nowo_ui_attrs('section', _b) }}{% if read ?? null %} data-nowo-chat-read-url="{{ read.url }}" data-nowo-chat-read-id="{{ read.messageId }}" data-nowo-chat-read-csrf="{{ read.csrf }}"{% endif %}>
         {% block nowo_chat_page_list %}
             <nav class="nowo-chat-page__list" aria-label="{{ 'chat.launcher'|trans }}">
-                <h1 class="nowo-chat-page__heading">{{ 'chat.page_title'|trans }}</h1>
                 {% if conversations is empty %}
-                    <p class="nowo-chat-page__empty">{{ 'chat.empty_title'|trans }}</p>
+                    <p class="{{ nowo_ui_class('empty', _b) }} nowo-chat-page__empty">{{ 'chat.empty_title'|trans }}</p>
                 {% endif %}
                 <ul role="list">
                     {% for conversation in conversations %}
@@ -47,13 +67,13 @@
             <section class="nowo-chat-page__thread" aria-label="{{ current ? 'chat.conversation_label'|trans({'%name%': current.title}) : 'chat.page_title'|trans }}">
                 {% if current %}
                     <header class="nowo-chat-page__header">
-                        <a class="nowo-chat-page__back" href="{{ path('nowo_chat_page') }}">{{ 'chat.back'|trans }}</a>
+                        <a class="{{ nowo_ui_class('btn_link', _b) }} nowo-chat-page__back" href="{{ path('nowo_chat_page') }}">{{ 'chat.back'|trans }}</a>
                         <h2>{{ current.title }}</h2>
-                        <p>{{ current.subtitle }}</p>
+                        {% if current.subtitle %}<p class="{{ nowo_ui_class('muted', _b) }}">{{ current.subtitle }}</p>{% endif %}
                     </header>
                     {% set error = app.request.query.get('error') %}
                     {% if error in ['read_only', 'rate_limited', 'too_long', 'error'] %}
-                        <p class="nowo-chat-notice" role="alert">{{ ('chat.' ~ error)|trans({'%max%': 4000}) }}</p>
+                        <p class="{{ nowo_ui_class('flash_error', _b) }} nowo-chat-notice" role="alert">{{ ('chat.' ~ error)|trans({'%max%': 4000}) }}</p>
                     {% endif %}
                     <ol class="nowo-chat-page__messages" role="list">
                         {% for message in messages %}
@@ -72,24 +92,24 @@
                                 </div>
                             </li>
                         {% else %}
-                            <li class="nowo-chat-page__empty">{{ 'chat.start_chat'|trans }}</li>
+                            <li class="{{ nowo_ui_class('empty', _b) }} nowo-chat-page__empty">{{ 'chat.start_chat'|trans }}</li>
                         {% endfor %}
                     </ol>
                     {% if can_send %}
                         {# Symfony Form (ChatPageMessageType), never hand-written form tags (REQ-TWIG-005). #}
-                        {{ form_start(composer, {attr: {class: 'nowo-chat-page__composer'}}) }}
+                        {{ form_start(composer, {attr: {class: nowo_ui_class('form', _b) ~ ' nowo-chat-page__composer'}}) }}
                             {% for child in composer %}
                                 {% if not child.rendered %}
                                     {{ form_row(child) }}
                                 {% endif %}
                             {% endfor %}
-                            <button type="submit">{{ 'chat.send'|trans }}</button>
+                            <button type="submit" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'chat.send'|trans }}</button>
                         {{ form_end(composer) }}
                     {% else %}
-                        <p class="nowo-chat-notice">{{ 'chat.read_only'|trans }}</p>
+                        <p class="{{ nowo_ui_class('muted', _b) }} nowo-chat-notice">{{ 'chat.read_only'|trans }}</p>
                     {% endif %}
                 {% else %}
-                    <p class="nowo-chat-page__empty">{{ 'chat.page_select'|trans }}</p>
+                    <p class="{{ nowo_ui_class('empty', _b) }} nowo-chat-page__empty">{{ 'chat.page_select'|trans }}</p>
                 {% endif %}
             </section>
         {% endblock %}

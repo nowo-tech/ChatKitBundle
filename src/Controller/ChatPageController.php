@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Controller;
 
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Form\ChatPageMessageType;
@@ -17,6 +18,7 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatService;
+use Nowo\ChatKitBundle\View\ChatPage;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Form\FormInterface;
@@ -33,15 +35,21 @@ use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
  */
 final class ChatPageController extends AbstractController
 {
-    public const string CSRF_ID  = 'nowo_chat_page';
-    private const int LIST_LIMIT = 50;
-    private const int PAGE_SIZE  = 50;
+    public const string CSRF_ID = 'nowo_chat_page';
+
+    /** Deprecated 1.x template of the page, used while only the deprecated `page_layout` is configured. */
+    public const string LEGACY_TEMPLATE = '@NowoChatKitBundle/page_legacy.html.twig';
+    private const int LIST_LIMIT        = 50;
+    private const int PAGE_SIZE         = 50;
 
     /**
      * Builds the page controller from the chat services, repositories, the send rate limiter, the CSRF token
      * manager (header token of the mark-read call) and the layout.
      *
-     * @param string $layout Template the chat page extends (`nowo_chat_kit.page_layout`)
+     * @param string|null $layout Deprecated 1.x layout (`page_layout`): when set and `web_ui.layout_template` is not,
+     *                            the page keeps its 1.x template (`page_legacy.html.twig`)
+     * @param string|null $webUiLayout Layout of the page (`web_ui.layout_template`); null = nowo_ui_kit.layouts.admin
+     * @param string $pageTemplate Template of the page (`web_ui.templates.page`)
      */
     public function __construct(
         private readonly ChatService $chat,
@@ -54,7 +62,11 @@ final class ChatPageController extends AbstractController
         private readonly RateLimiterFactoryInterface $sendLimiter,
         private readonly CsrfTokenManagerInterface $csrf,
         #[Autowire(param: 'nowo_chat_kit.page_layout')]
-        private readonly string $layout = '@NowoChatKitBundle/page_layout.html.twig',
+        private readonly ?string $layout = null,
+        #[Autowire(param: 'nowo_chat_kit.web_ui.layout_template')]
+        private readonly ?string $webUiLayout = null,
+        #[Autowire(param: 'nowo_chat_kit.web_ui.templates.page')]
+        private readonly string $pageTemplate = Configuration::PAGE_TEMPLATE,
     ) {
     }
 
@@ -68,7 +80,7 @@ final class ChatPageController extends AbstractController
     {
         $user = $this->chatUser();
 
-        return $this->render('@NowoChatKitBundle/page.html.twig', $this->context($user, null));
+        return $this->render($this->template(), $this->context($user, null));
     }
 
     /**
@@ -88,7 +100,7 @@ final class ChatPageController extends AbstractController
         $page         = $this->messages->findPage($conversation, self::PAGE_SIZE);
         $last         = end($page);
 
-        return $this->render('@NowoChatKitBundle/page.html.twig', [
+        return $this->render($this->template(), [
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $page),
             'read'     => $last instanceof ChatMessage ? [
                 'url'       => $this->generateUrl('nowo_chat_api_read', ['uuid' => $uuid]),
@@ -148,6 +160,15 @@ final class ChatPageController extends AbstractController
     }
 
     /**
+     * The 1.x template while a deprecated `page_layout` is the only layout configured (its layout renders the 1.x
+     * `title` / `stylesheets` / `javascripts` / `body` blocks, not the UiKit canonical ones).
+     */
+    private function template(): string
+    {
+        return $this->layout !== null && $this->webUiLayout === null ? self::LEGACY_TEMPLATE : $this->pageTemplate;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function context(ChatUserInterface $user, ?ChatConversation $current): array
@@ -170,10 +191,15 @@ final class ChatPageController extends AbstractController
             $rows[] = $this->summary($conversation, $user, $conversation === $current ? 0 : $unread[$id] ?? 0, $latest[$id] ?? null);
         }
 
+        $summary = $current instanceof ChatConversation ? $this->summary($current, $user) : null;
+
         return [
-            'layout'        => $this->layout,
+            // `layout`: the page layout (web_ui.layout_template, else the deprecated page_layout); null = UiKit layout.
+            'layout'        => $this->webUiLayout ?? $this->layout,
+            'header'        => ChatPage::header(),
+            'bundle'        => ChatPage::BUNDLE,
             'conversations' => $rows,
-            'current'       => $current instanceof ChatConversation ? $this->summary($current, $user) : null,
+            'current'       => $summary,
             'messages'      => [],
             'read'          => null,
             'can_send'      => false,

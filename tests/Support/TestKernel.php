@@ -19,6 +19,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestLinkPreviewProvider;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Nowo\UiKitBundle\NowoUiKitBundle;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
 use Symfony\Bundle\SecurityBundle\SecurityBundle;
@@ -75,6 +76,7 @@ final class TestKernel extends Kernel
         yield new TwigExtraBundle();
         yield new DoctrineBundle();
         yield new UXIconsBundle();
+        yield new NowoUiKitBundle();
         yield new NowoChatKitBundle();
     }
 

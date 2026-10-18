@@ -6,8 +6,11 @@ namespace Nowo\ChatKitBundle\Tests\Unit\DependencyInjection;
 
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Config\Definition\ArrayNode;
+use Symfony\Component\Config\Definition\BaseNode;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
+use Symfony\Component\Config\Definition\PrototypedArrayNode;
 
 /**
  * @author Héctor Franco Aceituno <hectorfranco@nowo.tech>
@@ -31,7 +34,8 @@ final class ConfigurationTest extends TestCase
             'push_preview'   => false,
             'doctrine'       => ['table_prefix' => ''],
             'digest'         => ['enabled' => false, 'delay_minutes' => 15, 'interval_minutes' => 60],
-            'page_layout'    => '@NowoChatKitBundle/page_layout.html.twig',
+            'web_ui'         => ['layout_template' => null, 'templates' => ['page' => '@NowoChatKitBundle/page.html.twig']],
+            'page_layout'    => null,
             'cache_pool'     => 'cache.app',
             'reactions'      => ['👍', '❤️', '😂', '😮', '😢', '🎉'],
             'icon_set'       => 'ux_icon',
@@ -75,6 +79,26 @@ final class ConfigurationTest extends TestCase
         self::assertSame('support', $config['default_profile']);
         self::assertFalse($config['profiles']['member']['enabled']);
         self::assertTrue($config['profiles']['support']['enabled']);
+    }
+
+    public function testPageLayoutIsADeprecatedAliasOfWebUiLayout(): void
+    {
+        $root = (new Configuration())->getConfigTreeBuilder()->buildTree();
+        self::assertInstanceOf(ArrayNode::class, $root);
+        $profiles = $root->getChildren()['profiles'];
+        self::assertInstanceOf(PrototypedArrayNode::class, $profiles);
+        $prototype = $profiles->getPrototype();
+        self::assertInstanceOf(ArrayNode::class, $prototype);
+        $pageLayout = $prototype->getChildren()['page_layout'];
+        $webUi      = $prototype->getChildren()['web_ui'];
+        self::assertInstanceOf(BaseNode::class, $pageLayout);
+        self::assertInstanceOf(BaseNode::class, $webUi);
+        self::assertTrue($pageLayout->isDeprecated());
+        self::assertFalse($webUi->isDeprecated());
+
+        $config = $this->process([['profiles' => ['default' => ['web_ui' => ['layout_template' => 'layouts/chat.html.twig']]]]]);
+        self::assertSame('layouts/chat.html.twig', $config['profiles']['default']['web_ui']['layout_template']);
+        self::assertNull($config['profiles']['default']['page_layout']);
     }
 
     public function testUnknownDefaultProfileIsRejected(): void

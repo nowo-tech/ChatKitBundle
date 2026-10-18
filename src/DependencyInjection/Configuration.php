@@ -26,6 +26,12 @@ final class Configuration implements ConfigurationInterface
 
     public const DEFAULT_PROFILE = 'default';
 
+    /** 1.x default of `page_layout`: the bundle's own document, replaced by the UiKit layout (REQ-UI-003). */
+    public const string LEGACY_PAGE_LAYOUT = '@NowoChatKitBundle/page_layout.html.twig';
+
+    /** Default template of the full-page chat (`web_ui.templates.page`). */
+    public const string PAGE_TEMPLATE = '@NowoChatKitBundle/page.html.twig';
+
     /** Dock icon → Symfony UX Icons name (Tabler set), used with `icon_set: ux_icon`. */
     public const array DEFAULT_ICONS = [
         'chat'        => 'tabler:message-circle',
@@ -137,10 +143,30 @@ final class Configuration implements ConfigurationInterface
                                     ->end()
                                 ->end()
                             ->end()
+                            ->arrayNode('web_ui')
+                                ->info('UiKit page contract (REQ-UI-003) of the full-page chat (/chat).')
+                                ->addDefaultsIfNotSet()
+                                ->children()
+                                    ->scalarNode('layout_template')
+                                        ->info('Layout the chat page extends; null (default) = nowo_ui_kit.layouts.admin. It must render the UiKit canonical blocks.')
+                                        ->defaultNull()
+                                    ->end()
+                                    ->arrayNode('templates')
+                                        ->addDefaultsIfNotSet()
+                                        ->children()
+                                            ->scalarNode('page')
+                                                ->info('Template of the chat page (a host template that extends @!NowoChatKitBundle/page.html.twig and overrides one block).')
+                                                ->defaultValue(self::PAGE_TEMPLATE)
+                                                ->cannotBeEmpty()
+                                            ->end()
+                                        ->end()
+                                    ->end()
+                                ->end()
+                            ->end()
                             ->scalarNode('page_layout')
-                                ->info('Layout the full-page chat (/chat) extends; it must define the `title` and `body` blocks.')
-                                ->defaultValue('@NowoChatKitBundle/page_layout.html.twig')
-                                ->cannotBeEmpty()
+                                ->info('Deprecated: 1.x layout with the `title`, `stylesheets`, `javascripts` and `body` blocks; when set (and web_ui.layout_template is not), the chat page keeps its 1.x template (page_legacy.html.twig).')
+                                ->defaultNull()
+                                ->setDeprecated('nowo-tech/chat-kit-bundle', '1.5', 'The "%path%.%node%" option is deprecated, use "web_ui.layout_template" (a layout rendering the UiKit canonical blocks; null = nowo_ui_kit.layouts.admin) instead.')
                             ->end()
                             ->scalarNode('cache_pool')
                                 ->info('PSR-6 pool for presence and recipient lists (shared between workers, e.g. Redis).')

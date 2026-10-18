@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Twig;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Controller\ChatApiController;
+use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Form\ChatDockComposerType;
 use Nowo\ChatKitBundle\Form\ChatDockEditType;
@@ -40,7 +41,7 @@ use function strlen;
  * `nowo_chat_dock_config()`: what the dock needs (endpoints, CSRF token, settings, UI strings, the channel of
  * the current page). Null for guests and unreachable accounts, so the dock template renders nothing.
  * `nowo_chat_dock_forms()`: the Form views of the dock's search boxes, composer and inline editor.
- * Global `nowo_chat_kit_page_layout`: the layout the full-page chat extends (`page_layout`).
+ * Global `nowo_chat_kit_page_layout` (deprecated): the 1.x layout of `page_legacy.html.twig` (`page_layout`).
  */
 final class ChatDockExtension extends AbstractExtension implements GlobalsInterface
 {
@@ -54,7 +55,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param string $iconSet `ux_icon` or `svg_inline`
      * @param array<string, string> $icons dock icon → UX Icons name (icon_set: ux_icon)
      * @param IconRendererInterface|null $iconRenderer UX Icons renderer; null when symfony/ux-icons is not installed
-     * @param string $pageLayout Template the full-page chat extends (`page_layout`)
+     * @param string|null $pageLayout Deprecated 1.x layout (`page_layout`); null = the bundle's 1.x default document
      */
     public function __construct(
         private readonly Security $security,
@@ -72,7 +73,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly string $iconSet = 'ux_icon',
         private readonly array $icons = [],
         private readonly ?IconRendererInterface $iconRenderer = null,
-        private readonly string $pageLayout = '@NowoChatKitBundle/page_layout.html.twig',
+        private readonly ?string $pageLayout = null,
     ) {
     }
 
@@ -91,13 +92,14 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
     }
 
     /**
-     * Twig globals: `nowo_chat_kit_page_layout`, the layout the full-page chat extends.
+     * Twig globals: `nowo_chat_kit_page_layout` (deprecated), the layout the 1.x chat page (`page_legacy.html.twig`)
+     * extends; the 1.5 page extends the UiKit layout (`web_ui.layout_template`).
      *
      * @return array<string, mixed> The globals
      */
     public function getGlobals(): array
     {
-        return ['nowo_chat_kit_page_layout' => $this->pageLayout];
+        return ['nowo_chat_kit_page_layout' => $this->pageLayout ?? Configuration::LEGACY_PAGE_LAYOUT];
     }
 
     /**

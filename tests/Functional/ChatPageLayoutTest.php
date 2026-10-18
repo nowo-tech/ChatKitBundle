@@ -12,9 +12,9 @@ use Symfony\Component\HttpFoundation\Request;
 use function assert;
 
 /**
- * `page_layout` pointing at a host layout that already includes the dock: the page extends it through the
- * `nowo_chat_kit_page_layout` global, appends the chat stylesheet and script to its blocks, and the dock does not
- * load them a second time.
+ * Deprecated 1.x `page_layout` pointing at a host layout that already includes the dock: the page keeps its 1.x
+ * template (page_legacy.html.twig), extends the layout through the `nowo_chat_kit_page_layout` global, appends the
+ * chat stylesheet and script to its blocks, and the dock does not load them a second time.
  */
 final class ChatPageLayoutTest extends DatabaseTestCase
 {
@@ -29,7 +29,7 @@ final class ChatPageLayoutTest extends DatabaseTestCase
     {
         self::assertSame(self::LAYOUT, $this->twig()->createTemplate('{{ nowo_chat_kit_page_layout }}')->render());
         // Without the controller's `layout` (and `read`) variables, the page extends the global.
-        $html = $this->twig()->render('@NowoChatKitBundle/page.html.twig', ['conversations' => [], 'current' => null, 'messages' => [], 'can_send' => false]);
+        $html = $this->twig()->render('@NowoChatKitBundle/page_legacy.html.twig', ['conversations' => [], 'current' => null, 'messages' => [], 'can_send' => false]);
         self::assertStringContainsString('<link rel="stylesheet" href="/host.css">', $html);
         self::assertStringNotContainsString('data-nowo-chat-read-url', $html);
     }

@@ -1,25 +1,27 @@
 /*
- * NowoChatKitBundle — floating chat dock. Theme through the --nowo-chat-* tokens below: set them on :root (or
- * on .nowo-chat) in your own stylesheet, after this one. Defaults follow the light / dark colour scheme;
- * set data-theme="dark" / "light" on <html> to force one.
+ * NowoChatKitBundle — floating chat dock and full-page chat. Theme through the --nowo-chat-* tokens below: set them
+ * on :root (or on .nowo-chat) in your own stylesheet, after this one. Tokens first (REQ-UI-003): the colours, the
+ * display font and the window / control radius default to the UiKit --nowo-ui-* tokens (nowo-ui.css or
+ * nowo_ui_kit.theme.tokens), so a host themes the chat once with UiKit; without them the 1.x values apply, following
+ * the light / dark colour scheme (set data-theme="dark" / "light" on <html> to force one).
  */
 :where(:root) {
-  --nowo-chat-accent: #2f6b4f;
-  --nowo-chat-accent-strong: #24543d;
-  --nowo-chat-on-accent: #ffffff;
-  --nowo-chat-text: #1d2521;
-  --nowo-chat-surface: #ffffff;
-  --nowo-chat-surface-muted: #f2f4f3;
-  --nowo-chat-border: #d3d9d6;
-  --nowo-chat-danger: #c23a2b;
+  --nowo-chat-accent: var(--nowo-ui-primary, #2f6b4f);
+  --nowo-chat-accent-strong: var(--nowo-ui-btn-primary-hover-bg, #24543d);
+  --nowo-chat-on-accent: var(--nowo-ui-primary-contrast, #ffffff);
+  --nowo-chat-text: var(--nowo-ui-text, #1d2521);
+  --nowo-chat-surface: var(--nowo-ui-surface, #ffffff);
+  --nowo-chat-surface-muted: var(--nowo-ui-surface-muted, #f2f4f3);
+  --nowo-chat-border: var(--nowo-ui-border, #d3d9d6);
+  --nowo-chat-danger: var(--nowo-ui-danger, #c23a2b);
   --nowo-chat-warn: #d99a00;
   --nowo-chat-mist: #dce7f2;
-  --nowo-chat-font-display: inherit;
+  --nowo-chat-font-display: var(--nowo-ui-font-display, inherit);
   /* Shapes and sizes (override any of them like the colours). */
-  --nowo-chat-radius-window: 12px;
+  --nowo-chat-radius-window: var(--nowo-ui-radius, 12px);
   --nowo-chat-radius-bubble: 16px;
   --nowo-chat-radius-input: 18px;
-  --nowo-chat-radius-control: 8px;
+  --nowo-chat-radius-control: var(--nowo-ui-radius, 8px);
   --nowo-chat-radius-pill: 999px;
   --nowo-chat-radius-button: 50%;
   --nowo-chat-radius-avatar: 50%;
@@ -34,28 +36,28 @@
 
 @media (prefers-color-scheme: dark) {
   :where(:root:not([data-theme="light"])) {
-    --nowo-chat-accent: #5fb38a;
-    --nowo-chat-accent-strong: #7cc8a1;
-    --nowo-chat-on-accent: #0f1a14;
-    --nowo-chat-text: #e6ece9;
-    --nowo-chat-surface: #1b2220;
-    --nowo-chat-surface-muted: #242d2a;
-    --nowo-chat-border: #3a4541;
-    --nowo-chat-danger: #ef7466;
+    --nowo-chat-accent: var(--nowo-ui-primary, #5fb38a);
+    --nowo-chat-accent-strong: var(--nowo-ui-btn-primary-hover-bg, #7cc8a1);
+    --nowo-chat-on-accent: var(--nowo-ui-primary-contrast, #0f1a14);
+    --nowo-chat-text: var(--nowo-ui-text, #e6ece9);
+    --nowo-chat-surface: var(--nowo-ui-surface, #1b2220);
+    --nowo-chat-surface-muted: var(--nowo-ui-surface-muted, #242d2a);
+    --nowo-chat-border: var(--nowo-ui-border, #3a4541);
+    --nowo-chat-danger: var(--nowo-ui-danger, #ef7466);
     --nowo-chat-warn: #f0b429;
     --nowo-chat-mist: #2b3a48;
   }
 }
 
 :where(:root[data-theme="dark"]) {
-  --nowo-chat-accent: #5fb38a;
-  --nowo-chat-accent-strong: #7cc8a1;
-  --nowo-chat-on-accent: #0f1a14;
-  --nowo-chat-text: #e6ece9;
-  --nowo-chat-surface: #1b2220;
-  --nowo-chat-surface-muted: #242d2a;
-  --nowo-chat-border: #3a4541;
-  --nowo-chat-danger: #ef7466;
+  --nowo-chat-accent: var(--nowo-ui-primary, #5fb38a);
+  --nowo-chat-accent-strong: var(--nowo-ui-btn-primary-hover-bg, #7cc8a1);
+  --nowo-chat-on-accent: var(--nowo-ui-primary-contrast, #0f1a14);
+  --nowo-chat-text: var(--nowo-ui-text, #e6ece9);
+  --nowo-chat-surface: var(--nowo-ui-surface, #1b2220);
+  --nowo-chat-surface-muted: var(--nowo-ui-surface-muted, #242d2a);
+  --nowo-chat-border: var(--nowo-ui-border, #3a4541);
+  --nowo-chat-danger: var(--nowo-ui-danger, #ef7466);
   --nowo-chat-warn: #f0b429;
   --nowo-chat-mist: #2b3a48;
 }
