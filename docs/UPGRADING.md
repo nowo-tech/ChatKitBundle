@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.5.2](#to-152)
 - [To 1.5.1](#to-151)
 - [To 1.5.0](#to-150)
   - [Template contract (1.5)](#template-contract-15)
@@ -18,6 +19,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.5.2
+
+From **1.5.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 No action needed. If your layout mounts its own dock (own bundler or Stimulus controller calling `mount()`), mark
 its root `data-nowo-chat-manual` (`{{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual: true}) }}`) so

@@ -7,33 +7,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
-- [[1.5.1] - 2026-10-18](#151---2026-10-18)
+- [[1.5.2] - 2026-10-18](#152---2026-10-18)
   - [Fixed](#fixed)
-- [[1.5.0] - 2026-10-18](#150---2026-10-18)
   - [Added](#added)
+- [[1.5.1] - 2026-10-18](#151---2026-10-18)
+  - [Fixed](#fixed-1)
+- [[1.5.0] - 2026-10-18](#150---2026-10-18)
+  - [Added](#added-1)
   - [Changed](#changed)
   - [Deprecated](#deprecated)
 - [[1.4.1] - 2026-10-18](#141---2026-10-18)
-  - [Fixed](#fixed-1)
-- [[1.4.0] - 2026-10-16](#140---2026-10-16)
-  - [Added](#added-1)
-  - [Changed](#changed-1)
   - [Fixed](#fixed-2)
-- [[1.3.0] - 2026-10-16](#130---2026-10-16)
+- [[1.4.0] - 2026-10-16](#140---2026-10-16)
   - [Added](#added-2)
+  - [Changed](#changed-1)
+  - [Fixed](#fixed-3)
+- [[1.3.0] - 2026-10-16](#130---2026-10-16)
+  - [Added](#added-3)
   - [Changed](#changed-2)
 - [[1.2.0] - 2026-10-16](#120---2026-10-16)
-  - [Added](#added-3)
-  - [Fixed](#fixed-3)
-- [[1.1.1] - 2026-10-16](#111---2026-10-16)
-  - [Fixed](#fixed-4)
-- [[1.1.0] - 2026-10-16](#110---2026-10-16)
   - [Added](#added-4)
+  - [Fixed](#fixed-4)
+- [[1.1.1] - 2026-10-16](#111---2026-10-16)
   - [Fixed](#fixed-5)
-- [[1.0.0] - 2026-10-16](#100---2026-10-16)
+- [[1.1.0] - 2026-10-16](#110---2026-10-16)
   - [Added](#added-5)
+  - [Fixed](#fixed-6)
+- [[1.0.0] - 2026-10-16](#100---2026-10-16)
+  - [Added](#added-6)
 
 ## [Unreleased]
+
+## [1.5.2] - 2026-10-18
+
+Host-mounted docks (data-nowo-chat-manual) are no longer mounted twice by nowo-chat.js. See [UPGRADING](UPGRADING.md#to-152).
 
 ### Fixed
 
@@ -240,7 +247,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.5.2...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
