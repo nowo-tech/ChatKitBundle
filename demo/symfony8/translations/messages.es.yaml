@@ -4,6 +4,9 @@ demo:
   heading: 'Chat Kit Bundle'
   lead: 'Chat flotante estilo LinkedIn para Symfony: mensajes directos, canales y bandeja de soporte.'
   body: 'El bundle está instalado con el perfil por defecto (%profile%). Inicia sesión y abre el dock flotante abajo a la derecha.'
+  nav:
+    home: 'Inicio'
+    chat: 'Chat'
   language: Idioma
   logout: 'Cerrar sesión'
   features:

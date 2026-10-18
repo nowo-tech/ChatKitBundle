@@ -152,27 +152,35 @@ them too.
 
 `/chat/` (route `nowo_chat_page`) and `/chat/{uuid}` (`nowo_chat_page_conversation`) render the list and one thread on
 the server: a plain form posts the message and redirects back (works without JavaScript, same permissions, CSRF and
-rate limit as the API). Every dock window has an "Open in a page" link to it. The page extends `page_layout` (default: a
-minimal standalone layout), also exposed as the Twig global `nowo_chat_kit_page_layout` (the `layout` variable is still
-passed for existing overrides). Set it to your own layout, which must define the `title`, `stylesheets`, `javascripts`
-and `body` blocks: the page appends `css/nowo-chat.css` to `stylesheets` and `js/nowo-chat.js` to `javascripts` with
-`parent()`, so the chat is styled even when your layout does not include the dock (when it does, the dock does not load
-them a second time):
+rate limit as the API). Every dock window has an "Open in a page" link to it. The page follows the UiKit page contract
+(REQ-UI-003, [TEMPLATES.md](TEMPLATES.md)): it extends the UiKit admin layout (`nowo_ui_kit.layouts.admin`, or
+`web_ui.layout_template` per profile), puts its title in the UiKit page header and stacks `css/nowo-chat.css` /
+`js/nowo-chat.js` on `nowo_ui_styles` / `nowo_ui_scripts` with `parent()`, so the chat is styled even when your layout
+does not include the dock (when it does, the dock does not load them a second time). Include the dock in that layout
+(e.g. in `nowo_ui_modals`):
 
 ```yaml
+nowo_ui_kit:
+    layouts:
+        admin: 'layouts/admin.html.twig'   # renders the UiKit canonical blocks
 nowo_chat_kit:
     profiles:
         default:
-            page_layout: base.html.twig
+            web_ui:
+                layout_template: null      # null = nowo_ui_kit.layouts.admin
 ```
+
+The 1.x `page_layout` option (a layout with `title`, `stylesheets`, `javascripts` and `body` blocks) is deprecated:
+while it is the only layout set, the page keeps its 1.x template (`page_legacy.html.twig`).
 
 Opening `/chat/{uuid}` is a plain GET that changes nothing. With JavaScript, `nowo-chat.js` marks the conversation read
 through the CSRF-protected `POST /api/conversations/{uuid}/read` (the page carries the URL, the newest message id and the
 header token in `data-nowo-chat-read-*` attributes); without JavaScript, sending a message from the page marks the
 conversation read up to that message.
 
-Override `@NowoChatKitBundle/page.html.twig` (blocks `nowo_chat_page_list`, `nowo_chat_page_thread`) to change the
-markup. With the route prefix `/chat`, the list lives at `/chat/` (Symfony redirects `/chat` there).
+To change one part, point `web_ui.templates.page` at a template that extends `@!NowoChatKitBundle/page.html.twig`
+and overrides `nowo_chat_page_list` or `nowo_chat_page_thread`. Theme the page and the dock once with UiKit: the
+`--nowo-chat-*` tokens default to the `--nowo-ui-*` tokens. With the route prefix `/chat`, the list lives at `/chat/` (Symfony redirects `/chat` there).
 
 ## Events
 
@@ -236,8 +244,9 @@ application's copy always wins.
 | --- | --- | --- |
 | `dock.html.twig` | Dock root (config attribute) and assets | `nowo_chat_assets`, `nowo_chat_root` |
 | `_templates.html.twig` | Every `<template>` the dock clones | `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`, `nowo_chat_icons` |
-| `page.html.twig` | Full-page chat (list + thread + composer form) | `title`, `stylesheets`, `javascripts`, `body`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
-| `page_layout.html.twig` | Default standalone layout of the full page (or set `page_layout`) | `title`, `stylesheets`, `javascripts`, `body` |
+| `page.html.twig` | Full-page chat (list + thread + composer form), UiKit layout | `nowo_ui_document_title`, `nowo_ui_styles`, `nowo_ui_scripts`, `nowo_ui_page_header`, `nowo_ui_content`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
+| `page_legacy.html.twig` | Deprecated 1.x page (only with the deprecated `page_layout`) | `title`, `stylesheets`, `javascripts`, `body`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
+| `page_layout.html.twig` | Deprecated 1.x default layout of `page_legacy.html.twig` | `title`, `stylesheets`, `javascripts`, `body` |
 
 **Procedure.** Create the file under `templates/bundles/NowoChatKitBundle/`, start it with
 `{% extends '@!NowoChatKitBundle/<subpath>' %}` and override only the blocks you need, then

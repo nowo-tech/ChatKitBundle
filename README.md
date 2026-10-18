@@ -14,7 +14,18 @@ This bundle is **FrankenPHP worker mode friendly**. See [docs/FRANKENPHP-WORKER-
 
 ## Features
 
-![The chat dock in the demo: the conversation list and an open conversation](docs/images/demo/overview.webp)
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/demo/overview.webp" alt="The chat dock in the demo: the conversation list and an open conversation" />
+      <br /><sub>Floating dock — list and an open conversation, host UiKit theme</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/demo/page.webp" alt="The full-page chat in the demo's UiKit host layout" />
+      <br /><sub>Full-page chat — works without JavaScript, in the host's UiKit layout</sub>
+    </td>
+  </tr>
+</table>
 
 - **Direct messages** between people your application allows to talk (you decide: same team, same project, anyone…)
 - **Channels**: one group conversation per resource of your application (project, room, team) — `project:<uuid>`-style keys from your own provider
@@ -28,7 +39,8 @@ This bundle is **FrankenPHP worker mode friendly**. See [docs/FRANKENPHP-WORKER-
 - **Web Push** only when the application is not open in any tab (your push stack, through one interface)
 - LinkedIn-style **floating dock**: windows that survive navigation and stay in step across browser tabs; full-screen sheet on phones
 - **Customisable markup**: every piece of the UI is a Twig `<template>` the TypeScript clones — override any block
-- **Theme tokens** (`--nowo-chat-*`, light / dark defaults) and **Symfony UX Icons** (Tabler by default, any set)
+- **UiKit page contract** (REQ-UI-003, `nowo-tech/ui-kit-bundle` ^2.2): the full-page chat renders in the host's UiKit layout and the `--nowo-chat-*` tokens follow the UiKit theme ([templates](docs/TEMPLATES.md))
+- **Theme tokens** (`--nowo-chat-*`, defaulting to the UiKit tokens, light / dark fallbacks) and **Symfony UX Icons** (Tabler by default, any set)
 - Rate limits, CSRF, IDOR-safe (foreign UUID → 404), no-store responses, retention purge, GDPR export / erasure hooks
 - **FrankenPHP worker mode** friendly; 7 locales (en, es, fr, de, it, pt, nl)
 
@@ -110,6 +122,7 @@ and `make -C demo/symfony8 demo-screenshots` (see [docs/CONTRIBUTING.md](docs/CO
 - [Installation](docs/INSTALLATION.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Usage](docs/USAGE.md)
+- [Templates (UiKit page contract)](docs/TEMPLATES.md)
 - [Contributing](docs/CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Changelog](docs/CHANGELOG.md)

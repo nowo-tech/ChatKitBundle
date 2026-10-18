@@ -1,0 +1,17 @@
+# UiKit host theme of the demo (same tokens as the UiKit host-theme demo): the full-page chat renders in
+# layouts.admin and the dock / page read these tokens through the --nowo-chat-* defaults.
+nowo_ui_kit:
+    css_framework: bootstrap5
+    layouts:
+        admin: 'layouts/admin.html.twig'
+    theme:
+        tokens:
+            primary: '#0f766e'
+            primary-contrast: '#ffffff'
+            surface: '#fffdf8'
+            surface-muted: '#f5efe4'
+            border: '#e8dfd0'
+            border-strong: '#d6c8b2'
+            text: '#1c2a27'
+            muted: '#6b6a5e'
+            radius: '0.75rem'

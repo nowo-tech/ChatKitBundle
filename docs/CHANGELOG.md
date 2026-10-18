@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+  - [Added](#added)
+  - [Changed](#changed)
+  - [Deprecated](#deprecated)
 - [[1.4.1] - 2026-10-18](#141---2026-10-18)
   - [Fixed](#fixed)
 - [[1.4.0] - 2026-10-16](#140---2026-10-16)
@@ -28,6 +31,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - [Added](#added-4)
 
 ## [Unreleased]
+
+### Added
+
+- **UiKit page contract (REQ-UI-003)** — requires `nowo-tech/ui-kit-bundle` **^2.2**. The full-page chat
+  (`page.html.twig`) is a unique page on the UiKit admin layout (`layout ?? nowo_ui_layout.admin`): canonical blocks
+  (`nowo_ui_document_title`, `nowo_ui_styles` / `nowo_ui_scripts` stacked with `parent()`, `nowo_ui_page_header`
+  through the UiKit `page_header` partial, `nowo_ui_content`) and theme slots of `NowoChatKitBundle` (`section`,
+  `empty`, `muted`, `flash_error`, `btn_link`, `btn_primary`, `form`).
+- `profiles.<name>.web_ui.layout_template` (null = `nowo_ui_kit.layouts.admin`) and
+  `profiles.<name>.web_ui.templates.page` (one-block `@!NowoChatKitBundle/page.html.twig` overrides).
+- `Nowo\ChatKitBundle\View\ChatPage` (page header view model); page context `header`, `bundle`.
+- `docs/TEMPLATES.md`; contract test (`PageContractTestCase`); functional test of the page on a UiKit host layout.
+- Demo: UiKit host layout (`nowo_ui_kit.layouts.admin`, host theme tokens), full-page chat screenshot.
+
+### Changed
+
+- `nowo-chat.css`: the `--nowo-chat-*` colour, display-font and radius tokens default to the UiKit `--nowo-ui-*` tokens
+  (1.x values as fallbacks), so the dock and the page follow the host's UiKit theme.
+- The full-page chat title moved to the UiKit page header (`chat.page_title`); the list no longer repeats it.
+- Dock root: `data-nowo-ui-bundle="NowoChatKitBundle"` (per-bundle UiKit tokens).
+
+### Deprecated
+
+- `profiles.<name>.page_layout` → `web_ui.layout_template`. While it is the only layout set, the page keeps its 1.x
+  template (`page_legacy.html.twig`, deprecated) in that layout; its 1.x default value means the UiKit layout.
+- `page_layout.html.twig`, `page_legacy.html.twig` and the Twig global `nowo_chat_kit_page_layout` (removed in 2.0).
 
 ## [1.4.1] - 2026-10-18
 

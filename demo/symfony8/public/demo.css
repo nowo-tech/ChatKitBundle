@@ -1,0 +1,9 @@
+/* Demo host styles: navbar and page background from the UiKit tokens (config/packages/nowo_ui_kit.yaml). */
+body { background: var(--nowo-ui-surface-muted); color: var(--nowo-ui-text); }
+.demo-navbar { background: var(--nowo-ui-primary); }
+.demo-navbar .nav-link.active { color: #fff; font-weight: 600; }
+.nowo-ui-page--admin > .nowo-ui-content { max-width: 1140px; margin: 0 auto; padding: 1.5rem 0.75rem 6rem; }
+.nowo-ui-page--admin .container { max-width: 1140px; }
+/* Host shell flush with the top; page title at the host's heading size. */
+body.nowo-ui-body { padding: 0; }
+.nowo-ui-page-header__title { font-size: 1.5rem; }

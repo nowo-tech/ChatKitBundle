@@ -1,43 +1,9 @@
-<!DOCTYPE html>
-<html lang="{{ app.request.locale }}">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>{% block title %}{{ 'demo.title'|trans }}{% endblock %}</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-        {{ vite_entry_link_tags('app') }}
-        {% block stylesheets %}{% endblock %}
-    </head>
-    <body class="bg-light">
-        {% set locale_route = app.request.attributes.get('_route') %}
-        {% set locale_params = app.request.attributes.get('_route_params')|default({}) %}
-        <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-            <div class="container">
-                <a class="navbar-brand" href="{{ path('homepage', { _locale: app.request.locale }) }}">{{ 'demo.brand'|trans }}</a>
-                <div class="navbar-nav ms-auto align-items-lg-center gap-lg-2">
-                    {% if app.user %}
-                        <span class="navbar-text text-white-50 small">{{ app.user.userIdentifier }}</span>
-                        <a class="nav-link text-white" href="{{ path('demo_logout') }}">{{ 'demo.logout'|trans }}</a>
-                    {% else %}
-                        <a class="nav-link text-white" href="{{ path('demo_login', { _locale: app.request.locale }) }}">{{ 'demo.login.nav'|trans }}</a>
-                    {% endif %}
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle text-white" href="#" id="localeDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            {{ 'demo.language'|trans }} ({{ app.request.locale|upper }})
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="localeDropdown">
-                            <li><a class="dropdown-item {{ app.request.locale == 'en' ? 'active' : '' }}" href="{{ path(locale_route, locale_params|merge({ _locale: 'en' })) }}">English</a></li>
-                            <li><a class="dropdown-item {{ app.request.locale == 'es' ? 'active' : '' }}" href="{{ path(locale_route, locale_params|merge({ _locale: 'es' })) }}">Español</a></li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </nav>
-        <main>{% block body %}{% endblock %}</main>
-        {# The floating chat dock: renders nothing for guests. #}
-        {{ include('@NowoChatKitBundle/dock.html.twig') }}
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-        {{ vite_entry_script_tags('app') }}
-        {% block javascripts %}{% endblock %}
-    </body>
-</html>
+{#
+  Demo pages (home, login) on the same host layout as the bundle page: `title` → nowo_ui_document_title,
+  `body` → nowo_ui_content.
+#}
+{% extends 'layouts/admin.html.twig' %}
+
+{% block nowo_ui_document_title %}{% block title %}{{ 'demo.title'|trans }}{% endblock %}{% endblock %}
+
+{% block nowo_ui_content %}{% block body %}{% endblock %}{% endblock %}

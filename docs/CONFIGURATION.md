@@ -91,7 +91,9 @@ nowo_chat_kit:
 | `profiles.<name>.digest.interval_minutes` | int ≥ 1 | `60` | At most one email per user in this window. |
 | `profiles.<name>.push_preview` | bool | `false` | Put the first 140 characters of the message in the Web Push body (lock screens). Off: a generic "New message". |
 | `profiles.<name>.doctrine.table_prefix` | string | `''` | Prepended to every bundle table, index and unique constraint (lowercase letters, digits, `_`). `app_` gives `app_nowo_chat_conversation`, `app_nowo_chat_message`, … Generate a migration after changing it. |
-| `profiles.<name>.page_layout` | string | `@NowoChatKitBundle/page_layout.html.twig` | Layout the full-page chat extends (`title` and `body` blocks). |
+| `profiles.<name>.web_ui.layout_template` | ?string | `null` | Layout the full-page chat extends (REQ-UI-003); `null` = `nowo_ui_kit.layouts.admin`. It must render the UiKit canonical blocks. |
+| `profiles.<name>.web_ui.templates.page` | string | `@NowoChatKitBundle/page.html.twig` | Template of the full-page chat (a host template extending `@!NowoChatKitBundle/page.html.twig` and overriding one block). |
+| `profiles.<name>.page_layout` | ?string | `null` | **Deprecated** (use `web_ui.layout_template`): a 1.x layout with the `title`, `stylesheets`, `javascripts` and `body` blocks; while it is the only layout set, the page keeps its 1.x template. |
 | `profiles.<name>.cache_pool` | string | `cache.app` | PSR-6 pool for presence and recipient lists. Share it between workers / replicas. |
 | `profiles.<name>.reactions` | list | `👍 ❤️ 😂 😮 😢 🎉` | Emojis offered as reactions (anything else is refused). |
 | `profiles.<name>.icon_set` | `ux_icon` \| `svg_inline` | `ux_icon` | Dock icons from Symfony UX Icons, or the built-in SVG only. |
@@ -115,7 +117,7 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 ## Container parameters
 
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
-key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `doctrine.table_prefix`,
+key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `doctrine.table_prefix`,
 `reactions`, `icon_set`, `icons`, `presence_ttl`, `limits`, `digest`).
 
 ## Timeouts

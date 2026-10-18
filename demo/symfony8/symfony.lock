@@ -28,6 +28,9 @@
     "nowo-tech/twig-inspector-bundle": {
         "version": "v1.1.3"
     },
+    "nowo-tech/ui-kit-bundle": {
+        "version": "v2.2.0"
+    },
     "pentatrion/vite-bundle": {
         "version": "8.2",
         "recipe": {

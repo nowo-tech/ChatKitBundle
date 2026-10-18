@@ -5,5 +5,7 @@ nowo_chat_kit:
         default:
             enabled: true
             user_class: App\Entity\User
-            # The full-page chat (/chat/) renders inside the demo layout.
-            page_layout: base.html.twig
+            # The full-page chat (/chat/) renders in nowo_ui_kit.layouts.admin (web_ui.layout_template: null);
+            # REQ-UI-003 — the 1.x page_layout option is deprecated.
+            # web_ui:
+            #     layout_template: null

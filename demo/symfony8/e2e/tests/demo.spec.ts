@@ -37,5 +37,9 @@ test.describe('chat kit demo', () => {
     await page.locator('.nowo-chat-page__row', { hasText: 'Bob Lee' }).click();
     await expect(page.locator('.nowo-chat-page__header h2')).toHaveText('Bob Lee');
     await expect(page.locator('.nowo-chat-page__composer textarea')).toBeVisible();
+    // REQ-UI-003: the page renders in the UiKit host layout (nowo_ui_kit.layouts.admin) with the UiKit page header.
+    await expect(page.locator('main[data-nowo-ui-bundle="NowoChatKitBundle"] [data-nowo-ui-region="header"] h1')).toHaveText('Messages');
+    await expect(page.locator('.nowo-chat-page__composer button[type="submit"]')).toHaveClass(/nowo-ui-btn--primary/);
+    await expect(page.locator('nav.demo-navbar')).toBeVisible();
   });
 });

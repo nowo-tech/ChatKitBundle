@@ -1,6 +1,6 @@
 # Chat Kit Bundle — Demo
 
-FrankenPHP demo for **Symfony 8.1** (PHP 8.5) running the real floating chat: Doctrine users, the bundle's contracts implemented in `src/Chat/`, the dock in the layout and the full-page chat inside the demo layout.
+FrankenPHP demo for **Symfony 8.1** (PHP 8.5) running the real floating chat: Doctrine users, the bundle's contracts implemented in `src/Chat/`, the dock in the layout and the full-page chat inside the demo layout. The demo layout is a UiKit host layout (`templates/layouts/admin.html.twig` = `nowo_ui_kit.layouts.admin`, REQ-UI-003) with the host theme tokens of `config/packages/nowo_ui_kit.yaml`: the full-page chat renders there with `web_ui.layout_template` left null, and the dock / page colours follow the UiKit tokens.
 
 ## Accounts
 
@@ -33,7 +33,7 @@ Default URL: **http://localhost:8147** (`PORT` in `demo/symfony8/.env.example`).
 | `make -C demo/symfony8 down` | Stop containers |
 | `make -C demo/symfony8 test` | Sync the bundle, seed, run the demo PHPUnit tests |
 | `make -C demo/symfony8 test-e2e` | Playwright happy path (dock send, full page) — needs `up` + `setup-db` |
-| `make -C demo/symfony8 demo-screenshots` | Regenerate `docs/images/demo/overview.webp` (README image) |
+| `make -C demo/symfony8 demo-screenshots` | Regenerate `docs/images/demo/overview.webp` and `page.webp` (README images; run on a freshly seeded database so e2e messages do not show) |
 | `make demo-smoke` | From the bundle root: boot the demo and assert HTTP 200 (REQ-TEST-011) |
 | `make update-deps` | Refresh bundle **and** demo Composer dependencies (from the bundle root) |
 
