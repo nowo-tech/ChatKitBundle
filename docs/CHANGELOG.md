@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.5.1] - 2026-10-18](#151---2026-10-18)
   - [Fixed](#fixed)
 - [[1.5.0] - 2026-10-18](#150---2026-10-18)
   - [Added](#added)
@@ -33,6 +34,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - [Added](#added-5)
 
 ## [Unreleased]
+
+## [1.5.1] - 2026-10-18
+
+Conversation list no longer re-reads the viewer's settings and peers per row (9 queries for 5 or 50 rows). See [UPGRADING](UPGRADING.md#to-151).
 
 ### Fixed
 
@@ -219,7 +224,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.5.1...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
