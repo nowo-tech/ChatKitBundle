@@ -7,30 +7,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+  - [Fixed](#fixed)
+- [[1.5.0] - 2026-10-18](#150---2026-10-18)
   - [Added](#added)
   - [Changed](#changed)
   - [Deprecated](#deprecated)
 - [[1.4.1] - 2026-10-18](#141---2026-10-18)
-  - [Fixed](#fixed)
+  - [Fixed](#fixed-1)
 - [[1.4.0] - 2026-10-16](#140---2026-10-16)
   - [Added](#added-1)
   - [Changed](#changed-1)
-  - [Fixed](#fixed-1)
+  - [Fixed](#fixed-2)
 - [[1.3.0] - 2026-10-16](#130---2026-10-16)
   - [Added](#added-2)
   - [Changed](#changed-2)
 - [[1.2.0] - 2026-10-16](#120---2026-10-16)
   - [Added](#added-3)
-  - [Fixed](#fixed-2)
-- [[1.1.1] - 2026-10-16](#111---2026-10-16)
   - [Fixed](#fixed-3)
+- [[1.1.1] - 2026-10-16](#111---2026-10-16)
+  - [Fixed](#fixed-4)
 - [[1.1.0] - 2026-10-16](#110---2026-10-16)
   - [Added](#added-4)
-  - [Fixed](#fixed-4)
+  - [Fixed](#fixed-5)
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
   - [Added](#added-5)
 
 ## [Unreleased]
+
+### Fixed
+
+- **N+1 queries on `GET /chat/api/conversations`** (reported from symfony-beacon): every direct-thread row ran two extra
+  SQL statements — the presence-visibility check re-read the viewer's own `nowo_chat_user_settings` row, and the
+  per-row `nowo_chat.send` vote re-loaded the peer through `ChatDirectoryInterface::findByIds()`. The list now runs a
+  constant number of statements (9 for 5 or 50 direct threads in the test kernel; 19 / 109 before).
+  `ChatUserSettingsRepository::forUser()` memoizes per user id and `ChatAccess::usersByIds()` (new) memoizes the
+  directory lookups for the current request, so `directPeer()` reuses the peers the list loaded in one query. Both
+  memos are cleared by `reset()` (`kernel.reset`): nothing carries over between FrankenPHP worker requests or
+  Messenger messages. The message page, support inbox and contacts list were checked and already batch their rows;
+  query-count regression tests (5 vs 50 rows) cover the conversation list, the support inbox and the message page.
 
 ## [1.5.0] - 2026-10-18
 

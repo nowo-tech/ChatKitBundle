@@ -17,6 +17,12 @@ use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
+use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Contracts\Service\ResetInterface;
+
+use function assert;
 
 /**
  * Repositories on SQLite: unique cardinalities, list scope, cursor pages, unread counts in one query, open
@@ -172,5 +178,52 @@ final class ChatRepositoriesTest extends DatabaseTestCase
         self::assertTrue($many[(int) $ana->getId()]->isPushEnabled());
         self::assertFalse($many[(int) $luis->getId()]->isPushEnabled());
         self::assertSame([], $repository->forUsers([]));
+    }
+
+    public function testUserSettingsAreMemoizedUntilReset(): void
+    {
+        $ana        = $this->user('Ana');
+        $repository = $this->get(ChatUserSettingsRepository::class);
+        $saved      = $repository->forUser($ana);
+        $saved->setSound('chime');
+        $this->em->persist($saved);
+        $this->em->flush();
+        $repository->reset();
+
+        $counter = $this->get(QueryCounter::class);
+        $counter->clear();
+        $first = $repository->forUser($ana);
+        self::assertSame($first, $repository->forUser($ana), 'memoized: same instance');
+        self::assertSame(1, $counter->count(), 'one query for repeated reads of the same user');
+
+        $repository->reset();
+        self::assertSame('chime', $repository->forUser($ana)->getSound());
+        self::assertSame(2, $counter->count(), 'reset() clears the memo: the next read queries again');
+
+        $this->em->clear();
+        $reloaded = $repository->forUser($ana);
+        self::assertTrue($this->em->contains($reloaded), 'a memo detached by clear() is read again');
+        self::assertSame(3, $counter->count());
+
+        // Unsaved defaults are memoized too; users without an id are never memoized.
+        $luis = $this->user('Luis');
+        $counter->clear();
+        $defaults = $repository->forUser($luis);
+        self::assertNull($defaults->getId());
+        self::assertSame($defaults, $repository->forUser($luis));
+        self::assertSame(1, $counter->count(), 'unsaved defaults are memoized as well');
+        $ghost = new TestUser('Ghost', 'ghost@example.test');
+        self::assertNotSame($repository->forUser($ghost), $repository->forUser($ghost));
+
+        // The kernel resets it between requests / messages (`kernel.reset`, FrankenPHP worker mode).
+        $repository->forUser($ana);
+        $before    = $counter->count();
+        $container = $this->kernel->getContainer()->get('test.service_container');
+        assert($container instanceof ContainerInterface);
+        $resetter = $container->get('services_resetter');
+        assert($resetter instanceof ResetInterface);
+        $resetter->reset();
+        $this->get(ChatUserSettingsRepository::class)->forUser($ana);
+        self::assertSame($before + 1, $counter->count(), 'services_resetter clears the memo');
     }
 }

@@ -125,15 +125,13 @@ final class ChatApiController extends AbstractController
         $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
         $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
         $latest = $this->messages->findLatestByConversationIds($ids);
-        // Peers of direct threads in one query and their presence in one cache round trip.
+        // Peers of direct threads in one query (memoized in ChatAccess, so the per-row SEND vote reuses them) and
+        // their presence in one cache round trip.
         $peerIds = [];
         foreach ($list as $conversation) {
             $peerIds = [...$peerIds, ...$conversation->directUserIds()];
         }
-        $peers = [];
-        foreach ($this->directory->findByIds(array_values(array_unique($peerIds))) as $peer) {
-            $peers[(int) $peer->getId()] = $peer;
-        }
+        $peers    = $this->access->usersByIds(array_values(array_unique($peerIds)));
         $presence = $this->showsPresence($user) ? $this->presence->statusOf(array_values($peers)) : [];
 
         $rows = [];

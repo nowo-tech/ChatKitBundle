@@ -21,7 +21,7 @@ A bundle that is safe under **B** is safe under **A** and under classic mode / P
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Mutable state in shared services | ✅ | Services hold only constructor-injected collaborators and configuration (most are `final readonly`; controllers and `ChatAccess` keep no request data in properties). `ChatAccess` memoizes access answers in the current main request's attributes, never in a property: nothing crosses requests, even without `services_resetter`; console / Messenger compute every time. |
+| Mutable state in shared services | ✅ | Services hold only constructor-injected collaborators and configuration (most are `final readonly`; controllers and `ChatAccess` keep no request data in properties). `ChatAccess` memoizes access answers in the current main request's attributes, never in a property: nothing crosses requests, even without `services_resetter`; console / Messenger compute every time (including the `usersByIds()` / `directPeer()` directory lookups). The one property memo, `ChatUserSettingsRepository::forUser()` (user id → settings), implements `ResetInterface` (autoconfigured `kernel.reset`), so `services_resetter` empties it between worker requests and Messenger messages. |
 | Caches | ✅ | Presence, recipient lists and digest markers live in the configured PSR-6 pool (`cache_pool`) with TTLs — shared storage, not process memory. |
 | Static properties / `static` locals | ✅ | None |
 | Request / user / locale captured in services | ✅ | Controllers and the Twig extension read the user and locale per call; no service stores them. |

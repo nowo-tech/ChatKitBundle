@@ -165,7 +165,56 @@ final class ChatAccess implements ResetInterface
     {
         $peerId = $conversation->peerIdOf($actor);
 
-        return $peerId === null ? null : ($this->directory->findByIds([$peerId])[0] ?? null);
+        return $peerId === null ? null : ($this->usersByIds([$peerId])[$peerId] ?? null);
+    }
+
+    /**
+     * Users by id through the directory, memoized for the current request: ids already loaded (or known to be
+     * gone) are not queried again, so list endpoints load every peer in one query and the per-row voter checks
+     * (`directPeer()`) hit the memo instead of the directory (no N+1).
+     *
+     * @param list<int> $ids User ids
+     *
+     * @return array<int, ChatUserInterface> id => user; unknown ids are left out
+     */
+    public function usersByIds(array $ids): array
+    {
+        $request = $this->requests?->getMainRequest();
+        if (!$request instanceof Request) {
+            return $this->loadUsers($ids);
+        }
+        $memo    = $request->attributes->get(self::MEMO, []);
+        $missing = array_values(array_unique(array_filter($ids, static fn (int $id): bool => !array_key_exists('user:' . $id, $memo))));
+        if ($missing !== []) {
+            $loaded = $this->loadUsers($missing);
+            foreach ($missing as $id) {
+                $memo['user:' . $id] = $loaded[$id] ?? false;
+            }
+            $request->attributes->set(self::MEMO, $memo);
+        }
+        $users = [];
+        foreach ($ids as $id) {
+            if ($memo['user:' . $id] instanceof ChatUserInterface) {
+                $users[$id] = $memo['user:' . $id];
+            }
+        }
+
+        return $users;
+    }
+
+    /**
+     * @param list<int> $ids
+     *
+     * @return array<int, ChatUserInterface>
+     */
+    private function loadUsers(array $ids): array
+    {
+        $users = [];
+        foreach ($ids === [] ? [] : $this->directory->findByIds($ids) as $user) {
+            $users[(int) $user->getId()] = $user;
+        }
+
+        return $users;
     }
 
     /**

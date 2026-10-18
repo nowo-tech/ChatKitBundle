@@ -8,14 +8,20 @@ use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Symfony\Contracts\Service\ResetInterface;
 
 /**
- * Loads per-user chat settings, falling back to unsaved defaults.
+ * Loads per-user chat settings, falling back to unsaved defaults. `forUser()` is memoized per user id until
+ * `reset()` (tag `kernel.reset`, so a FrankenPHP worker / Messenger consumer never carries it to the next request):
+ * per-row checks such as the API's presence visibility read the table once per request, not once per row.
  *
  * @extends ServiceEntityRepository<ChatUserSettings>
  */
-class ChatUserSettingsRepository extends ServiceEntityRepository
+class ChatUserSettingsRepository extends ServiceEntityRepository implements ResetInterface
 {
+    /** @var array<int, ChatUserSettings> user id => settings loaded in this request */
+    private array $memo = [];
+
     /**
      * Builds the repository for ChatUserSettings entities.
      *
@@ -35,7 +41,26 @@ class ChatUserSettingsRepository extends ServiceEntityRepository
      */
     public function forUser(ChatUserInterface $user): ChatUserSettings
     {
-        return $this->findOneBy(['user' => $user]) ?? new ChatUserSettings($user);
+        $id = $user->getId();
+        if ($id === null) {
+            return new ChatUserSettings($user);
+        }
+
+        $memo = $this->memo[$id] ?? null;
+        // A stored row detached by EntityManager::clear() is read again (it would no longer be flushed).
+        if ($memo instanceof ChatUserSettings && ($memo->getId() === null || $this->getEntityManager()->contains($memo))) {
+            return $memo;
+        }
+
+        return $this->memo[$id] = $this->findOneBy(['user' => $user]) ?? new ChatUserSettings($user);
+    }
+
+    /**
+     * Forgets the settings memoized by `forUser()` (end of request / message).
+     */
+    public function reset(): void
+    {
+        $this->memo = [];
     }
 
     /**
