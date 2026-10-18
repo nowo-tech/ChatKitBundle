@@ -19,6 +19,12 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+No action needed. If your layout mounts its own dock (own bundler or Stimulus controller calling `mount()`), mark
+its root `data-nowo-chat-manual` (`{{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual: true}) }}`) so
+the `nowo-chat.js` loaded by the chat page no longer mounts a second dock; optionally empty the new
+`nowo_chat_page_script` block in your `web_ui.templates.page` override. See
+[USAGE — Front end](USAGE.md#front-end-iife-or-your-bundler).
+
 ## To 1.5.1
 
 From **1.5.0**:

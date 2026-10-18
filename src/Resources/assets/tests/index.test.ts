@@ -13,7 +13,7 @@ vi.mock('../src/dock', () => ({
   },
 }));
 
-const { CSS_TOKEN_PREFIX, VERSION, autoStart, mount, mountAll, unmount } = await import('../src/index');
+const { AUTO_ROOT_SELECTOR, CSS_TOKEN_PREFIX, VERSION, autoStart, mount, mountAll, unmount } = await import('../src/index');
 
 function root(config: string): HTMLElement {
   const element = document.createElement('div');
@@ -68,6 +68,28 @@ describe('nowo-chat entry', () => {
     expect(created).toHaveLength(1);
     vi.advanceTimersByTime(200);
     expect(created).toHaveLength(2);
+  });
+
+  it('leaves roots marked data-nowo-chat-manual to the host', () => {
+    vi.stubGlobal('requestIdleCallback', undefined);
+    const auto = root('{}');
+    const manual = root('{}');
+    manual.dataset.nowoChatManual = '';
+    expect(AUTO_ROOT_SELECTOR).toBe('[data-nowo-chat-config]:not([data-nowo-chat-manual])');
+
+    autoStart();
+    vi.advanceTimersByTime(200);
+    expect(created).toEqual([auto]);
+
+    // The host mounts its own dock explicitly; a Turbo swap does not tear it down, the next visit does not re-mount it.
+    expect(mount(manual)).not.toBeNull();
+    destroy.mockClear();
+    document.dispatchEvent(new Event('turbo:before-render'));
+    expect(destroy).toHaveBeenCalledTimes(1);
+    document.dispatchEvent(new Event('turbo:load'));
+    vi.advanceTimersByTime(200);
+    expect(created.filter((item) => item === manual)).toHaveLength(1);
+    unmount(manual);
   });
 
   it('starts on document ready and follows Turbo visits', () => {

@@ -35,6 +35,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Two docks with a host-mounted dock**: `page.html.twig` always loads `nowo-chat.js`, whose automatic start mounted
+  every `[data-nowo-chat-config]` root, including a dock the host mounts itself, so two docks appeared. The automatic
+  start (first paint, `turbo:load`, and the `turbo:before-render` cleanup) now skips roots marked
+  `data-nowo-chat-manual` (`AUTO_ROOT_SELECTOR`); `mount()` still mounts them when called explicitly. Roots without
+  the attribute behave as before.
+
+### Added
+
+- `dock.html.twig` variable `nowo_chat_manual` (`{{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual:
+  true}) }}`) renders the root with `data-nowo-chat-manual`.
+- `page.html.twig` block `nowo_chat_page_script` around the `nowo-chat.js` tag, so a `web_ui.templates.page` override
+  can drop the bundle script when the host ships it. Covered by `ChatPageManualDockTest` and the `index.test.ts`
+  manual-root test.
+
 ## [1.5.1] - 2026-10-18
 
 Conversation list no longer re-reads the viewer's settings and peers per row (9 queries for 5 or 50 rows). See [UPGRADING](UPGRADING.md#to-151).

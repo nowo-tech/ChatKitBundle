@@ -9,6 +9,9 @@
  # {% extends '@!NowoChatKitBundle/_templates.html.twig' %} and redefine the blocks you need.
  # Theme (REQ-UI-003): the --nowo-chat-* tokens of nowo-chat.css default to the UiKit --nowo-ui-* tokens; the root
  # carries data-nowo-ui-bundle="NowoChatKitBundle" for per-bundle tokens (nowo_ui_kit.theme.bundles.NowoChatKitBundle).
+ # Host-mounted dock (1.5.2): {{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual: true}) }} marks the
+ # root data-nowo-chat-manual, so the automatic start of nowo-chat.js skips it and the host mounts it itself
+ # (NowoChat.mount(root) or its own bundler / Stimulus controller) — one dock, never two.
  #}
 {% set nowo_chat_config = nowo_chat_dock_config() %}
 {% if nowo_chat_config %}
@@ -20,7 +23,7 @@
         {% endif %}
     {% endblock %}
     {% block nowo_chat_root %}
-        <div class="nowo-chat" data-nowo-ui-bundle="NowoChatKitBundle" data-nowo-chat-config="{{ nowo_chat_config|json_encode|e('html_attr') }}" data-testid="chat-dock">
+        <div class="nowo-chat" data-nowo-ui-bundle="NowoChatKitBundle" data-nowo-chat-config="{{ nowo_chat_config|json_encode|e('html_attr') }}" data-testid="chat-dock"{% if nowo_chat_manual ?? false %} data-nowo-chat-manual{% endif %}>
             {{ include('@NowoChatKitBundle/_templates.html.twig', {nowo_chat_locale: nowo_chat_config.locale}) }}
         </div>
     {% endblock %}

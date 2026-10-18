@@ -7,7 +7,8 @@
  # which default to the UiKit --nowo-ui-* tokens) plus the theme slots section, muted, empty, flash_error, btn_link,
  # btn_primary of NowoChatKitBundle.
  # Change one part: nowo_chat_kit.profiles.<p>.web_ui.templates.page → a template that
- # {% extends '@!NowoChatKitBundle/page.html.twig' %} and redefines nowo_chat_page_list or nowo_chat_page_thread.
+ # {% extends '@!NowoChatKitBundle/page.html.twig' %} and redefines nowo_chat_page_list, nowo_chat_page_thread or
+ # nowo_chat_page_script (the nowo-chat.js tag; empty it when the host loads the chat script itself).
  # Opening a conversation never changes state on GET: with JavaScript, nowo-chat.js marks it read through the
  # CSRF-protected `POST …/read` API (the `data-nowo-chat-read-*` attributes); without it, sending a message does.
  #}
@@ -26,7 +27,11 @@
 
 {% block nowo_ui_scripts %}
     {{ parent() }}
-    <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
+    {# A host that bundles the chat script itself (or mounts its own dock) empties this block in its
+       web_ui.templates.page override; docks marked data-nowo-chat-manual are skipped by the automatic start anyway. #}
+    {% block nowo_chat_page_script %}
+        <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
+    {% endblock %}
 {% endblock %}
 
 {% block nowo_ui_page_header %}

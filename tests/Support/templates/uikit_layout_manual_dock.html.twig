@@ -1,0 +1,3 @@
+{# A UiKit host layout that mounts its own dock (ChatPageManualDockTest): the bundle dock marked data-nowo-chat-manual. #}
+{% extends '@NowoUiKit/layout/admin.html.twig' %}
+{% block nowo_ui_modals %}{{ parent() }}{{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual: true}) }}{% endblock %}

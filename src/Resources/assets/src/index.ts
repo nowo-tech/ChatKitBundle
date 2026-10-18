@@ -1,7 +1,7 @@
 /**
  * Nowo Chat Kit — browser entry point. The IIFE build (`nowo-chat.js`) mounts the dock on every
  * `[data-nowo-chat-config]` element rendered by `@NowoChatKitBundle/dock.html.twig`, after first paint, and again
- * after Turbo page swaps. Applications with their own bundler can import `ChatDock` / `mount` from the source.
+ * after Turbo page swaps — except roots marked `data-nowo-chat-manual`, which the host mounts itself. Applications with their own bundler can import `ChatDock` / `mount` from the source.
  */
 import { ChatDock } from './dock';
 import { markPageRead } from './page';
@@ -53,13 +53,20 @@ export function unmount(root: HTMLElement): void {
 }
 
 /**
- * Mounts every dock root in the document, when the browser is idle (the page paints first).
+ * Roots the automatic start handles: every `[data-nowo-chat-config]` except the ones marked
+ * `data-nowo-chat-manual` (a dock the host mounts itself, e.g. with its own bundler or a Stimulus controller).
+ */
+export const AUTO_ROOT_SELECTOR = '[data-nowo-chat-config]:not([data-nowo-chat-manual])';
+
+/**
+ * Mounts every dock root in the document, when the browser is idle (the page paints first). Roots marked
+ * `data-nowo-chat-manual` are left to the host (mount() still mounts them when called explicitly).
  *
  * @param scope Where to look for `[data-nowo-chat-config]` roots.
  */
 export function mountAll(scope: ParentNode = document): void {
-  /** Mounts every root found in the scope. */
-  const run = (): void => scope.querySelectorAll<HTMLElement>('[data-nowo-chat-config]').forEach((root) => mount(root));
+  /** Mounts every automatic root found in the scope. */
+  const run = (): void => scope.querySelectorAll<HTMLElement>(AUTO_ROOT_SELECTOR).forEach((root) => mount(root));
   if (typeof window.requestIdleCallback === 'function') {
     window.requestIdleCallback(run, { timeout: 1500 });
   } else {
@@ -83,5 +90,5 @@ export function autoStart(): void {
     start();
   }
   document.addEventListener('turbo:load', start);
-  document.addEventListener('turbo:before-render', () => document.querySelectorAll<HTMLElement>('[data-nowo-chat-config]').forEach(unmount));
+  document.addEventListener('turbo:before-render', () => document.querySelectorAll<HTMLElement>(AUTO_ROOT_SELECTOR).forEach(unmount));
 }

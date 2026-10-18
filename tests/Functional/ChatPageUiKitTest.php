@@ -50,6 +50,7 @@ final class ChatPageUiKitTest extends DatabaseTestCase
         self::assertCount(1, $crawler->filter('head link[href="/bundles/nowochatkit/css/nowo-chat.css"]'));
         self::assertCount(1, $crawler->filter('script[src="/bundles/nowochatkit/js/nowo-chat.js"]'));
         self::assertCount(1, $crawler->filter('[data-testid="chat-dock"][data-nowo-ui-bundle="NowoChatKitBundle"]'));
+        self::assertCount(0, $crawler->filter('[data-nowo-chat-manual]'), 'the dock is started automatically by default');
     }
 
     private function open(): Crawler

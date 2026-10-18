@@ -244,7 +244,7 @@ application's copy always wins.
 | --- | --- | --- |
 | `dock.html.twig` | Dock root (config attribute) and assets | `nowo_chat_assets`, `nowo_chat_root` |
 | `_templates.html.twig` | Every `<template>` the dock clones | `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`, `nowo_chat_icons` |
-| `page.html.twig` | Full-page chat (list + thread + composer form), UiKit layout | `nowo_ui_document_title`, `nowo_ui_styles`, `nowo_ui_scripts`, `nowo_ui_page_header`, `nowo_ui_content`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
+| `page.html.twig` | Full-page chat (list + thread + composer form), UiKit layout | `nowo_ui_document_title`, `nowo_ui_styles`, `nowo_ui_scripts`, `nowo_chat_page_script` (the `nowo-chat.js` tag), `nowo_ui_page_header`, `nowo_ui_content`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
 | `page_legacy.html.twig` | Deprecated 1.x page (only with the deprecated `page_layout`) | `title`, `stylesheets`, `javascripts`, `body`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
 | `page_layout.html.twig` | Deprecated 1.x default layout of `page_legacy.html.twig` | `title`, `stylesheets`, `javascripts`, `body` |
 
@@ -377,6 +377,19 @@ The dock is translated in the request's locale (markup and script strings alike)
 import { mount, unmount } from '../vendor/nowo-tech/chat-kit-bundle/src/Resources/assets/src/index';
 // e.g. in a Stimulus controller: connect() { mount(this.element) }  disconnect() { unmount(this.element) }
 ```
+
+- **Host-mounted dock next to the IIFE** (1.5.2): the chat page (`page.html.twig`) always loads `nowo-chat.js`, whose
+  automatic start mounts every `[data-nowo-chat-config]` root on the page — a dock your layout mounts itself would be
+  mounted twice. Mark it manual and the automatic start (first paint, `turbo:load`, `turbo:before-render` cleanup)
+  skips it; `mount()` / `NowoChat.mount(root)` still mount it when you call them:
+
+```twig
+{{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual: true}) }}
+{# or, on your own root: <div data-nowo-chat-config="…" data-nowo-chat-manual …> #}
+```
+
+  To drop the bundle script from the chat page as well (your bundler ships it), empty `nowo_chat_page_script` in the
+  `web_ui.templates.page` override: `{% block nowo_chat_page_script %}{% endblock %}`.
 
 ## User settings
 

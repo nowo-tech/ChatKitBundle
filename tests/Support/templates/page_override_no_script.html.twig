@@ -1,0 +1,3 @@
+{# Host override that loads the chat script through its own bundler (ChatPageManualDockTest). #}
+{% extends '@!NowoChatKitBundle/page.html.twig' %}
+{% block nowo_chat_page_script %}<script src="/host-chat.js" defer></script>{% endblock %}

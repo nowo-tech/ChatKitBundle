@@ -44,13 +44,15 @@ in the dock; every part of `_templates.html.twig` is a block (override one with
 `{% extends '@!NowoChatKitBundle/_templates.html.twig' %}`). The dock keeps its own `nowo-chat-*` classes (no
 framework classes): it is themed through the `--nowo-chat-*` tokens, which default to the UiKit tokens (below). Its
 root carries `data-nowo-ui-bundle="NowoChatKitBundle"`, so per-bundle tokens (`theme.bundles.NowoChatKitBundle.tokens`)
-apply to it.
+apply to it. `{{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual: true}) }}` marks the root
+`data-nowo-chat-manual`: the automatic start of `nowo-chat.js` skips it, for a dock the host mounts itself (see
+[USAGE — Front end](USAGE.md#front-end-iife-or-your-bundler)).
 
 ## Per-page overrides
 
 `nowo_chat_kit.profiles.<profile>.web_ui.templates.page`: a host template that
-`{% extends '@!NowoChatKitBundle/page.html.twig' %}` and redefines `nowo_chat_page_list` or `nowo_chat_page_thread`
-(or a file under `templates/bundles/NowoChatKitBundle/` doing the same). Do not copy the whole page.
+`{% extends '@!NowoChatKitBundle/page.html.twig' %}` and redefines `nowo_chat_page_list`, `nowo_chat_page_thread` or
+`nowo_chat_page_script` (the `nowo-chat.js` tag; empty it when the host loads the chat script itself) (or a file under `templates/bundles/NowoChatKitBundle/` doing the same). Do not copy the whole page.
 
 ## Layout
 
