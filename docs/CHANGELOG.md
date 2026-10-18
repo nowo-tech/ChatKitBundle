@@ -32,6 +32,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-18
+
+Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--nowo-ui-*`; `page_layout` deprecated in favour of `web_ui.layout_template`. See [UPGRADING](UPGRADING.md#to-150).
+
 ### Added
 
 - **UiKit page contract (REQ-UI-003)** — requires `nowo-tech/ui-kit-bundle` **^2.2**. The full-page chat
@@ -201,7 +205,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.5.0...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
