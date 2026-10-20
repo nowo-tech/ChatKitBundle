@@ -133,7 +133,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 ### Twig, markup and theme
 
 - **FR-TWIG-001** — `ChatDockExtension`: dock config (endpoints, i18n, prefs, limits, icons) for reachable users; `nowo_chat_icons()`; the dock form views (FR-TWIG-004).
-- **FR-TWIG-002** — Views: `dock.html.twig` (root + assets), `_templates.html.twig` (inert `<template>` markup cloned by the TypeScript, overridable per block), `page.html.twig` / `page_layout.html.twig` (full page; 1.3: extends the Twig global `nowo_chat_kit_page_layout`, adds the chat CSS / JS through the layout's `stylesheets` / `javascripts` blocks, each asset loaded once with the dock).
+- **FR-TWIG-002** — Views: `dock.html.twig` (root + assets), `_templates.html.twig` (inert `<template>` markup cloned by the TypeScript, overridable per block), `page.html.twig` / `page_layout.html.twig` (full page; 1.3: extends the Twig global `nowo_chat_kit_page_layout`, adds the chat CSS / JS through the layout's `stylesheets` / `javascripts` blocks, each asset loaded once with the dock). 1.5: `page.html.twig` renders on the UiKit page contract (REQ-UI-003) with the `ChatPage` view data (page header, theme bundle name); `page_legacy.html.twig` keeps the deprecated 1.x full page while only `page_layout` is configured (removed in 2.0).
 - **FR-TWIG-003** — Hide to the side (1.2): the list header carries a `data-part="tuck"` button (`chat.tuck`, icon `tuck`) and the `nowo_chat_template_edge` block defines the `edge` template (`.nowo-chat-edge` button, `chat.untuck` label, `edge-badge` unread count), hidden by default.
 - **FR-TWIG-004** — Dock form types `ChatDockSearchType` (conversation search `query`, people picker `people`), `ChatDockComposerType` (`body`) and `ChatDockEditType` (`body`): built by `ChatDockExtension` and rendered with `form_widget` in `_templates.html.twig` so the dock has no raw `<form>` / `<input>` / `<textarea>` (REQ-TWIG-005); they are the markup contract only — the TypeScript cancels the submit and talks JSON to the API (CSRF header).
 - **FR-THEME-001** — `nowo-chat.css`: `--nowo-chat-*` tokens (light / dark), dock, windows, mobile sheet, full page.
@@ -182,7 +182,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 ## Success criteria
 
-- **SC-01** — `code-inventory.md` maps **95/95** production units (see its audit command).
+- **SC-01** — `code-inventory.md` maps **97/97** production units (see its audit command).
 - **SC-02** — PHPUnit: 100% line coverage of `src/`.
 - **SC-03** — Vitest: 100% line coverage of `Resources/assets/src`.
 - **SC-04** — PHPStan level 8 (with the FrankenPHP rulesets), Rector and PHP-CS-Fixer report nothing; Igor passes.

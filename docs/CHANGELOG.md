@@ -38,6 +38,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation: wave-1 REQ compliance — README Templates link moved under Additional documentation, Spec Kit inventory refresh (97/97: `View/ChatPage.php`, `page_legacy.html.twig`).
+
 ## [1.5.2] - 2026-10-18
 
 Host-mounted docks (data-nowo-chat-manual) are no longer mounted twice by nowo-chat.js. See [UPGRADING](UPGRADING.md#to-152).

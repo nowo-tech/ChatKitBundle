@@ -1,8 +1,8 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-10-16  
-**Production units**: **95/95**  
+**Last audited**: 2026-10-20  
+**Production units**: **97/97**  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -22,13 +22,13 @@
 | Contracts & value objects | 13 |
 | Access control | 2 |
 | Messaging | 7 |
-| HTTP | 5 |
+| HTTP | 6 |
 | Realtime, presence & notifications | 15 |
 | Privacy & retention | 2 |
-| Twig, markup & theme | 9 |
+| Twig, markup & theme | 10 |
 | Browser (TypeScript) | 14 |
 | Translations | 7 |
-| **Total** | **95** |
+| **Total** | **97** |
 
 ## Bundle, configuration & DI
 
@@ -107,6 +107,7 @@
 | `src/Form/ChatPageMessageType.php` | US-07 | FR-PAGE-001 |
 | `src/Http/ChatApiException.php` | US-02 | FR-API-002 |
 | `src/Http/ChatApiExceptionListener.php` | US-02 | FR-API-002 |
+| `src/View/ChatPage.php` | US-07 | FR-PAGE-001, FR-TWIG-002 |
 
 ## Realtime, presence & notifications
 
@@ -147,6 +148,7 @@
 | `src/Resources/views/dock.html.twig` | US-01 | FR-TWIG-002 |
 | `src/Resources/views/page.html.twig` | US-07 | FR-TWIG-002, FR-PAGE-001 |
 | `src/Resources/views/page_layout.html.twig` | US-07 | FR-TWIG-002 |
+| `src/Resources/views/page_legacy.html.twig` | US-07 | FR-TWIG-002, FR-PAGE-001 |
 | `src/Twig/ChatDockExtension.php` | US-01, US-08 | FR-TWIG-001, FR-TWIG-004 |
 
 ## Browser (TypeScript)

@@ -122,7 +122,6 @@ and `make -C demo/symfony8 demo-screenshots` (see [docs/CONTRIBUTING.md](docs/CO
 - [Installation](docs/INSTALLATION.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Usage](docs/USAGE.md)
-- [Templates (UiKit page contract)](docs/TEMPLATES.md)
 - [Contributing](docs/CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Changelog](docs/CHANGELOG.md)
@@ -135,6 +134,7 @@ and `make -C demo/symfony8 demo-screenshots` (see [docs/CONTRIBUTING.md](docs/CO
 
 ### Additional documentation
 
+- [Templates (UiKit page contract)](docs/TEMPLATES.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [PSR evaluation](docs/PSR.md)
 - [Coverage policy](docs/COVERAGE.md)
