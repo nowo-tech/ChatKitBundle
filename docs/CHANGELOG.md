@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.5.4] - 2026-10-20](#154---2026-10-20)
   - [Changed](#changed)
   - [Fixed](#fixed)
 - [[1.5.3] - 2026-10-20](#153---2026-10-20)
@@ -42,6 +43,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - [Added](#added-6)
 
 ## [Unreleased]
+
+## [1.5.4] - 2026-10-20
+
+Demo release-check refreshes the bundle first; worktree-safe co-author check. See [UPGRADING](UPGRADING.md#to-154).
 
 ### Changed
 
@@ -272,7 +277,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.5.2...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.5.4...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
