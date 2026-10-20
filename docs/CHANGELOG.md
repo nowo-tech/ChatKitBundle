@@ -7,39 +7,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
-- [[1.5.3] - 2026-10-20](#153---2026-10-20)
-  - [Fixed](#fixed)
   - [Changed](#changed)
-- [[1.5.2] - 2026-10-18](#152---2026-10-18)
+  - [Fixed](#fixed)
+- [[1.5.3] - 2026-10-20](#153---2026-10-20)
   - [Fixed](#fixed-1)
+  - [Changed](#changed-1)
+- [[1.5.2] - 2026-10-18](#152---2026-10-18)
+  - [Fixed](#fixed-2)
   - [Added](#added)
 - [[1.5.1] - 2026-10-18](#151---2026-10-18)
-  - [Fixed](#fixed-2)
+  - [Fixed](#fixed-3)
 - [[1.5.0] - 2026-10-18](#150---2026-10-18)
   - [Added](#added-1)
-  - [Changed](#changed-1)
+  - [Changed](#changed-2)
   - [Deprecated](#deprecated)
 - [[1.4.1] - 2026-10-18](#141---2026-10-18)
-  - [Fixed](#fixed-3)
+  - [Fixed](#fixed-4)
 - [[1.4.0] - 2026-10-16](#140---2026-10-16)
   - [Added](#added-2)
-  - [Changed](#changed-2)
-  - [Fixed](#fixed-4)
+  - [Changed](#changed-3)
+  - [Fixed](#fixed-5)
 - [[1.3.0] - 2026-10-16](#130---2026-10-16)
   - [Added](#added-3)
-  - [Changed](#changed-3)
+  - [Changed](#changed-4)
 - [[1.2.0] - 2026-10-16](#120---2026-10-16)
   - [Added](#added-4)
-  - [Fixed](#fixed-5)
-- [[1.1.1] - 2026-10-16](#111---2026-10-16)
   - [Fixed](#fixed-6)
+- [[1.1.1] - 2026-10-16](#111---2026-10-16)
+  - [Fixed](#fixed-7)
 - [[1.1.0] - 2026-10-16](#110---2026-10-16)
   - [Added](#added-5)
-  - [Fixed](#fixed-7)
+  - [Fixed](#fixed-8)
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
   - [Added](#added-6)
 
 ## [Unreleased]
+
+### Changed
+
+- Demo `release-check` runs `update-bundle-all` before the demo tests (REQ-DEMO-007).
+
+### Fixed
+
+- `.scripts/check-no-cursor-coauthor.sh` also runs inside git worktrees (`.git` file instead of directory).
 
 ## [1.5.3] - 2026-10-20
 
