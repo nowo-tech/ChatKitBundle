@@ -788,6 +788,30 @@ describe('ChatDock', () => {
     q('.nowo-chat-overflow').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   });
 
+  it('loads the list once on start: the first realtime connection is no reconnection and re-arms the slow poll', async () => {
+    const { dock } = mount([summary('a')]);
+    await dock.start();
+    expect(api.conversations).toHaveBeenCalledTimes(1);
+
+    realtimeHandlers?.onState(true);
+    await flush();
+    expect(api.conversations).toHaveBeenCalledTimes(1);
+    // The pollMs tick scheduled before the connection is replaced by the live cadence (60 s).
+    vi.advanceTimersByTime(4_000);
+    await flush();
+    expect(api.conversations).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(56_000);
+    await flush();
+    expect(api.conversations).toHaveBeenCalledTimes(2);
+
+    // A drop goes back to pollMs; a real reconnection catches up at once.
+    realtimeHandlers?.onState(false);
+    realtimeHandlers?.onState(true);
+    await flush();
+    expect(api.conversations).toHaveBeenCalledTimes(3);
+    dock.destroy();
+  });
+
   it('forgets chat storage on logout, shows connection status, recent people, leader and destroy', async () => {
     window.localStorage.setItem('nowo-chat-drafts:me', '{"a":"x"}');
     vi.stubGlobal('navigator', { ...navigator, locks: { request: (_: string, cb: () => Promise<void>) => cb() } });

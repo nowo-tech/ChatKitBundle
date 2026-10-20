@@ -143,11 +143,17 @@ export class ChatDock implements ThreadHost {
       (connected) => {
         const reconnected = connected && !this.live;
         const dropped = !connected && this.live;
+        // The first connection follows the list start() just loaded: only a real reconnection has anything to catch up.
+        const catchUp = reconnected && this.wasLive;
         this.live = connected;
         this.root.classList.toggle('is-live', connected);
-        this.showStatus(dropped ? 'reconnecting' : reconnected && this.wasLive ? 'reconnected' : null);
+        this.showStatus(dropped ? 'reconnecting' : catchUp ? 'reconnected' : null);
         this.wasLive ||= connected;
-        if (reconnected) {
+        if (reconnected || dropped) {
+          // Polling cadence follows the connection: the slow safety net while live, pollMs as soon as it drops.
+          this.schedulePoll();
+        }
+        if (catchUp) {
           // Catch up whatever happened while the connection was down.
           void this.poll(true);
         }
