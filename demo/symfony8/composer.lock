@@ -934,7 +934,7 @@
             "dist": {
                 "type": "path",
                 "url": "/var/chat-kit-bundle",
-                "reference": "e907c8168f5fedfdb44769b412a3b3b7d5064318"
+                "reference": "8aa11646ebe44500d37cf9e655b3a16021fcc000"
             },
             "require": {
                 "doctrine/doctrine-bundle": "^2.13 || ^3.0",
@@ -1097,16 +1097,16 @@
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v2.2.0",
+            "version": "v2.5.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "aa13a2f8845017ba7a07e48ee74ce63a44326698"
+                "reference": "840fa7f3601d5a94d5ae63b608dd3548c9a0b6d2"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/aa13a2f8845017ba7a07e48ee74ce63a44326698",
-                "reference": "aa13a2f8845017ba7a07e48ee74ce63a44326698",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/840fa7f3601d5a94d5ae63b608dd3548c9a0b6d2",
+                "reference": "840fa7f3601d5a94d5ae63b608dd3548c9a0b6d2",
                 "shasum": ""
             },
             "require": {
@@ -1132,6 +1132,8 @@
                 "phpstan/phpstan-symfony": "^2.0",
                 "phpunit/phpunit": "^10.5 || ^11.0",
                 "rector/rector": "^2.0",
+                "symfony/css-selector": "^7.4 || ^8.0",
+                "symfony/dom-crawler": "^7.4 || ^8.0",
                 "symfony/form": "^7.4 || ^8.0",
                 "symfony/http-client": "^7.4 || ^8.0",
                 "symfony/validator": "^7.4 || ^8.0",
@@ -1185,7 +1187,7 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-10-18T08:32:49+00:00"
+            "time": "2026-10-19T11:17:50+00:00"
         },
         {
             "name": "pentatrion/vite-bundle",
