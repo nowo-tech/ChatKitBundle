@@ -1024,6 +1024,8 @@ export class ThreadView {
   private appendFresh(fresh: ChatMessage[], previousLast: ChatMessage | undefined): boolean {
     if (
       this.pending.length > 0 ||
+      // A delivered message has already left `pending`, but its "Sending…" node is still painted: repaint.
+      this.log.querySelector('.nowo-chat-msg--pending') !== null ||
       fresh.length === 0 ||
       previousLast === undefined ||
       fresh.some((message) => message.id <= previousLast.id) ||

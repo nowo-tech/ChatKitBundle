@@ -194,6 +194,18 @@ describe('ThreadView', () => {
     expect(q('.nowo-chat-seen')).toBeNull();
   });
 
+  it('drops the pending bubble when the HTTP confirmation lands before the realtime event', async () => {
+    const { view, api, q } = setup();
+    view.merge([msg({ html: '<p>earlier</p>' })], false);
+    const input = q<HTMLTextAreaElement>('.nowo-chat-composer__input');
+    api.send.mockResolvedValueOnce(msg({ mine: true, html: '<p>now</p>' }));
+    input.value = 'now';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await vi.runOnlyPendingTimersAsync();
+    expect(view.element.querySelector('.nowo-chat-msg--pending')).toBeNull();
+    expect(view.element.querySelectorAll('.nowo-chat-msg--mine')).toHaveLength(1);
+  });
+
   it('sends optimistically, confirms, and keeps failed messages with retry', async () => {
     const { view, api, host, q } = setup();
     const input = q<HTMLTextAreaElement>('.nowo-chat-composer__input');

@@ -1077,10 +1077,17 @@
   width: 40px;
   height: 40px;
 }
+/* Folded launcher on phones: the unread badge sits on the round button's corner, outside the 40px icon (the panel
+ * clips its overflow when open, so only the folded pill lets it out). */
+.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) {
+  overflow: visible;
+}
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-badge {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: -6px;
+  right: -6px;
+  z-index: 1;
+  box-shadow: 0 0 0 2px var(--nowo-chat-surface);
 }
 .nowo-chat.is-mobile .nowo-chat-panel.is-open {
   position: fixed;
