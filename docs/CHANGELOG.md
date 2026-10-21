@@ -7,42 +7,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.5.5] - 2026-10-21](#155---2026-10-21)
+  - [Fixed](#fixed)
 - [[1.5.4] - 2026-10-20](#154---2026-10-20)
   - [Changed](#changed)
-  - [Fixed](#fixed)
-- [[1.5.3] - 2026-10-20](#153---2026-10-20)
   - [Fixed](#fixed-1)
+- [[1.5.3] - 2026-10-20](#153---2026-10-20)
+  - [Fixed](#fixed-2)
   - [Changed](#changed-1)
 - [[1.5.2] - 2026-10-18](#152---2026-10-18)
-  - [Fixed](#fixed-2)
+  - [Fixed](#fixed-3)
   - [Added](#added)
 - [[1.5.1] - 2026-10-18](#151---2026-10-18)
-  - [Fixed](#fixed-3)
+  - [Fixed](#fixed-4)
 - [[1.5.0] - 2026-10-18](#150---2026-10-18)
   - [Added](#added-1)
   - [Changed](#changed-2)
   - [Deprecated](#deprecated)
 - [[1.4.1] - 2026-10-18](#141---2026-10-18)
-  - [Fixed](#fixed-4)
+  - [Fixed](#fixed-5)
 - [[1.4.0] - 2026-10-16](#140---2026-10-16)
   - [Added](#added-2)
   - [Changed](#changed-3)
-  - [Fixed](#fixed-5)
+  - [Fixed](#fixed-6)
 - [[1.3.0] - 2026-10-16](#130---2026-10-16)
   - [Added](#added-3)
   - [Changed](#changed-4)
 - [[1.2.0] - 2026-10-16](#120---2026-10-16)
   - [Added](#added-4)
-  - [Fixed](#fixed-6)
-- [[1.1.1] - 2026-10-16](#111---2026-10-16)
   - [Fixed](#fixed-7)
+- [[1.1.1] - 2026-10-16](#111---2026-10-16)
+  - [Fixed](#fixed-8)
 - [[1.1.0] - 2026-10-16](#110---2026-10-16)
   - [Added](#added-5)
-  - [Fixed](#fixed-8)
+  - [Fixed](#fixed-9)
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
   - [Added](#added-6)
 
 ## [Unreleased]
+
+## [1.5.5] - 2026-10-21
+
+A sent message no longer keeps a "Sending…" bubble next to the confirmed one; on phones the folded launcher's unread badge sits on the button's corner. See [UPGRADING](UPGRADING.md#to-155).
+
+### Fixed
+
+- Thread: when the HTTP confirmation of a sent message arrived before its realtime event, the fast append path added the
+  confirmed message but left the painted pending bubble ("Sending…") in place until the next full render. The append
+  path now falls back to a full render while a pending node is still painted.
+- Phones: the folded launcher's unread badge sat inside the round button, over the icon (the panel's `overflow: hidden`
+  clipped it). The folded pill now lets it overflow and the badge sits on the button's corner with a surface ring.
 
 ## [1.5.4] - 2026-10-20
 
@@ -277,7 +291,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.5.4...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.5.5...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0

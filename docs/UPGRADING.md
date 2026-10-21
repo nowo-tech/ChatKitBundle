@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.5.5](#to-155)
 - [To 1.5.4](#to-154)
 - [To 1.5.2](#to-152)
 - [To 1.5.1](#to-151)
@@ -20,6 +21,19 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.5.5
+
+From **1.5.4** — no configuration, template or schema change; the published `nowo-chat.js` and `nowo-chat.css` change:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+php bin/console assets:install public
+```
+
+Hosts that import the TypeScript sources (`src/Resources/assets/src`) pick the thread fix up on their next front-end build. Hosts that
+override the folded phone launcher badge (`.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-badge`) can delete
+the override.
 
 ## To 1.5.4
 
