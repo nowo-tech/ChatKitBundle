@@ -31,7 +31,7 @@ jobs:
       - name: Translation key parity (REQ-I18N-002)
         run: python3 .scripts/check-translation-key-parity.py
 
-  # REQ-SF-002: Symfony 7.4+ and 8.x (7.4, 8.0, 8.1, 8.2). 8.2 is 8.2.x-dev until the Nov 2026 stable.
+  # REQ-SF-002: Symfony 7.4+ and 8.x (7.4, 8.1, 8.2). 8.2 is 8.2.x-dev until the Nov 2026 stable.
   test:
     name: PHP ${{ matrix.php }} - Symfony ${{ matrix.symfony }}
     runs-on: ubuntu-latest
@@ -41,10 +41,9 @@ jobs:
       max-parallel: 4
       matrix:
         php: ['8.3', '8.4', '8.5']
-        symfony: ['7.4', '8.0', '8.1', '8.2']
+        # Symfony 8.0 reached end of maintenance (July 2026): its CI cell is dropped (REQ-SF-002); composer.json still allows ^8.0.
+        symfony: ['7.4', '8.1', '8.2']
         exclude:
-          - php: '8.3'
-            symfony: '8.0'
           - php: '8.3'
             symfony: '8.1'
           - php: '8.3'
