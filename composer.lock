@@ -930,16 +930,16 @@
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v2.5.2",
+            "version": "v2.6.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "840fa7f3601d5a94d5ae63b608dd3548c9a0b6d2"
+                "reference": "1e0944a99055b820204e3c64aa024d088de06fc7"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/840fa7f3601d5a94d5ae63b608dd3548c9a0b6d2",
-                "reference": "840fa7f3601d5a94d5ae63b608dd3548c9a0b6d2",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/1e0944a99055b820204e3c64aa024d088de06fc7",
+                "reference": "1e0944a99055b820204e3c64aa024d088de06fc7",
                 "shasum": ""
             },
             "require": {
@@ -1020,7 +1020,7 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-10-19T11:17:50+00:00"
+            "time": "2026-10-21T19:29:07+00:00"
         },
         {
             "name": "psr/cache",
@@ -5990,16 +5990,16 @@
         },
         {
             "name": "composer/semver",
-            "version": "3.5.1",
+            "version": "3.5.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/composer/semver.git",
-                "reference": "528948210cc46f967a4b98e83b19e76f2b504993"
+                "reference": "9dfce66f1e97360ea5e6d3e38ab14277e4cc591e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/composer/semver/zipball/528948210cc46f967a4b98e83b19e76f2b504993",
-                "reference": "528948210cc46f967a4b98e83b19e76f2b504993",
+                "url": "https://api.github.com/repos/composer/semver/zipball/9dfce66f1e97360ea5e6d3e38ab14277e4cc591e",
+                "reference": "9dfce66f1e97360ea5e6d3e38ab14277e4cc591e",
                 "shasum": ""
             },
             "require": {
@@ -6051,7 +6051,7 @@
             "support": {
                 "irc": "ircs://irc.libera.chat:6697/composer",
                 "issues": "https://github.com/composer/semver/issues",
-                "source": "https://github.com/composer/semver/tree/3.5.1"
+                "source": "https://github.com/composer/semver/tree/3.5.2"
             },
             "funding": [
                 {
@@ -6063,7 +6063,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-05T13:12:12+00:00"
+            "time": "2026-10-22T15:37:26+00:00"
         },
         {
             "name": "composer/xdebug-handler",
@@ -6582,16 +6582,16 @@
         },
         {
             "name": "nowo-tech/phpstan-frankenphp",
-            "version": "v1.3.0",
+            "version": "v1.3.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/PhpStanFrankenPhp.git",
-                "reference": "8ad8c62f3c5decfd92332f70d599b6dad1e68820"
+                "reference": "943010bc203ce403c4c6e808eadc9c2c868c7c49"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/PhpStanFrankenPhp/zipball/8ad8c62f3c5decfd92332f70d599b6dad1e68820",
-                "reference": "8ad8c62f3c5decfd92332f70d599b6dad1e68820",
+                "url": "https://api.github.com/repos/nowo-tech/PhpStanFrankenPhp/zipball/943010bc203ce403c4c6e808eadc9c2c868c7c49",
+                "reference": "943010bc203ce403c4c6e808eadc9c2c868c7c49",
                 "shasum": ""
             },
             "require": {
@@ -6665,7 +6665,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-13T10:11:25+00:00"
+            "time": "2026-10-22T05:58:06+00:00"
         },
         {
             "name": "phar-io/manifest",
