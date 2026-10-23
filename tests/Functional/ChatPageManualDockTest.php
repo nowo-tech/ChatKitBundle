@@ -48,4 +48,24 @@ final class ChatPageManualDockTest extends DatabaseTestCase
         self::assertCount(1, $crawler->filter('script[src="/host-chat.js"]'));
         self::assertCount(1, $crawler->filter('head link[href="/bundles/nowochatkit/css/nowo-chat.css"]'));
     }
+
+    public function testABundlerHostAddsRootAttributesAndLeavesOutTheBundleAssets(): void
+    {
+        $ana    = $this->user('Ana');
+        $client = $this->kernel->getContainer()->get('test.client');
+        assert($client instanceof KernelBrowser);
+        $client->loginUser($ana);
+        $crawler = $client->request(Request::METHOD_GET, '/bundler-page');
+        self::assertSame(200, $client->getResponse()->getStatusCode());
+
+        $root = $crawler->filter('.nowo-chat');
+        self::assertCount(1, $root);
+        self::assertSame('nowo-chat host-dock', $root->attr('class'));
+        self::assertSame('chat-dock', $root->attr('data-controller'));
+        self::assertSame('chat-dock', $root->attr('data-testid'), 'the dock keeps its own attributes');
+        self::assertSame('', $root->attr('data-flag'));
+        self::assertNull($root->attr('onclick'));
+        self::assertNotNull($root->attr('data-nowo-chat-manual'));
+        self::assertCount(0, $crawler->filter('script, link'));
+    }
 }

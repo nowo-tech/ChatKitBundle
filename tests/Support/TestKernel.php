@@ -162,12 +162,19 @@ final class TestKernel extends Kernel
         $routes->import('@NowoChatKitBundle/Resources/config/routes.php')->prefix('/chat');
         $routes->add('test_page', '/page')->controller([self::class, 'page']);
         $routes->add('test_project_page', '/projects/acme/page')->controller([self::class, 'page']);
+        $routes->add('test_bundler_page', '/bundler-page')->controller([self::class, 'bundlerPage']);
     }
 
     /** A signed-in page of the host application: renders the dock. */
     public function page(Environment $twig): Response
     {
         return new Response($twig->render('@NowoChatKitBundle/dock.html.twig'));
+    }
+
+    /** A bundler host (1.6): its own assets and Stimulus controller on the dock root, no template override. */
+    public function bundlerPage(Environment $twig): Response
+    {
+        return new Response($twig->createTemplate("{{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual: true, nowo_chat_assets: false, nowo_chat_root_attr: {'data-controller': 'chat-dock', class: 'host-dock', 'data-testid': 'ignored', 'data-flag': true, onclick: false, 'bad name': 'x'}}) }}")->render());
     }
 
     protected function build(ContainerBuilder $container): void

@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.6.0] - 2026-10-23](#160---2026-10-23)
 - [[1.5.5] - 2026-10-21](#155---2026-10-21)
   - [Fixed](#fixed)
 - [[1.5.4] - 2026-10-20](#154---2026-10-20)
@@ -45,6 +46,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - [Added](#added-6)
 
 ## [Unreleased]
+
+## [1.6.0] - 2026-10-23
+
+### Added
+
+- `dock.html.twig` variables for bundler hosts: `nowo_chat_assets` (`false` leaves out the bundle `<link>` / `<script>`)
+  and `nowo_chat_root_attr` (extra attributes on the dock root, `class` appended, the dock's own attributes kept), so a
+  host that mounts the dock with its own Stimulus controller no longer overrides the template.
 
 ## [1.5.5] - 2026-10-21
 

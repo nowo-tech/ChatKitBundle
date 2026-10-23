@@ -12,18 +12,30 @@
  # Host-mounted dock (1.5.2): {{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual: true}) }} marks the
  # root data-nowo-chat-manual, so the automatic start of nowo-chat.js skips it and the host mounts it itself
  # (NowoChat.mount(root) or its own bundler / Stimulus controller) — one dock, never two.
+ # Bundler hosts (1.6): nowo_chat_assets: false leaves out the <link> / <script> (the host ships nowo-chat.css / the
+ # script itself), and nowo_chat_root_attr adds attributes to the root (`class` is appended; the dock's own
+ # attributes cannot be replaced), e.g. a Stimulus controller that mounts the dock — no template override needed:
+ #     {{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual: true, nowo_chat_assets: false,
+ #         nowo_chat_root_attr: {'data-controller': 'chat-dock'}}) }}
  #}
 {% set nowo_chat_config = nowo_chat_dock_config() %}
 {% if nowo_chat_config %}
     {% block nowo_chat_assets %}
         {# The full-page chat (page.html.twig) already loads them in the layout head. #}
-        {% if not (nowo_chat_page_assets ?? false) %}
+        {% if not (nowo_chat_page_assets ?? false) and (nowo_chat_assets ?? true) %}
             <link rel="stylesheet" href="{{ asset('css/nowo-chat.css', 'nowo_chat_kit') }}">
             <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
         {% endif %}
     {% endblock %}
     {% block nowo_chat_root %}
-        <div class="nowo-chat" data-nowo-ui-bundle="NowoChatKitBundle" data-nowo-chat-config="{{ nowo_chat_config|json_encode|e('html_attr') }}" data-testid="chat-dock"{% if nowo_chat_manual ?? false %} data-nowo-chat-manual{% endif %}>
+        {% set nowo_chat_root_attr = nowo_chat_root_attr ?? {} %}
+        <div class="nowo-chat{{ (nowo_chat_root_attr.class ?? '') is not empty ? ' ' ~ nowo_chat_root_attr.class }}" data-nowo-ui-bundle="NowoChatKitBundle" data-nowo-chat-config="{{ nowo_chat_config|json_encode|e('html_attr') }}" data-testid="chat-dock"{% if nowo_chat_manual ?? false %} data-nowo-chat-manual{% endif %}
+            {%- for name, value in nowo_chat_root_attr -%}
+                {%- if name not in ['class', 'data-nowo-ui-bundle', 'data-nowo-chat-config', 'data-testid', 'data-nowo-chat-manual'] and name matches '/^[A-Za-z_:][A-Za-z0-9_:.-]*$/' and value is not same as(false) and value is not null -%}
+                    {{ ' ' ~ name }}{% if value is not same as(true) %}="{{ value }}"{% endif %}
+                {%- endif -%}
+            {%- endfor -%}
+        >
             {{ include('@NowoChatKitBundle/_templates.html.twig', {nowo_chat_locale: nowo_chat_config.locale}) }}
         </div>
     {% endblock %}

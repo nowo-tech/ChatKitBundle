@@ -391,6 +391,19 @@ import { mount, unmount } from '../vendor/nowo-tech/chat-kit-bundle/src/Resource
   To drop the bundle script from the chat page as well (your bundler ships it), empty `nowo_chat_page_script` in the
   `web_ui.templates.page` override: `{% block nowo_chat_page_script %}{% endblock %}`.
 
+- **Bundler hosts** (1.6): `nowo_chat_assets: false` leaves the bundle `<link>` / `<script>` out of the dock (you ship
+  `nowo-chat.css` and the script), and `nowo_chat_root_attr` adds attributes to the dock root — `class` is appended, the
+  dock's own attributes (`data-nowo-chat-config`, `data-testid`, …) cannot be replaced, `false` / `null` values are
+  skipped. A Stimulus controller that mounts the dock needs no template override:
+
+```twig
+{{ include('@NowoChatKitBundle/dock.html.twig', {
+    nowo_chat_manual: true,
+    nowo_chat_assets: false,
+    nowo_chat_root_attr: {'data-controller': 'chat-dock'},
+}) }}
+```
+
 ## User settings
 
 Per-user settings live in the bundle (`ChatUserSettings`: sound, push, buzzes, presence, email digest). Read / save them with

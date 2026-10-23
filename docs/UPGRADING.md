@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.6.0](#to-160)
 - [To 1.5.5](#to-155)
 - [To 1.5.4](#to-154)
 - [To 1.5.2](#to-152)
@@ -21,6 +22,12 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.6.0
+
+From **1.5.5**: `composer update nowo-tech/chat-kit-bundle`. Optional: an override of `dock.html.twig` that only empties
+`nowo_chat_assets` and adds attributes to the root can go — pass `nowo_chat_assets: false` and `nowo_chat_root_attr` to
+the include instead (see USAGE, *Bundler hosts*).
 
 ## To 1.5.5
 
