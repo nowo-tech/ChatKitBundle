@@ -13,7 +13,7 @@ export DOCKER_CONFIG := $(BUNDLE_ROOT)/.docker
 
 .PHONY: help ensure-up up down down-dev build shell install assets assets-test test-ts test test-coverage \
 	check-twig-extra test-with-db test-coverage-with-db coverage-check test-coverage-100 cs-check cs-fix \
-	rector rector-dry phpstan validate-phpdoc fix-phpdoc qa release-check release-check-demos demo-smoke composer-sync \
+	rector rector-dry phpstan validate-phpdoc qa release-check release-check-demos demo-smoke composer-sync \
 	clean update update-deps validate validate-translations setup-hooks check-no-cursor-coauthor check-open-prs \
 	strip-cursor-coauthor-from-history igor check-no-raw-html-form
 
@@ -71,7 +71,7 @@ help:
 	@echo "  check-open-prs Fail if unresolved open GitHub PRs remain (REQ-REL-003)"
 	@echo "  check-twig-extra        Twig Extra installed/configured (REQ-TWIG-004)"
 	@echo "  check-no-raw-html-form  Fail on raw form controls in Twig (REQ-TWIG-005)"
-	@echo "  validate-phpdoc / fix-phpdoc  Check / complete public PHPDoc @return tags"
+	@echo "  validate-phpdoc    Check that every class and public method in src/ has PHPDoc (read-only)"
 	@echo "  setup-hooks    Install git hooks from .githooks/ (REQ-MAKE-006)"
 	@echo ""
 	@echo "Demos:"
@@ -156,10 +156,6 @@ rector: ensure-up
 	@$(COMPOSE) exec -T $(SERVICE_PHP) composer rector
 
 validate-phpdoc: ensure-up
-	@$(COMPOSE) exec -T $(SERVICE_PHP) php .scripts/complete-public-phpdoc.php --check
-
-# Adds the missing @return tags (validate-phpdoc only reports them).
-fix-phpdoc: ensure-up
 	@$(COMPOSE) exec -T $(SERVICE_PHP) php .scripts/complete-public-phpdoc.php
 
 phpstan: ensure-up
@@ -189,6 +185,7 @@ release-check: check-no-cursor-coauthor
 	@$(MAKE) rector-dry
 	@$(MAKE) phpstan
 	@$(MAKE) igor
+	@$(MAKE) validate-phpdoc
 	@$(MAKE) coverage-check
 	@$(MAKE) validate-translations
 	@$(MAKE) release-check-demos

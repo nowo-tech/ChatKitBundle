@@ -3,12 +3,13 @@
 declare(strict_types=1);
 
 /**
- * Adds missing @return tags to public methods that already have PHPDoc.
- * With --check it only reports them and exits 1 (release-check never rewrites sources).
+ * Checks that every class-like and every public method in src/ has a PHPDoc block (REQ-CS-001).
+ *
+ * Read-only: it never rewrites sources. @param/@return tags that only repeat a native type are left to
+ * php-cs-fixer (no_superfluous_phpdoc_tags), so a description line is enough. Exits 1 when a docblock is missing.
  */
 $srcDir = dirname(__DIR__) . '/src';
-$check = in_array('--check', $argv, true);
-$pending = 0;
+$missing = [];
 
 foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($srcDir)) as $file) {
     if (!$file->isFile() || $file->getExtension() !== 'php') {
@@ -21,48 +22,90 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($srcDir)) 
         continue;
     }
 
-    $updated = preg_replace_callback(
-        '#(/\*\*(?:(?!\*/).)*?\*/)\s*public\s+(?:static\s+)?function\s+\w+\s*\([^)]*\)\s*:\s*([^\s{;]+)#s',
-        static function (array $matches): string {
-            $doc = $matches[1];
-            $returnType = $matches[2];
+    $tokens = token_get_all($content);
+    $count = count($tokens);
+    $relative = str_replace($srcDir . '/', '', $path);
 
-            if (str_contains($doc, '@return')) {
-                return $matches[0];
-            }
-
-            $returnTag = match ($returnType) {
-                'void' => '     * @return void',
-                'self' => '     * @return self Fluent interface',
-                'bool' => '     * @return bool',
-                'string' => '     * @return string',
-                'int' => '     * @return int',
-                'float' => '     * @return float',
-                'array' => '     * @return array',
-                default => str_starts_with($returnType, '?') || str_contains($returnType, '\\')
-                    ? '     * @return ' . $returnType
-                    : '     * @return ' . $returnType,
-            };
-
-            $newDoc = preg_replace('/\n\s*\*\/\s*$/', "\n     *\n" . $returnTag . "\n     */", $doc, 1);
-            if (!is_string($newDoc)) {
-                return $matches[0];
-            }
-
-            return str_replace($doc, $newDoc, $matches[0]);
-        },
-        $content,
-    );
-
-    if (is_string($updated) && $updated !== $content) {
-        ++$pending;
-        if ($check) {
-            echo 'Missing @return: ' . str_replace($srcDir . '/', '', $path) . PHP_EOL;
+    for ($i = 0; $i < $count; ++$i) {
+        $token = $tokens[$i];
+        if (!is_array($token)) {
             continue;
         }
-        file_put_contents($path, $updated);
-        echo 'Updated: ' . str_replace($srcDir . '/', '', $path) . PHP_EOL;
+
+        $kind = $token[0];
+        if (!in_array($kind, [T_CLASS, T_INTERFACE, T_TRAIT, T_ENUM, T_FUNCTION], true)) {
+            continue;
+        }
+
+        // Anonymous classes, closures, `::class` constants and `use function` imports are not declarations.
+        $next = $i + 1;
+        while ($next < $count && is_array($tokens[$next]) && $tokens[$next][0] === T_WHITESPACE) {
+            ++$next;
+        }
+        if ($next >= $count || !is_array($tokens[$next]) || $tokens[$next][0] !== T_STRING) {
+            continue;
+        }
+        $name = $tokens[$next][1];
+        $prev = $i - 1;
+        while ($prev >= 0 && is_array($tokens[$prev]) && $tokens[$prev][0] === T_WHITESPACE) {
+            --$prev;
+        }
+        if ($prev >= 0 && is_array($tokens[$prev]) && in_array($tokens[$prev][0], [T_DOUBLE_COLON, T_NEW, T_USE], true)) {
+            continue;
+        }
+
+        // Walk back over modifiers and attributes to the docblock, if any.
+        $public = $kind !== T_FUNCTION;
+        $explicitVisibility = false;
+        $doc = false;
+        for ($j = $i - 1; $j >= 0; --$j) {
+            $t = $tokens[$j];
+            if (is_array($t) && $t[0] === T_DOC_COMMENT) {
+                $doc = true;
+                break;
+            }
+            if (is_array($t) && in_array($t[0], [T_PUBLIC, T_PROTECTED, T_PRIVATE], true)) {
+                $explicitVisibility = true;
+                $public = $public || $t[0] === T_PUBLIC;
+                if ($kind === T_FUNCTION && $t[0] !== T_PUBLIC) {
+                    $public = false;
+                }
+                continue;
+            }
+            if (is_array($t) && in_array($t[0], [T_WHITESPACE, T_COMMENT, T_STATIC, T_ABSTRACT, T_FINAL, T_READONLY], true)) {
+                continue;
+            }
+            if ($t === ']') {
+                // Skip an attribute group #[...].
+                $depth = 0;
+                for (; $j >= 0; --$j) {
+                    if ($tokens[$j] === ']') {
+                        ++$depth;
+                    } elseif ($tokens[$j] === '[' || (is_array($tokens[$j]) && $tokens[$j][0] === T_ATTRIBUTE)) {
+                        --$depth;
+                        if ($depth === 0) {
+                            break;
+                        }
+                    }
+                }
+                continue;
+            }
+            break;
+        }
+
+        // Interface methods and methods without a visibility keyword are public.
+        if ($kind === T_FUNCTION && !$explicitVisibility) {
+            $public = true;
+        }
+
+        if ($public && !$doc) {
+            $missing[] = sprintf('%s:%d %s %s', $relative, $token[2], $kind === T_FUNCTION ? 'method' : 'class', $name);
+        }
     }
 }
 
-exit($check && $pending > 0 ? 1 : 0);
+foreach ($missing as $line) {
+    echo 'Missing PHPDoc: ' . $line . PHP_EOL;
+}
+
+exit($missing === [] ? 0 : 1);
