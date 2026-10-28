@@ -7,6 +7,7 @@ import { ChatApiError, type ChatApi } from './api';
 import { h, prefersReducedMotion, setBadge } from './dom';
 import { emojiPicker, insertAtCaret } from './emoji';
 import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from './format';
+import { decodeMentions, markOwnMentions, MentionAutocomplete, mentionsViewer } from './mention';
 import { part, text, type Templates } from './templates';
 import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader } from './types';
 
@@ -128,6 +129,7 @@ export class ThreadView {
   private readonly buzzBtn: HTMLButtonElement;
   private readonly resolveBtn: HTMLButtonElement;
   private readonly emojiBtn: HTMLButtonElement;
+  private readonly mention: MentionAutocomplete;
 
   private readonly host: ThreadHost;
 
@@ -182,6 +184,12 @@ export class ThreadView {
       event.preventDefault();
       void this.submit();
     });
+    // Before the composer's own keydown: Enter / Escape pick or close the @mention list first.
+    this.mention = new MentionAutocomplete(this.input, {
+      load: (query) => this.host.api.members(this.summary.uuid, query),
+      i18n,
+      idPrefix: `nowo-chat-${summary.uuid}`,
+    });
     this.input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
@@ -194,7 +202,7 @@ export class ThreadView {
       this.updateComposerState();
       // Drafts are stored at most twice a second (each save is a storage write).
       window.clearTimeout(draftTimer);
-      draftTimer = window.setTimeout(() => this.host.saveDraft(this.summary.uuid, this.input.value), 500);
+      draftTimer = window.setTimeout(() => this.host.saveDraft(this.summary.uuid, this.mention.encode()), 500);
       this.pingTyping();
     });
     this.buzzBtn.addEventListener('click', () => void this.sendBuzz());
@@ -210,7 +218,7 @@ export class ThreadView {
     });
     this.emojiBtn.addEventListener('click', () => this.toggleEmoji());
 
-    this.input.value = host.draft(summary.uuid);
+    this.mention.load(host.draft(summary.uuid));
     this.applySummary(summary);
   }
 
@@ -797,6 +805,13 @@ export class ThreadView {
     const input = part<HTMLTextAreaElement>(form, 'input');
     input.value = plain(message.html, true);
     input.maxLength = this.host.config.maxLength;
+    // Chips read as `@Name` in the editor; the message's mentions turn back into tokens on save.
+    const editMention = new MentionAutocomplete(input, {
+      load: (query) => this.host.api.members(this.summary.uuid, query),
+      i18n: this.host.config.i18n,
+      idPrefix: `nowo-chat-edit-${message.uuid}`,
+    });
+    editMention.seed(message.mentions ?? []);
     /** Leaves the editor and repaints the line from the current message. */
     const stop = (): void => {
       this.editing = null;
@@ -805,7 +820,7 @@ export class ThreadView {
     };
     /** Saves a non-blank edit; on failure, leaves the editor with an error notice. */
     const save = async (): Promise<void> => {
-      const body = input.value.trim();
+      const body = editMention.encode().trim();
       if (body === '') {
         return;
       }
@@ -881,7 +896,7 @@ export class ThreadView {
    * Blank, read-only or too long texts are not sent.
    */
   private async submit(): Promise<void> {
-    const body = this.input.value.trim();
+    const body = this.mention.encode().trim();
     if (body === '' || !this.summary.canSend) {
       return;
     }
@@ -897,6 +912,7 @@ export class ThreadView {
     };
     this.pending.push(pending);
     this.input.value = '';
+    this.mention.reset();
     this.host.saveDraft(this.summary.uuid, '');
     this.autoGrow();
     this.updateComposerState();
@@ -1064,6 +1080,7 @@ export class ThreadView {
     article.dataset.id = String(message.id);
     article.classList.toggle('nowo-chat-msg--mine', message.mine);
     article.classList.toggle('nowo-chat-msg--group-start', groupStart);
+    article.classList.toggle('nowo-chat-msg--mentioned', !message.mine && !message.deleted && mentionsViewer(message, this.host.config.userUuid));
 
     const avatarSlot = part(article, 'avatar');
     if (message.mine) {
@@ -1085,6 +1102,7 @@ export class ThreadView {
       // Server-sanitised Markdown render (ChatMarkdownRenderer): escape-first, closed tag set.
       // eslint-disable-next-line no-restricted-syntax -- sanitised on the server, see ChatMarkdownRenderer
       bubble.innerHTML = message.html;
+      markOwnMentions(bubble, this.host.config.userUuid);
     }
 
     const time = part(article, 'time');
@@ -1250,7 +1268,7 @@ export class ThreadView {
     const i18n = this.host.config.i18n;
     const article = this.host.templates.clone('pending');
     article.classList.toggle('nowo-chat-msg--failed', pending.status === 'failed');
-    part(article, 'bubble').textContent = pending.body;
+    part(article, 'bubble').textContent = decodeMentions(pending.body).text;
     const status = part(article, 'status');
     if (pending.status === 'sending') {
       status.textContent = t(i18n, 'sending');

@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, Reactions, Reader, SupportContext } from './types';
+import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, Member, Reactions, Reader, SupportContext } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -61,6 +61,17 @@ export class ChatApi {
   async contacts(query: string): Promise<Contact[]> {
     const url = `${this.config.endpoints.contacts}?q=${encodeURIComponent(query)}`;
     return (await this.get<{ contacts: Contact[] }>(url)).contacts;
+  }
+
+  /**
+   * Members of a conversation the caller may @mention (filtered by name on the server, at most 20).
+   *
+   * @param uuid Conversation uuid.
+   * @param query Text typed after `@` ("" for the first members).
+   * @returns The matching members.
+   */
+  async members(uuid: string, query: string): Promise<Member[]> {
+    return (await this.get<{ members: Member[] }>(`${this.url('members', uuid)}?q=${encodeURIComponent(query)}`)).members;
   }
 
   /**
@@ -239,7 +250,7 @@ export class ChatApi {
    * @param uuid Conversation uuid.
    * @returns The URL.
    */
-  private url(kind: 'conversation' | 'messages' | 'read' | 'typing' | 'buzz' | 'resolve', uuid: string): string {
+  private url(kind: 'conversation' | 'messages' | 'members' | 'read' | 'typing' | 'buzz' | 'resolve', uuid: string): string {
     return this.config.endpoints[kind].replace('__uuid__', encodeURIComponent(uuid));
   }
 

@@ -7,45 +7,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.7.0] - 2026-10-29](#170---2026-10-29)
 - [[1.6.0] - 2026-10-23](#160---2026-10-23)
 - [[1.5.5] - 2026-10-21](#155---2026-10-21)
-  - [Fixed](#fixed)
 - [[1.5.4] - 2026-10-20](#154---2026-10-20)
-  - [Changed](#changed)
-  - [Fixed](#fixed-1)
 - [[1.5.3] - 2026-10-20](#153---2026-10-20)
-  - [Fixed](#fixed-2)
-  - [Changed](#changed-1)
 - [[1.5.2] - 2026-10-18](#152---2026-10-18)
-  - [Fixed](#fixed-3)
-  - [Added](#added)
 - [[1.5.1] - 2026-10-18](#151---2026-10-18)
-  - [Fixed](#fixed-4)
 - [[1.5.0] - 2026-10-18](#150---2026-10-18)
-  - [Added](#added-1)
-  - [Changed](#changed-2)
-  - [Deprecated](#deprecated)
 - [[1.4.1] - 2026-10-18](#141---2026-10-18)
-  - [Fixed](#fixed-5)
 - [[1.4.0] - 2026-10-16](#140---2026-10-16)
-  - [Added](#added-2)
-  - [Changed](#changed-3)
-  - [Fixed](#fixed-6)
 - [[1.3.0] - 2026-10-16](#130---2026-10-16)
-  - [Added](#added-3)
-  - [Changed](#changed-4)
 - [[1.2.0] - 2026-10-16](#120---2026-10-16)
-  - [Added](#added-4)
-  - [Fixed](#fixed-7)
 - [[1.1.1] - 2026-10-16](#111---2026-10-16)
-  - [Fixed](#fixed-8)
 - [[1.1.0] - 2026-10-16](#110---2026-10-16)
-  - [Added](#added-5)
-  - [Fixed](#fixed-9)
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
-  - [Added](#added-6)
 
 ## [Unreleased]
+
+## [1.7.0] - 2026-10-29
+
+### Added
+
+- **@mentions in conversations.** Typing `@` in the composer (or the inline editor) opens a list of the
+  conversation's members, filtered as you type (`↑` `↓` move, `Enter` / `Tab` pick, `Escape` closes; ARIA
+  `aria-autocomplete="list"`, `listbox`, `aria-activedescendant`). A picked member is sent as the token
+  `@[Display name](publicId)`; the server keeps it only for a member who may read the conversation now (never the
+  author; at most 20 per message) with their current name, turns any other token into plain `@name` text, and renders
+  it as `<span class="nowo-chat-mention" data-mention="publicId">@name</span>`. Previews, push bodies and digests show
+  `@name`.
+- `ChatMessageMention` entity (`nowo_chat_message_mention`: message, user, `created_at`, `read_at`): one row per
+  mentioned member, kept in step on edit and removed with a deleted message; reading the thread past the message marks
+  it read. `ChatMessageMentionRepository` answers "messages that mention me" (`findForUser()` / `countForUser()`, only
+  in conversations the user may still read), `findOneForUser()` and `countUnreadByConversation()`.
+- `ChatMentionEvent` (message, newly mentioned users, conversation, `edited`) after the message is stored: an edit
+  carries only the people it adds, so a host notifies each person at most once per message.
+- `GET /api/conversations/{uuid}/members?q=`: members the caller may mention (same access as reading the conversation,
+  never the caller, sorted by name, at most 20); dock config `endpoints.members`.
+- Message JSON: `mentions` (`[{uuid, name}]`, from the stored tokens, no query) and `mentionsMe`. The dock and the
+  full page highlight a message that mentions the viewer (`nowo-chat-msg--mentioned`) and the chip naming the viewer
+  (`is-me`).
+- Theme tokens `--nowo-chat-mention`, `--nowo-chat-mention-bg`, `--nowo-chat-mention-me-bg`,
+  `--nowo-chat-mentioned-bg`, `--nowo-chat-mentioned-edge`; translation key `chat.mention_list` (7 locales).
 
 ### Changed
 

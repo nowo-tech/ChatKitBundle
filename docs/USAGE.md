@@ -4,27 +4,16 @@
 
 - [How it fits together](#how-it-fits-together)
 - [Contracts](#contracts)
-  - [`ChatDirectoryInterface` (required)](#chatdirectoryinterface-required)
-  - [`ChatAccessPolicyInterface` (required)](#chataccesspolicyinterface-required)
-  - [`ChatChannelProviderInterface` (optional)](#chatchannelproviderinterface-optional)
-  - [`ChatRealtimeInterface` (optional)](#chatrealtimeinterface-optional)
-  - [`ChatPushSenderInterface` (optional)](#chatpushsenderinterface-optional)
-  - [`ChatLinkPreviewProviderInterface` (optional)](#chatlinkpreviewproviderinterface-optional)
-  - [`ChatDigestSenderInterface` (optional)](#chatdigestsenderinterface-optional)
 - [Conversations and permissions](#conversations-and-permissions)
 - [Opening conversations from your pages](#opening-conversations-from-your-pages)
 - [Support inbox](#support-inbox)
 - [Full-page chat](#full-page-chat)
 - [Events](#events)
+- [Mentions](#mentions)
 - [Link previews](#link-previews)
 - [Email digest](#email-digest)
 - [Customising the markup](#customising-the-markup)
-  - [Overridable templates](#overridable-templates)
-  - [Forms](#forms)
 - [Theme tokens](#theme-tokens)
-  - [Bottom bars](#bottom-bars)
-  - [Tucking the dock away](#tucking-the-dock-away)
-  - [Stacking with drawers and modals](#stacking-with-drawers-and-modals)
 - [Translations](#translations)
 - [Front end: IIFE or your bundler](#front-end-iife-or-your-bundler)
 - [User settings](#user-settings)
@@ -33,7 +22,6 @@
 - [Timeouts](#timeouts)
 - [Privacy](#privacy)
 - [JSON API](#json-api)
-  - [Pagination and limits](#pagination-and-limits)
 - [Naming conventions](#naming-conventions)
 
 ## How it fits together
@@ -189,6 +177,35 @@ and overrides `nowo_chat_page_list` or `nowo_chat_page_thread`. Theme the page a
 | `ChatMessageSentEvent` | a message or buzz was stored and published | counters, bots, audit |
 | `ChatMessageDeletedEvent` | a message was deleted (by its author; `moderated` is true only on tombstones from before 1.4) | audit |
 | `ChatSupportStatusChangedEvent` | a support thread was resolved (`by` = agent) or reopened (`by` = owner) | inbox counters, notifications |
+| `ChatMentionEvent` | a stored message mentions members (`users`: only the people an edit adds; `edited`) | notify the mentioned people |
+
+## Mentions
+
+Typing `@` in the composer or the inline editor opens the conversation's members (`GET
+/api/conversations/{uuid}/members?q=`: the people who may read it now, not the caller, at most 20). Picking one writes
+`@Name` in the box and sends the token `@[Name](publicId)`. On send and edit `ChatMentions` keeps a token only for a
+member who may read the conversation (never the author; at most 20), rewrites its name to the current display name and
+stores a `ChatMessageMention` row; any other token becomes plain `@name` text. The message renders the token as a chip
+(`.nowo-chat-mention[data-mention]`), and a message that mentions the viewer gets `nowo-chat-msg--mentioned`.
+
+Notify the people in your own channels (toast, push, e-mail) from the event, after checking they can still read the
+conversation:
+
+```php
+#[AsEventListener]
+public function __invoke(ChatMentionEvent $event): void
+{
+    foreach ($event->users as $user) {
+        // $event->message, $event->conversation; one event per message and person (edits carry only new people)
+    }
+}
+```
+
+For an inbox of "messages that mention me", `ChatMessageMentionRepository::findForUser($user, $channelKeys,
+$isSupportAgent, $limit, $unreadOnly, $since, $channelsOnly)` and `countForUser()` return only mentions in direct
+threads, the channels you pass (`ChatChannelProviderInterface::channelsFor()` keys) and the support threads the user may
+read; `read_at` is set when the user reads the conversation past the message (or you call `markRead()` and flush).
+`countUnreadByConversation()` gives an "@" count per conversation.
 
 ## Link previews
 
@@ -461,6 +478,7 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | GET | `/api/contacts?q=` | people picker |
 | POST | `/api/direct` `{userUuid}` · `/api/channel` `{channelKey}` · `/api/support` | open |
 | GET | `/api/conversations/{uuid}` | one conversation |
+| GET | `/api/conversations/{uuid}/members?q=` | members the caller may @mention |
 | GET / POST | `/api/conversations/{uuid}/messages` (`?before=` / `?after=`) | page / send `{body}` |
 | PATCH / DELETE | `/api/conversations/{uuid}/messages/{messageUuid}` | edit `{body}` / delete |
 | POST | `/api/conversations/{uuid}/messages/{messageUuid}/reactions` `{emoji}` | toggle a reaction |
@@ -479,6 +497,7 @@ Every list is bounded server-side (constants, not configuration); nothing return
 | `GET /api/conversations` | 50 most recent conversations (DMs, channels, support merged by last message) | none (the list is a recent-activity view) |
 | `GET /api/conversations/{uuid}/messages` | 30 messages per page | `?before={messageId}` (older page) / `?after={messageId}` (catch-up), response `hasMore` |
 | `GET /api/contacts?q=` | 30 contacts from `ChatDirectoryInterface::contactsFor()` | narrow with `q` |
+| `GET /api/conversations/{uuid}/members?q=` | 20 members (cached recipient ids, one user query) | narrow with `q` |
 | `GET /api/support/inbox` | 50 threads (`ChatSupportInbox::list()` default) | narrow with `status` / `q` |
 | `GET /api/link-previews?url[]=…` | 10 URLs per request (500 characters each) | the dock batches |
 | Full page `/chat/`, `/chat/{uuid}` | 50 conversations, last 50 messages | none (server-rendered view) |

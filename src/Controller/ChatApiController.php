@@ -66,6 +66,7 @@ final class ChatApiController extends AbstractController
     private const int LIST_LIMIT          = 50;
     private const int PAGE_SIZE           = 30;
     private const int CONTACTS_LIMIT      = 30;
+    private const int MEMBERS_LIMIT       = 20;
 
     /**
      * Builds the API controller from the chat services, repositories, realtime helpers and the rate limiters
@@ -330,6 +331,38 @@ final class ChatApiController extends AbstractController
                 'name'      => $participant->getUser()->getChatDisplayName(),
                 'messageId' => $participant->getLastReadMessageId(),
             ], $this->currentReaders($conversation, $user)),
+        ]);
+    }
+
+    /**
+     * Members of the conversation the caller may @mention (`?q=` filters by name, at most 80 characters): the people
+     * who may read it now, without the caller, sorted by name, at most 20. Same access as reading the conversation
+     * (unknown or foreign → 404).
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request The request (query `q`)
+     *
+     * @return JsonResponse `{members: list<{uuid, name, initials}>}`
+     */
+    #[Route('/conversations/{uuid}/members', name: 'members', requirements: ['uuid' => self::UUID], methods: ['GET'])]
+    public function members(string $uuid, Request $request): JsonResponse
+    {
+        $user         = $this->reader();
+        $conversation = $this->find($uuid, ChatVoter::VIEW);
+        $query        = mb_strtolower(mb_substr(trim((string) $request->query->get('q', '')), 0, 80));
+        $members      = array_values(array_filter(
+            $this->recipients->of($conversation),
+            static fn (ChatUserInterface $member): bool => $member->getId() !== $user->getId()
+                && ($query === '' || str_contains(mb_strtolower($member->getChatDisplayName()), $query)),
+        ));
+        usort($members, static fn (ChatUserInterface $a, ChatUserInterface $b): int => strnatcasecmp($a->getChatDisplayName(), $b->getChatDisplayName()));
+
+        return $this->json([
+            'members' => array_map(static fn (ChatUserInterface $member): array => [
+                'uuid'     => $member->getChatPublicId(),
+                'name'     => $member->getChatDisplayName(),
+                'initials' => $member->getChatInitials(),
+            ], array_slice($members, 0, self::MEMBERS_LIMIT)),
         ]);
     }
 

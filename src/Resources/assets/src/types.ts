@@ -37,6 +37,21 @@ export interface ChatMessage {
   deleted: boolean;
   moderated: boolean;
   reactions?: Reactions;
+  /** Members the message @mentions (public id and the name written in the message). */
+  mentions?: MentionRef[];
+  /** The viewer is one of them (false in viewer-neutral realtime payloads: use `mentions`). */
+  mentionsMe?: boolean;
+}
+
+/** One @mention of a message: public id and display name. */
+export interface MentionRef {
+  uuid: string;
+  name: string;
+}
+
+/** A conversation member offered by the @mention list. */
+export interface Member extends MentionRef {
+  initials: string;
 }
 
 /** A message typed here and not yet confirmed by the server (optimistic send). */
@@ -98,6 +113,8 @@ export interface ChatConfig {
     /** `__uuid__` is replaced with the conversation UUID (and `__message__` with a message UUID). */
     conversation: string;
     messages: string;
+    /** Members a message may @mention (`__uuid__`). */
+    members: string;
     message: string;
     reactions: string;
     read: string;

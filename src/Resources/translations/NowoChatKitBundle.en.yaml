@@ -63,6 +63,7 @@ chat:
   seen_by: 'Seen by %names%'
   online: 'Online'
   emoji: 'Emoji'
+  mention_list: 'Mention someone'
   emoji_recent: 'Recent'
   emoji_smileys: 'Smileys'
   emoji_gestures: 'Gestures'

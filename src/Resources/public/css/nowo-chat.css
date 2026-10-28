@@ -32,6 +32,13 @@
   --nowo-chat-window-width: 336px;
   --nowo-chat-panel-width: 312px;
   --nowo-chat-font-size: 0.875rem;
+  /* @mentions (1.7): the chip, the chip naming the viewer and a message that mentions the viewer. They derive from
+     the accent / warn tokens, so they follow the light / dark scheme; override them to match your palette. */
+  --nowo-chat-mention: var(--nowo-chat-accent);
+  --nowo-chat-mention-bg: color-mix(in srgb, var(--nowo-chat-accent) 14%, transparent);
+  --nowo-chat-mention-me-bg: color-mix(in srgb, var(--nowo-chat-warn) 32%, transparent);
+  --nowo-chat-mentioned-bg: color-mix(in srgb, var(--nowo-chat-warn) 10%, transparent);
+  --nowo-chat-mentioned-edge: var(--nowo-chat-warn);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1937,4 +1944,89 @@
     margin-bottom: 4px;
     font-size: 0.8125rem;
   }
+}
+
+/* @mentions (1.7): chips in messages, the highlighted message that mentions the viewer and the composer list. */
+.nowo-chat-mention {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--nowo-chat-mention-bg);
+  color: var(--nowo-chat-mention);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.nowo-chat-mention.is-me {
+  background: var(--nowo-chat-mention-me-bg);
+  color: inherit;
+}
+
+.nowo-chat-msg--mine .nowo-chat-mention {
+  background: color-mix(in srgb, var(--nowo-chat-on-accent) 22%, transparent);
+  color: inherit;
+}
+
+.nowo-chat-msg--mentioned {
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-mentioned-bg);
+  box-shadow: inset 3px 0 0 var(--nowo-chat-mentioned-edge);
+}
+
+.nowo-chat-mention-host {
+  position: relative;
+}
+
+.nowo-chat-mention-list {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: calc(100% + 6px);
+  left: 0;
+  max-height: 216px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  box-shadow: var(--nowo-chat-shadow);
+  list-style: none;
+  overscroll-behavior: contain;
+}
+
+.nowo-chat-mention-list[hidden] {
+  display: none;
+}
+
+.nowo-chat-mention-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: calc(var(--nowo-chat-radius-control) - 2px);
+  color: var(--nowo-chat-text);
+  cursor: pointer;
+}
+
+.nowo-chat-mention-option[aria-selected="true"],
+.nowo-chat-mention-option:hover {
+  background: var(--nowo-chat-mention-bg);
+}
+
+.nowo-chat-mention-option__initials {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--nowo-chat-radius-avatar);
+  background: var(--nowo-chat-surface-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.nowo-chat-mention-option__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

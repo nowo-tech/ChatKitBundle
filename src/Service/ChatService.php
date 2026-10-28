@@ -10,6 +10,7 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
+use Nowo\ChatKitBundle\Event\ChatMentionEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageDeletedEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
 use Nowo\ChatKitBundle\Event\ChatSupportStatusChangedEvent;
@@ -17,6 +18,7 @@ use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
+use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Symfony\Component\Clock\Clock;
@@ -39,6 +41,8 @@ final readonly class ChatService
      * @param list<string> $reactions emojis offered for reactions (anything else is rejected)
      * @param ClockInterface $clock Clock for every timestamp it writes (conversations, participants, messages, reactions, resolution)
      * @param EventDispatcherInterface|null $events Receives the chat events; null dispatches none
+     * @param ChatMentions|null $mentions Validates and stores @mentions; null keeps mention tokens as written
+     * @param ChatMessageMentionRepository|null $mentionRows Mention rows (removed with a deleted message, read with the thread)
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -50,6 +54,8 @@ final readonly class ChatService
         private array $reactions = [],
         private ClockInterface $clock = new Clock(),
         private ?EventDispatcherInterface $events = null,
+        private ?ChatMentions $mentions = null,
+        private ?ChatMessageMentionRepository $mentionRows = null,
     ) {
     }
 
@@ -111,8 +117,9 @@ final readonly class ChatService
     }
 
     /**
-     * Stores a new message (rendered to HTML), bumps the conversation activity, reopens the owner's resolved
-     * support thread and notifies.
+     * Stores a new message (rendered to HTML) with its @mentions of conversation members, bumps the conversation
+     * activity, reopens the owner's resolved support thread, notifies and dispatches ChatMentionEvent when it
+     * mentions someone.
      *
      * @param ChatUserInterface $author The writer
      * @param ChatConversation $conversation The conversation
@@ -124,10 +131,12 @@ final readonly class ChatService
      */
     public function send(ChatUserInterface $author, ChatConversation $conversation, string $body): ChatMessage
     {
-        $body    = $this->normalize($body);
-        $now     = $this->clock->now();
-        $message = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
+        $body               = $this->normalize($body);
+        [$body, $mentioned] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, []];
+        $now                = $this->clock->now();
+        $message            = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
         $this->entityManager->persist($message);
+        $mentioned = $this->mentions?->sync($message, $mentioned) ?? [];
         $conversation->touch($now);
         $reopened = $conversation->isSupport() && $conversation->isResolved() && $conversation->getSupportOwner()?->getId() === $author->getId();
         if ($reopened) {
@@ -136,6 +145,9 @@ final readonly class ChatService
         $this->publish($message, $author);
         if ($reopened) {
             $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $author));
+        }
+        if ($mentioned !== []) {
+            $this->events?->dispatch(new ChatMentionEvent($message, $mentioned, $conversation));
         }
 
         return $message;
@@ -159,7 +171,8 @@ final readonly class ChatService
     }
 
     /**
-     * Replaces the message text (re-rendered), marks it edited and notifies the recipients.
+     * Replaces the message text (re-rendered) and its @mentions, marks it edited, notifies the recipients and
+     * dispatches ChatMentionEvent for the people the edit mentions for the first time.
      *
      * @param ChatMessage $message The message to edit
      * @param string $body New raw Markdown text
@@ -168,10 +181,18 @@ final readonly class ChatService
      */
     public function edit(ChatMessage $message, string $body): void
     {
-        $body = $this->normalize($body);
+        $body               = $this->normalize($body);
+        $author             = $message->getAuthor();
+        [$body, $mentioned] = $author instanceof ChatUserInterface && $this->mentions instanceof ChatMentions
+            ? $this->mentions->resolve($message->getConversation(), $author, $body)
+            : [$body, []];
         $message->edit($body, $this->markdown->render($body), $this->clock->now());
+        $added = $this->mentions?->sync($message, $mentioned) ?? [];
         $this->entityManager->flush();
         $this->notifier->messageUpdated($message, $this->reactionsOf($message));
+        if ($added !== []) {
+            $this->events?->dispatch(new ChatMentionEvent($message, $added, $message->getConversation(), true));
+        }
     }
 
     /**
@@ -187,6 +208,7 @@ final readonly class ChatService
         foreach ($this->reactionRepository->findBy(['message' => $message]) as $reaction) {
             $this->entityManager->remove($reaction);
         }
+        $this->mentionRows?->removeFor($message);
         $this->entityManager->flush();
         $this->notifier->messageUpdated($message);
         $this->events?->dispatch(new ChatMessageDeletedEvent($message, $by, $message->isModerated()));
@@ -253,7 +275,8 @@ final readonly class ChatService
     }
 
     /**
-     * Moves the user's read cursor forward to the message and publishes the read receipt when it moved.
+     * Moves the user's read cursor forward to the message (marking the user's mentions up to it read) and publishes
+     * the read receipt when it moved.
      *
      * @param ChatUserInterface $user The reader
      * @param ChatConversation $conversation The conversation
@@ -266,6 +289,7 @@ final readonly class ChatService
         $moved = $this->participant($conversation, $user)->markReadUpTo($messageId);
         $this->entityManager->flush();
         if ($moved) {
+            $this->mentionRows?->markReadUpTo($user, $conversation, $messageId, $this->clock->now());
             $this->notifier->read($conversation, $user, $messageId);
         }
 

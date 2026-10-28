@@ -94,7 +94,7 @@ final readonly class ChatPresenter
     }
 
     /**
-     * Message shape for the dock (sanitized HTML, author, flags and reactions).
+     * Message shape for the dock (sanitized HTML, author, flags, reactions and @mentions).
      *
      * @param ChatMessage $message The message
      * @param ChatUserInterface|null $viewer The reader (sets `mine`); null for viewer-neutral realtime payloads
@@ -104,7 +104,12 @@ final readonly class ChatPresenter
      */
     public function message(ChatMessage $message, ?ChatUserInterface $viewer, array $reactions = []): array
     {
-        $author = $message->getAuthor();
+        $author   = $message->getAuthor();
+        $ids      = $message->isDeleted() ? [] : ChatMentions::parse($message->getBody());
+        $mentions = [];
+        foreach ($ids as $uuid => $name) {
+            $mentions[] = ['uuid' => $uuid, 'name' => $name];
+        }
 
         return [
             'id'             => $message->getId(),
@@ -120,6 +125,9 @@ final readonly class ChatPresenter
             'deleted'        => $message->isDeleted(),
             'moderated'      => $message->isModerated(),
             'reactions'      => $reactions,
+            // Members the message mentions (from its stored tokens, no query) and whether the viewer is one of them.
+            'mentions'   => $mentions,
+            'mentionsMe' => $viewer instanceof ChatUserInterface && isset($ids[$viewer->getChatPublicId()]),
         ];
     }
 

@@ -23,7 +23,7 @@ const msg = (over: Partial<ChatMessage> = {}): ChatMessage => ({
   createdAt: '2026-10-15T10:00:00Z', edited: false, deleted: false, moderated: false, ...over,
 });
 
-type ApiMock = Record<'messages' | 'send' | 'typing' | 'buzz' | 'resolve' | 'edit' | 'remove' | 'react', Mock>;
+type ApiMock = Record<'messages' | 'send' | 'typing' | 'buzz' | 'resolve' | 'edit' | 'remove' | 'react' | 'members', Mock>;
 
 function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock> = {}, configOver: Partial<ChatConfig> = {}) {
   const api: ApiMock = {
@@ -35,6 +35,7 @@ function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock
     edit: vi.fn(),
     remove: vi.fn(),
     react: vi.fn(),
+    members: vi.fn().mockResolvedValue([{ uuid: 'u-luis', name: 'Luis', initials: 'LU' }]),
     ...apiOver,
   };
   const host: ThreadHost = {
@@ -49,6 +50,15 @@ function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock
   document.body.append(view.element);
   const q = <T extends Element = HTMLElement>(selector: string) => view.element.querySelector<T>(selector) as T;
   return { view, host, api, q };
+}
+
+function setupWithDraft(draft: string) {
+  const ctx = setup();
+  ctx.view.element.remove();
+  (ctx.host.draft as Mock).mockReturnValue(draft);
+  const view = new ThreadView(ctx.host, summary());
+  document.body.append(view.element);
+  return { ...ctx, view, q: <T extends Element = HTMLElement>(selector: string) => view.element.querySelector<T>(selector) as T };
 }
 
 function scrolled(view: ThreadView, top: number, height = 1000, client = 300) {
@@ -556,6 +566,44 @@ describe('ThreadView', () => {
     expect(readOnly.q('.nowo-chat-notice').hidden).toBe(false);
   });
 
+  it('mentions members: @ opens the list, Enter picks instead of sending, the token is sent and drafts keep it', async () => {
+    const { view, api, host, q } = setup({ kind: 'channel' }, {}, {});
+    (host.draft as Mock).mockReturnValue('');
+    const input = q<HTMLTextAreaElement>('.nowo-chat-composer__input');
+    input.value = 'hi @lu';
+    input.setSelectionRange(6, 6);
+    input.dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(api.members).toHaveBeenCalledWith('c1', 'lu');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    expect(api.send).not.toHaveBeenCalled();
+    expect(input.value).toBe('hi @Luis ');
+    await vi.advanceTimersByTimeAsync(600);
+    expect(host.saveDraft).toHaveBeenLastCalledWith('c1', 'hi @[Luis](u-luis) ');
+
+    api.send.mockReturnValueOnce(new Promise(() => undefined));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    expect(api.send).toHaveBeenCalledWith('c1', 'hi @[Luis](u-luis)');
+    expect(view.element.querySelector('.nowo-chat-msg--pending .nowo-chat-bubble')?.textContent).toBe('hi @Luis');
+
+    // A restored draft shows names, not tokens.
+    expect(setupWithDraft('@[Ana](u-ana) hola').q<HTMLTextAreaElement>('.nowo-chat-composer__input').value).toBe('@Ana hola');
+  });
+
+  it('highlights messages that mention the viewer and marks their chips', async () => {
+    const chip = (uuid: string, name: string) => `<p><span class="nowo-chat-mention" data-mention="${uuid}">@${name}</span> hi</p>`;
+    const forMe = msg({ html: chip('me', 'Me'), mentions: [{ uuid: 'me', name: 'Me' }] });
+    const forOther = msg({ html: chip('x', 'X'), mentions: [{ uuid: 'x', name: 'X' }] });
+    const mine = msg({ mine: true, authorUuid: 'me', html: chip('x', 'X'), mentions: [{ uuid: 'me', name: 'Me' }] });
+    const { view } = setup({ kind: 'channel' }, { messages: vi.fn().mockResolvedValue({ messages: [forMe, forOther, mine], hasMore: false, readUpTo: null, readers: [] }) });
+    await view.load();
+    const line = (id: number) => view.element.querySelector<HTMLElement>(`[data-id="${id}"]`) as HTMLElement;
+    expect(line(forMe.id).classList.contains('nowo-chat-msg--mentioned')).toBe(true);
+    expect(line(forMe.id).querySelector('.nowo-chat-mention')?.classList.contains('is-me')).toBe(true);
+    expect(line(forOther.id).classList.contains('nowo-chat-msg--mentioned')).toBe(false);
+    expect(line(mine.id).classList.contains('nowo-chat-msg--mentioned')).toBe(false);
+  });
+
     describe('edit, delete and reactions', () => {
     const now = new Date('2026-10-15T10:05:00Z');
     async function loaded(messages: ChatMessage[], over: Partial<ConversationSummary> = {}, configOver: Partial<ChatConfig> = {}) {
@@ -674,6 +722,30 @@ describe('ThreadView', () => {
       await Promise.resolve();
       expect(article(mine.id).querySelector('.nowo-chat-edit')).toBeNull();
       expect(view.element.querySelector('.nowo-chat-notice')?.textContent).toBe('Error');
+    });
+
+    it('keeps the mentions of an edited message as tokens and offers the list in the editor', async () => {
+      const mine = msg({ mine: true, authorUuid: 'me', uuid: 'm1', html: '<p>hola <span class="nowo-chat-mention" data-mention="u-luis">@Luis</span></p>', mentions: [{ uuid: 'u-luis', name: 'Luis' }] });
+      const { action, article, api } = await loaded([mine]);
+      action(mine.id, 'edit').click();
+      const input = article(mine.id).querySelector<HTMLTextAreaElement>('.nowo-chat-edit__input') as HTMLTextAreaElement;
+      expect(input.value).toBe('hola @Luis');
+      expect(input.getAttribute('aria-autocomplete')).toBe('list');
+      api.edit.mockReturnValueOnce(new Promise(() => undefined));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(api.edit).toHaveBeenCalledWith('c1', 'm1', 'hola @[Luis](u-luis)');
+
+      const other = msg({ mine: true, authorUuid: 'me', uuid: 'm2' });
+      const second = await loaded([other]);
+      second.action(other.id, 'edit').click();
+      const box = second.article(other.id).querySelector<HTMLTextAreaElement>('.nowo-chat-edit__input') as HTMLTextAreaElement;
+      box.value = '@lu';
+      box.setSelectionRange(3, 3);
+      box.dispatchEvent(new Event('input'));
+      await vi.advanceTimersByTimeAsync(200);
+      expect(second.api.members).toHaveBeenCalledWith('c1', 'lu');
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      expect(second.article(other.id).querySelector('.nowo-chat-edit')).not.toBeNull();
     });
 
     it('cancels an edit whose message left the thread (cache repaint) with the original text', async () => {

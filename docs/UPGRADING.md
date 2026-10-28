@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.7.0](#to-170)
 - [To 1.6.0](#to-160)
 - [To 1.5.5](#to-155)
 - [To 1.5.4](#to-154)
@@ -22,6 +23,44 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.7.0
+
+From **1.6.0** — **schema change** (new table `nowo_chat_message_mention`). After `composer update nowo-tech/chat-kit-bundle`:
+
+```bash
+php bin/console assets:install public          # nowo-chat.js / nowo-chat.css (or rebuild your bundle of the TS sources)
+php bin/console doctrine:migrations:diff       # or write the migration by hand from the SQL below
+php bin/console doctrine:migrations:migrate
+```
+
+MySQL / MariaDB (with a `doctrine.table_prefix`, prefix the table, index and constraint names; `user` is your user
+table):
+
+```sql
+CREATE TABLE nowo_chat_message_mention (
+  id INT AUTO_INCREMENT NOT NULL,
+  message_id INT NOT NULL,
+  user_id INT NOT NULL,
+  created_at DATETIME NOT NULL,
+  read_at DATETIME DEFAULT NULL,
+  UNIQUE INDEX uniq_nowo_chat_mention (message_id, user_id),
+  INDEX idx_nowo_chat_mention_user (user_id, read_at, created_at),
+  PRIMARY KEY (id)
+);
+ALTER TABLE nowo_chat_message_mention
+  ADD CONSTRAINT FK_nowo_chat_mention_message FOREIGN KEY (message_id) REFERENCES nowo_chat_message (id) ON DELETE CASCADE,
+  ADD CONSTRAINT FK_nowo_chat_mention_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE CASCADE;
+```
+
+Optional:
+
+- Notify mentioned people: listen to `ChatMentionEvent` (see USAGE, *Mentions*). The bundle itself only highlights
+  the message in the conversation.
+- Theme: the mention chip and the highlighted message use `--nowo-chat-mention*` / `--nowo-chat-mentioned-*`, derived
+  from `--nowo-chat-accent` and `--nowo-chat-warn`; override them to match your palette.
+- Hosts that construct `ChatService` by hand can pass `ChatMentions` and `ChatMessageMentionRepository` (new optional
+  last arguments); without them tokens are stored as written and no mention rows are kept.
 
 ## To 1.6.0
 

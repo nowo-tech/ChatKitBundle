@@ -156,6 +156,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'page'          => $this->pattern('nowo_chat_page_conversation'),
                 'conversation'  => $this->pattern('nowo_chat_api_conversation'),
                 'messages'      => $this->pattern('nowo_chat_api_messages'),
+                'members'       => $this->pattern('nowo_chat_api_members'),
                 'message'       => $this->pattern('nowo_chat_api_edit', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 'reactions'     => $this->pattern('nowo_chat_api_react', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 'read'          => $this->pattern('nowo_chat_api_read'),

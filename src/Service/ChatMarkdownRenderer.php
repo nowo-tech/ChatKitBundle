@@ -14,8 +14,9 @@ use const ENT_SUBSTITUTE;
 /**
  * Light Markdown for chat messages, safe by construction — the whole text is
  * HTML-escaped first, then a closed set of rules adds tags: fenced code blocks, inline code, **bold**,
- * *italic* / _italic_, ~~strike~~, bullet / numbered lists, line breaks and http(s) autolinks
- * (`rel="noopener nofollow ugc"`, new tab). No raw HTML, no images, no other URL schemes.
+ * *italic* / _italic_, ~~strike~~, bullet / numbered lists, line breaks, http(s) autolinks
+ * (`rel="noopener nofollow ugc"`, new tab) and @mention tokens (`@[name](publicId)`, ChatMentions) as
+ * `<span class="nowo-chat-mention" data-mention="publicId">@name</span>`. No raw HTML, no images, no other URL schemes.
  */
 final class ChatMarkdownRenderer
 {
@@ -118,7 +119,7 @@ final class ChatMarkdownRenderer
      */
     public function plainText(string $markdown, int $maxLength = 120): string
     {
-        $text = (string) preg_replace(['/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)])[ \t]+/m', '/\s+/'], ['', '', '', ' '], self::clean($markdown));
+        $text = (string) preg_replace([ChatMentions::TOKEN, '/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)])[ \t]+/m', '/\s+/'], ['@$1', '', '', '', ' '], self::clean($markdown));
         $text = trim($text);
 
         return mb_strlen($text) > $maxLength ? rtrim(mb_substr($text, 0, $maxLength - 1)) . '…' : $text;
@@ -131,6 +132,13 @@ final class ChatMarkdownRenderer
             $codes[] = '<code>' . self::escape($m[1]) . '</code>';
 
             return "\u{E000}C" . (count($codes) - 1) . "\u{E000}";
+        }, $text);
+
+        $mentions = [];
+        $text     = (string) preg_replace_callback(ChatMentions::TOKEN, static function (array $m) use (&$mentions): string {
+            $mentions[] = '<span class="nowo-chat-mention" data-mention="' . self::escape($m[2]) . '">@' . self::escape($m[1]) . '</span>';
+
+            return "\u{E000}M" . (count($mentions) - 1) . "\u{E000}";
         }, $text);
 
         $links = [];
@@ -149,6 +157,7 @@ final class ChatMarkdownRenderer
         $text = (string) preg_replace('/(?<![\w_])_(?=\S)(.+?)(?<=\S)_(?![\w_])/', '<em>$1</em>', $text);
 
         $text = (string) preg_replace_callback('/\x{E000}L(\d+)\x{E000}/u', static fn (array $m): string => $links[(int) $m[1]], $text);
+        $text = (string) preg_replace_callback('/\x{E000}M(\d+)\x{E000}/u', static fn (array $m): string => $mentions[(int) $m[1]], $text);
 
         return (string) preg_replace_callback('/\x{E000}C(\d+)\x{E000}/u', static fn (array $m): string => $codes[(int) $m[1]], $text);
     }

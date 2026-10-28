@@ -16,6 +16,7 @@ const config = {
     support: '/support',
     conversation: '/conv/__uuid__',
     messages: '/conv/__uuid__/messages',
+    members: '/conv/__uuid__/members',
     read: '/conv/__uuid__/read',
     typing: '/conv/__uuid__/typing',
     buzz: '/conv/__uuid__/buzz',
@@ -42,6 +43,9 @@ describe('chat api client', () => {
     expect(fetchMock).toHaveBeenLastCalledWith('/conv/a%20b', expect.objectContaining({ credentials: 'same-origin' }));
     expect(await api.contacts('lu cía')).toEqual([1]);
     expect(fetchMock).toHaveBeenLastCalledWith('/contacts?q=lu%20c%C3%ADa', expect.anything());
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ members: [{ uuid: 'u' }] }) });
+    expect(await api.members('c 1', 'lu')).toEqual([{ uuid: 'u' }]);
+    expect(fetchMock).toHaveBeenLastCalledWith('/conv/c%201/members?q=lu', expect.anything());
     expect(await api.openDirect('u')).toEqual({ uuid: 'x' });
     expect(fetchMock.mock.lastCall?.[1]).toMatchObject({ method: 'POST', body: '{"userUuid":"u"}', headers: expect.objectContaining({ 'X-CSRF-TOKEN': 'tok' }) });
     expect(await api.openChannel('project:p')).toEqual({ uuid: 'x' });
