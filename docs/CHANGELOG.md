@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.11.2] - 2026-10-29](#1112---2026-10-29)
 - [[1.11.1] - 2026-10-29](#1111---2026-10-29)
 - [[1.11.0] - 2026-10-29](#1110---2026-10-29)
 - [[1.10.1] - 2026-10-29](#1101---2026-10-29)
@@ -32,6 +33,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.11.2] - 2026-10-29
+
+### Fixed
+
+- **The composer box no longer carries ARIA attributes a text box cannot have** (axe 4.14 `aria-allowed-attr`): the
+  @mention and `/` `#` pickers drop `aria-expanded` / `aria-haspopup` from the `<textarea>` (which keeps its textbox
+  role — ARIA in HTML allows no `combobox` role on it); the box keeps `aria-autocomplete="list"` and points
+  `aria-controls` / `aria-activedescendant` at the open list only while it is open.
+- **The two picker lists have their own classes**: the reference list is `.nowo-chat-ref-list` only (no longer also
+  `.nowo-chat-mention-list`), so `.nowo-chat-mention-list` targets the @mention list alone.
 
 ## [1.11.1] - 2026-10-29
 

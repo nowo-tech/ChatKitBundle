@@ -73,15 +73,20 @@ describe('MentionAutocomplete', () => {
   it('binds ARIA to the text box and opens on @ with the first option selected', async () => {
     expect(input.parentElement?.classList.contains('nowo-chat-mention-host')).toBe(true);
     expect(list().getAttribute('aria-label')).toBe('Mention someone');
-    expect(input.getAttribute('aria-controls')).toBe('c1-mentions');
     expect(input.getAttribute('aria-autocomplete')).toBe('list');
+    // A <textarea> keeps its textbox role: no aria-expanded / aria-haspopup (axe aria-allowed-attr), and it only
+    // points at the list while it is open.
+    expect(input.hasAttribute('aria-controls')).toBe(false);
     expect(auto.isOpen).toBe(false);
 
     type('hello @an');
     await settle();
     expect(load).toHaveBeenCalledWith('an');
     expect(auto.isOpen).toBe(true);
-    expect(input.getAttribute('aria-expanded')).toBe('true');
+    expect(input.getAttribute('aria-controls')).toBe('c1-mentions');
+    expect(input.hasAttribute('aria-expanded')).toBe(false);
+    expect(input.hasAttribute('aria-haspopup')).toBe(false);
+    expect(input.getAttribute('role')).toBeNull();
     expect(options().map((option) => option.textContent)).toEqual(['ALAna López', 'LULuis']);
     expect(input.getAttribute('aria-activedescendant')).toBe('c1-mentions-0');
     expect(options()[0]?.getAttribute('aria-selected')).toBe('true');

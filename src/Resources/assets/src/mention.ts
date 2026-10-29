@@ -113,10 +113,9 @@ export class MentionAutocomplete {
     const host = input.parentElement as HTMLElement;
     host.classList.add('nowo-chat-mention-host');
     host.append(this.list);
+    // 1.11.2: a <textarea> keeps its textbox role (ARIA in HTML allows no combobox role on it), so only the attributes
+    // a textbox supports go on it — aria-expanded / aria-haspopup were axe `aria-allowed-attr` violations.
     input.setAttribute('aria-autocomplete', 'list');
-    input.setAttribute('aria-haspopup', 'listbox');
-    input.setAttribute('aria-controls', this.list.id);
-    input.setAttribute('aria-expanded', 'false');
     input.addEventListener('keydown', (event) => this.onKeydown(event));
     input.addEventListener('input', () => this.schedule());
     input.addEventListener('blur', () => this.close());
@@ -185,7 +184,7 @@ export class MentionAutocomplete {
     this.active = -1;
     // The box may also host the #reference picker: leave its ARIA state alone unless this list was open.
     if (!this.list.hidden) {
-      this.input.setAttribute('aria-expanded', 'false');
+      this.input.removeAttribute('aria-controls');
       this.input.removeAttribute('aria-activedescendant');
     }
     this.list.hidden = true;
@@ -264,7 +263,6 @@ export class MentionAutocomplete {
     );
     this.list.hidden = false;
     this.input.setAttribute('aria-controls', this.list.id);
-    this.input.setAttribute('aria-expanded', 'true');
     this.setActive(0);
   }
 

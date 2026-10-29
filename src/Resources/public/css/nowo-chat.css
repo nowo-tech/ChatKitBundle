@@ -2002,7 +2002,8 @@
   position: relative;
 }
 
-.nowo-chat-mention-list {
+.nowo-chat-mention-list,
+.nowo-chat-ref-list {
   position: absolute;
   z-index: 2;
   right: 0;
@@ -2020,7 +2021,8 @@
   overscroll-behavior: contain;
 }
 
-.nowo-chat-mention-list[hidden] {
+.nowo-chat-mention-list[hidden],
+.nowo-chat-ref-list[hidden] {
   display: none;
 }
 
