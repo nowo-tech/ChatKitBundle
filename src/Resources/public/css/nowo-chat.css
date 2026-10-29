@@ -3208,3 +3208,14 @@ a.nowo-chat-ref:focus-visible {
   width: 100%;
   box-sizing: border-box;
 }
+
+.nowo-chat-auto-reply__text {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}

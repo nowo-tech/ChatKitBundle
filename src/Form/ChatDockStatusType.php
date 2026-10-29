@@ -66,7 +66,7 @@ final class ChatDockStatusType extends AbstractType
             ->add('autoReplyText', TextareaType::class, [
                 'label'    => 'chat.auto_reply_text',
                 'required' => false,
-                'attr'     => ['class' => 'nowo-chat-status-form__text', 'data-part' => 'auto-reply-text', 'maxlength' => ChatUserSettings::AUTO_REPLY_MAX, 'rows' => 3],
+                'attr'     => ['class' => 'nowo-chat-auto-reply__text', 'data-part' => 'auto-reply-text', 'maxlength' => ChatUserSettings::AUTO_REPLY_MAX, 'rows' => 3],
             ])
             ->add('autoReplyWhen', ChoiceType::class, [
                 'label'       => 'chat.auto_reply_when',
