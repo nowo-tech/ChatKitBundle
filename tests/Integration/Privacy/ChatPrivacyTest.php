@@ -14,6 +14,7 @@ use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Service\ChatService;
+use Nowo\ChatKitBundle\Support\ChatSupportTickets;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Psr\Log\AbstractLogger;
 use RuntimeException;
@@ -84,6 +85,13 @@ final class ChatPrivacyTest extends DatabaseTestCase
         $support = $chat->openSupport($ana);
         $help    = $chat->send($ana, $support, 'help');
         $chat->toggleReaction($ana, $help, '🎉');
+        // A second ticket (1.8: several per user) goes too.
+        $tickets = $this->get(ChatSupportTickets::class);
+        $tickets->chooseTopic($ana, $support, 'billing');
+        $support->resolve($luis);
+        $second = $tickets->open($ana);
+        self::assertNotSame($support, $second);
+        $tickets->chooseTopic($ana, $second, 'incident');
         $settings = $this->em->getRepository(ChatUserSettings::class)->forUser($ana);
         $settings->setSound('ding');
         $this->em->persist($settings);

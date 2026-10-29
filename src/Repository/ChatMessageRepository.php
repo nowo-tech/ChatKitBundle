@@ -194,4 +194,24 @@ class ChatMessageRepository extends ServiceEntityRepository
             ->getQuery()
             ->execute();
     }
+
+    /**
+     * Moves every message of one conversation to another (a support draft continued in an earlier ticket).
+     *
+     * @param ChatConversation $from The conversation that loses its messages
+     * @param ChatConversation $to The conversation that receives them
+     *
+     * @return int The number of messages moved
+     */
+    public function moveAll(ChatConversation $from, ChatConversation $to): int
+    {
+        return (int) $this->createQueryBuilder('m')
+            ->update()
+            ->set('m.conversation', ':to')
+            ->where('m.conversation = :from')
+            ->setParameter('to', $to)
+            ->setParameter('from', $from)
+            ->getQuery()
+            ->execute();
+    }
 }

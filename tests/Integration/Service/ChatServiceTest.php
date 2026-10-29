@@ -169,7 +169,7 @@ final class ChatServiceTest extends DatabaseTestCase
         $inbox = $this->get(ChatSupportInbox::class);
         $chat->openSupport($this->user('Silent Sam')); // opened, never written: not in the inbox
         self::assertEqualsCanonicalizing(['Ana', 'Bob'], array_column($inbox->list($agent, 'open', null), 'title'));
-        self::assertSame(['Bob'], array_column($inbox->list($agent, 'mine', null), 'title'), 'threads the agent answered');
+        self::assertSame([], $inbox->list($agent, 'mine', null), 'mine = assigned to the agent (none yet)');
         self::assertSame([], $inbox->list($agent, 'resolved', null));
         self::assertSame(['Bob'], array_column($inbox->list($agent, 'all', 'BOB@'), 'title'), 'search by email');
         self::assertSame(['Ana'], array_column($inbox->list($agent, 'unknown-filter', 'an'), 'title'), 'unknown filter = open; search by name');

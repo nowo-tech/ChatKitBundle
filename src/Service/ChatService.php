@@ -10,10 +10,13 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
+use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Event\ChatMentionEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageDeletedEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
 use Nowo\ChatKitBundle\Event\ChatSupportStatusChangedEvent;
+use Nowo\ChatKitBundle\Event\SupportTicketReopenedEvent;
+use Nowo\ChatKitBundle\Event\SupportTicketStatusChangedEvent;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
@@ -96,8 +99,9 @@ final readonly class ChatService
     }
 
     /**
-     * The owner's support thread (created on first use). `$context` (`url`, `label`) records where the problem was
-     * reported from, for the agents.
+     * The owner's latest support conversation (created on first use). `$context` (`url`, `label`) records where the
+     * problem was reported from, for the agents. Since 1.8 the dock opens support through ChatSupportTickets::open()
+     * (active ticket or the intake draft).
      *
      * @param ChatUserInterface $owner The user asking for support
      * @param array{url?: mixed, label?: mixed}|null $context Page the request comes from; null keeps the stored one
@@ -118,8 +122,9 @@ final readonly class ChatService
 
     /**
      * Stores a new message (rendered to HTML) with its @mentions of conversation members, bumps the conversation
-     * activity, reopens the owner's resolved support thread, notifies and dispatches ChatMentionEvent when it
-     * mentions someone.
+     * activity, moves the support status (the owner's message reopens a resolved ticket and turns a waiting one open;
+     * an agent's reply turns an open ticket to waiting for the user), notifies and dispatches ChatMentionEvent when
+     * it mentions someone.
      *
      * @param ChatUserInterface $author The writer
      * @param ChatConversation $conversation The conversation
@@ -138,13 +143,14 @@ final readonly class ChatService
         $this->entityManager->persist($message);
         $mentioned = $this->mentions?->sync($message, $mentioned) ?? [];
         $conversation->touch($now);
-        $reopened = $conversation->isSupport() && $conversation->isResolved() && $conversation->getSupportOwner()?->getId() === $author->getId();
-        if ($reopened) {
-            $conversation->reopen();
-        }
+        $reopened = $this->supportTransition($conversation, $author);
         $this->publish($message, $author);
         if ($reopened) {
             $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $author));
+            if ($conversation->isTicket()) {
+                $this->events?->dispatch(new SupportTicketStatusChangedEvent($conversation, SupportStatus::Resolved, $author));
+                $this->events?->dispatch(new SupportTicketReopenedEvent($conversation, $author));
+            }
         }
         if ($mentioned !== []) {
             $this->events?->dispatch(new ChatMentionEvent($message, $mentioned, $conversation));
@@ -321,6 +327,30 @@ final readonly class ChatService
     private function reactionsOf(ChatMessage $message): array
     {
         return $this->reactionRepository->summaryFor([(int) $message->getId()])[(int) $message->getId()] ?? [];
+    }
+
+    /**
+     * Support status after a new message; true when the owner reopened a resolved thread (events to dispatch).
+     */
+    private function supportTransition(ChatConversation $conversation, ChatUserInterface $author): bool
+    {
+        if (!$conversation->isSupport()) {
+            return false;
+        }
+        $isOwner = $conversation->getSupportOwner()?->getId() === $author->getId();
+        $status  = $conversation->getSupportStatus();
+        if ($isOwner && $status === SupportStatus::Resolved) {
+            $conversation->reopen();
+
+            return true;
+        }
+        if ($isOwner && $status === SupportStatus::Waiting) {
+            $conversation->changeSupportStatus(SupportStatus::Open, $author, $this->clock->now());
+        } elseif (!$isOwner && $status === SupportStatus::Open && $conversation->isTicket()) {
+            $conversation->changeSupportStatus(SupportStatus::Waiting, $author, $this->clock->now());
+        }
+
+        return false;
     }
 
     private function normalize(string $body): string

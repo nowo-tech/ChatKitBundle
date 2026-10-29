@@ -99,6 +99,12 @@ nowo_chat_kit:
 | `profiles.<name>.icon_set` | `ux_icon` \| `svg_inline` | `ux_icon` | Dock icons from Symfony UX Icons, or the built-in SVG only. |
 | `profiles.<name>.icons` | map | Tabler set | UX Icons name per dock icon (`chat`, `compose`, `chevronUp`, `chevronDown`, `tuck`, `close`, `send`, `back`, `arrowDown`, `search`, `hash`, `lifebuoy`, `retry`, `buzz`, `smile`, `check`, `edit`, `trash`, `link`, `external`). |
 | `profiles.<name>.presence_ttl` | int ≥ 30 | `90` | Seconds a heartbeat keeps someone online. |
+| `profiles.<name>.support.ticket_prefix` | string | `SUP-` | Prefix of the readable ticket number (`SUP-000123`). |
+| `profiles.<name>.support.ticket_digits` | int 1–12 | `6` | Digits of the ticket number (zero-padded). |
+| `profiles.<name>.support.resume_after_days` | int ≥ 1 | `7` | Opening support when the last ticket has had no message for this many days (or is resolved) asks "continue it or open a new one?". |
+| `profiles.<name>.support.close_after_days` | int ≥ 0 | `30` | A resolved ticket turns read-only after this many days (`0`: never; a **closed** ticket is read-only at once). |
+| `profiles.<name>.support.translation_domain` | string | `NowoChatKitBundle` | Domain of the topic labels and replies. |
+| `profiles.<name>.support.topics` | list | incident, billing, how_to, account, other | Topics offered when a ticket opens: `key` (a-z, 0-9, `_`, `-`), `label` / `reply` (translation keys; default `support.topic.<key>` / `support.topic_reply.<key>`; `reply: ''` posts none), `icon` (for your templates), `assignee` (public id of the agent new tickets of the topic go to). |
 | `profiles.<name>.limits.*` | int | see below | Rate limits. |
 
 ## Rate limits
@@ -118,7 +124,7 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
 key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `doctrine.table_prefix`,
-`reactions`, `icon_set`, `icons`, `presence_ttl`, `limits`, `digest`).
+`reactions`, `icon_set`, `icons`, `presence_ttl`, `limits`, `digest`, `support`, and `support.<key>` for each support key).
 
 ## Timeouts
 

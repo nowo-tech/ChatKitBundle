@@ -44,7 +44,7 @@ function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock
     templates: templates(),
     minimise: vi.fn(), close: vi.fn(), saveDraft: vi.fn(), draft: vi.fn().mockReturnValue('borrador'),
     messagesChanged: vi.fn(), read: vi.fn(), isMobile: vi.fn().mockReturnValue(false), conversationChanged: vi.fn(),
-    linkPreview: vi.fn().mockResolvedValue(null),
+    replaceWith: vi.fn(), linkPreview: vi.fn().mockResolvedValue(null),
   };
   const view = new ThreadView(host, summary(over));
   document.body.append(view.element);
@@ -367,6 +367,27 @@ describe('ThreadView', () => {
     await vi.runOnlyPendingTimersAsync();
     expect(host.conversationChanged).toHaveBeenCalled();
     expect(resolve.disabled).toBe(false);
+  });
+
+  it('offers resolve on waiting tickets, renders the support panel and replaces the window with another ticket', async () => {
+    const ticket = { uuid: 'c1', number: null, topic: null, topicLabel: 'No topic', status: 'open' as const, statusLabel: 'Open', requester: { uuid: 'me', name: 'Me' }, assignee: null, createdAt: '2026-10-15T10:00:00Z', lastMessageAt: '2026-10-15T10:00:00Z', resolvedAt: null, readOnly: false };
+    const intake = { prompt: 'topic' as const, topics: [{ key: 'billing', label: 'Billing', icon: null }], resume: null, tickets: [ticket], resumeAfterDays: 7 };
+    const conversation = vi.fn().mockResolvedValue(summary({ uuid: 'old', kind: 'support' }));
+    const chooseTopic = vi.fn().mockResolvedValue({ conversation: summary({ kind: 'support', ticket: { ...ticket, number: 'SUP-000001' } }), messages: [msg({ kind: 'bot', authorName: 'Support assistant', html: '<p>Ticket opened</p>' })] });
+    const { view, host, q } = setup({ kind: 'support', supportStatus: 'waiting', ticket, intake }, { conversation, chooseTopic } as unknown as Partial<ApiMock>, { isAgent: true });
+    expect(q<HTMLButtonElement>('.nowo-chat-window__resolve').hidden).toBe(false);
+    expect(q('.nowo-chat-support').hidden).toBe(false);
+    q<HTMLButtonElement>('[data-topic="billing"]').click();
+    await vi.runOnlyPendingTimersAsync();
+    expect(host.conversationChanged).toHaveBeenCalled();
+    expect(view.element.textContent).toContain('Ticket opened');
+    q<HTMLButtonElement>('.nowo-chat-support__ticket-link').click();
+    await vi.runOnlyPendingTimersAsync();
+    expect(host.replaceWith).toHaveBeenCalledWith('c1', expect.objectContaining({ uuid: 'old' }));
+    chooseTopic.mockRejectedValueOnce(new Error('x'));
+    q<HTMLButtonElement>('[data-topic="billing"]').click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(q('.nowo-chat-notice').hidden).toBe(false);
   });
 
   it('keeps the reading position: new-messages divider, jump button, older pages', async () => {

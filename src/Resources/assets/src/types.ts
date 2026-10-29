@@ -13,9 +13,13 @@ export interface ConversationSummary {
   initials: string;
   peerUuid: string | null;
   channelKey: string | null;
-  supportStatus: 'open' | 'resolved' | null;
+  supportStatus: SupportStatus | null;
   /** Support only: where the problem was reported from. */
   supportContext?: { url?: string; label?: string } | null;
+  /** Support only: the ticket (a draft has a null `number`); null for other kinds. */
+  ticket?: SupportTicket | null;
+  /** The requester's own draft only: the topic question or "continue or new?", and their earlier tickets. */
+  intake?: SupportIntake;
   canSend: boolean;
   peerOnline: boolean;
   unread: number;
@@ -30,7 +34,7 @@ export interface ChatMessage {
   authorName: string;
   authorInitials: string;
   mine: boolean;
-  kind: 'text' | 'buzz';
+  kind: 'text' | 'buzz' | 'bot';
   html: string;
   createdAt: string;
   edited: boolean;
@@ -107,6 +111,13 @@ export interface ChatConfig {
     channel: string;
     support: string;
     supportInbox: string;
+    /** The caller's tickets. */
+    supportTickets: string;
+    /** Ticket actions (`__uuid__`): choose the topic, continue, change the status, assign. */
+    supportTopic: string;
+    supportResume: string;
+    supportStatus: string;
+    supportAssign: string;
     linkPreviews: string;
     /** Full-page view of a conversation (`__uuid__`). */
     page: string;
@@ -135,6 +146,44 @@ export interface LinkPreview {
   title: string;
   subtitle: string;
   badge: string;
+}
+
+/** Status of a support ticket. */
+export type SupportStatus = 'open' | 'waiting' | 'resolved' | 'closed';
+
+/** A support ticket (ChatPresenter::ticket()). */
+export interface SupportTicket {
+  uuid: string;
+  /** Readable number (SUP-000123); null for the intake draft. */
+  number: string | null;
+  topic: string | null;
+  topicLabel: string;
+  status: SupportStatus;
+  statusLabel: string;
+  requester: { uuid: string; name: string } | null;
+  assignee: { uuid: string; name: string } | null;
+  createdAt: string;
+  lastMessageAt: string;
+  resolvedAt: string | null;
+  /** Closed, or resolved too long ago: nobody writes, the requester cannot reopen. */
+  readOnly: boolean;
+}
+
+/** A topic offered when a ticket opens. */
+export interface SupportTopicOption {
+  key: string;
+  label: string;
+  icon: string | null;
+}
+
+/** The intake panel of the requester's draft. */
+export interface SupportIntake {
+  /** `topic`: pick a topic; `resume`: continue `resume` or open a new ticket. */
+  prompt: 'topic' | 'resume';
+  topics: SupportTopicOption[];
+  resume: SupportTicket | null;
+  tickets: SupportTicket[];
+  resumeAfterDays: number;
 }
 
 /** Where a support request comes from ("Report this problem" links). */

@@ -8,6 +8,7 @@ import { h, prefersReducedMotion, setBadge } from './dom';
 import { emojiPicker, insertAtCaret } from './emoji';
 import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from './format';
 import { decodeMentions, markOwnMentions, MentionAutocomplete, mentionsViewer } from './mention';
+import { SupportPanel } from './support';
 import { part, text, type Templates } from './templates';
 import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader } from './types';
 
@@ -72,6 +73,13 @@ export interface ThreadHost {
    */
   conversationChanged(summary: ConversationSummary): void;
   /**
+   * Show another conversation instead of this window (an earlier support ticket the requester continues or opens).
+   *
+   * @param from Uuid of the window to replace.
+   * @param summary Conversation to open.
+   */
+  replaceWith(from: string, summary: ConversationSummary): void;
+  /**
    * Card for a link, as the viewer may see it (null: none).
    *
    * @param url Link found in a message.
@@ -130,6 +138,7 @@ export class ThreadView {
   private readonly resolveBtn: HTMLButtonElement;
   private readonly emojiBtn: HTMLButtonElement;
   private readonly mention: MentionAutocomplete;
+  private readonly support: SupportPanel;
 
   private readonly host: ThreadHost;
 
@@ -217,6 +226,17 @@ export class ThreadView {
         });
     });
     this.emojiBtn.addEventListener('click', () => this.toggleEmoji());
+    this.support = new SupportPanel(
+      {
+        config: host.config,
+        api: host.api,
+        conversationChanged: (changed) => host.conversationChanged(changed),
+        openConversation: (other) => host.replaceWith(this.summary.uuid, other),
+        appendMessages: (messages) => this.merge(messages, false),
+        notice: (message) => this.flashNotice(message),
+      },
+      part(this.element, 'support'),
+    );
 
     this.mention.load(host.draft(summary.uuid));
     this.applySummary(summary);
@@ -270,13 +290,14 @@ export class ThreadView {
     this.applyContext(summary);
     // A buzz is a person-to-person nudge: direct conversations only.
     this.buzzBtn.hidden = !summary.canSend || summary.kind !== 'direct';
-    this.resolveBtn.hidden = !(this.host.config.isAgent && summary.kind === 'support' && summary.supportStatus === 'open');
+    this.resolveBtn.hidden = !(this.host.config.isAgent && summary.kind === 'support' && (summary.supportStatus === 'open' || summary.supportStatus === 'waiting'));
     this.setUnread(this.minimised ? summary.unread : 0);
     this.input.disabled = !summary.canSend;
     this.notice.hidden = summary.canSend;
     this.notice.textContent = summary.canSend ? '' : t(i18n, 'read_only');
     this.composer.hidden = !summary.canSend;
     this.updateComposerState();
+    this.support.render(summary);
   }
 
   /**

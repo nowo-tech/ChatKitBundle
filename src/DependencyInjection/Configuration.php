@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\DependencyInjection;
 
+use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
 use function array_key_exists;
+use function count;
 use function is_array;
 use function is_string;
 
@@ -55,6 +57,15 @@ final class Configuration implements ConfigurationInterface
         'ban'         => 'tabler:ban',
         'link'        => 'tabler:link',
         'external'    => 'tabler:external-link',
+    ];
+
+    /** Support ticket topics offered by default (labels and replies in the bundle catalogue). */
+    public const array DEFAULT_SUPPORT_TOPICS = [
+        ['key' => 'incident', 'icon' => 'tabler:bug'],
+        ['key' => 'billing', 'icon' => 'tabler:receipt'],
+        ['key' => 'how_to', 'icon' => 'tabler:help-circle'],
+        ['key' => 'account', 'icon' => 'tabler:key'],
+        ['key' => 'other', 'icon' => 'tabler:dots'],
     ];
 
     /**
@@ -194,6 +205,7 @@ final class Configuration implements ConfigurationInterface
                                 ->defaultValue(90)
                                 ->min(30)
                             ->end()
+                            ->append($this->supportNode())
                             ->arrayNode('limits')
                                 ->addDefaultsIfNotSet()
                                 ->children()
@@ -218,5 +230,68 @@ final class Configuration implements ConfigurationInterface
             ->end();
 
         return $treeBuilder;
+    }
+
+    /**
+     * `support`: ticket numbering, the resume / read-only thresholds and the topics.
+     */
+    private function supportNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('support'))->getRootNode();
+        $node
+            ->info('Support tickets: numbering, when to ask "continue or new", when a resolved ticket turns read-only, and the topics.')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->scalarNode('ticket_prefix')
+                    ->info('Prefix of the readable ticket number (SUP-000123).')
+                    ->defaultValue('SUP-')
+                ->end()
+                ->integerNode('ticket_digits')
+                    ->info('Digits of the ticket number (zero-padded).')
+                    ->defaultValue(6)->min(1)->max(12)
+                ->end()
+                ->integerNode('resume_after_days')
+                    ->info('A user opening support whose last ticket has had no message for this many days (or is resolved) is asked "continue it or open a new one?".')
+                    ->defaultValue(7)->min(1)
+                ->end()
+                ->integerNode('close_after_days')
+                    ->info('Days after which a resolved ticket turns read-only (closed tickets are read-only at once). 0: resolved tickets never turn read-only.')
+                    ->defaultValue(30)->min(0)
+                ->end()
+                ->scalarNode('translation_domain')
+                    ->info('Translation domain of the topic labels and replies below.')
+                    ->defaultValue('NowoChatKitBundle')
+                    ->cannotBeEmpty()
+                ->end()
+                ->arrayNode('topics')
+                    ->info('Topics offered when a ticket opens, in order. label / reply default to support.topic.<key> / support.topic_reply.<key>; reply "" posts no automatic reply.')
+                    ->defaultValue(array_map(static fn (array $topic): array => $topic + ['label' => null, 'reply' => null, 'assignee' => null], self::DEFAULT_SUPPORT_TOPICS))
+                    ->requiresAtLeastOneElement()
+                    ->arrayPrototype()
+                        ->children()
+                            ->scalarNode('key')
+                                ->isRequired()
+                                ->validate()
+                                    ->ifTrue(static fn (mixed $key): bool => !is_string($key) || preg_match('/^[a-z0-9_-]{1,64}$/', $key) !== 1)
+                                    ->thenInvalid('A support topic key may only contain 1–64 lowercase letters, digits, "_" and "-".')
+                                ->end()
+                            ->end()
+                            ->scalarNode('label')->defaultNull()->end()
+                            ->scalarNode('reply')->defaultNull()->end()
+                            ->scalarNode('icon')->defaultNull()->end()
+                            ->scalarNode('assignee')
+                                ->info('Public id of the agent new tickets of this topic are assigned to.')
+                                ->defaultNull()
+                            ->end()
+                        ->end()
+                    ->end()
+                    ->validate()
+                        ->ifTrue(static fn (array $topics): bool => count(array_unique(array_column($topics, 'key'))) !== count($topics))
+                        ->thenInvalid('Support topic keys must be unique.')
+                    ->end()
+                ->end()
+            ->end();
+
+        return $node;
     }
 }

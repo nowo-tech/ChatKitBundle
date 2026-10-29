@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, Member, Reactions, Reader, SupportContext } from './types';
+import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, Member, Reactions, Reader, SupportContext, SupportStatus, SupportTicket } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -225,6 +225,59 @@ export class ChatApi {
   }
 
   /**
+   * The caller's support tickets, newest activity first.
+   *
+   * @returns The tickets.
+   */
+  async supportTickets(): Promise<SupportTicket[]> {
+    return (await this.get<{ tickets: SupportTicket[] }>(this.config.endpoints.supportTickets)).tickets;
+  }
+
+  /**
+   * Chooses the topic of the caller's draft (it becomes a ticket) or, as an agent, changes a ticket's topic.
+   *
+   * @param uuid Draft or ticket uuid.
+   * @param topic Topic key.
+   * @returns The updated summary and the bot lines posted.
+   */
+  async chooseTopic(uuid: string, topic: string): Promise<{ conversation: ConversationSummary; messages: ChatMessage[] }> {
+    return this.post(this.url('supportTopic', uuid), { topic });
+  }
+
+  /**
+   * Continues an earlier ticket; the messages of the draft (if given) move into it.
+   *
+   * @param uuid Ticket uuid.
+   * @param draft Uuid of the caller's draft, or null.
+   * @returns The ticket summary.
+   */
+  async resumeTicket(uuid: string, draft: string | null): Promise<ConversationSummary> {
+    return (await this.post<{ conversation: ConversationSummary }>(this.url('supportResume', uuid), draft === null ? {} : { draft })).conversation;
+  }
+
+  /**
+   * Changes a ticket's status (the requester may only reopen).
+   *
+   * @param uuid Ticket uuid.
+   * @param status New status.
+   * @returns The updated summary.
+   */
+  async setTicketStatus(uuid: string, status: SupportStatus): Promise<ConversationSummary> {
+    return (await this.post<{ conversation: ConversationSummary }>(this.url('supportStatus', uuid), { status })).conversation;
+  }
+
+  /**
+   * Assigns a ticket to an agent (agents only).
+   *
+   * @param uuid Ticket uuid.
+   * @param assignee Public id of the agent, or null to unassign.
+   * @returns The updated summary.
+   */
+  async assignTicket(uuid: string, assignee: string | null): Promise<ConversationSummary> {
+    return (await this.post<{ conversation: ConversationSummary }>(this.url('supportAssign', uuid), { assignee })).conversation;
+  }
+
+  /**
    * Mercure settings for this user: hub URL, short-lived subscriber token and private topic.
    *
    * @returns Whether realtime is enabled, the hub URL, the token, the topic and the token expiry.
@@ -250,7 +303,10 @@ export class ChatApi {
    * @param uuid Conversation uuid.
    * @returns The URL.
    */
-  private url(kind: 'conversation' | 'messages' | 'members' | 'read' | 'typing' | 'buzz' | 'resolve', uuid: string): string {
+  private url(
+    kind: 'conversation' | 'messages' | 'members' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign',
+    uuid: string,
+  ): string {
     return this.config.endpoints[kind].replace('__uuid__', encodeURIComponent(uuid));
   }
 

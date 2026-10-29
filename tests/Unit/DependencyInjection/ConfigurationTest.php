@@ -41,7 +41,15 @@ final class ConfigurationTest extends TestCase
             'icon_set'       => 'ux_icon',
             'icons'          => Configuration::DEFAULT_ICONS,
             'presence_ttl'   => 90,
-            'limits'         => [
+            'support'        => [
+                'ticket_prefix'      => 'SUP-',
+                'ticket_digits'      => 6,
+                'resume_after_days'  => 7,
+                'close_after_days'   => 30,
+                'translation_domain' => 'NowoChatKitBundle',
+                'topics'             => array_map(static fn (array $topic): array => $topic + ['label' => null, 'reply' => null, 'assignee' => null], Configuration::DEFAULT_SUPPORT_TOPICS),
+            ],
+            'limits' => [
                 'send_per_minute'       => 30,
                 'actions_per_minute'    => 240,
                 'typing_per_minute'     => 30,

@@ -23,6 +23,11 @@ const config = {
     resolve: '/conv/__uuid__/resolve',
     realtime: '/rt',
     presence: '/presence',
+    supportTickets: '/support/tickets',
+    supportTopic: '/support/__uuid__/topic',
+    supportResume: '/support/__uuid__/resume',
+    supportStatus: '/support/__uuid__/status',
+    supportAssign: '/support/__uuid__/assign',
   },
 } as unknown as ChatConfig;
 
@@ -32,6 +37,25 @@ function respond(body: unknown, ok = true, status = 200) {
 
 describe('chat api client', () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it('calls the support ticket endpoints', async () => {
+    const fetchMock = respond({ tickets: [{ uuid: 't' }], conversation: { uuid: 'x' }, messages: [{ id: 1 }] });
+    vi.stubGlobal('fetch', fetchMock);
+    const api = new ChatApi(config);
+
+    expect(await api.supportTickets()).toEqual([{ uuid: 't' }]);
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/support/tickets');
+    expect(await api.chooseTopic('d 1', 'billing')).toEqual({ tickets: [{ uuid: 't' }], conversation: { uuid: 'x' }, messages: [{ id: 1 }] });
+    expect(fetchMock).toHaveBeenLastCalledWith('/support/d%201/topic', expect.objectContaining({ method: 'POST', body: '{"topic":"billing"}' }));
+    expect(await api.resumeTicket('t', 'd')).toEqual({ uuid: 'x' });
+    expect(fetchMock).toHaveBeenLastCalledWith('/support/t/resume', expect.objectContaining({ body: '{"draft":"d"}' }));
+    await api.resumeTicket('t', null);
+    expect(fetchMock.mock.lastCall?.[1]).toMatchObject({ body: '{}' });
+    expect(await api.setTicketStatus('t', 'open')).toEqual({ uuid: 'x' });
+    expect(fetchMock).toHaveBeenLastCalledWith('/support/t/status', expect.objectContaining({ body: '{"status":"open"}' }));
+    expect(await api.assignTicket('t', null)).toEqual({ uuid: 'x' });
+    expect(fetchMock).toHaveBeenLastCalledWith('/support/t/assign', expect.objectContaining({ body: '{"assignee":null}' }));
+  });
 
   it('calls every endpoint with CSRF on writes and unwraps payloads', async () => {
     const fetchMock = respond({ conversations: [], unreadTotal: 0, conversation: { uuid: 'x' }, contacts: [1], message: { id: 1 }, online: ['u'], messages: [], reactions: { '👍': ['me'] } });

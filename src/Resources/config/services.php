@@ -9,6 +9,7 @@ use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\Contract\ChatSupportTopicProviderInterface;
 use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
@@ -22,6 +23,7 @@ use Nowo\ChatKitBundle\Realtime\ChatRecipients;
 use Nowo\ChatKitBundle\Realtime\MercureChatRealtime;
 use Nowo\ChatKitBundle\Realtime\NullChatRealtime;
 use Nowo\ChatKitBundle\Service\ChatService;
+use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\Mercure\HubInterface;
@@ -62,6 +64,7 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);
     $services->alias(ChatLinkPreviewProviderInterface::class, NullLinkPreviewProvider::class);
     $services->alias(ChatDigestSenderInterface::class, NullChatDigestSender::class);
+    $services->alias(ChatSupportTopicProviderInterface::class, ConfiguredSupportTopicProvider::class);
     $services->set(NullChatRealtime::class);
     if (interface_exists(HubInterface::class)) {
         $services->alias(ChatRealtimeInterface::class, MercureChatRealtime::class);

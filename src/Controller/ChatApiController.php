@@ -13,6 +13,7 @@ use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
+use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Http\ChatApiException;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatContact;
@@ -32,6 +33,7 @@ use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatSupportInbox;
+use Nowo\ChatKitBundle\Support\ChatSupportTickets;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
@@ -91,6 +93,7 @@ final class ChatApiController extends AbstractController
         private readonly ChatRealtimeInterface $realtime,
         private readonly ChatSupportInbox $supportInbox,
         private readonly ChatLinkPreviewProviderInterface $linkPreviews,
+        private readonly ChatSupportTickets $tickets,
         #[Autowire(service: 'limiter.nowo_chat_send')]
         private readonly RateLimiterFactoryInterface $sendLimiter,
         #[Autowire(service: 'limiter.nowo_chat_action')]
@@ -214,7 +217,8 @@ final class ChatApiController extends AbstractController
     }
 
     /**
-     * Opens (or creates) the caller's support thread, recording the optional `context` (`url`, `label`).
+     * Opens support for the caller: the active ticket, or the intake draft (its summary carries `intake`: pick a topic
+     * or "continue the last ticket or open a new one?"). Records the optional `context` (`url`, `label`).
      *
      * @param Request $request JSON body `{context?}`
      *
@@ -227,7 +231,139 @@ final class ChatApiController extends AbstractController
 
         $context = $this->payload($request)['context'] ?? null;
 
-        return $this->json(['conversation' => $this->present($this->chat->openSupport($user, is_array($context) ? $context : null), $user)]);
+        return $this->json(['conversation' => $this->present($this->tickets->open($user, is_array($context) ? $context : null), $user)]);
+    }
+
+    /**
+     * The caller's tickets, newest activity first; an agent may pass `?owner=<public id>` for a requester's tickets.
+     *
+     * @param Request $request The request (query `owner`)
+     *
+     * @return JsonResponse `{tickets}`
+     */
+    #[Route('/support/tickets', name: 'support_tickets', methods: ['GET'])]
+    public function supportTickets(Request $request): JsonResponse
+    {
+        $user  = $this->reader();
+        $owner = $user;
+        $asked = (string) $request->query->get('owner', '');
+        if ($asked !== '' && $asked !== $user->getChatPublicId()) {
+            $owner = $this->access->isSupportAgent($user) ? $this->directory->findByPublicId($asked) : null;
+            $this->deny(!$owner instanceof ChatUserInterface, 'not_found', Response::HTTP_NOT_FOUND);
+            assert($owner instanceof ChatUserInterface);
+        }
+
+        return $this->json(['tickets' => $this->tickets->tickets($owner)]);
+    }
+
+    /**
+     * Chooses the topic: the requester's draft becomes a ticket (number, automatic replies); an agent changes the
+     * topic of a ticket. Unknown topic → 422 `topic`.
+     *
+     * @param string $uuid Draft or ticket uuid
+     * @param Request $request JSON body `{topic}`
+     *
+     * @return JsonResponse `{conversation, messages}` (the bot lines posted)
+     */
+    #[Route('/support/{uuid}/topic', name: 'support_topic', requirements: ['uuid' => self::UUID], methods: ['POST'])]
+    public function supportTopic(string $uuid, Request $request): JsonResponse
+    {
+        $user         = $this->writer($request);
+        $conversation = $this->findSupport($uuid);
+        $this->deny(
+            $conversation->isSupportDraft() ? !$this->owns($conversation, $user) : !$this->access->isSupportAgent($user),
+            'not_found',
+            Response::HTTP_NOT_FOUND,
+        );
+        try {
+            $posted = $this->tickets->chooseTopic($user, $conversation, (string) ($this->payload($request)['topic'] ?? ''));
+        } catch (InvalidArgumentException $exception) {
+            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
+        }
+
+        return $this->json([
+            'conversation' => $this->present($conversation, $user),
+            'messages'     => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $posted),
+        ]);
+    }
+
+    /**
+     * The requester continues an earlier ticket (`uuid`); the messages of their draft (`draft`, optional) move into it
+     * and it goes back to open. Read-only ticket → 422 `read_only`.
+     *
+     * @param string $uuid Ticket uuid
+     * @param Request $request JSON body `{draft?}`
+     *
+     * @return JsonResponse `{conversation}` (the ticket)
+     */
+    #[Route('/support/{uuid}/resume', name: 'support_resume', requirements: ['uuid' => self::UUID], methods: ['POST'])]
+    public function supportResume(string $uuid, Request $request): JsonResponse
+    {
+        $user   = $this->writer($request);
+        $ticket = $this->findSupport($uuid);
+        $this->deny(!$ticket->isTicket() || !$this->owns($ticket, $user), 'not_found', Response::HTTP_NOT_FOUND);
+        $draft = $this->conversations->findOneByUuid((string) ($this->payload($request)['draft'] ?? ''));
+        try {
+            $this->tickets->resume($user, $ticket, $draft instanceof ChatConversation && $this->owns($draft, $user) ? $draft : null);
+        } catch (InvalidArgumentException $exception) {
+            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
+        }
+
+        return $this->json(['conversation' => $this->present($ticket, $user)]);
+    }
+
+    /**
+     * Changes a ticket's status: agents any status, the requester only a reopen (`open`). Unknown or forbidden status
+     * → 422 `status`; read-only ticket (requester) → 422 `read_only`.
+     *
+     * @param string $uuid Ticket uuid
+     * @param Request $request JSON body `{status}`
+     *
+     * @return JsonResponse `{conversation}`
+     */
+    #[Route('/support/{uuid}/status', name: 'support_status', requirements: ['uuid' => self::UUID], methods: ['POST'])]
+    public function supportStatus(string $uuid, Request $request): JsonResponse
+    {
+        $user    = $this->writer($request);
+        $ticket  = $this->findSupport($uuid);
+        $isAgent = $this->access->isSupportAgent($user);
+        $this->deny(!$ticket->isTicket() || !$isAgent && !$this->owns($ticket, $user), 'not_found', Response::HTTP_NOT_FOUND);
+        $status = SupportStatus::tryFrom((string) ($this->payload($request)['status'] ?? ''));
+        $this->deny(!$status instanceof SupportStatus, 'status', Response::HTTP_UNPROCESSABLE_ENTITY);
+        assert($status instanceof SupportStatus);
+        try {
+            $this->tickets->changeStatus($user, $ticket, $status, $isAgent);
+        } catch (InvalidArgumentException $exception) {
+            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
+        }
+
+        return $this->json(['conversation' => $this->present($ticket, $user)]);
+    }
+
+    /**
+     * An agent assigns a ticket (`assignee`: an agent's public id, or null to unassign). Not an agent → 422 `assignee`.
+     *
+     * @param string $uuid Ticket uuid
+     * @param Request $request JSON body `{assignee}`
+     *
+     * @return JsonResponse `{conversation}`
+     */
+    #[Route('/support/{uuid}/assign', name: 'support_assign', requirements: ['uuid' => self::UUID], methods: ['POST'])]
+    public function supportAssign(string $uuid, Request $request): JsonResponse
+    {
+        $user   = $this->writer($request);
+        $ticket = $this->findSupport($uuid);
+        $this->deny(!$ticket->isTicket() || !$this->access->isSupportAgent($user), 'not_found', Response::HTTP_NOT_FOUND);
+        $given    = $this->payload($request)['assignee'] ?? null;
+        $assignee = is_string($given) && $given !== '' ? $this->directory->findByPublicId($given) : null;
+        $this->deny(is_string($given) && $given !== '' && !$assignee instanceof ChatUserInterface, 'assignee', Response::HTTP_UNPROCESSABLE_ENTITY);
+        try {
+            $this->tickets->assign($user, $ticket, $assignee);
+        } catch (InvalidArgumentException $exception) {
+            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
+        }
+
+        return $this->json(['conversation' => $this->present($ticket, $user)]);
     }
 
     /**
@@ -255,11 +391,12 @@ final class ChatApiController extends AbstractController
     }
 
     /**
-     * Support agents' inbox (`?status=open|resolved|mine|all&q=`); 404 for everyone else.
+     * Support agents' inbox (`?status=open|waiting|resolved|closed|mine|unassigned|all&topic=&q=`) with the open
+     * count and the open + waiting count per topic; 404 for everyone else.
      *
-     * @param Request $request The request (query `status`, `q`)
+     * @param Request $request The request (query `status`, `topic`, `q`)
      *
-     * @return JsonResponse `{threads, open}`
+     * @return JsonResponse `{threads, open, topics}`
      */
     #[Route('/support/inbox', name: 'support_inbox', methods: ['GET'])]
     public function supportInbox(Request $request): JsonResponse
@@ -267,10 +404,12 @@ final class ChatApiController extends AbstractController
         $user = $this->reader();
         $this->deny(!$this->access->isSupportAgent($user), 'not_found', Response::HTTP_NOT_FOUND);
         $query = mb_substr(trim((string) $request->query->get('q', '')), 0, 80);
+        $topic = mb_substr(trim((string) $request->query->get('topic', '')), 0, ChatConversation::TOPIC_MAX_LENGTH);
 
         return $this->json([
-            'threads' => $this->supportInbox->list($user, (string) $request->query->get('status', 'open'), $query === '' ? null : $query),
+            'threads' => $this->supportInbox->list($user, (string) $request->query->get('status', 'open'), $query === '' ? null : $query, 50, $topic === '' ? null : $topic),
             'open'    => $this->supportInbox->countOpen(),
+            'topics'  => $this->supportInbox->countByTopic(),
         ]);
     }
 
@@ -645,7 +784,7 @@ final class ChatApiController extends AbstractController
             $online = $presence[$peer->getChatPublicId()]['online'] ?? false;
         }
 
-        return $this->presenter->conversation(
+        $summary = $this->presenter->conversation(
             $conversation,
             $user,
             $peer,
@@ -656,6 +795,27 @@ final class ChatApiController extends AbstractController
             $this->access->isSupportAgent($user),
             $online,
         );
+        if ($conversation->isSupportDraft() && $this->owns($conversation, $user)) {
+            // The requester's draft: the topic question (or "continue or new?") and their earlier tickets.
+            $summary['intake'] = $this->tickets->intake($user);
+        }
+
+        return $summary;
+    }
+
+    /** Whether the user is the requester of the support conversation. */
+    private function owns(ChatConversation $conversation, ChatUserInterface $user): bool
+    {
+        return $conversation->isSupport() && $conversation->getSupportOwner()?->getId() === $user->getId();
+    }
+
+    /** A support conversation the caller may view (anything else → 404). */
+    private function findSupport(string $uuid): ChatConversation
+    {
+        $conversation = $this->find($uuid, ChatVoter::VIEW);
+        $this->deny(!$conversation->isSupport(), 'not_found', Response::HTTP_NOT_FOUND);
+
+        return $conversation;
     }
 
     /** Reciprocal: hiding your own presence also hides everyone else's. */

@@ -22,7 +22,7 @@ use const DATE_ATOM;
  * Personal data hooks for the application's export / erasure flows (GDPR). Export: the user's own messages
  * and chat settings (other people's messages are not the user's personal data). Erasure: authored messages
  * become tombstones with no author and no text (the thread keeps its shape for the others), reactions, read
- * cursors, settings and the user's own support thread are deleted.
+ * cursors, settings and the user's own support tickets are deleted.
  */
 final readonly class ChatPersonalData
 {
@@ -81,7 +81,7 @@ final readonly class ChatPersonalData
 
     /**
      * Erases the user's chat data: authored messages become author-less, text-less tombstones; reactions,
-     * read cursors, settings and the user's own support thread (with its messages) are deleted.
+     * read cursors, settings and the user's own support tickets (with their messages) are deleted.
      *
      * @param ChatUserInterface $user The user whose data is erased
      */
@@ -100,8 +100,8 @@ final readonly class ChatPersonalData
         $qb()->delete(ChatParticipant::class, 'p')->where('p.user = :user')->setParameter('user', $user)->getQuery()->execute();
         $qb()->delete(ChatUserSettings::class, 's')->where('s.user = :user')->setParameter('user', $user)->getQuery()->execute();
 
-        $support = $this->conversations->findSupportFor($user);
-        if ($support instanceof ChatConversation) {
+        // Every support ticket of the user (and the intake draft), with its messages.
+        foreach ($this->conversations->findBy(['supportOwner' => $user]) as $support) {
             $messageIds = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->getSingleColumnResult();
             if ($messageIds !== []) {
                 $qb()->delete(ChatReaction::class, 'r')->where('IDENTITY(r.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();

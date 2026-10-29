@@ -15,6 +15,7 @@ use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
 use function array_slice;
+use function in_array;
 
 /**
  * Queries for conversations: lookups by uuid / direct key / channel / support owner, the dock list, the support inbox and counters.
@@ -74,15 +75,50 @@ class ChatConversationRepository extends ServiceEntityRepository
     }
 
     /**
-     * Finds the support thread owned by the user.
+     * The user's most recent support conversation (ticket or intake draft).
      *
      * @param ChatUserInterface $owner The user who asks for support
      *
-     * @return ChatConversation|null The support thread, or null when none exists yet
+     * @return ChatConversation|null The latest support conversation, or null when none exists yet
      */
     public function findSupportFor(ChatUserInterface $owner): ?ChatConversation
     {
-        return $this->findOneBy(['supportOwner' => $owner]);
+        return $this->findOneBy(['supportOwner' => $owner], ['lastMessageAt' => 'DESC', 'id' => 'DESC']);
+    }
+
+    /**
+     * The user's intake draft (a support conversation whose topic is not chosen yet).
+     *
+     * @param ChatUserInterface $owner The user
+     *
+     * @return ChatConversation|null The draft, or null when none exists
+     */
+    public function findSupportDraft(ChatUserInterface $owner): ?ChatConversation
+    {
+        return $this->findOneBy(['supportOwner' => $owner, 'ticketNumber' => null], ['id' => 'DESC']);
+    }
+
+    /**
+     * The user's tickets, newest activity first.
+     *
+     * @param ChatUserInterface $owner The requester
+     * @param int $limit Maximum number of tickets
+     *
+     * @return list<ChatConversation> The tickets
+     */
+    public function findTickets(ChatUserInterface $owner, int $limit): array
+    {
+        /** @var list<ChatConversation> $rows */
+        $rows = $this->createQueryBuilder('c')
+            ->where('c.supportOwner = :owner AND c.ticketNumber IS NOT NULL')
+            ->setParameter('owner', $owner)
+            ->orderBy('c.lastMessageAt', 'DESC')
+            ->addOrderBy('c.id', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        return $rows;
     }
 
     /**
@@ -169,35 +205,105 @@ class ChatConversationRepository extends ServiceEntityRepository
     }
 
     /**
-     * Support threads for the agents' inbox, newest activity first: `open`, `resolved`, `mine` (threads the agent
-     * took part in) or every thread (null).
+     * Support threads for the agents' inbox, newest activity first. Status filters: `open`, `waiting`, `resolved`
+     * (resolved after `$closeCutoff`), `closed` (closed, or resolved before `$closeCutoff`), `mine` (assigned to the
+     * agent), `unassigned` (open or waiting without an assignee); null for every thread. `$topic` narrows to one topic
+     * key (`none`: no topic).
      *
-     * @param string|null $filter `open`, `resolved`, `mine` or null for all
+     * @param string|null $filter Status filter, or null for all
      * @param ChatUserInterface $agent The agent viewing the inbox (used by `mine`)
      * @param int $limit Maximum number of threads
+     * @param string|null $topic Topic key, `none`, or null for every topic
+     * @param DateTimeImmutable|null $closeCutoff Resolved before this counts as closed; null: never
      *
      * @return list<ChatConversation> The support threads
      */
-    public function findSupportInbox(?string $filter, ChatUserInterface $agent, int $limit): array
+    public function findSupportInbox(?string $filter, ChatUserInterface $agent, int $limit, ?string $topic = null, ?DateTimeImmutable $closeCutoff = null): array
     {
         $qb = $this->createQueryBuilder('c')
             ->leftJoin('c.supportOwner', 'owner')->addSelect('owner')
+            ->leftJoin('c.assignee', 'assignee')->addSelect('assignee')
             ->where('c.kind = :support')
             ->andWhere(self::HAS_MESSAGES)
             ->setParameter('support', ConversationKind::Support)
             ->orderBy('c.lastMessageAt', 'DESC')
             ->addOrderBy('c.id', 'DESC')
             ->setMaxResults($limit);
-        if ($filter === 'open' || $filter === 'resolved') {
-            $qb->andWhere('c.supportStatus = :status')->setParameter('status', SupportStatus::from($filter));
-        } elseif ($filter === 'mine') {
-            $qb->innerJoin(ChatParticipant::class, 'p', 'WITH', 'p.conversation = c AND p.user = :agent')->setParameter('agent', $agent);
+        $resolved = static fn (string $operator): string => $closeCutoff instanceof DateTimeImmutable ? ' AND c.resolvedAt ' . $operator . ' :cutoff' : ($operator === '<' ? ' AND 1 = 0' : '');
+        match ($filter) {
+            'open', 'waiting' => $qb->andWhere('c.supportStatus = :status')->setParameter('status', SupportStatus::from($filter)),
+            'resolved'        => $qb->andWhere('c.supportStatus = :resolved' . $resolved('>='))->setParameter('resolved', SupportStatus::Resolved),
+            'closed'          => $qb->andWhere('c.supportStatus = :closed OR (c.supportStatus = :resolved' . $resolved('<') . ')')->setParameter('closed', SupportStatus::Closed)->setParameter('resolved', SupportStatus::Resolved),
+            'mine'            => $qb->andWhere('c.assignee = :agent')->setParameter('agent', $agent),
+            'unassigned'      => $qb->andWhere('c.assignee IS NULL AND c.supportStatus IN (:active)')->setParameter('active', [SupportStatus::Open, SupportStatus::Waiting]),
+            default           => null,
+        };
+        if (in_array($filter, ['resolved', 'closed'], true) && $closeCutoff instanceof DateTimeImmutable) {
+            $qb->setParameter('cutoff', $closeCutoff);
+        }
+        if ($topic === 'none') {
+            $qb->andWhere('c.ticketTopic IS NULL');
+        } elseif ($topic !== null) {
+            $qb->andWhere('c.ticketTopic = :topic')->setParameter('topic', $topic);
         }
 
         /** @var list<ChatConversation> $rows */
         $rows = $qb->getQuery()->getResult();
 
         return $rows;
+    }
+
+    /**
+     * Number of tickets of each requester.
+     *
+     * @param list<int> $ownerIds Doctrine ids of the requesters
+     *
+     * @return array<int, int> owner id => ticket count (owners without tickets are left out)
+     */
+    public function countTicketsByOwner(array $ownerIds): array
+    {
+        if ($ownerIds === []) {
+            return [];
+        }
+        /** @var list<array{owner: int|string, total: int|string}> $rows */
+        $rows = $this->createQueryBuilder('c')
+            ->select('IDENTITY(c.supportOwner) AS owner, COUNT(c.id) AS total')
+            ->where('c.supportOwner IN (:owners) AND c.ticketNumber IS NOT NULL')
+            ->setParameter('owners', $ownerIds)
+            ->groupBy('c.supportOwner')
+            ->getQuery()
+            ->getArrayResult();
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[(int) $row['owner']] = (int) $row['total'];
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Open or waiting support threads that hold a message, per topic key (`none` for threads without a topic).
+     *
+     * @return array<string, int> topic key => count
+     */
+    public function countActiveByTopic(): array
+    {
+        /** @var list<array{topic: string|null, total: int|string}> $rows */
+        $rows = $this->createQueryBuilder('c')
+            ->select('c.ticketTopic AS topic, COUNT(c.id) AS total')
+            ->where('c.kind = :support AND c.supportStatus IN (:active)')
+            ->andWhere(self::HAS_MESSAGES)
+            ->setParameter('support', ConversationKind::Support)
+            ->setParameter('active', [SupportStatus::Open, SupportStatus::Waiting])
+            ->groupBy('c.ticketTopic')
+            ->getQuery()
+            ->getArrayResult();
+        $counts = [];
+        foreach ($rows as $row) {
+            $counts[$row['topic'] ?? 'none'] = (int) $row['total'];
+        }
+
+        return $counts;
     }
 
     /**

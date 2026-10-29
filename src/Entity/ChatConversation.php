@@ -16,21 +16,27 @@ use function in_array;
 use function strlen;
 
 /**
- * A conversation: one per user pair (direct), one per application channel key and one per user with the shared
- * support inbox. Unique keys enforce those cardinalities in the database.
+ * A conversation: one per user pair (direct), one per application channel key, and support tickets. A support
+ * conversation without a ticket number is the user's intake draft (topic not chosen yet); choosing a topic turns
+ * it into a numbered ticket. One user may hold several tickets. Unique keys enforce the direct / channel / ticket
+ * number cardinalities in the database.
  */
 #[ORM\Entity(repositoryClass: ChatConversationRepository::class)]
 #[ORM\Table(name: 'nowo_chat_conversation')]
 #[ORM\UniqueConstraint(name: 'uniq_nowo_chat_conversation_uuid', columns: ['uuid'])]
 #[ORM\UniqueConstraint(name: 'uniq_nowo_chat_conversation_direct', columns: ['direct_key'])]
 #[ORM\UniqueConstraint(name: 'uniq_nowo_chat_conversation_channel', columns: ['channel_key'])]
-#[ORM\UniqueConstraint(name: 'uniq_nowo_chat_conversation_support', columns: ['support_owner_id'])]
+#[ORM\UniqueConstraint(name: 'uniq_nowo_chat_conversation_ticket', columns: ['ticket_number'])]
 #[ORM\Index(name: 'idx_nowo_chat_conversation_activity', columns: ['kind', 'last_message_at'])]
+#[ORM\Index(name: 'idx_nowo_chat_conversation_support', columns: ['support_owner_id', 'last_message_at'])]
+#[ORM\Index(name: 'idx_nowo_chat_conversation_assignee', columns: ['assignee_id'])]
 class ChatConversation
 {
     use PublicIdTrait;
 
     public const int CHANNEL_KEY_MAX_LENGTH = 120;
+
+    public const int TOPIC_MAX_LENGTH = 64;
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -66,6 +72,23 @@ class ChatConversation
 
     #[ORM\Column(name: 'resolved_at', nullable: true)]
     private ?DateTimeImmutable $resolvedAt = null;
+
+    /** Support only: sequential ticket number (per application); null while the topic is not chosen (intake draft). */
+    #[ORM\Column(name: 'ticket_number', nullable: true)]
+    private ?int $ticketNumber = null;
+
+    /** Support only: key of the ticket topic (`support.topics`); null for drafts and tickets created before 1.8. */
+    #[ORM\Column(name: 'ticket_topic', length: self::TOPIC_MAX_LENGTH, nullable: true)]
+    private ?string $ticketTopic = null;
+
+    /** Support only: the agent handling the ticket; null when unassigned. */
+    #[ORM\ManyToOne(targetEntity: ChatUserInterface::class)]
+    #[ORM\JoinColumn(name: 'assignee_id', nullable: true, onDelete: 'SET NULL')]
+    private ?ChatUserInterface $assignee = null;
+
+    /** Support only: when the ticket was closed (read-only from then on). */
+    #[ORM\Column(name: 'closed_at', nullable: true)]
+    private ?DateTimeImmutable $closedAt = null;
 
     /** Set from creation so list ordering needs no COALESCE and stays indexed. */
     #[ORM\Column(name: 'last_message_at')]
@@ -288,7 +311,7 @@ class ChatConversation
     }
 
     /**
-     * Support only: open or resolved.
+     * Support only: open, waiting for the user, resolved or closed.
      *
      * @return SupportStatus|null The status, or null for other kinds
      */
@@ -324,10 +347,12 @@ class ChatConversation
         $this->resolvedBy = $agent;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->resolvedAt = $at ?? new DateTimeImmutable();
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->closedAt = null;
     }
 
     /**
-     * Reopens the support thread and clears who / when resolved it.
+     * Reopens the support thread and clears who / when resolved or closed it.
      *
      * @throws LogicException When the conversation is not a support thread
      */
@@ -340,6 +365,139 @@ class ChatConversation
         $this->resolvedBy = null;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->resolvedAt = null;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->closedAt = null;
+    }
+
+    /**
+     * Sets the ticket status: resolved records who / when, closed records when, open clears both, waiting keeps them.
+     *
+     * @param SupportStatus $status The new status
+     * @param ChatUserInterface|null $by Who changed it (recorded as the resolver for `resolved`)
+     * @param DateTimeImmutable|null $at Time of the change; null for now
+     *
+     * @throws LogicException When the conversation is not a support thread
+     */
+    public function changeSupportStatus(SupportStatus $status, ?ChatUserInterface $by = null, ?DateTimeImmutable $at = null): void
+    {
+        $this->assertSupport();
+        $at ??= new DateTimeImmutable();
+        match ($status) {
+            SupportStatus::Open     => $this->reopen(),
+            SupportStatus::Resolved => $this->resolve($by ?? $this->supportOwner ?? throw new LogicException('A resolved ticket needs who resolved it.'), $at),
+            SupportStatus::Closed   => $this->close($at),
+            SupportStatus::Waiting  => $this->wait(),
+        };
+    }
+
+    /**
+     * Support only: whether the conversation is a numbered ticket (not an intake draft).
+     *
+     * @return bool True for a ticket
+     */
+    public function isTicket(): bool
+    {
+        return $this->isSupport() && $this->ticketNumber !== null;
+    }
+
+    /**
+     * Support only: whether this is the owner's intake draft (no topic chosen yet, no number).
+     *
+     * @return bool True for a draft
+     */
+    public function isSupportDraft(): bool
+    {
+        return $this->isSupport() && $this->ticketNumber === null;
+    }
+
+    /**
+     * Support only: the sequential ticket number.
+     *
+     * @return int|null The number; null for drafts and other kinds
+     */
+    public function getTicketNumber(): ?int
+    {
+        return $this->ticketNumber;
+    }
+
+    /**
+     * Support only: key of the ticket topic.
+     *
+     * @return string|null The topic key; null when none was chosen
+     */
+    public function getTicketTopic(): ?string
+    {
+        return $this->ticketTopic;
+    }
+
+    /**
+     * Turns the intake draft into an open ticket with its number and topic.
+     *
+     * @param int $number The sequential ticket number (positive)
+     * @param string $topic The topic key (1–64 characters)
+     *
+     * @throws LogicException When the conversation is not a draft or the number / topic is invalid
+     */
+    public function openTicket(int $number, string $topic): void
+    {
+        if (!$this->isSupportDraft() || $number < 1) {
+            throw new LogicException('Only a support draft becomes a ticket, with a positive number.');
+        }
+        $this->changeTopic($topic);
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->ticketNumber = $number;
+        $this->reopen();
+    }
+
+    /**
+     * Changes the ticket topic.
+     *
+     * @param string $topic The topic key (1–64 characters)
+     *
+     * @throws LogicException When the conversation is not a support thread or the key is invalid
+     */
+    public function changeTopic(string $topic): void
+    {
+        $this->assertSupport();
+        if ($topic === '' || strlen($topic) > self::TOPIC_MAX_LENGTH) {
+            throw new LogicException('A topic key must be 1–64 characters.');
+        }
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->ticketTopic = $topic;
+    }
+
+    /**
+     * Support only: the agent handling the ticket.
+     *
+     * @return ChatUserInterface|null The assignee; null when unassigned or the account is gone
+     */
+    public function getAssignee(): ?ChatUserInterface
+    {
+        return $this->assignee;
+    }
+
+    /**
+     * Assigns the ticket to an agent (null: unassigned).
+     *
+     * @param ChatUserInterface|null $assignee The agent; null to unassign
+     *
+     * @throws LogicException When the conversation is not a support thread
+     */
+    public function assign(?ChatUserInterface $assignee): void
+    {
+        $this->assertSupport();
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->assignee = $assignee;
+    }
+
+    /**
+     * Support only: when the ticket was closed.
+     *
+     * @return DateTimeImmutable|null The closing time; null unless closed
+     */
+    public function getClosedAt(): ?DateTimeImmutable
+    {
+        return $this->closedAt;
     }
 
     /**
@@ -425,6 +583,22 @@ class ChatConversation
     public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
+    }
+
+    private function close(DateTimeImmutable $at): void
+    {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->supportStatus = SupportStatus::Closed;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->closedAt = $at;
+    }
+
+    private function wait(): void
+    {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->supportStatus = SupportStatus::Waiting;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->closedAt = null;
     }
 
     private function assertSupport(): void

@@ -7,6 +7,7 @@
 - [Conversations and permissions](#conversations-and-permissions)
 - [Opening conversations from your pages](#opening-conversations-from-your-pages)
 - [Support inbox](#support-inbox)
+- [Support tickets](#support-tickets)
 - [Full-page chat](#full-page-chat)
 - [Events](#events)
 - [Mentions](#mentions)
@@ -130,11 +131,55 @@ shown to the agents as a "Reported from" banner.
 
 ## Support inbox
 
-Support agents (`ChatAccessPolicyInterface::isSupportAgent()`) see every support thread in the dock. For an inbox page of
-your own, `GET /api/support/inbox?status=open|resolved|mine|all&q=` returns the threads (each with its `owner`) and the
-`open` count; `ChatSupportInbox` gives the same data in PHP (e.g. a menu counter: `countOpen()`). Agents resolve and
-reopen threads (`ChatService::resolveSupport()` / `reopenSupport()`, or the API); a new message from the owner reopens
-them too.
+Support agents (`ChatAccessPolicyInterface::isSupportAgent()`) see every support ticket in the dock. For an inbox page of
+your own, `GET /api/support/inbox?status=open|waiting|resolved|closed|mine|unassigned|all&topic=&q=` returns the
+tickets (each with its `ticket` block, `owner` and `ownerTickets`, the requester's ticket count), the `open` count and
+`topics` (open + waiting tickets per topic); `ChatSupportInbox` gives the same data in PHP (`list()`, `countOpen()`,
+`countByTopic()`, `otherTickets()`). `mine` means assigned to the agent. Agents change the status, the topic and the
+assignee (`ChatSupportTickets` or the API below); `ChatService::resolveSupport()` / `reopenSupport()` still work.
+
+## Support tickets
+
+Since 1.8 a support conversation is a **ticket**: a readable number (`SUP-000123`, sequential per application), a
+topic, a status (`open`, `waiting` for the user, `resolved`, `closed`), created / last activity / resolved / closed
+times, the requester and an optional assignee. One user may hold several tickets.
+
+- **Opening support** (`data-nowo-chat-open="support"`, `POST /api/support`) continues the latest ticket while it is
+  open or waiting and has had a message in the last `support.resume_after_days` (7). Otherwise it opens the user's
+  **intake draft**, where the support assistant greets them with the topics as buttons. When the latest ticket can
+  still be continued (resolved, or idle), the assistant asks first: *Continue SUP-000123 (topic, last message date)
+  or open a new one?* — Continue moves anything typed meanwhile into that ticket and reopens it; New shows the topics.
+- **Choosing a topic** gives the draft the next number, assigns the topic's default `assignee` (when they answer
+  support), posts *Ticket SUP-000123 opened: Billing.* and the topic's automatic reply (`support.topic_reply.<key>`,
+  e.g. *Tell us the invoice number…*). Text typed before choosing stays the first message (agents see such a draft
+  in the inbox with *No topic*).
+- **Replies move the status**: an agent's reply turns an open ticket to `waiting`; the requester's reply turns it back
+  to `open` and reopens a resolved one. These automatic switches dispatch no event.
+- **Earlier tickets**: the assistant lists the requester's tickets (number, topic, status, last activity); each opens
+  in the dock. A resolved ticket shows **Reopen** to its requester. A **closed** ticket, or one resolved more than
+  `support.close_after_days` (30) ago, is read-only for everyone (agents may still change its status).
+- Every status change, assignment, topic change and continuation posts a support-assistant line (`kind: bot`, no
+  author, translated for each reader) in the ticket.
+
+Topics come from `support.topics` (see CONFIGURATION). To manage them as data, alias
+`ChatSupportTopicProviderInterface` to your service returning `ChatSupportTopic` objects; a topic with a null `domain`
+keeps its `label` and `reply` as plain text:
+
+```php
+use Nowo\ChatKitBundle\Contract\ChatSupportTopicProviderInterface;
+use Nowo\ChatKitBundle\Model\ChatSupportTopic;
+
+final class SupportTopics implements ChatSupportTopicProviderInterface
+{
+    public function topics(): array
+    {
+        return [
+            new ChatSupportTopic('incident', 'support.topic.incident', 'support.topic_reply.incident', 'tabler:bug', null, 'messages'),
+            new ChatSupportTopic('sales', 'Sales', 'Which plan are you interested in?'), // plain text
+        ];
+    }
+}
+```
 
 ## Full-page chat
 
@@ -177,6 +222,10 @@ and overrides `nowo_chat_page_list` or `nowo_chat_page_thread`. Theme the page a
 | `ChatMessageSentEvent` | a message or buzz was stored and published | counters, bots, audit |
 | `ChatMessageDeletedEvent` | a message was deleted (by its author; `moderated` is true only on tombstones from before 1.4) | audit |
 | `ChatSupportStatusChangedEvent` | a support thread was resolved (`by` = agent) or reopened (`by` = owner) | inbox counters, notifications |
+| `SupportTicketCreatedEvent` | a requester chose a topic and a ticket opened (`ticket`, `requester`) | notify the support agents |
+| `SupportTicketReopenedEvent` | a ticket went back to open: Continue, Reopen, the requester's reply to a resolved ticket, an agent (`by`) | notify the agents / the assignee |
+| `SupportTicketStatusChangedEvent` | a deliberate status change (`previous`, `by`); not the automatic open ↔ waiting switch | notify the requester |
+| `SupportTicketAssignedEvent` | a ticket was assigned or unassigned (`assignee` null), by an agent or by the topic's default assignee | notify the assignee |
 | `ChatMentionEvent` | a stored message mentions members (`users`: only the people an edit adds; `edited`) | notify the mentioned people |
 
 ## Mentions
@@ -476,14 +525,19 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | --- | --- | --- |
 | GET | `/api/conversations` | list with unread counts and presence |
 | GET | `/api/contacts?q=` | people picker |
-| POST | `/api/direct` `{userUuid}` · `/api/channel` `{channelKey}` · `/api/support` | open |
+| POST | `/api/direct` `{userUuid}` · `/api/channel` `{channelKey}` · `/api/support` `{context?}` | open (support: the active ticket or the intake draft, whose summary carries `intake`) |
 | GET | `/api/conversations/{uuid}` | one conversation |
 | GET | `/api/conversations/{uuid}/members?q=` | members the caller may @mention |
 | GET / POST | `/api/conversations/{uuid}/messages` (`?before=` / `?after=`) | page / send `{body}` |
 | PATCH / DELETE | `/api/conversations/{uuid}/messages/{messageUuid}` | edit `{body}` / delete |
 | POST | `/api/conversations/{uuid}/messages/{messageUuid}/reactions` `{emoji}` | toggle a reaction |
 | POST | `/api/conversations/{uuid}/read` `{messageId}` · `/typing` · `/buzz` · `/resolve` · `/reopen` | |
-| GET | `/api/support/inbox?status=open\|resolved\|mine\|all&q=` | agents only: support threads + open count |
+| GET | `/api/support/inbox?status=open\|waiting\|resolved\|closed\|mine\|unassigned\|all&topic=&q=` | agents only: tickets, open count, counts per topic |
+| GET | `/api/support/tickets` (`?owner=<public id>`, agents) | the caller's (or a requester's) tickets |
+| POST | `/api/support/{uuid}/topic` `{topic}` | requester: the draft becomes a ticket (`{conversation, messages}`); agent: change the topic |
+| POST | `/api/support/{uuid}/resume` `{draft?}` | requester: continue the ticket (the draft's messages move into it) |
+| POST | `/api/support/{uuid}/status` `{status}` | agents: any status; requester: `open` (Reopen) only |
+| POST | `/api/support/{uuid}/assign` `{assignee}` | agents: an agent's public id, or null |
 | GET | `/api/link-previews?url[]=…` | previews from your provider, per viewer |
 | GET | `/api/realtime` | hub URL + subscriber token for the caller's topic |
 | POST | `/api/presence` `{visible}` | heartbeat; online direct contacts |

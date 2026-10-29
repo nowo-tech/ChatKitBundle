@@ -638,6 +638,26 @@ describe('ChatDock', () => {
     expect(q('.nowo-chat-list').textContent).toContain('Renamed');
   });
 
+  it('replaces a support draft window with the ticket it continues', async () => {
+    const { dock, all } = mount([]);
+    await dock.start();
+    await dock.open(summary('draft', { kind: 'support' }));
+    dock.replaceWith('draft', summary('ticket', { kind: 'support' }));
+    await flush();
+    const uuids = () => all('.nowo-chat-window').filter((element) => !element.hidden).map((element) => element.dataset.uuid);
+    expect(uuids()).toEqual(['ticket']);
+  });
+
+  it('replaces the phone thread with another ticket', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: () => undefined }));
+    const { dock, root } = mount([]);
+    await dock.start();
+    await dock.open(summary('draft', { kind: 'support' }));
+    dock.replaceWith('draft', summary('older', { kind: 'support' }));
+    await flush();
+    expect(root.classList.contains('has-mobile-thread')).toBe(true);
+  });
+
   it('opens the conversation of a push notification (?chat=)', async () => {
     window.history.replaceState(null, '', '/dashboard?chat=11111111-1111-1111-1111-111111111111&x=1');
     const { dock, all } = mount([summary('11111111-1111-1111-1111-111111111111')]);

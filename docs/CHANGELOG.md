@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.8.0] - 2026-10-29](#180---2026-10-29)
 - [[1.7.0] - 2026-10-29](#170---2026-10-29)
 - [[1.6.0] - 2026-10-23](#160---2026-10-23)
 - [[1.5.5] - 2026-10-21](#155---2026-10-21)
@@ -24,6 +25,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.8.0] - 2026-10-29
+
+### Added
+
+- **Support tickets.** A support conversation is now a ticket: readable sequential number (`SUP-000123`,
+  `support.ticket_prefix` / `ticket_digits`), topic, status (`open`, `waiting` for the user, `resolved`, `closed`),
+  created / last activity / resolved / closed times, requester and an optional assignee (a support agent). One user may
+  hold several tickets (the one-thread-per-user unique key is gone).
+- **Topics** (`support.topics`; defaults *Incident / bug*, *Billing*, *How do I…?*, *Account and access*, *Other* in
+  the 7 locales): key, label and automatic reply per locale (translation keys in `support.translation_domain`), an
+  optional icon and an optional default assignee. `ChatSupportTopicProviderInterface` lets an application manage them
+  as data (`ChatSupportTopic`, plain text when its `domain` is null).
+- **Support assistant in the dock.** Opening support with no active ticket shows a greeting with the topics as real
+  buttons in a labelled group (keyboard, screen readers); choosing one opens the ticket and posts *Ticket … opened* plus
+  the topic's reply (e.g. *Tell us the invoice number…*). Text typed before choosing stays the first message.
+- **Continue or new.** When the latest ticket has had no message for `support.resume_after_days` (7) or is resolved,
+  the assistant asks *Continue SUP-000123 (topic · status, last message date) or open a new one?*; Continue moves the
+  text typed meanwhile into that ticket and reopens it, New shows the topics. Below that limit an open ticket simply
+  continues.
+- **Earlier tickets** listed in the assistant (number, topic, status, last activity), each opening in the dock;
+  **Reopen** on a resolved ticket for its requester; a closed ticket, or one resolved more than
+  `support.close_after_days` (30) ago, is read-only.
+- Support-assistant messages (`ChatMessage::KIND_BOT`, no author, `meta` column) for every ticket change, translated for
+  each reader; `ChatNotifier::botMessage()` publishes them live (no Web Push / digest).
+- Agents: inbox filters `waiting`, `closed`, `unassigned` and `topic`; `mine` now means *assigned to me*; inbox rows
+  carry the `ticket` block and `ownerTickets`; `ChatSupportInbox::countByTopic()` and `otherTickets()`; the dock's
+  resolve button also shows on waiting tickets.
+- API: `GET /api/support/tickets` (`?owner=` for agents), `POST /api/support/{uuid}/topic|resume|status|assign`; dock
+  endpoints `supportTickets`, `supportTopic`, `supportResume`, `supportStatus`, `supportAssign`.
+- Events `SupportTicketCreatedEvent`, `SupportTicketReopenedEvent`, `SupportTicketStatusChangedEvent`,
+  `SupportTicketAssignedEvent`.
+- Replies move the status: an agent's reply turns an open ticket to `waiting`, the requester's reply turns it back to
+  `open` (no event for these automatic switches).
+
+### Changed
+
+- `SupportStatus` gains `Waiting` and `Closed` (and `isActive()`).
+- `ChatConversationRepository::findSupportFor()` returns the user's latest support conversation; new
+  `findSupportDraft()`, `findTickets()`, `countActiveByTopic()`, `countTicketsByOwner()`; `findSupportInbox()` takes the
+  topic and the read-only cutoff.
+- `ChatPresenter` adds `ticket` to support summaries and titles tickets `SUP-000123 · Topic`; support summaries of the
+  requester's draft carry `intake` (API).
+- Schema: see UPGRADING (new columns, the support unique key replaced by an index, ticket numbers for existing threads).
 
 ## [1.7.0] - 2026-10-29
 

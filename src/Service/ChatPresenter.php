@@ -6,11 +6,18 @@ namespace Nowo\ChatKitBundle\Service;
 
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Support\ChatSupportPolicy;
+use Nowo\ChatKitBundle\Support\ChatSupportTopics;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
+use function is_string;
+
 use const DATE_ATOM;
+use const ENT_QUOTES;
+use const ENT_SUBSTITUTE;
 
 /**
  * JSON shapes for the dock. Message HTML is the server-sanitised render; every other string is plain text the
@@ -25,10 +32,14 @@ final readonly class ChatPresenter
      *
      * @param ChatMarkdownRenderer $markdown Builds plain-text previews of the last message
      * @param TranslatorInterface $translator Translates fallback titles in the bundle domain
+     * @param ChatSupportTopics $topics Topic labels of support tickets and bot messages
+     * @param ChatSupportPolicy $policy Readable ticket numbers and the read-only rule
      */
     public function __construct(
         private ChatMarkdownRenderer $markdown,
         private TranslatorInterface $translator,
+        private ChatSupportTopics $topics,
+        private ChatSupportPolicy $policy,
     ) {
     }
 
@@ -79,12 +90,17 @@ final readonly class ChatPresenter
             'channelKey'     => $conversation->getChannelKey(),
             'supportStatus'  => $conversation->getSupportStatus()?->value,
             'supportContext' => $conversation->getSupportContext(),
+            'ticket'         => $this->ticket($conversation),
             'canSend'        => $canSend,
             'peerOnline'     => $peerOnline,
             'unread'         => $unread,
             'lastMessageAt'  => ($last?->getCreatedAt() ?? $conversation->getLastMessageAt())->format(DATE_ATOM),
             'lastMessage'    => $last instanceof ChatMessage ? [
-                'preview'    => $last->isDeleted() || $last->isBuzz() ? '' : $this->markdown->plainText($last->getBody(), 90),
+                'preview' => match (true) {
+                    $last->isDeleted(), $last->isBuzz() => '',
+                    $last->isBot()                      => mb_substr($this->botText($last), 0, 90),
+                    default                             => $this->markdown->plainText($last->getBody(), 90),
+                },
                 'buzz'       => $last->isBuzz(),
                 'deleted'    => $last->isDeleted(),
                 'mine'       => $last->isAuthoredBy($viewer),
@@ -111,15 +127,17 @@ final readonly class ChatPresenter
             $mentions[] = ['uuid' => $uuid, 'name' => $name];
         }
 
+        $bot = $message->isBot();
+
         return [
             'id'             => $message->getId(),
             'uuid'           => $message->getUuid(),
             'authorUuid'     => $author?->getChatPublicId(),
-            'authorName'     => $author?->getChatDisplayName() ?? $this->trans('chat.deleted_user'),
-            'authorInitials' => $author?->getChatInitials() ?? '?',
+            'authorName'     => $bot ? $this->trans('chat.support_bot') : ($author?->getChatDisplayName() ?? $this->trans('chat.deleted_user')),
+            'authorInitials' => $bot ? '★' : ($author?->getChatInitials() ?? '?'),
             'mine'           => $viewer instanceof ChatUserInterface && $message->isAuthoredBy($viewer),
             'kind'           => $message->getKind(),
-            'html'           => $message->getBodyHtml(),
+            'html'           => $bot ? '<p>' . htmlspecialchars($this->botText($message), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>' : $message->getBodyHtml(),
             'createdAt'      => $message->getCreatedAt()->format(DATE_ATOM),
             'edited'         => $message->isEdited(),
             'deleted'        => $message->isDeleted(),
@@ -132,16 +150,74 @@ final readonly class ChatPresenter
     }
 
     /**
+     * Ticket block of a support conversation: readable number, topic, status, assignee, dates and the read-only flag.
+     *
+     * @param ChatConversation $conversation The conversation
+     *
+     * @return array<string, mixed>|null The block; null for other kinds (a draft has a null `number`)
+     */
+    public function ticket(ChatConversation $conversation): ?array
+    {
+        if (!$conversation->isSupport()) {
+            return null;
+        }
+        $status   = ($conversation->getSupportStatus() ?? SupportStatus::Open)->value;
+        $assignee = $conversation->getAssignee();
+        $owner    = $conversation->getSupportOwner();
+
+        return [
+            'uuid'          => $conversation->getUuid(),
+            'number'        => $this->policy->format($conversation->getTicketNumber()),
+            'topic'         => $conversation->getTicketTopic(),
+            'topicLabel'    => $this->topics->label($conversation->getTicketTopic()),
+            'status'        => $status,
+            'statusLabel'   => $this->trans('chat.support_status_' . $status),
+            'requester'     => $owner instanceof ChatUserInterface ? ['uuid' => $owner->getChatPublicId(), 'name' => $owner->getChatDisplayName()] : null,
+            'assignee'      => $assignee instanceof ChatUserInterface ? ['uuid' => $assignee->getChatPublicId(), 'name' => $assignee->getChatDisplayName()] : null,
+            'createdAt'     => $conversation->getCreatedAt()->format(DATE_ATOM),
+            'lastMessageAt' => $conversation->getLastMessageAt()->format(DATE_ATOM),
+            'resolvedAt'    => $conversation->getResolvedAt()?->format(DATE_ATOM),
+            'readOnly'      => $this->policy->isReadOnly($conversation),
+        ];
+    }
+
+    /**
+     * Text of a bot message for the current locale (its key translated, `%topic%` as the topic label).
+     *
+     * @param ChatMessage $message A bot message
+     *
+     * @return string The text
+     */
+    public function botText(ChatMessage $message): string
+    {
+        $meta   = $message->getMeta() ?? [];
+        $params = [];
+        foreach ($meta['params'] ?? [] as $name => $value) {
+            $params['%' . $name . '%'] = $value;
+        }
+        $topic = $meta['topic'] ?? null;
+        if (is_string($topic)) {
+            $params['%topic%'] = $this->topics->label($topic);
+        }
+
+        return $this->topics->text($message->getBody(), $meta['domain'] ?? null, $params);
+    }
+
+    /**
      * @return array{string, string, string}
      */
     private function supportTitle(ChatConversation $conversation, ChatUserInterface $viewer, bool $viewerIsAgent): array
     {
-        $owner = $conversation->getSupportOwner();
+        $owner  = $conversation->getSupportOwner();
+        $number = $this->policy->format($conversation->getTicketNumber());
+        $ticket = $number === null ? null : $number . ' · ' . $this->topics->label($conversation->getTicketTopic());
         if ($viewerIsAgent && $owner instanceof ChatUserInterface && $owner->getId() !== $viewer->getId()) {
-            return [$owner->getChatDisplayName(), $this->trans('chat.support_thread'), $owner->getChatInitials()];
+            return [$owner->getChatDisplayName(), $ticket ?? $this->trans('chat.support_thread'), $owner->getChatInitials()];
         }
 
-        return [$this->trans('chat.support_title'), $this->trans('chat.support_hint'), '★'];
+        return $ticket === null
+            ? [$this->trans('chat.support_title'), $this->trans('chat.support_hint'), '★']
+            : [$ticket, $this->trans('chat.support_title'), '★'];
     }
 
     private function trans(string $key): string

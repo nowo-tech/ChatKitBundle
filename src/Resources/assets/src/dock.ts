@@ -354,6 +354,21 @@ export class ChatDock implements ThreadHost {
   }
 
   /**
+   * Opens another conversation in place of a window (a support draft replaced by the ticket it continues).
+   *
+   * @param from Uuid of the window to replace.
+   * @param summary Conversation to open.
+   */
+  replaceWith(from: string, summary: ConversationSummary): void {
+    if (!this.isMobile()) {
+      this.store.update((state) => {
+        state.tabs = state.tabs.filter((item) => item.uuid !== from);
+      });
+    }
+    void this.open(summary);
+  }
+
+  /**
    * A window's messages changed: update the cache and the list row, count unread on a minimised window and share
    * the new messages with the other tabs.
    *

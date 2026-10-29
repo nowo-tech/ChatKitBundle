@@ -30,18 +30,27 @@ class ChatMessage
 
     public const string KIND_TEXT = 'text';
     public const string KIND_BUZZ = 'buzz';
+    public const string KIND_BOT  = 'bot';
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
     private ?int $id = null;
 
-    /** `text`, or `buzz` (a nudge shown as a system line; body empty). */
+    /** `text`, `buzz` (a nudge shown as a system line; body empty) or `bot` (support assistant; body is a translation key). */
     #[ORM\Column(length: 16, options: ['default' => 'text'])]
     private string $kind = self::KIND_TEXT;
 
     #[ORM\Column(name: 'created_at')]
     private DateTimeImmutable $createdAt;
+
+    /**
+     * Bot messages only: how to render the body (`domain` of the key, `params`, optional `topic` key).
+     *
+     * @var array{domain?: string|null, params?: array<string, string>, topic?: string|null}|null
+     */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $meta = null;
 
     #[ORM\Column(name: 'edited_at', nullable: true)]
     private ?DateTimeImmutable $editedAt = null;
@@ -98,6 +107,48 @@ class ChatMessage
     }
 
     /**
+     * Creates a support assistant message (no author): `$body` is a translation key in `$domain` rendered for each
+     * reader, or plain text when `$domain` is null. A `%topic%` parameter is rendered as the topic label of `$topic`.
+     *
+     * @param ChatConversation $conversation The support conversation
+     * @param string $body Translation key (or plain text when `$domain` is null)
+     * @param string|null $domain Translation domain of the key; null for plain text
+     * @param array<string, string> $params Translation parameters (`%name%` => value)
+     * @param string|null $topic Topic key shown as `%topic%`; null for none
+     * @param DateTimeImmutable|null $createdAt Creation time; null for now
+     *
+     * @return self The new, unpersisted message
+     */
+    public static function bot(ChatConversation $conversation, string $body, ?string $domain, array $params = [], ?string $topic = null, ?DateTimeImmutable $createdAt = null): self
+    {
+        $message       = new self($conversation, null, $body, '', $createdAt);
+        $message->kind = self::KIND_BOT;
+        $message->meta = ['domain' => $domain, 'params' => $params, 'topic' => $topic];
+
+        return $message;
+    }
+
+    /**
+     * Whether the message comes from the support assistant.
+     *
+     * @return bool True for a bot message
+     */
+    public function isBot(): bool
+    {
+        return $this->kind === self::KIND_BOT;
+    }
+
+    /**
+     * Bot messages only: rendering data (`domain`, `params`, `topic`).
+     *
+     * @return array{domain?: string|null, params?: array<string, string>, topic?: string|null}|null The data; null for other kinds
+     */
+    public function getMeta(): ?array
+    {
+        return $this->meta;
+    }
+
+    /**
      * Doctrine identifier (also the cursor for paging and read receipts).
      *
      * @return int|null The id; null before the message is persisted
@@ -110,7 +161,7 @@ class ChatMessage
     /**
      * Kind of the message.
      *
-     * @return string `text` or `buzz`
+     * @return string `text`, `buzz` or `bot`
      */
     public function getKind(): string
     {

@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.8.0](#to-180)
 - [To 1.7.0](#to-170)
 - [To 1.6.0](#to-160)
 - [To 1.5.5](#to-155)
@@ -23,6 +24,60 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.8.0
+
+From **1.7.0** — **schema change** (support tickets). After `composer update nowo-tech/chat-kit-bundle`:
+
+```bash
+php bin/console assets:install public          # nowo-chat.js / nowo-chat.css (or rebuild your bundle of the TS sources)
+php bin/console doctrine:migrations:diff       # or write the migration by hand from the SQL below
+php bin/console doctrine:migrations:migrate
+```
+
+MySQL / MariaDB (with a `doctrine.table_prefix`, prefix the table, index and constraint names; `user` is your user
+table; take the generated `IDX_` / `FK_` names from `doctrine:migrations:diff` if you validate the schema):
+
+```sql
+ALTER TABLE nowo_chat_conversation
+  ADD ticket_number INT DEFAULT NULL,
+  ADD ticket_topic VARCHAR(64) DEFAULT NULL,
+  ADD assignee_id INT DEFAULT NULL,
+  ADD closed_at DATETIME DEFAULT NULL;
+-- The new index first: the support_owner_id foreign key needs an index once the unique key is gone.
+CREATE INDEX idx_nowo_chat_conversation_support ON nowo_chat_conversation (support_owner_id, last_message_at);
+DROP INDEX uniq_nowo_chat_conversation_support ON nowo_chat_conversation;
+CREATE UNIQUE INDEX uniq_nowo_chat_conversation_ticket ON nowo_chat_conversation (ticket_number);
+CREATE INDEX idx_nowo_chat_conversation_assignee ON nowo_chat_conversation (assignee_id);
+ALTER TABLE nowo_chat_conversation
+  ADD CONSTRAINT FK_nowo_chat_conversation_assignee FOREIGN KEY (assignee_id) REFERENCES `user` (id) ON DELETE SET NULL;
+ALTER TABLE nowo_chat_message ADD meta JSON DEFAULT NULL;
+-- Existing support threads that hold a message become tickets SUP-000001, SUP-000002 … (oldest first, no topic).
+SET @n := 0;
+UPDATE nowo_chat_conversation c
+   SET c.ticket_number = (@n := @n + 1)
+ WHERE c.kind = 'support' AND EXISTS (SELECT 1 FROM nowo_chat_message m WHERE m.conversation_id = c.id)
+ ORDER BY c.id;
+```
+
+Behaviour changes to check:
+
+- `ChatSupportInbox::FILTERS` gains `waiting`, `closed` and `unassigned`; **`mine` now means assigned to the agent**
+  (it meant "threads the agent wrote in"). A host form listing the filters gets the new choices (translate them).
+- `ChatConversationRepository::findSupportFor()` returns the user's **latest** support conversation; open support with
+  `ChatSupportTickets::open()` (the API and the dock already do).
+- A ticket resolved more than `support.close_after_days` (30) ago, or closed, is read-only: `ChatVoter::SEND` is
+  denied. Set `close_after_days: 0` to keep resolved tickets writable.
+- An agent's reply turns an open ticket to `waiting`; count both `open` and `waiting` if your menu counter means
+  "active tickets" (`countOpen()` still counts `open` only).
+- New strings (`chat.support_*`, `support.topic.*`, `support.topic_reply.*`, `support.bot.*`): override them in your
+  translations, or point `support.translation_domain` and the topics' `label` / `reply` at your own keys.
+
+Optional:
+
+- Notify people: listen to `SupportTicketCreatedEvent` / `SupportTicketReopenedEvent` (agents),
+  `SupportTicketStatusChangedEvent` (the requester) and `SupportTicketAssignedEvent` (the assignee).
+- Manage topics as data: alias `ChatSupportTopicProviderInterface` (USAGE, *Support tickets*).
 
 ## To 1.7.0
 

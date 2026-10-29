@@ -2030,3 +2030,97 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Support tickets (1.8): the assistant's intake (topics, "continue or new?"), earlier tickets and the ticket status. */
+.nowo-chat-support {
+  display: grid;
+  gap: 8px;
+  padding: 4px 12px 12px;
+}
+.nowo-chat-support[hidden] {
+  display: none;
+}
+.nowo-chat-support__bot {
+  display: grid;
+  gap: 6px;
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: var(--nowo-chat-radius-bubble);
+  border-top-left-radius: 6px;
+  background: var(--nowo-chat-surface-muted);
+  color: var(--nowo-chat-text);
+}
+.nowo-chat-support__bot p,
+.nowo-chat-support__status,
+.nowo-chat-support__note,
+.nowo-chat-support__heading {
+  margin: 0;
+}
+.nowo-chat-support__author,
+.nowo-chat-support__heading {
+  color: var(--nowo-chat-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.nowo-chat-support__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.nowo-chat-support__btn {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-pill);
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  text-align: start;
+  cursor: pointer;
+}
+.nowo-chat-support__btn:hover:not(:disabled) {
+  border-color: var(--nowo-chat-accent);
+  color: var(--nowo-chat-accent-strong);
+}
+.nowo-chat-support__btn:focus-visible {
+  outline: 2px solid var(--nowo-chat-accent);
+  outline-offset: 2px;
+}
+.nowo-chat-support__btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.nowo-chat-support__primary {
+  border-color: var(--nowo-chat-accent);
+  background: var(--nowo-chat-accent);
+  color: var(--nowo-chat-on-accent);
+}
+.nowo-chat-support__primary:hover:not(:disabled) {
+  background: var(--nowo-chat-accent-strong);
+  color: var(--nowo-chat-on-accent);
+}
+.nowo-chat-support__tickets {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nowo-chat-support__ticket-link {
+  width: 100%;
+  border-radius: var(--nowo-chat-radius-control);
+}
+.nowo-chat-support__status,
+.nowo-chat-support__note {
+  padding: 6px 10px;
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface-muted);
+  color: var(--nowo-chat-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+.nowo-chat-support__status.is-resolved,
+.nowo-chat-support__status.is-closed {
+  color: var(--nowo-chat-text);
+}

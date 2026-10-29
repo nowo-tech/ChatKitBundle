@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Security;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Support\ChatSupportPolicy;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
@@ -40,10 +41,12 @@ final class ChatVoter extends Voter
      *
      * @param ChatAccess $access Reachability, agent and channel checks
      * @param ClockInterface $clock Clock used for the edit / delete window
+     * @param ChatSupportPolicy|null $support Read-only rule of support tickets; null: tickets never turn read-only
      */
     public function __construct(
         private readonly ChatAccess $access,
         private readonly ClockInterface $clock = new Clock(),
+        private readonly ?ChatSupportPolicy $support = null,
     ) {
     }
 
@@ -101,6 +104,7 @@ final class ChatVoter extends Voter
             return $peer instanceof ChatUserInterface && $this->access->canWriteDirect($user, $peer);
         }
 
-        return $this->canView($conversation, $user);
+        // A closed ticket (or one resolved long ago) is read-only for everyone; agents change its status instead.
+        return $this->canView($conversation, $user) && (!$conversation->isSupport() || $this->support?->isReadOnly($conversation) !== true);
     }
 }

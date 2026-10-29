@@ -123,6 +123,17 @@ final readonly class ChatNotifier
     }
 
     /**
+     * A support assistant line: published live to the ticket's readers (no Web Push or digest — the application
+     * notifies through the ticket events).
+     *
+     * @param ChatMessage $message The bot message
+     */
+    public function botMessage(ChatMessage $message): void
+    {
+        $this->messageEvent('message', $message, []);
+    }
+
+    /**
      * Tells every recipient that the support thread was resolved or reopened, so they reload it.
      *
      * @param ChatConversation $conversation The support thread

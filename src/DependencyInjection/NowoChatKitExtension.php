@@ -92,7 +92,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
 
         $profile          = $config['profiles'][$config['default_profile']];
         $profile['icons'] = array_replace(Configuration::DEFAULT_ICONS, $profile['icons']);
-        foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'push_preview', 'cache_pool', 'page_layout', 'web_ui', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'limits', 'digest', 'doctrine'] as $key) {
+        foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'push_preview', 'cache_pool', 'page_layout', 'web_ui', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'limits', 'digest', 'doctrine', 'support'] as $key) {
             $container->setParameter(Configuration::ALIAS . '.' . $key, $profile[$key]);
         }
 
@@ -102,6 +102,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
             $container->setParameter(Configuration::ALIAS . '.digest.' . $key, $value);
         }
         $container->setParameter(Configuration::ALIAS . '.doctrine.table_prefix', $profile['doctrine']['table_prefix']);
+        foreach ($profile['support'] as $key => $value) {
+            $container->setParameter(Configuration::ALIAS . '.support.' . $key, $value);
+        }
         $container->setAlias('nowo_chat_kit.cache', $profile['cache_pool']);
         // REQ-UI-003: the 1.x default layout means "no host layout" (the UiKit layout applies).
         $legacyLayout = $profile['page_layout'] === Configuration::LEGACY_PAGE_LAYOUT ? null : $profile['page_layout'];
