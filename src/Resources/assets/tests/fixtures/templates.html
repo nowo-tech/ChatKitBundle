@@ -101,10 +101,19 @@
                             </div>
             <form name="nowo_chat_status" method="post" class="nowo-chat-status-form" data-part="status-form">
                 <p class="nowo-chat-status-form__title">Custom status</p>
+                                <div class="nowo-chat-status-presets" role="group" aria-label="Suggestions">
+                                                                    <button type="button" class="nowo-chat-status-preset" data-preset-emoji="🍕" data-preset-text="Lunch" data-preset-clear-after="1h"><span aria-hidden="true">🍕</span> Lunch</button>
+                                                                    <button type="button" class="nowo-chat-status-preset" data-preset-emoji="📅" data-preset-text="In a meeting" data-preset-clear-after="1h"><span aria-hidden="true">📅</span> In a meeting</button>
+                                                                    <button type="button" class="nowo-chat-status-preset" data-preset-emoji="🏠" data-preset-text="Working from home" data-preset-clear-after="today"><span aria-hidden="true">🏠</span> Working from home</button>
+                                                                    <button type="button" class="nowo-chat-status-preset" data-preset-emoji="🤒" data-preset-text="Sick" data-preset-clear-after="today"><span aria-hidden="true">🤒</span> Sick</button>
+                                                                    <button type="button" class="nowo-chat-status-preset" data-preset-emoji="🌴" data-preset-text="On holiday" data-preset-clear-after="week"><span aria-hidden="true">🌴</span> On holiday</button>
+                                    </div>
                 <div class="nowo-chat-status-form__row">
                                         <input type="text" id="nowo_chat_status_emoji" name="nowo_chat_status[emoji]" class="nowo-chat-status-form__emoji" data-part="status-emoji" maxlength="16" autocomplete="off" inputmode="text" placeholder="🙂" aria-label="Status emoji" title="Status emoji" />
+                                        <button type="button" class="nowo-chat-icon-btn nowo-chat-status-form__emoji-pick" data-part="status-emoji-pick" aria-expanded="false" aria-label="Choose an emoji" title="Choose an emoji"><span data-icon="smile"></span></button>
                                         <input type="text" id="nowo_chat_status_text" name="nowo_chat_status[text]" class="nowo-chat-status-form__text" data-part="status-text" maxlength="80" autocomplete="off" placeholder="What is your status?" aria-label="What is your status?" />
                 </div>
+                <div class="nowo-chat-status-form__picker" data-part="status-emoji-panel"></div>
                 <div class="nowo-chat-status-form__row">
                     <label for="nowo_chat_status_clearAfter" class="required">Clear after</label>
                     <select id="nowo_chat_status_clearAfter" name="nowo_chat_status[clearAfter]" class="nowo-chat-status-form__clear-after" data-part="status-clear-after"><option value="never" selected="selected">Never</option><option value="30m">30 minutes</option><option value="1h">1 hour</option><option value="4h">4 hours</option><option value="today">Today</option><option value="week">This week</option></select>

@@ -60,11 +60,11 @@ final class ChatReferencesApiTest extends DatabaseTestCase
         $sent     = $this->requestJson(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', [
             'body' => 'see #[old](task:1), #[Secret](task:2), #[Forged](task:3), #[Nope](task:999), #[Ghost](wiki:1), #[Odd](task:4) `#[code](task:1)`',
         ], $config['csrf'])['message'];
-        self::assertStringContainsString('<a class="nowo-chat-ref" href="/tasks/1" data-ref-type="task">', $sent['html']);
+        self::assertStringContainsString('<a class="nowo-chat-ref" href="/tasks/1" data-ref-type="task" title="Task · Deploy the API · Acme · Doing · High">', $sent['html']);
         self::assertStringContainsString('<span class="nowo-chat-ref__title">Deploy the API</span>', $sent['html'], 'the current title, not the typed one');
         self::assertStringContainsString('<span class="nowo-chat-ref__title">Secret plan</span>', $sent['html']);
         self::assertStringContainsString(', #Forged, #Nope, #Ghost, ', $sent['html'], 'foreign, unknown and unregistered tokens become text');
-        self::assertStringContainsString('<span class="nowo-chat-ref" data-ref-type="task">', $sent['html'], 'an unsafe URL renders no link');
+        self::assertStringContainsString('<span class="nowo-chat-ref" data-ref-type="task" title="', $sent['html'], 'an unsafe URL renders no link');
         self::assertStringContainsString('nowo-chat-ref__badge--neutral', $sent['html'], 'an unknown tone is neutral');
         self::assertStringContainsString('<code>#[code](task:1)</code>', $sent['html']);
         self::assertSame(['1', '2', '4'], array_column($sent['references'], 'id'));
@@ -119,6 +119,10 @@ final class ChatReferencesApiTest extends DatabaseTestCase
         // Editing re-validates the tokens the same way.
         $edited = $this->requestJson(Request::METHOD_PATCH, '/chat/api/conversations/' . $uuid . '/messages/' . $sent['uuid'], ['body' => '#[a](task:2) #[b](task:1)'], $config['csrf'])['message'];
         self::assertStringStartsWith('<p>#a <a class="nowo-chat-ref" href="/tasks/1"', $edited['html']);
+        // 1.10.1: a card alone in its paragraph is a full-width card; within text it stays a compact chip.
+        $alone = $this->requestJson(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', ['body' => "#[a](task:1)\n\nand #[b](task:1) inline"], $config['csrf'])['message'];
+        self::assertStringStartsWith('<p><a class="nowo-chat-ref nowo-chat-ref--block" href="/tasks/1"', $alone['html']);
+        self::assertStringContainsString('<p>and <a class="nowo-chat-ref" href="/tasks/1"', $alone['html']);
 
         $nora = $this->user('NoTasks Nora');
         $uuid = $this->requestJson(Request::METHOD_POST, '/chat/api/direct', ['userUuid' => $nora->getChatPublicId()], $config['csrf'])['conversation']['uuid'];

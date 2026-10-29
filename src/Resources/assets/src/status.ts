@@ -8,6 +8,7 @@
  */
 import type { ChatApi } from './api';
 import { h } from './dom';
+import { emojiPicker } from './emoji';
 import { t } from './format';
 import { part } from './templates';
 import type { ChatConfig, ChatStatus, OwnStatus, VisibleStatus } from './types';
@@ -185,6 +186,43 @@ export class StatusMenu {
       event.preventDefault();
       void this.save({});
     });
+    // 1.10.1: suggested statuses (emoji, text, when it clears) save in one click; the emoji button opens the chat's emoji
+    // picker inside the menu (never clipped by it).
+    popover.querySelectorAll<HTMLButtonElement>('[data-preset-emoji]').forEach((preset) => {
+      preset.addEventListener('click', () => {
+        this.emojiInput.value = preset.dataset.presetEmoji ?? '';
+        this.textInput.value = preset.dataset.presetText ?? '';
+        this.clearAfter.value = preset.dataset.presetClearAfter ?? 'never';
+        void this.save({});
+      });
+    });
+    const pick = popover.querySelector<HTMLButtonElement>('[data-part="status-emoji-pick"]');
+    const holder = popover.querySelector<HTMLElement>('[data-part="status-emoji-panel"]');
+    if (pick !== null && holder !== null) {
+      /** Closes the picker and returns focus to its button. */
+      const closePicker = (): void => {
+        holder.replaceChildren();
+        pick.setAttribute('aria-expanded', 'false');
+        pick.focus();
+      };
+      pick.addEventListener('click', () => {
+        if (holder.childElementCount > 0) {
+          closePicker();
+          return;
+        }
+        const panel = emojiPicker(
+          host.config.i18n,
+          (emoji) => {
+            this.emojiInput.value = emoji;
+            closePicker();
+          },
+          closePicker,
+        );
+        holder.append(panel);
+        pick.setAttribute('aria-expanded', 'true');
+        panel.querySelector<HTMLButtonElement>('button')?.focus();
+      });
+    }
     part(popover, 'status-clear').addEventListener('click', () => {
       this.textInput.value = '';
       this.emojiInput.value = '';

@@ -177,3 +177,14 @@ describe('decorative emoji styles (1.9.2)', () => {
     expect(CSS_SOURCE).toMatch(/\.nowo-chat-emoji\s*\{[^}]*position: absolute/);
   });
 });
+
+describe('message times (1.10.1)', () => {
+  it('reveal on hover without moving anything: no display, height or margin change', () => {
+    const rules = [...CSS_SOURCE.matchAll(/([^{}]*\.nowo-chat-msg[^{}\s]*:(?:hover|focus-within)[^{}]*\.nowo-chat-msg__meta[^{}]*)\{([^}]*)\}/g)];
+    expect(rules.length).toBeGreaterThan(0);
+    for (const [, , body] of rules) {
+      expect(body).not.toMatch(/display|height|margin|padding|position/);
+    }
+    expect(CSS_SOURCE).not.toMatch(/^\.nowo-chat-msg__meta\s*\{[^}]*max-height/m);
+  });
+});

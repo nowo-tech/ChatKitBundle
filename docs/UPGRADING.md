@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.10.1](#to-1101)
 - [To 1.10.0](#to-1100)
 - [To 1.9.2](#to-192)
 - [To 1.9.1](#to-191)
@@ -28,6 +29,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.10.1
+
+From **1.10.0** — no schema change. Run `php bin/console assets:install public` (or rebuild your bundle of the TS
+sources). Cards alone in a paragraph get `nowo-chat-ref--block` (restyle that class if you themed the cards); inline
+chips hide their type and subtitle (both stay in the `title` attribute). The status menu template block gained the
+suggestions (`data-preset-*`) and the emoji button (`data-part="status-emoji-pick"`, `data-part="status-emoji-panel"`);
+a block redefined from 1.10.0 keeps working without them.
 
 ## To 1.10.0
 
