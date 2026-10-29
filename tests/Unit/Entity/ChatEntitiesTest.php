@@ -394,6 +394,40 @@ final class ChatEntitiesTest extends TestCase
         ChatUserSettings::statusExpiry('fortnight', $now);
     }
 
+    public function testArchiveAndPinMarks(): void
+    {
+        $ana          = $this->user(8);
+        $luis         = $this->user(9);
+        $now          = new DateTimeImmutable('2026-10-29 10:00:00');
+        $conversation = ChatConversation::direct($ana, $luis, $now->modify('-1 day'));
+        $participant  = new ChatParticipant($conversation, $ana, $now);
+        self::assertNull($participant->getArchivedAt());
+        self::assertFalse($participant->isArchived($now));
+        $participant->archive($now);
+        self::assertSame($now, $participant->getArchivedAt());
+        self::assertTrue($participant->isArchived($now));
+        $conversation->touch($now->modify('+1 minute'));
+        self::assertFalse($participant->isArchived($now), 'a newer message brings it back');
+        $participant->muteUntil($now->modify('+1 hour'));
+        self::assertTrue($participant->isArchived($now), 'muted: stays closed');
+        $participant->archive(null);
+        self::assertFalse($participant->isArchived($now));
+
+        $message = new ChatMessage($conversation, $luis, 'hi', '<p>hi</p>', $now);
+        self::assertTrue($message->isPinnable());
+        self::assertNull($message->getPinnedMessageUuid());
+        $message->pin($ana, $now);
+        self::assertSame($ana, $message->getPinnedBy());
+        self::assertSame($now, $message->getPinnedAt());
+        $line = ChatMessage::pinLine($conversation, $ana, $message, $now);
+        self::assertTrue($line->isPinLine());
+        self::assertFalse($line->isPinnable());
+        self::assertSame($message->getUuid(), $line->getPinnedMessageUuid());
+        $message->pin($ana, null);
+        self::assertNull($message->getPinnedBy());
+        self::assertNull($message->getPinnedAt());
+    }
+
     private function user(int $id): TestUser
     {
         $user = new TestUser('User ' . $id);
