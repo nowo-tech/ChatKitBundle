@@ -77,7 +77,7 @@
                                 {% if conversation.unread > 0 %}<span class="nowo-chat-badge"><span aria-hidden="true">{{ conversation.unread }}</span><span class="nowo-chat-sr-only">{{ 'chat.unread'|trans({'%count%': conversation.unread}) }}</span></span>{% endif %}
                             </a>
                             {% set _action = _archived ? 'chat.reopen_conversation' : 'chat.close_conversation' %}
-                            <button type="button" class="nowo-chat-page__row-archive" {{ _archived ? 'data-nowo-chat-unarchive' : 'data-nowo-chat-archive' }}="{{ conversation.uuid }}" aria-label="{{ _action|trans({'%name%': conversation.title}) }}" title="{{ _action|trans({'%name%': conversation.title}) }}">{{ (_archived ? 'chat.reopen' : 'chat.close_short')|trans }}</button>
+                            <button type="button" class="nowo-chat-page__row-archive" {{ _archived ? 'data-nowo-chat-unarchive' : 'data-nowo-chat-archive' }}="{{ conversation.uuid }}" aria-label="{{ (_archived ? 'chat.reopen' : 'chat.close_short')|trans }} — {{ conversation.title }}" title="{{ _action|trans({'%name%': conversation.title}) }}">{{ (_archived ? 'chat.reopen' : 'chat.close_short')|trans }}</button>
                         </li>
                     {% endfor %}
                 </ul>
