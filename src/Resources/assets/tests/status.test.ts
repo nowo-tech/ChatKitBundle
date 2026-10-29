@@ -146,6 +146,28 @@ describe('chat status', () => {
     expect(error?.textContent).toBe('Could not save');
   });
 
+  it('saves a suggested status in one click and picks the emoji with the chat picker (1.10.1)', async () => {
+    const { popover, setStatus } = menu();
+    setStatus.mockResolvedValue(own({ status: 'available', text: 'Lunch', emoji: '🍕' }));
+    const preset = popover.querySelector<HTMLButtonElement>('[data-preset-emoji]') as HTMLButtonElement;
+    preset.click();
+    await flush();
+    expect(setStatus).toHaveBeenLastCalledWith({ status: 'available', text: preset.dataset.presetText, emoji: '🍕', clearAfter: '1h' });
+
+    const pick = popover.querySelector<HTMLButtonElement>('[data-part="status-emoji-pick"]') as HTMLButtonElement;
+    const holder = popover.querySelector<HTMLElement>('[data-part="status-emoji-panel"]') as HTMLElement;
+    pick.click();
+    expect(pick.getAttribute('aria-expanded')).toBe('true');
+    holder.querySelector<HTMLButtonElement>('.nowo-chat-emoji__item')?.click();
+    expect(popover.querySelector<HTMLInputElement>('[data-part="status-emoji"]')?.value).not.toBe('');
+    expect(holder.childElementCount).toBe(0);
+    pick.click();
+    pick.click();
+    expect(pick.getAttribute('aria-expanded')).toBe('false');
+    pick.click();
+    holder.querySelector('.nowo-chat-emoji')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+
   it('paints a trigger without a dot', () => {
     const setStatus = vi.fn();
     const trigger = document.createElement('button');

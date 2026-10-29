@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.10.1] - 2026-10-29](#1101---2026-10-29)
 - [[1.10.0] - 2026-10-29](#1100---2026-10-29)
 - [[1.9.2] - 2026-10-29](#192---2026-10-29)
 - [[1.9.1] - 2026-10-29](#191---2026-10-29)
@@ -29,6 +30,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.10.1] - 2026-10-29
+
+### Added
+
+- **Custom status with emojis**: an emoji button next to the custom status opens the chat's emoji picker inside the
+  status menu, and five suggestions (🍕 Lunch, 📅 In a meeting, 🏠 Working from home, 🤒 Sick, 🌴 On holiday) fill the
+  emoji, the text and when it clears, and save, in one click. An emoji-only status gets an accessible label in the list.
+
+### Fixed
+
+- **The status menu ran off the screen**: with the conversation list open it was pushed above the viewport and some
+  options were out of reach. It now takes the panel's place while open (the list steps aside), scrolls inside, fits
+  short screens and phones, and its fields wrap at the dock's width.
+- **Reference cards** (`/task`, `#`): a card alone in its paragraph is now a full-width card (icon, title with
+  ellipsis, "type · project" below, badge on the right; several in a row stack); within text it is a compact chip
+  (icon, title, badge) that keeps the line height, never wraps inside and never overflows the bubble. Every card
+  carries its full text in a `title` attribute.
+- **Message times moved the conversation**: hovering a grouped message revealed its time by growing the line (~18 px
+  layout shift). The last message of a group always shows its time; the others show it beside the bubble on hover or
+  keyboard focus with opacity / visibility only — nothing moves. Regression test on the stylesheet.
+- **Close button over the row**: the time and the unread badge step aside while a row's Close button shows; a long
+  custom status no longer squeezes the name; the window subtitle carries the full status in its `title`.
 
 ## [1.10.0] - 2026-10-29
 

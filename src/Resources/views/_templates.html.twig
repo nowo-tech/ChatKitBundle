@@ -97,12 +97,22 @@
             </div>
             {{ form_start(nowo_chat_status_form) }}
                 <p class="nowo-chat-status-form__title">{{ 'chat.status_custom'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</p>
+                {# 1.10.1: one click fills the emoji, the text and when it clears, and saves. #}
+                <div class="nowo-chat-status-presets" role="group" aria-label="{{ 'chat.status_presets'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}">
+                    {% for nowo_chat_preset in [['🍕', 'lunch', '1h'], ['📅', 'meeting', '1h'], ['🏠', 'home', 'today'], ['🤒', 'sick', 'today'], ['🌴', 'holiday', 'week']] %}
+                        {% set nowo_chat_label = ('chat.status_preset_' ~ nowo_chat_preset[1])|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                        <button type="button" class="nowo-chat-status-preset" data-preset-emoji="{{ nowo_chat_preset[0] }}" data-preset-text="{{ nowo_chat_label }}" data-preset-clear-after="{{ nowo_chat_preset[2] }}"><span aria-hidden="true">{{ nowo_chat_preset[0] }}</span> {{ nowo_chat_label }}</button>
+                    {% endfor %}
+                </div>
                 <div class="nowo-chat-status-form__row">
                     {% set nowo_chat_label = 'chat.status_emoji'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
                     {{ form_widget(nowo_chat_status_form.emoji, {translation_domain: false, attr: nowo_chat_status_form.emoji.vars.attr|merge({placeholder: '🙂', 'aria-label': nowo_chat_label, title: nowo_chat_label})}) }}
+                    {% set nowo_chat_label = 'chat.status_emoji_pick'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                    <button type="button" class="nowo-chat-icon-btn nowo-chat-status-form__emoji-pick" data-part="status-emoji-pick" aria-expanded="false" aria-label="{{ nowo_chat_label }}" title="{{ nowo_chat_label }}"><span data-icon="smile"></span></button>
                     {% set nowo_chat_label = 'chat.status_text'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
                     {{ form_widget(nowo_chat_status_form.text, {translation_domain: false, attr: nowo_chat_status_form.text.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
                 </div>
+                <div class="nowo-chat-status-form__picker" data-part="status-emoji-panel"></div>
                 <div class="nowo-chat-status-form__row">
                     {{ form_label(nowo_chat_status_form.clearAfter) }}
                     {{ form_widget(nowo_chat_status_form.clearAfter) }}

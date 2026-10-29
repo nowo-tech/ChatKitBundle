@@ -411,7 +411,9 @@ export class ThreadView {
     const status = summary.peerStatus ?? (summary.peerOnline ? 'available' : 'offline');
     const presence = status === 'offline' ? '' : status === 'available' ? t(i18n, 'online') : statusLabel(i18n, status);
     const peerLine = [presence, customStatus(summary.peerStatusText, summary.peerStatusEmoji)].filter((value) => value !== '').join(' · ');
-    part(this.element, 'subtitle').textContent =
+    const subtitle = part(this.element, 'subtitle');
+    subtitle.title = summary.kind === 'direct' ? peerLine : '';
+    subtitle.textContent =
       summary.kind === 'support' && summary.supportStatus === 'resolved'
         ? t(i18n, 'support_resolved')
         : summary.kind === 'direct' && peerLine !== ''

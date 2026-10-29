@@ -43,6 +43,9 @@ final class ChatReferences implements ResetInterface
     /** What ChatMarkdownRenderer writes for each token: an empty slot filled for the viewer at read time. */
     public const string SLOT = '<span class="nowo-chat-ref-slot"></span>';
 
+    /** 1.10.1: a slot alone in its paragraph (only cards, spaces and line breaks) becomes a full-width card. */
+    private const string BLOCK_SLOT = '<span class="nowo-chat-ref-slot" data-block></span>';
+
     /** At most this many references are kept in one message; later tokens stay plain text. */
     public const int MAX_REFERENCES = 10;
 
@@ -269,14 +272,20 @@ final class ChatReferences implements ResetInterface
         $cards    = $this->resolveFor($viewer, $tokens);
         $readable = [];
         $index    = 0;
-        $html     = (string) preg_replace_callback('/' . preg_quote(self::SLOT, '/') . '/', function () use ($tokens, $cards, &$readable, &$index): string {
+        // Paragraphs holding only cards (and spaces / line breaks): full-width cards; cards within text stay compact chips.
+        $html = (string) preg_replace_callback(
+            '~<p>((?:\s|<br\s*/?>|' . preg_quote(self::SLOT, '~') . ')+)</p>~',
+            static fn (array $match): string => '<p>' . str_replace(self::SLOT, self::BLOCK_SLOT, $match[1]) . '</p>',
+            $html,
+        );
+        $html = (string) preg_replace_callback('/' . preg_quote(self::SLOT, '/') . '|' . preg_quote(self::BLOCK_SLOT, '/') . '/', function (array $match) use ($tokens, $cards, &$readable, &$index): string {
             $token     = $tokens[$index++] ?? null;
             $reference = $token === null ? null : ($cards[$token['type'] . ':' . $token['id']] ?? null);
             if ($reference instanceof ChatReference) {
                 $readable[$reference->key()] = $reference->toArray();
             }
 
-            return $this->chip($reference);
+            return $this->chip($reference, $match[0] === self::BLOCK_SLOT);
         }, $html);
 
         return ['html' => $html, 'references' => array_values($readable), 'pending' => false];
@@ -352,11 +361,15 @@ final class ChatReferences implements ResetInterface
         return array_filter($cache, static fn (ChatReference|false $reference): bool => $reference !== false);
     }
 
-    /** The card of a readable item, or the neutral chip (no title, type, project, status or id). */
-    private function chip(?ChatReference $reference): string
+    /**
+     * The card of a readable item, or the neutral chip (no title, type, project, status or id). `$block`: alone in its
+     * paragraph (full-width card), otherwise a compact chip within the text; the title attribute carries the full text.
+     */
+    private function chip(?ChatReference $reference, bool $block = false): string
     {
+        $variant = $block ? ' nowo-chat-ref--block' : '';
         if (!$reference instanceof ChatReference) {
-            return '<span class="nowo-chat-ref nowo-chat-ref--restricted"><span class="nowo-chat-ref__icon" data-icon="lock" data-icon-size="14" aria-hidden="true"></span><span class="nowo-chat-ref__title">' . $this->escape($this->restricted()) . '</span></span>';
+            return '<span class="nowo-chat-ref nowo-chat-ref--restricted' . $variant . '"><span class="nowo-chat-ref__icon" data-icon="lock" data-icon-size="14" aria-hidden="true"></span><span class="nowo-chat-ref__title">' . $this->escape($this->restricted()) . '</span></span>';
         }
         $provider = $this->providers()[$reference->type];
         $card     = $reference->toArray();
@@ -365,11 +378,12 @@ final class ChatReferences implements ResetInterface
             . '<span class="nowo-chat-ref__title">' . $this->escape($card['title']) . '</span>'
             . ($card['subtitle'] === '' ? '' : '<span class="nowo-chat-ref__subtitle">' . $this->escape($card['subtitle']) . '</span>')
             . ($card['badge'] === '' ? '' : '<span class="nowo-chat-ref__badge nowo-chat-ref__badge--' . $card['tone'] . '">' . $this->escape($card['badge']) . '</span>');
-        $attributes = ' data-ref-type="' . $this->escape($reference->type) . '"';
+        $full       = implode(' · ', array_filter([$provider->label(), $card['title'], $card['subtitle'], $card['badge']], static fn (string $part): bool => $part !== ''));
+        $attributes = ' data-ref-type="' . $this->escape($reference->type) . '" title="' . $this->escape($full) . '"';
 
         return $this->isSafeUrl($reference->url)
-            ? '<a class="nowo-chat-ref" href="' . $this->escape($reference->url) . '"' . $attributes . '>' . $inner . '</a>'
-            : '<span class="nowo-chat-ref"' . $attributes . '>' . $inner . '</span>';
+            ? '<a class="nowo-chat-ref' . $variant . '" href="' . $this->escape($reference->url) . '"' . $attributes . '>' . $inner . '</a>'
+            : '<span class="nowo-chat-ref' . $variant . '"' . $attributes . '>' . $inner . '</span>';
     }
 
     /** Root-relative (`/x`, never `//host`) or http(s) URLs only. */

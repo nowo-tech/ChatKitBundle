@@ -1434,7 +1434,12 @@ export class ChatDock implements ThreadHost {
     }
     const custom = customStatus(summary.peerStatusText, summary.peerStatusEmoji);
     if (custom !== '') {
-      extras.push(h('span', { class: 'nowo-chat-row__status', title: custom, text: custom }));
+      const line = h('span', { class: 'nowo-chat-row__status', title: custom, text: custom });
+      if ((summary.peerStatusText ?? '') === '') {
+        // Only an emoji: say what it is.
+        line.setAttribute('aria-label', t(this.config.i18n, 'status_custom_emoji', { emoji: custom }));
+      }
+      extras.push(line);
     }
     title.after(...extras);
   }

@@ -818,30 +818,56 @@
   opacity: 1;
 }
 
-.nowo-chat-msg__meta {
-  max-height: 0;
-  margin: 0 8px;
-  overflow: hidden;
-  color: var(--nowo-chat-muted);
-  font-size: 0.6875rem;
-  opacity: 0;
-  transition: max-height 0.15s ease, opacity 0.15s ease;
+/* Message time (1.10.1): the last message of a group always shows it under the bubble. A message followed by another
+   of the same group shows it beside the bubble, out of the flow, only on hover or keyboard focus — visibility and
+   opacity only, so revealing it never moves anything (no layout shift). The full date is the <time> title. */
+.nowo-chat-msg__content {
+  position: relative;
 }
 
-.nowo-chat-msg:hover .nowo-chat-msg__meta,
-.nowo-chat-msg:focus-within .nowo-chat-msg__meta,
-.nowo-chat-msg:has(+ .nowo-chat-msg--group-start) .nowo-chat-msg__meta,
-.nowo-chat-msg:last-child .nowo-chat-msg__meta,
-.nowo-chat-msg--pending .nowo-chat-msg__meta {
-  max-height: 2.4em;
-  margin-top: 2px;
+.nowo-chat-msg__meta {
+  margin: 2px 8px 0;
+  color: var(--nowo-chat-muted);
+  font-size: 0.6875rem;
+}
+
+.nowo-chat-msg:has(+ .nowo-chat-msg:not(.nowo-chat-msg--group-start)):not(.nowo-chat-msg--pending) .nowo-chat-msg__meta {
+  position: absolute;
+  bottom: 2px;
+  left: calc(100% + 4px);
+  margin: 0;
+  white-space: nowrap;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s ease, visibility 0.15s;
+}
+
+.nowo-chat-msg--mine:has(+ .nowo-chat-msg:not(.nowo-chat-msg--group-start)):not(.nowo-chat-msg--pending) .nowo-chat-msg__meta {
+  right: calc(100% + 4px);
+  left: auto;
+}
+
+.nowo-chat-msg:has(+ .nowo-chat-msg:not(.nowo-chat-msg--group-start)):not(.nowo-chat-msg--pending):hover .nowo-chat-msg__meta,
+.nowo-chat-msg:has(+ .nowo-chat-msg:not(.nowo-chat-msg--group-start)):not(.nowo-chat-msg--pending):focus-within .nowo-chat-msg__meta {
+  visibility: visible;
   opacity: 1;
 }
 
+/* Mine: the hover actions sit beside the bubble, so the time is a small pill over the bubble's top corner instead. */
+.nowo-chat-msg--mine:has(+ .nowo-chat-msg:not(.nowo-chat-msg--group-start)):not(.nowo-chat-msg--pending) .nowo-chat-msg__meta {
+  z-index: 1;
+  top: -9px;
+  right: 6px;
+  bottom: auto;
+  padding: 0 6px;
+  border-radius: var(--nowo-chat-radius-pill);
+  background: var(--nowo-chat-surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
 @media (hover: none) {
-  .nowo-chat-msg__meta {
-    max-height: 2.4em;
-    margin-top: 2px;
+  .nowo-chat-msg:has(+ .nowo-chat-msg:not(.nowo-chat-msg--group-start)):not(.nowo-chat-msg--pending) .nowo-chat-msg__meta {
+    visibility: visible;
     opacity: 1;
   }
 }
@@ -2131,20 +2157,84 @@
 .nowo-chat-ref {
   --nowo-chat-ref-fg: var(--nowo-chat-text);
   --nowo-chat-ref-fg-soft: color-mix(in srgb, var(--nowo-chat-text) 72%, var(--nowo-chat-surface));
+  /* Within text (1.10.1): a compact chip — icon, title (ellipsis) and badge on one line that never wraps inside, never
+     grows past the bubble and keeps the text's line height; the full text is the title attribute. */
   display: inline-flex;
+  box-sizing: border-box;
   align-items: center;
   gap: 4px;
   max-width: 100%;
-  margin: 1px 0;
-  padding: 1px 6px;
+  padding: 0 6px;
   border: 1px solid var(--nowo-chat-border);
   border-radius: var(--nowo-chat-radius-control);
   background: var(--nowo-chat-surface);
   color: var(--nowo-chat-ref-fg);
-  font-size: 0.95em;
-  line-height: 1.4;
+  font-size: 0.92em;
+  line-height: 1.35;
   text-decoration: none;
-  vertical-align: baseline;
+  vertical-align: -0.25em;
+  white-space: nowrap;
+}
+
+.nowo-chat-ref:not(.nowo-chat-ref--block) .nowo-chat-ref__type,
+.nowo-chat-ref:not(.nowo-chat-ref--block) .nowo-chat-ref__subtitle {
+  display: none;
+}
+
+.nowo-chat-ref:not(.nowo-chat-ref--block) .nowo-chat-ref__title {
+  max-width: 14em;
+}
+
+/* Alone in its paragraph (1.10.1): a full-width card — icon, title (ellipsis), "type · project" below, badge on the
+   right. Several cards in a row stack. */
+.nowo-chat-ref--block {
+  display: grid;
+  grid-template-areas: "icon title title badge" "icon type subtitle badge";
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 0 6px;
+  align-items: center;
+  width: 100%;
+  min-width: min(15rem, 100%);
+  margin: 2px 0;
+  padding: 5px 8px;
+  line-height: 1.3;
+  vertical-align: top;
+}
+
+.nowo-chat-ref--block .nowo-chat-ref__icon {
+  grid-area: icon;
+}
+
+.nowo-chat-ref--block .nowo-chat-ref__title {
+  grid-area: title;
+}
+
+.nowo-chat-ref--block .nowo-chat-ref__type {
+  grid-area: type;
+}
+
+.nowo-chat-ref--block .nowo-chat-ref__type:has(+ .nowo-chat-ref__title + .nowo-chat-ref__subtitle)::after {
+  content: " ·";
+}
+
+.nowo-chat-ref--block .nowo-chat-ref__subtitle {
+  grid-area: subtitle;
+}
+
+.nowo-chat-ref--block .nowo-chat-ref__badge {
+  grid-area: badge;
+}
+
+/* Cards stacked in one paragraph: the line breaks between them take no extra height. */
+.nowo-chat-bubble p:has(> .nowo-chat-ref--block) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nowo-chat-bubble:has(.nowo-chat-ref--block) {
+  box-sizing: border-box;
+  width: 100%;
 }
 
 /* Beats `.nowo-chat-msg--mine .nowo-chat-bubble a { color: inherit }` (on-accent text on the light card). */
@@ -2181,6 +2271,7 @@ a.nowo-chat-ref:focus-visible {
 
 .nowo-chat-ref__title {
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   color: var(--nowo-chat-ref-fg);
   font-weight: 600;
@@ -2201,6 +2292,9 @@ a.nowo-chat-ref:focus-visible {
 .nowo-chat-ref__badge {
   --nowo-chat-ref-tone: color-mix(in srgb, var(--nowo-chat-text) 45%, var(--nowo-chat-surface));
   flex: none;
+  justify-self: end;
+  line-height: 1.4;
+  white-space: nowrap;
   padding: 0 6px;
   border: 1px solid var(--nowo-chat-ref-tone);
   border-radius: var(--nowo-chat-radius-pill);
@@ -2327,8 +2421,12 @@ a.nowo-chat-ref:focus-visible {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background-color: #22a06b;
   vertical-align: middle;
+}
+
+/* Available (1.10.1: the base no longer paints over busy / away / dnd, which come before it). */
+.nowo-chat-status-dot--available {
+  background-color: #22a06b;
 }
 
 .nowo-chat-status-dot--offline {
@@ -2372,7 +2470,8 @@ a.nowo-chat-ref:focus-visible {
   flex: none;
   flex-direction: column;
   gap: 8px;
-  max-height: min(70vh, 460px);
+  max-height: min(460px, calc(100vh - var(--nowo-chat-lift, 0px) - 120px));
+  min-height: 0;
   padding: 10px 12px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 70%, transparent);
   overflow-y: auto;
@@ -2722,4 +2821,126 @@ a.nowo-chat-ref:focus-visible {
   .nowo-chat-msg.is-highlighted .nowo-chat-bubble {
     transition: none;
   }
+}
+
+/* 1.10.1: while the status menu is open it takes the panel's place (the list and the notice step aside), scrolls inside
+   and never runs off the screen; the custom-status fields wrap at the dock's width. */
+.nowo-chat-panel:has(> .nowo-chat-status-menu:not([hidden])) > .nowo-chat-panel__body,
+.nowo-chat-panel:has(> .nowo-chat-status-menu:not([hidden])) > .nowo-chat-toast {
+  display: none;
+}
+
+.nowo-chat-status-menu {
+  overscroll-behavior: contain;
+}
+
+.nowo-chat-status-form__row {
+  flex-wrap: wrap;
+}
+
+.nowo-chat-status-form__row > label {
+  flex: 1 0 100%;
+}
+
+.nowo-chat-status-form__text {
+  flex: 1 1 9rem;
+}
+
+.nowo-chat-status-form__clear-after {
+  width: 100%;
+}
+
+/* The row's Close button covers the time and the badge: they step aside (visibility only) while it shows. */
+.nowo-chat-list > li:hover .nowo-chat-row__time,
+.nowo-chat-list > li:focus-within .nowo-chat-row__time,
+.nowo-chat-list > li:hover .nowo-chat-row .nowo-chat-badge,
+.nowo-chat-list > li:focus-within .nowo-chat-row .nowo-chat-badge {
+  visibility: hidden;
+}
+
+/* A long custom status never squeezes the name away. */
+.nowo-chat-row__status {
+  flex: 0 1 auto;
+  max-width: 45%;
+}
+
+/* Custom status (1.10.1): suggested statuses and the emoji picker inside the menu (in its flow, never clipped). */
+.nowo-chat-status-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.nowo-chat-status-preset {
+  padding: 3px 8px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-pill);
+  background: var(--nowo-chat-surface);
+  color: inherit;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.nowo-chat-status-preset:hover,
+.nowo-chat-status-preset:focus-visible {
+  border-color: var(--nowo-chat-accent);
+  outline: none;
+}
+
+.nowo-chat-status-form__emoji-pick {
+  flex: none;
+}
+
+.nowo-chat-status-form__picker:empty {
+  display: none;
+}
+
+.nowo-chat-status-form__picker .nowo-chat-emoji {
+  position: static;
+  width: auto;
+  max-height: 200px;
+  box-shadow: none;
+}
+
+/* A message holding a full-width card uses the whole message column. */
+.nowo-chat-msg__content:has(.nowo-chat-ref--block) {
+  width: 82%;
+}
+
+.nowo-chat-msg__content:has(.nowo-chat-ref--block) > .nowo-chat-bubble {
+  align-self: stretch;
+}
+
+/* Hosts whose form theme wraps each widget: the wrappers size like the fields. */
+.nowo-chat-status-form__row > :not(.nowo-chat-status-form__emoji):has(.nowo-chat-status-form__emoji) {
+  flex: none;
+  width: 3.25rem;
+}
+
+.nowo-chat-status-form__row > :not(.nowo-chat-status-form__text):has(.nowo-chat-status-form__text) {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+.nowo-chat-status-form__row > :not(.nowo-chat-status-form__emoji) .nowo-chat-status-form__emoji,
+.nowo-chat-status-form__row > :not(.nowo-chat-status-form__text) .nowo-chat-status-form__text {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+/* Phones: the dock is a full-screen sheet; the status menu fills it and scrolls inside. */
+.nowo-chat.is-mobile .nowo-chat-status-menu {
+  flex: 1 1 auto;
+  max-height: none;
+}
+
+/* Beat host-wide "inputs are full width" rules. */
+.nowo-chat-status-form .nowo-chat-status-form__emoji {
+  flex: none;
+  width: 3.25rem;
+}
+
+.nowo-chat-status-form .nowo-chat-status-form__text {
+  flex: 1 1 9rem;
+  width: auto;
 }
