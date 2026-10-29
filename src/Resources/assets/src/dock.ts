@@ -94,7 +94,7 @@ export class ChatDock implements ThreadHost {
     this.templates = new Templates(root);
     this.api = new ChatApi(config);
     this.store = new DockStore(config.userUuid);
-    this.cache = new ThreadCache(config.userUuid);
+    this.cache = new ThreadCache(config.userUuid, config.locale);
     this.drafts = new DraftStore(config.userUuid);
     this.mobileQuery = window.matchMedia(MOBILE_QUERY);
 

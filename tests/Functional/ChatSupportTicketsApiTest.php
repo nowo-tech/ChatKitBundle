@@ -55,7 +55,7 @@ final class ChatSupportTicketsApiTest extends DatabaseTestCase
         self::assertSame('SUP-000001', $opened['conversation']['ticket']['number']);
         self::assertSame('SUP-000001 · Billing', $opened['conversation']['title']);
         self::assertArrayNotHasKey('intake', $opened['conversation']);
-        self::assertSame('<p><span class="nowo-chat-emoji" aria-hidden="true">💳</span>Tell us the invoice number or the plan your question is about.</p>', $opened['messages'][1]['html'], 'the topic reply starts with the topic emoji');
+        self::assertSame('<p><span class="nowo-chat-deco" aria-hidden="true">💳</span>Tell us the invoice number or the plan your question is about.</p>', $opened['messages'][1]['html'], 'the topic reply starts with the topic emoji');
         $ticketUuid = $draft['uuid'];
         self::assertSame(['SUP-000001'], array_column($this->getJson('/chat/api/support/tickets')['tickets'], 'number'));
         $this->postJson('/chat/api/support/' . $ticketUuid . '/topic', ['topic' => 'incident'], $csrf);

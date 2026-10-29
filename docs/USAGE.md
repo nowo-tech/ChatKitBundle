@@ -179,7 +179,7 @@ times, the requester and an optional assignee. One user may hold several tickets
   resolved ✅, closed 🔒), before the topic label (status line, topic buttons, earlier tickets; ticket blocks carry
   `topicEmoji` / `statusEmoji`, topic options and inbox counts `emoji`) and before each assistant line (🎫 opened,
   🏷️ topic changed, 🔄 continued, 🔁 reopened, ⏳ waiting, ✅ resolved, 🔒 closed, 🙋 assigned, 👤 unassigned, 👋 the
-  greeting, 🔄 "continue or new?"; a topic's first reply uses the topic's emoji). They are `<span class="nowo-chat-emoji"
+  greeting, 🔄 "continue or new?"; a topic's first reply uses the topic's emoji). They are `<span class="nowo-chat-deco"
   aria-hidden="true">` elements outside the translations, so screen readers, previews, Web Push and the digest read only
   the text. Built-in topics: incident 🐞, billing 💳, how_to ❓, account 🔐, other 💬; set `emoji` per topic (`""`
   for none) or `support.emojis: false` for text only.

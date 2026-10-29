@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.9.2] - 2026-10-29](#192---2026-10-29)
 - [[1.9.1] - 2026-10-29](#191---2026-10-29)
 - [[1.9.0] - 2026-10-29](#190---2026-10-29)
 - [[1.8.0] - 2026-10-29](#180---2026-10-29)
@@ -27,6 +28,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.9.2] - 2026-10-29
+
+### Fixed
+
+- **Support emojis showed as floating white panels**: the decorative emoji span (status, topic, assistant lines) used the
+  class `nowo-chat-emoji`, which is the emoji picker's popover (absolute, surface, shadow), so each emoji covered the
+  window header and was missing from the ticket status line. It is now `nowo-chat-deco`, inline only (no positioning,
+  no surface).
+- **Stale support lines in another language after an upgrade or a language change**: the per-tab message cache
+  (`sessionStorage`) is keyed by a cache version and the dock locale (`nowo-chat-cache:<version>:<locale>:<user>`); the
+  user's entries of another version or locale are dropped when the dock starts.
 
 ## [1.9.1] - 2026-10-29
 

@@ -2290,8 +2290,9 @@ a.nowo-chat-ref:focus-visible {
   white-space: nowrap;
 }
 
-/* Support (1.9.1): a decorative emoji before a status, topic or assistant line (aria-hidden; `support.emojis`). */
-.nowo-chat-emoji {
+/* Support (1.9.1): a decorative emoji before a status, topic or assistant line (aria-hidden; `support.emojis`). Inline
+   only — never `.nowo-chat-emoji`, which is the emoji picker popover (1.9.2). */
+.nowo-chat-deco {
   display: inline-block;
   margin-inline-end: 0.3em;
   font-style: normal;

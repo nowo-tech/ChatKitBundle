@@ -31,7 +31,7 @@ type Part = Node | string | null;
  * @returns The span, or null.
  */
 export function emojiSpan(emoji: string | null | undefined): HTMLElement | null {
-  return emoji === undefined || emoji === null || emoji === '' ? null : h('span', { class: 'nowo-chat-emoji', 'aria-hidden': 'true', text: emoji });
+  return emoji === undefined || emoji === null || emoji === '' ? null : h('span', { class: 'nowo-chat-deco', 'aria-hidden': 'true', text: emoji });
 }
 
 /**
