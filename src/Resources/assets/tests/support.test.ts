@@ -1,4 +1,4 @@
-import CSS_SOURCE from '../../public/css/nowo-chat.css?raw';
+import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatApi } from '../src/api';
 import { emojiSpan, fill, SupportPanel, type SupportHost } from '../src/support';
@@ -165,6 +165,8 @@ describe('SupportPanel', () => {
     expect(fill('%a% and %b%', { a: ['x'] })).toEqual(['', 'x', ' and ', '%b%', '']);
   });
 });
+
+const CSS_SOURCE = readFileSync(new URL('../../public/css/nowo-chat.css', import.meta.url), 'utf8');
 
 describe('decorative emoji styles (1.9.2)', () => {
   it('are inline only: no positioning, unlike the emoji picker popover', () => {
