@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.9.1] - 2026-10-29](#191---2026-10-29)
 - [[1.9.0] - 2026-10-29](#190---2026-10-29)
 - [[1.8.0] - 2026-10-29](#180---2026-10-29)
 - [[1.7.0] - 2026-10-29](#170---2026-10-29)
@@ -26,6 +27,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.9.1] - 2026-10-29
+
+### Added
+
+- **Support emojis** (`support.emojis`, default `true`): a decorative emoji before the ticket status (open 🟢, waiting
+  ⏳, resolved ✅, closed 🔒), before the topic label (status line, topic buttons, earlier tickets) and before each
+  support assistant line (🎫 opened, 🏷️ topic changed, 🔄 continued, 🔁 reopened, ⏳ waiting, ✅ resolved, 🔒 closed,
+  🙋 assigned, 👤 unassigned, 👋 greeting, 🔄 "continue or new?"; a topic's first reply uses the topic's emoji). Rendered
+  as `aria-hidden` spans outside the translations — screen readers, previews, Web Push and the digest read only the
+  text. New optional `emoji` per topic (built-in: incident 🐞, billing 💳, how_to ❓, account 🔐, other 💬; `""` for
+  none); ticket blocks carry `topicEmoji` / `statusEmoji`, topic options and inbox counts `emoji`; dock config
+  `supportEmojis`.
+
+### Fixed
+
+- **#reference cards in the sender's own bubble were unreadable**: the card kept its light surface but inherited the
+  bubble's on-accent text (white on white in light mode, dark on dark in dark mode, ~1.1:1). The card now sets its own
+  foreground on its own surface whatever the bubble (title, type, subtitle, badges; beats
+  `.nowo-chat-msg--mine .nowo-chat-bubble a`); type / subtitle / option meta use a colour mix instead of `opacity`
+  (≥ 5.6:1 with the default and dark tokens); status badges get the card's text on a 20 % tone tint (≥ 8.7:1) and a tone
+  outline; hover / focus draw an on-accent ring inside an accent bubble; the restricted chip's icon follows its text.
+- **Support assistant lines in the poster's language**: a line posted while an agent acted (resolve, assign …) reached
+  the requester's open dock translated in the agent's locale. Realtime bot lines now carry `refsPending` and each dock
+  fetches the line again in its own locale.
 
 ## [1.9.0] - 2026-10-29
 

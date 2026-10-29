@@ -93,13 +93,17 @@ final class ChatSupportTicketsTest extends DatabaseTestCase
         $message = $presenter->message($posted[0], $ana);
         self::assertSame('Support assistant', $message['authorName']);
         self::assertSame('bot', $message['kind']);
-        self::assertStringStartsWith('<p>Ticket SUP-000001', $message['html']);
+        self::assertStringStartsWith('<p><span class="nowo-chat-emoji" aria-hidden="true">🎫</span>Ticket SUP-000001', $message['html']);
+        self::assertFalse($message['refsPending']);
+        self::assertTrue($presenter->message($posted[0], null)['refsPending'], 'a viewer-neutral bot line is fetched again in the reader\'s locale');
         self::assertInstanceOf(SupportTicketCreatedEvent::class, $this->recorded()[0]);
         self::assertSame($ana, $this->recorded()[0]->requester);
 
         $ticket = $presenter->ticket($draft);
         self::assertNotNull($ticket);
         self::assertSame(['SUP-000001', $key, $label, 'open', 'Open', false], [$ticket['number'], $ticket['topic'], $ticket['topicLabel'], $ticket['status'], $ticket['statusLabel'], $ticket['readOnly']]);
+        self::assertSame('🟢', $ticket['statusEmoji']);
+        self::assertNotSame('', $ticket['topicEmoji']);
         $summary = $presenter->conversation($draft, $ana, null, null, true, 0, $posted[1]);
         self::assertSame('SUP-000001 · ' . $label, $summary['title']);
         self::assertSame(mb_substr($presenter->botText($posted[1]), 0, 90), $summary['lastMessage']['preview']);
@@ -295,7 +299,7 @@ final class ChatSupportTicketsTest extends DatabaseTestCase
         // A draft with free text reaches the inbox without a topic.
         $this->get(ChatService::class)->send($silent->getSupportOwner() ?? $ana, $silent, 'hello?');
         self::assertSame(['Silent Sam'], array_column($inbox->list($agent, 'all', null, 50, 'none'), 'title'));
-        self::assertContains(['key' => 'none', 'label' => 'No topic', 'icon' => null, 'count' => 1], $inbox->countByTopic());
+        self::assertContains(['key' => 'none', 'label' => 'No topic', 'icon' => null, 'emoji' => '', 'count' => 1], $inbox->countByTopic());
 
         // Status filters with the read-only cutoff.
         $tickets->changeStatus($agent, $billing, SupportStatus::Resolved, true);

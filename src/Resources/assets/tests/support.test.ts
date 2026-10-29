@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatApi } from '../src/api';
-import { SupportPanel, type SupportHost } from '../src/support';
+import { emojiSpan, fill, SupportPanel, type SupportHost } from '../src/support';
 import type { ChatConfig, ConversationSummary, SupportIntake, SupportTicket } from '../src/types';
 
 const i18n: Record<string, string> = {
@@ -132,5 +132,31 @@ describe('SupportPanel', () => {
 
     panel.render(summary({ ticket: ticket({ status: 'closed', statusLabel: 'Closed', readOnly: true, requester: null }) }));
     expect(element.textContent).toContain('Closed ticket');
+  });
+
+  it('puts decorative aria-hidden emojis before the status, the topic and the assistant lines', () => {
+    const { element, host, panel, button } = setup();
+    const hidden = () => [...element.querySelectorAll('.nowo-chat-emoji')].map((span) => [span.textContent, span.getAttribute('aria-hidden')]);
+
+    panel.render(summary({ ticket: ticket({ topicEmoji: '💳', statusEmoji: '🟢' }) }));
+    expect(element.textContent).toBe('SUP-000001 · 💳Billing · 🟢Open');
+    expect(hidden()).toEqual([['💳', 'true'], ['🟢', 'true']]);
+
+    panel.render(summary({ intake: intake({ topics: [{ key: 'billing', label: 'Billing', icon: null, emoji: '💳' }] }) }));
+    expect(hidden()).toEqual([['👋', 'true'], ['💳', 'true']]);
+    expect(button('💳Billing').dataset.topic).toBe('billing');
+
+    panel.render(summary({ intake: intake({ prompt: 'resume', resume: ticket({ topicEmoji: '💳', statusEmoji: '✅' }) }) }));
+    expect(hidden().map(([emoji]) => emoji)).toEqual(['🔄', '💳', '✅']);
+
+    host.config.supportEmojis = false;
+    panel.render(summary());
+    expect(hidden()).toEqual([]);
+  });
+
+  it('fills translated templates with nodes and keeps unknown placeholders', () => {
+    expect(emojiSpan('')).toBeNull();
+    expect(emojiSpan(undefined)).toBeNull();
+    expect(fill('%a% and %b%', { a: ['x'] })).toEqual(['', 'x', ' and ', '%b%', '']);
   });
 });

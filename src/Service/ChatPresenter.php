@@ -145,7 +145,7 @@ final readonly class ChatPresenter
             'authorInitials' => $bot ? '★' : ($author?->getChatInitials() ?? '?'),
             'mine'           => $viewer instanceof ChatUserInterface && $message->isAuthoredBy($viewer),
             'kind'           => $message->getKind(),
-            'html'           => $bot ? '<p>' . htmlspecialchars($this->botText($message), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>' : $filled['html'],
+            'html'           => $bot ? $this->botHtml($message) : $filled['html'],
             'createdAt'      => $message->getCreatedAt()->format(DATE_ATOM),
             'edited'         => $message->isEdited(),
             'deleted'        => $message->isDeleted(),
@@ -155,9 +155,10 @@ final readonly class ChatPresenter
             'mentions'   => $mentions,
             'mentionsMe' => $viewer instanceof ChatUserInterface && isset($ids[$viewer->getChatPublicId()]),
             // Cards of the references the viewer may open (the editor turns them back into tokens); `refsPending`:
-            // a viewer-neutral payload whose slots the client fetches for its user.
+            // a viewer-neutral payload the client fetches again for its user — its #reference slots, or a bot line,
+            // translated in the locale of the request that posted it (an agent's), not the reader's.
             'references'  => $filled['references'],
-            'refsPending' => $filled['pending'],
+            'refsPending' => $filled['pending'] || ($bot && !$viewer instanceof ChatUserInterface),
         ];
     }
 
@@ -182,8 +183,10 @@ final readonly class ChatPresenter
             'number'        => $this->policy->format($conversation->getTicketNumber()),
             'topic'         => $conversation->getTicketTopic(),
             'topicLabel'    => $this->topics->label($conversation->getTicketTopic()),
+            'topicEmoji'    => $this->topics->topicEmoji($conversation->getTicketTopic()),
             'status'        => $status,
             'statusLabel'   => $this->trans('chat.support_status_' . $status),
+            'statusEmoji'   => $this->topics->statusEmoji($status),
             'requester'     => $owner instanceof ChatUserInterface ? ['uuid' => $owner->getChatPublicId(), 'name' => $owner->getChatDisplayName()] : null,
             'assignee'      => $assignee instanceof ChatUserInterface ? ['uuid' => $assignee->getChatPublicId(), 'name' => $assignee->getChatDisplayName()] : null,
             'createdAt'     => $conversation->getCreatedAt()->format(DATE_ATOM),
@@ -213,6 +216,23 @@ final readonly class ChatPresenter
         }
 
         return $this->topics->text($message->getBody(), $meta['domain'] ?? null, $params);
+    }
+
+    /**
+     * HTML of a bot message: its text in a paragraph, after the line's decorative emoji (`aria-hidden`) when any.
+     */
+    private function botHtml(ChatMessage $message): string
+    {
+        $topic = $message->getMeta()['topic'] ?? null;
+        $emoji = $this->topics->botEmoji($message->getBody(), is_string($topic) ? $topic : null);
+
+        return '<p>' . ($emoji === '' ? '' : '<span class="nowo-chat-emoji" aria-hidden="true">' . $this->escape($emoji) . '</span>')
+            . $this->escape($this->botText($message)) . '</p>';
+    }
+
+    private function escape(string $text): string
+    {
+        return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
     /**

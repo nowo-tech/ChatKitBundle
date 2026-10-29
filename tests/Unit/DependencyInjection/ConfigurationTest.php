@@ -46,6 +46,7 @@ final class ConfigurationTest extends TestCase
                 'ticket_digits'      => 6,
                 'resume_after_days'  => 7,
                 'close_after_days'   => 30,
+                'emojis'             => true,
                 'translation_domain' => 'NowoChatKitBundle',
                 'topics'             => array_map(static fn (array $topic): array => $topic + ['label' => null, 'reply' => null, 'assignee' => null], Configuration::DEFAULT_SUPPORT_TOPICS),
             ],

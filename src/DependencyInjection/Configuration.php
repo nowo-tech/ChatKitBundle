@@ -61,11 +61,11 @@ final class Configuration implements ConfigurationInterface
 
     /** Support ticket topics offered by default (labels and replies in the bundle catalogue). */
     public const array DEFAULT_SUPPORT_TOPICS = [
-        ['key' => 'incident', 'icon' => 'tabler:bug'],
-        ['key' => 'billing', 'icon' => 'tabler:receipt'],
-        ['key' => 'how_to', 'icon' => 'tabler:help-circle'],
-        ['key' => 'account', 'icon' => 'tabler:key'],
-        ['key' => 'other', 'icon' => 'tabler:dots'],
+        ['key' => 'incident', 'icon' => 'tabler:bug', 'emoji' => '🐞'],
+        ['key' => 'billing', 'icon' => 'tabler:receipt', 'emoji' => '💳'],
+        ['key' => 'how_to', 'icon' => 'tabler:help-circle', 'emoji' => '❓'],
+        ['key' => 'account', 'icon' => 'tabler:key', 'emoji' => '🔐'],
+        ['key' => 'other', 'icon' => 'tabler:dots', 'emoji' => '💬'],
     ];
 
     /**
@@ -262,6 +262,10 @@ final class Configuration implements ConfigurationInterface
                     ->info('Days after which a resolved ticket turns read-only (closed tickets are read-only at once). 0: resolved tickets never turn read-only.')
                     ->defaultValue(30)->min(0)
                 ->end()
+                ->booleanNode('emojis')
+                    ->info('Decorative emojis (aria-hidden) before the ticket status, the topic and the assistant\'s lines; false shows text only.')
+                    ->defaultTrue()
+                ->end()
                 ->scalarNode('translation_domain')
                     ->info('Translation domain of the topic labels and replies below.')
                     ->defaultValue('NowoChatKitBundle')
@@ -283,6 +287,10 @@ final class Configuration implements ConfigurationInterface
                             ->scalarNode('label')->defaultNull()->end()
                             ->scalarNode('reply')->defaultNull()->end()
                             ->scalarNode('icon')->defaultNull()->end()
+                            ->scalarNode('emoji')
+                                ->info('Decorative emoji before the topic label (null: the built-in one of incident, billing, how_to, account and other; "": none).')
+                                ->defaultNull()
+                            ->end()
                             ->scalarNode('assignee')
                                 ->info('Public id of the agent new tickets of this topic are assigned to.')
                                 ->defaultNull()

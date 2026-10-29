@@ -103,8 +103,9 @@ nowo_chat_kit:
 | `profiles.<name>.support.ticket_digits` | int 1–12 | `6` | Digits of the ticket number (zero-padded). |
 | `profiles.<name>.support.resume_after_days` | int ≥ 1 | `7` | Opening support when the last ticket has had no message for this many days (or is resolved) asks "continue it or open a new one?". |
 | `profiles.<name>.support.close_after_days` | int ≥ 0 | `30` | A resolved ticket turns read-only after this many days (`0`: never; a **closed** ticket is read-only at once). |
+| `profiles.<name>.support.emojis` | bool | `true` | Decorative emojis (`aria-hidden`) before the ticket status, the topic label and the support assistant's lines; `false` shows text only. |
 | `profiles.<name>.support.translation_domain` | string | `NowoChatKitBundle` | Domain of the topic labels and replies. |
-| `profiles.<name>.support.topics` | list | incident, billing, how_to, account, other | Topics offered when a ticket opens: `key` (a-z, 0-9, `_`, `-`), `label` / `reply` (translation keys; default `support.topic.<key>` / `support.topic_reply.<key>`; `reply: ''` posts none), `icon` (for your templates), `assignee` (public id of the agent new tickets of the topic go to). |
+| `profiles.<name>.support.topics` | list | incident, billing, how_to, account, other | Topics offered when a ticket opens: `key` (a-z, 0-9, `_`, `-`), `label` / `reply` (translation keys; default `support.topic.<key>` / `support.topic_reply.<key>`; `reply: ''` posts none), `icon` (for your templates), `emoji` (decorative, before the label; null = the built-in one of incident 🐞, billing 💳, how_to ❓, account 🔐, other 💬; `""` = none), `assignee` (public id of the agent new tickets of the topic go to). |
 | `profiles.<name>.limits.*` | int | see below | Rate limits. |
 
 ## Rate limits
