@@ -108,7 +108,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$iconSet', param('nowo_chat_kit.icon_set'))
         ->arg('$icons', param('nowo_chat_kit.icons'))
         ->arg('$iconRenderer', service(IconRendererInterface::class)->nullOnInvalid())
-        ->arg('$pageLayout', param('nowo_chat_kit.page_layout'));
+        ->arg('$pageLayout', param('nowo_chat_kit.page_layout'))
+        ->arg('$supportEmojis', param('nowo_chat_kit.support.emojis'));
     $services->get(ChatPurgeCommand::class)
         ->arg('$retentionDays', param('nowo_chat_kit.retention_days'));
 };

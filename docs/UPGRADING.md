@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.9.1](#to-191)
 - [To 1.9.0](#to-190)
 - [To 1.8.0](#to-180)
 - [To 1.7.0](#to-170)
@@ -25,6 +26,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.9.1
+
+From **1.9.0** — no schema change. Run `php bin/console assets:install public` (or rebuild your bundle of the TS
+sources). Support lines show decorative emojis by default: set `support.emojis: false` to keep text only, or an `emoji`
+per topic (`""` for none). `ChatSupportTopic` takes an optional last argument `$emoji`. If your stylesheet restyled
+`.nowo-chat-ref__type` / `__subtitle` with `opacity`, the card now sets colours instead (`--nowo-chat-ref-fg`,
+`--nowo-chat-ref-fg-soft`).
 
 ## To 1.9.0
 

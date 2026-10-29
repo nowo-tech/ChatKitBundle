@@ -3,6 +3,8 @@
  * assistant: a greeting with the topics as buttons, or "continue ticket SUP-… or open a new one?", and their earlier
  * tickets. A ticket shows its number, topic and status, a Reopen button while the requester may reopen it and a note
  * when it is read-only. Every control is a real <button> in a labelled group (keyboard and screen readers).
+ * Emojis (status, topic, the assistant's lines) are decorative: `aria-hidden` spans outside the translations, off
+ * with `support.emojis: false`.
  */
 import type { ChatApi } from './api';
 import { h } from './dom';
@@ -16,6 +18,44 @@ import type { ChatConfig, ChatMessage, ConversationSummary, SupportIntake, Suppo
  * @returns The number.
  */
 const num = (ticket: SupportTicket): string => ticket.number ?? '';
+
+/** Emojis of the assistant's own lines (the server sends the status, topic and bot-line ones). */
+export const SUPPORT_EMOJIS = { greeting: '👋', resume: '🔄' } as const;
+
+type Part = Node | string | null;
+
+/**
+ * A decorative emoji: hidden from screen readers, which read only the text after it.
+ *
+ * @param emoji The emoji; "" or absent for none.
+ * @returns The span, or null.
+ */
+export function emojiSpan(emoji: string | null | undefined): HTMLElement | null {
+  return emoji === undefined || emoji === null || emoji === '' ? null : h('span', { class: 'nowo-chat-emoji', 'aria-hidden': 'true', text: emoji });
+}
+
+/**
+ * A translated template whose `%name%` placeholders take nodes (an emoji span and its text); unknown ones stay.
+ *
+ * @param template Translated text.
+ * @param params Nodes per placeholder.
+ * @returns The parts, in order.
+ */
+export function fill(template: string, params: Record<string, Part[]>): Part[] {
+  return template.split(/%(\w+)%/).flatMap((part, index) => (index % 2 === 0 ? [part] : (params[part] ?? [`%${part}%`])));
+}
+
+/**
+ * Number, topic and status of a ticket for `support_ticket_label`, each with its emoji.
+ *
+ * @param ticket The ticket.
+ * @returns The placeholder parts.
+ */
+const ticketParts = (ticket: SupportTicket): Record<string, Part[]> => ({
+  number: [num(ticket)],
+  topic: [emojiSpan(ticket.topicEmoji), ticket.topicLabel],
+  status: [emojiSpan(ticket.statusEmoji), ticket.statusLabel],
+});
 
 /** What the support panel needs from the window that hosts it (ThreadView). */
 export interface SupportHost {
@@ -97,7 +137,7 @@ export class SupportPanel {
     if (resume !== null) {
       const question = t(i18n, 'support_resume_question', { number: num(resume), topic: resume.topicLabel, status: resume.statusLabel, date: this.date(resume.lastMessageAt) });
       bubble.append(
-        h('p', { text: question }),
+        h('p', {}, this.assistantEmoji(SUPPORT_EMOJIS.resume), ...fill(t(i18n, 'support_resume_question'), { ...ticketParts(resume), date: [this.date(resume.lastMessageAt)] })),
         this.group(question, [
           this.button(t(i18n, 'support_continue', { number: num(resume) }), 'nowo-chat-support__primary', () => this.resume(resume.uuid, draft)),
           this.button(t(i18n, 'support_new_ticket'), '', () => {
@@ -109,11 +149,11 @@ export class SupportPanel {
       );
     } else {
       bubble.append(
-        h('p', { text: t(i18n, 'support_greeting') }),
+        h('p', {}, this.assistantEmoji(SUPPORT_EMOJIS.greeting), t(i18n, 'support_greeting')),
         this.group(
           t(i18n, 'support_topics_label'),
           intake.topics.map((topic) => {
-            const button = this.button(topic.label, 'nowo-chat-support__topic', () => this.choose(draft, topic.key));
+            const button = this.button([emojiSpan(topic.emoji), topic.label], 'nowo-chat-support__topic', () => this.choose(draft, topic.key));
             button.dataset.topic = topic.key;
             return button;
           }),
@@ -124,7 +164,7 @@ export class SupportPanel {
     if (intake.tickets.length > 0) {
       const list = h('ul', { class: 'nowo-chat-support__tickets', role: 'list' });
       for (const ticket of intake.tickets) {
-        const label = `${t(i18n, 'support_ticket_label', { number: num(ticket), topic: ticket.topicLabel, status: ticket.statusLabel })} · ${this.date(ticket.lastMessageAt)}`;
+        const label = [...fill(t(i18n, 'support_ticket_label'), ticketParts(ticket)), ` · ${this.date(ticket.lastMessageAt)}`];
         list.append(h('li', {}, this.button(label, 'nowo-chat-support__ticket-link', () => this.openTicket(ticket.uuid))));
       }
       nodes.push(h('section', { class: 'nowo-chat-support__previous', 'aria-label': t(i18n, 'support_previous_tickets') }, h('p', { class: 'nowo-chat-support__heading', text: t(i18n, 'support_previous_tickets') }), list));
@@ -140,7 +180,7 @@ export class SupportPanel {
    */
   private ticket(ticket: SupportTicket): HTMLElement[] {
     const i18n = this.host.config.i18n;
-    const line = h('p', { class: `nowo-chat-support__status is-${ticket.status}`, 'data-testid': 'nowo-chat-support-status' }, t(i18n, 'support_ticket_label', { number: num(ticket), topic: ticket.topicLabel, status: ticket.statusLabel }));
+    const line = h('p', { class: `nowo-chat-support__status is-${ticket.status}`, 'data-testid': 'nowo-chat-support-status' }, ...fill(t(i18n, 'support_ticket_label'), ticketParts(ticket)));
     const nodes: HTMLElement[] = [line];
     const requester = ticket.requester?.uuid === this.host.config.userUuid;
     if (ticket.readOnly) {
@@ -198,8 +238,18 @@ export class SupportPanel {
     return h('div', { class: 'nowo-chat-support__actions', role: 'group', 'aria-label': label }, ...buttons);
   }
 
-  private button(label: string, className: string, onClick: () => void): HTMLButtonElement {
-    const button = h('button', { type: 'button', class: `nowo-chat-support__btn ${className}`.trim(), text: label });
+  /**
+   * Emoji of one of the assistant's own lines, unless `support.emojis` is off.
+   *
+   * @param emoji The emoji.
+   * @returns The span, or null.
+   */
+  private assistantEmoji(emoji: string): HTMLElement | null {
+    return this.host.config.supportEmojis === false ? null : emojiSpan(emoji);
+  }
+
+  private button(label: string | Part[], className: string, onClick: () => void): HTMLButtonElement {
+    const button = h('button', { type: 'button', class: `nowo-chat-support__btn ${className}`.trim() }, ...(typeof label === 'string' ? [label] : label));
     button.addEventListener('click', onClick);
     return button;
   }

@@ -161,6 +161,8 @@ export interface ChatConfig {
   };
   prefs: { sound: SoundName; buzz: boolean; presence: boolean };
   isAgent: boolean;
+  /** Decorative emojis of the support assistant's own lines (`support.emojis`; absent before 1.9.1 = shown). */
+  supportEmojis?: boolean;
   /** The application resolves link previews (issue cards …). */
   linkPreviews: boolean;
   /** The application registers reference providers: `/` commands and the `#` picker are offered. */
@@ -184,8 +186,12 @@ export interface SupportTicket {
   number: string | null;
   topic: string | null;
   topicLabel: string;
+  /** Decorative emoji of the topic ("" when none or `support.emojis` is off; absent before 1.9.1). */
+  topicEmoji?: string;
   status: SupportStatus;
   statusLabel: string;
+  /** Decorative emoji of the status ("" when `support.emojis` is off; absent before 1.9.1). */
+  statusEmoji?: string;
   requester: { uuid: string; name: string } | null;
   assignee: { uuid: string; name: string } | null;
   createdAt: string;
@@ -200,6 +206,8 @@ export interface SupportTopicOption {
   key: string;
   label: string;
   icon: string | null;
+  /** Decorative emoji ("" when none or `support.emojis` is off; absent before 1.9.1). */
+  emoji?: string;
 }
 
 /** The intake panel of the requester's draft. */

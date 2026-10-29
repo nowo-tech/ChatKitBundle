@@ -2125,8 +2125,12 @@
   color: var(--nowo-chat-text);
 }
 
-/* #references (1.9): a compact card per item the viewer may open, a neutral chip for the rest. */
+/* #references (1.9): a compact card per item the viewer may open, a neutral chip for the rest. The card sets its own
+   foreground on its own surface (1.9.1), so it stays readable inside the sender's accent bubble in light and dark
+   (`--nowo-chat-ref-fg` ≥ 4.5:1 on the surface; secondary text is a colour mix, not an opacity). */
 .nowo-chat-ref {
+  --nowo-chat-ref-fg: var(--nowo-chat-text);
+  --nowo-chat-ref-fg-soft: color-mix(in srgb, var(--nowo-chat-text) 72%, var(--nowo-chat-surface));
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2136,17 +2140,31 @@
   border: 1px solid var(--nowo-chat-border);
   border-radius: var(--nowo-chat-radius-control);
   background: var(--nowo-chat-surface);
-  color: var(--nowo-chat-text);
+  color: var(--nowo-chat-ref-fg);
   font-size: 0.95em;
   line-height: 1.4;
   text-decoration: none;
   vertical-align: baseline;
 }
 
+/* Beats `.nowo-chat-msg--mine .nowo-chat-bubble a { color: inherit }` (on-accent text on the light card). */
+.nowo-chat-bubble .nowo-chat-ref,
+.nowo-chat-msg--mine .nowo-chat-bubble a.nowo-chat-ref,
+.nowo-chat-msg--mine .nowo-chat-bubble .nowo-chat-ref {
+  color: var(--nowo-chat-ref-fg);
+  text-decoration: none;
+}
+
 a.nowo-chat-ref:hover,
 a.nowo-chat-ref:focus-visible {
   border-color: var(--nowo-chat-accent);
+  box-shadow: 0 0 0 1px var(--nowo-chat-accent);
   text-decoration: none;
+}
+
+a.nowo-chat-ref:focus-visible {
+  outline: 2px solid var(--nowo-chat-accent);
+  outline-offset: 1px;
 }
 
 .nowo-chat-ref__icon {
@@ -2157,13 +2175,14 @@ a.nowo-chat-ref:focus-visible {
 
 .nowo-chat-ref__type {
   flex: none;
-  opacity: 0.75;
+  color: var(--nowo-chat-ref-fg-soft);
   font-size: 0.85em;
 }
 
 .nowo-chat-ref__title {
   min-width: 0;
   overflow: hidden;
+  color: var(--nowo-chat-ref-fg);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2172,45 +2191,54 @@ a.nowo-chat-ref:focus-visible {
 .nowo-chat-ref__subtitle {
   min-width: 0;
   overflow: hidden;
-  opacity: 0.8;
+  color: var(--nowo-chat-ref-fg-soft);
   font-size: 0.85em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Badges: the card's text on a tone tint of the card surface (≥ 4.5:1), outlined in the tone so they read as status. */
 .nowo-chat-ref__badge {
+  --nowo-chat-ref-tone: color-mix(in srgb, var(--nowo-chat-text) 45%, var(--nowo-chat-surface));
   flex: none;
   padding: 0 6px;
+  border: 1px solid var(--nowo-chat-ref-tone);
   border-radius: var(--nowo-chat-radius-pill);
   background: var(--nowo-chat-surface-muted);
+  color: var(--nowo-chat-text);
   font-size: 0.8em;
   font-weight: 600;
 }
 
 .nowo-chat-ref__badge--info {
+  --nowo-chat-ref-tone: color-mix(in srgb, var(--nowo-chat-text) 45%, var(--nowo-chat-mist));
   background: var(--nowo-chat-mist);
 }
 
 .nowo-chat-ref__badge--success {
-  background: color-mix(in srgb, var(--nowo-chat-accent) 22%, transparent);
+  --nowo-chat-ref-tone: color-mix(in srgb, var(--nowo-chat-accent) 70%, var(--nowo-chat-surface));
+  background: color-mix(in srgb, var(--nowo-chat-accent) 20%, var(--nowo-chat-surface));
 }
 
 .nowo-chat-ref__badge--warning {
-  background: color-mix(in srgb, var(--nowo-chat-warn) 32%, transparent);
+  --nowo-chat-ref-tone: color-mix(in srgb, var(--nowo-chat-warn) 70%, var(--nowo-chat-surface));
+  background: color-mix(in srgb, var(--nowo-chat-warn) 20%, var(--nowo-chat-surface));
 }
 
 .nowo-chat-ref__badge--danger {
-  background: color-mix(in srgb, var(--nowo-chat-danger) 24%, transparent);
+  --nowo-chat-ref-tone: color-mix(in srgb, var(--nowo-chat-danger) 70%, var(--nowo-chat-surface));
+  background: color-mix(in srgb, var(--nowo-chat-danger) 20%, var(--nowo-chat-surface));
 }
 
 .nowo-chat-ref--restricted {
+  --nowo-chat-ref-fg-soft: color-mix(in srgb, var(--nowo-chat-text) 72%, var(--nowo-chat-surface-muted));
   border-style: dashed;
   background: var(--nowo-chat-surface-muted);
   font-style: italic;
 }
 
 .nowo-chat-ref--restricted .nowo-chat-ref__icon {
-  color: inherit;
+  color: var(--nowo-chat-ref-fg-soft);
 }
 
 .nowo-chat-ref--restricted .nowo-chat-ref__title {
@@ -2227,8 +2255,19 @@ a.nowo-chat-ref:focus-visible {
   vertical-align: middle;
 }
 
+/* In the sender's accent bubble the card is outlined in the on-accent colour; hover / focus thicken it there. */
 .nowo-chat-msg--mine .nowo-chat-ref {
-  border-color: color-mix(in srgb, var(--nowo-chat-on-accent) 40%, transparent);
+  border-color: color-mix(in srgb, var(--nowo-chat-on-accent) 55%, var(--nowo-chat-accent));
+}
+
+.nowo-chat-msg--mine a.nowo-chat-ref:hover,
+.nowo-chat-msg--mine a.nowo-chat-ref:focus-visible {
+  border-color: var(--nowo-chat-on-accent);
+  box-shadow: 0 0 0 1px var(--nowo-chat-on-accent);
+}
+
+.nowo-chat-msg--mine a.nowo-chat-ref:focus-visible {
+  outline-color: var(--nowo-chat-on-accent);
 }
 
 .nowo-chat-ref-option__icon {
@@ -2238,14 +2277,23 @@ a.nowo-chat-ref:focus-visible {
 }
 
 .nowo-chat-ref-option__command {
+  color: var(--nowo-chat-text);
   font-weight: 600;
 }
 
 .nowo-chat-ref-option__meta {
   min-width: 0;
   overflow: hidden;
-  opacity: 0.75;
+  color: color-mix(in srgb, var(--nowo-chat-text) 72%, var(--nowo-chat-surface));
   font-size: 0.85em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Support (1.9.1): a decorative emoji before a status, topic or assistant line (aria-hidden; `support.emojis`). */
+.nowo-chat-emoji {
+  display: inline-block;
+  margin-inline-end: 0.3em;
+  font-style: normal;
+  line-height: 1;
 }

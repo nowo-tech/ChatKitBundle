@@ -57,6 +57,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param array<string, string> $icons dock icon → UX Icons name (icon_set: ux_icon)
      * @param IconRendererInterface|null $iconRenderer UX Icons renderer; null when symfony/ux-icons is not installed
      * @param string|null $pageLayout Deprecated 1.x layout (`page_layout`); null = the bundle's 1.x default document
+     * @param ChatReferences|null $references #references (whether `/` commands and `#` are offered)
+     * @param bool $supportEmojis Decorative emojis of the support assistant (`support.emojis`)
      */
     public function __construct(
         private readonly Security $security,
@@ -76,6 +78,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly ?IconRendererInterface $iconRenderer = null,
         private readonly ?string $pageLayout = null,
         private readonly ?ChatReferences $references = null,
+        private readonly bool $supportEmojis = true,
     ) {
     }
 
@@ -183,7 +186,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'linkPreviews' => !$this->linkPreviews instanceof NullLinkPreviewProvider,
             // `/` commands and the `#` picker are offered only when the application registers reference providers.
             'references' => $this->references?->isEnabled() ?? false,
-            'i18n'       => $this->strings($locale),
+            // Decorative emojis of the support assistant's own lines (greeting, "continue or new?").
+            'supportEmojis' => $this->supportEmojis,
+            'i18n'          => $this->strings($locale),
         ];
     }
 

@@ -99,7 +99,7 @@ final readonly class ChatSupportInbox
     /**
      * Every topic with its open + waiting ticket count (topics without tickets included, `none` last when used).
      *
-     * @return list<array{key: string, label: string, icon: string|null, count: int}> The topics in display order
+     * @return list<array{key: string, label: string, icon: string|null, emoji: string, count: int}> The topics in display order
      */
     public function countByTopic(): array
     {
@@ -110,7 +110,7 @@ final readonly class ChatSupportInbox
             unset($counts[$option['key']]);
         }
         foreach ($counts as $key => $count) {
-            $rows[] = ['key' => $key, 'label' => $this->topics->label($key === 'none' ? null : $key), 'icon' => null, 'count' => $count];
+            $rows[] = ['key' => $key, 'label' => $this->topics->label($key === 'none' ? null : $key), 'icon' => null, 'emoji' => '', 'count' => $count];
         }
 
         return $rows;

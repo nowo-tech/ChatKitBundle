@@ -112,7 +112,7 @@ final readonly class ChatSupportTickets
      *
      * @param ChatUserInterface $owner The requester
      *
-     * @return array{prompt: string, topics: list<array{key: string, label: string, icon: string|null}>, resume: array<string, mixed>|null, tickets: list<array<string, mixed>>, resumeAfterDays: int}
+     * @return array{prompt: string, topics: list<array{key: string, label: string, icon: string|null, emoji: string}>, resume: array<string, mixed>|null, tickets: list<array<string, mixed>>, resumeAfterDays: int}
      */
     public function intake(ChatUserInterface $owner): array
     {

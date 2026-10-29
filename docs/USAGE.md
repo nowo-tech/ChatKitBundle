@@ -173,7 +173,16 @@ times, the requester and an optional assignee. One user may hold several tickets
   in the dock. A resolved ticket shows **Reopen** to its requester. A **closed** ticket, or one resolved more than
   `support.close_after_days` (30) ago, is read-only for everyone (agents may still change its status).
 - Every status change, assignment, topic change and continuation posts a support-assistant line (`kind: bot`, no
-  author, translated for each reader) in the ticket.
+  author, translated for each reader — a realtime line carries `refsPending` and each dock fetches it again in its
+  own locale) in the ticket.
+- **Emojis** (`support.emojis`, default `true`): a decorative emoji before the ticket status (open 🟢, waiting ⏳,
+  resolved ✅, closed 🔒), before the topic label (status line, topic buttons, earlier tickets; ticket blocks carry
+  `topicEmoji` / `statusEmoji`, topic options and inbox counts `emoji`) and before each assistant line (🎫 opened,
+  🏷️ topic changed, 🔄 continued, 🔁 reopened, ⏳ waiting, ✅ resolved, 🔒 closed, 🙋 assigned, 👤 unassigned, 👋 the
+  greeting, 🔄 "continue or new?"; a topic's first reply uses the topic's emoji). They are `<span class="nowo-chat-emoji"
+  aria-hidden="true">` elements outside the translations, so screen readers, previews, Web Push and the digest read only
+  the text. Built-in topics: incident 🐞, billing 💳, how_to ❓, account 🔐, other 💬; set `emoji` per topic (`""`
+  for none) or `support.emojis: false` for text only.
 
 Topics come from `support.topics` (see CONFIGURATION). To manage them as data, alias
 `ChatSupportTopicProviderInterface` to your service returning `ChatSupportTopic` objects; a topic with a null `domain`
@@ -188,7 +197,7 @@ final class SupportTopics implements ChatSupportTopicProviderInterface
     public function topics(): array
     {
         return [
-            new ChatSupportTopic('incident', 'support.topic.incident', 'support.topic_reply.incident', 'tabler:bug', null, 'messages'),
+            new ChatSupportTopic('incident', 'support.topic.incident', 'support.topic_reply.incident', 'tabler:bug', null, 'messages', '🐞'),
             new ChatSupportTopic('sales', 'Sales', 'Which plan are you interested in?'), // plain text
         ];
     }

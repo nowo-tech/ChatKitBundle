@@ -1475,6 +1475,8 @@ export class ThreadView {
  */
 export function plain(html: string, lines = false): string {
   const doc = new DOMParser().parseFromString(html.replace(/<br\s*\/?>/g, '\n').replace(/<\/(p|li|pre)>/g, '\n'), 'text/html');
+  // Decorative emojis (support assistant lines) are aria-hidden: previews and the live region read only the text.
+  doc.body.querySelectorAll('.nowo-chat-emoji').forEach((emoji) => emoji.remove());
   // A #reference card reads `#Title`; the neutral chip of an item the viewer may not open, `[Content not visible]`.
   doc.body.querySelectorAll('.nowo-chat-ref').forEach((chip) => {
     const title = chip.querySelector('.nowo-chat-ref__title')?.textContent ?? '';
