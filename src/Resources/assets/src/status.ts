@@ -223,6 +223,7 @@ export class StatusMenu {
         panel.querySelector<HTMLButtonElement>('button')?.focus();
       });
     }
+    this.bindAutoReply(popover);
     part(popover, 'status-clear').addEventListener('click', () => {
       this.textInput.value = '';
       this.emojiInput.value = '';
@@ -320,6 +321,61 @@ export class StatusMenu {
       this.error.textContent = t(i18n, 'status_error');
       this.error.hidden = false;
     }
+  }
+
+  /**
+   * The automatic reply section (1.11), when the template and the configuration have it: filled from the
+   * configuration, the date range shown only for "between two dates", saved on its own.
+   */
+  private bindAutoReply(popover: HTMLElement): void {
+    const section = popover.querySelector<HTMLElement>('[data-part="auto-reply"]');
+    const current = this.host.config.autoReply;
+    if (section === null || current === undefined || this.host.config.endpoints.autoReply === undefined) {
+      section?.remove();
+      return;
+    }
+    const field = <T extends HTMLElement>(name: string): T => part<T>(section, name);
+    const enabled = field<HTMLInputElement>('auto-reply-enabled');
+    const text = field<HTMLTextAreaElement>('auto-reply-text');
+    const when = field<HTMLSelectElement>('auto-reply-when');
+    const from = field<HTMLInputElement>('auto-reply-from');
+    const until = field<HTMLInputElement>('auto-reply-until');
+    const mentions = field<HTMLInputElement>('auto-reply-mentions');
+    const range = field('auto-reply-range');
+    const error = field('auto-reply-error');
+    /** `datetime-local` value of an ISO date, in the browser's time zone. */
+    const local = (iso: string | null): string => {
+      if (iso === null) {
+        return '';
+      }
+      const date = new Date(iso);
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+    };
+    const iso = (value: string): string | null => (value === '' ? null : new Date(value).toISOString());
+    enabled.checked = current.enabled;
+    text.value = current.text;
+    when.value = current.when;
+    from.value = local(current.from);
+    until.value = local(current.until);
+    mentions.checked = current.mentions;
+    const showRange = (): void => {
+      range.hidden = when.value !== 'range';
+    };
+    showRange();
+    when.addEventListener('change', showRange);
+    part(section, 'auto-reply-save').addEventListener('click', () => {
+      void this.host.api
+        .saveAutoReply({ enabled: enabled.checked, text: text.value, when: when.value === 'range' ? 'range' : 'status', from: iso(from.value), until: iso(until.value), mentions: mentions.checked })
+        .then((saved) => {
+          this.host.config.autoReply = saved;
+          error.hidden = true;
+          this.close(true);
+        })
+        .catch(() => {
+          error.textContent = t(this.host.config.i18n, 'auto_reply_invalid');
+          error.hidden = false;
+        });
+    });
   }
 
   /** Arrow keys, Home and End move between the options (roving focus). */

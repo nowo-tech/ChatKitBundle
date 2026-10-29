@@ -2944,3 +2944,267 @@ a.nowo-chat-ref:focus-visible {
   flex: 1 1 9rem;
   width: auto;
 }
+
+/* 1.11: the message actions float over the message's top corner (revealed on hover / focus / tap), so the bubble and its
+   cards keep the whole width of the window. */
+.nowo-chat-msg {
+  position: relative;
+}
+
+.nowo-chat-msg__actions {
+  position: absolute;
+  z-index: 2;
+  top: -12px;
+  right: 6px;
+  padding: 1px;
+  border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  box-shadow: var(--nowo-chat-shadow-soft);
+  visibility: hidden;
+}
+.nowo-chat-msg:focus-within .nowo-chat-msg__actions,
+.nowo-chat-msg.is-active .nowo-chat-msg__actions {
+  visibility: visible;
+}
+@media (hover: hover) {
+  .nowo-chat-msg:hover .nowo-chat-msg__actions {
+    visibility: visible;
+  }
+}
+
+.nowo-chat-msg--mine .nowo-chat-msg__actions {
+  right: auto;
+  left: 6px;
+}
+
+/* The time pill of my grouped messages moves to the bubble's other corner (the actions take the first one). */
+.nowo-chat-msg--mine:has(+ .nowo-chat-msg:not(.nowo-chat-msg--group-start)):not(.nowo-chat-msg--pending) .nowo-chat-msg__meta {
+  right: 6px;
+}
+
+/* Quotes and links (1.11). */
+.nowo-chat-bubble blockquote {
+  margin: 2px 0;
+  padding: 2px 0 2px 8px;
+  border-left: 3px solid color-mix(in srgb, currentColor 40%, transparent);
+  color: inherit;
+}
+.nowo-chat-bubble blockquote p {
+  margin: 0;
+}
+.nowo-chat-bubble blockquote + p,
+.nowo-chat-bubble p + blockquote {
+  margin-top: 6px;
+}
+
+/* An automatic reply (1.11). */
+.nowo-chat-msg__auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 8px 2px;
+  color: var(--nowo-chat-muted);
+  font-size: 0.6875rem;
+  font-style: italic;
+}
+
+.nowo-chat-msg--auto .nowo-chat-bubble {
+  border: 1px dashed color-mix(in srgb, var(--nowo-chat-text) 30%, transparent);
+}
+
+/* Composer tools (1.11): Aa (formatting toolbar), quick replies, the toolbar and the formatting help. */
+.nowo-chat-composer__tools {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1/-1;
+  align-items: center;
+  gap: 2px;
+}
+
+.nowo-chat-composer__tool {
+  width: 26px;
+  height: 26px;
+}
+.nowo-chat-composer__tool[aria-pressed="true"],
+.nowo-chat-composer__tool[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--nowo-chat-accent) 14%, transparent);
+  color: var(--nowo-chat-accent-strong);
+}
+
+.nowo-chat-composer__toolbar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding-left: 4px;
+  border-left: 1px solid color-mix(in srgb, var(--nowo-chat-border) 80%, transparent);
+}
+.nowo-chat-composer__toolbar[hidden] {
+  display: none;
+}
+
+.nowo-chat-format-help {
+  display: grid;
+  grid-column: 1/-1;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface-muted);
+  font-size: 0.75rem;
+}
+.nowo-chat-format-help dd {
+  margin: 0;
+  color: var(--nowo-chat-muted);
+}
+
+.nowo-chat-quick {
+  position: absolute;
+  z-index: 3;
+  right: 10px;
+  bottom: calc(100% + 6px);
+  left: 10px;
+  max-height: 260px;
+  padding: 8px;
+  overflow-y: auto;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  box-shadow: var(--nowo-chat-shadow-soft);
+  color: var(--nowo-chat-text);
+}
+.nowo-chat-quick[hidden] {
+  display: none;
+}
+
+.nowo-chat-quick__heading {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+.nowo-chat-quick__empty {
+  margin: 0 0 6px;
+  color: var(--nowo-chat-muted);
+  font-size: 0.8125rem;
+}
+
+.nowo-chat-quick__list {
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.nowo-chat-quick__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nowo-chat-quick__use {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: calc(var(--nowo-chat-radius-control) - 2px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.nowo-chat-quick__use:hover,
+.nowo-chat-quick__use:focus-visible {
+  background: var(--nowo-chat-surface-muted);
+  outline: none;
+}
+
+.nowo-chat-quick__title {
+  font-weight: 600;
+}
+
+.nowo-chat-quick__body {
+  overflow: hidden;
+  color: var(--nowo-chat-muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowo-chat-quick__edit,
+.nowo-chat-quick__delete,
+.nowo-chat-quick__add,
+.nowo-chat-quick__cancel,
+.nowo-chat-quick__save {
+  padding: 3px 8px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.nowo-chat-quick__form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.nowo-chat-quick__input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  color: inherit;
+  font: inherit;
+}
+
+.nowo-chat-quick__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* The automatic reply section of the status menu (1.11). */
+.nowo-chat-auto-reply {
+  border-top: 1px solid color-mix(in srgb, var(--nowo-chat-border) 70%, transparent);
+  padding-top: 6px;
+}
+
+.nowo-chat-auto-reply > summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nowo-chat-auto-reply[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nowo-chat-auto-reply__check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nowo-chat-auto-reply__range {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.nowo-chat-auto-reply__range[hidden] {
+  display: none;
+}
+
+.nowo-chat-status-form .nowo-chat-auto-reply textarea {
+  width: 100%;
+  box-sizing: border-box;
+}

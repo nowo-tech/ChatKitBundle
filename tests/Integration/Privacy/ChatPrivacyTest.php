@@ -117,6 +117,7 @@ final class ChatPrivacyTest extends DatabaseTestCase
             'status_text'           => null,
             'status_emoji'          => null,
             'status_expires_at'     => null,
+            'auto_reply'            => ['enabled' => false, 'text' => '', 'when' => 'status', 'from' => null, 'until' => null, 'mentions' => false],
         ], $export['settings']);
         self::assertSame(['my words', 'help'], array_column($export['messages'], 'text'), 'only own messages');
         self::assertSame('direct', $export['messages'][0]['conversation_kind']);

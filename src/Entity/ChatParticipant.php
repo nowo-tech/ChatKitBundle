@@ -39,6 +39,10 @@ class ChatParticipant
     #[ORM\Column(name: 'archived_at', nullable: true)]
     private ?DateTimeImmutable $archivedAt = null;
 
+    /** 1.11: the user's last automatic reply in this conversation (one per interval). */
+    #[ORM\Column(name: 'last_auto_reply_at', nullable: true)]
+    private ?DateTimeImmutable $lastAutoReplyAt = null;
+
     #[ORM\Column(name: 'joined_at')]
     private DateTimeImmutable $joinedAt;
 
@@ -203,5 +207,26 @@ class ChatParticipant
 
         // A message newer than the closing (the send also clears the mark; this covers messages from elsewhere).
         return $conversation->getLastMessageAt() <= $this->archivedAt || $this->isMuted($now);
+    }
+
+    /**
+     * When the user last sent an automatic reply here.
+     *
+     * @return DateTimeImmutable|null The time
+     */
+    public function getLastAutoReplyAt(): ?DateTimeImmutable
+    {
+        return $this->lastAutoReplyAt;
+    }
+
+    /**
+     * Records an automatic reply sent now.
+     *
+     * @param DateTimeImmutable $at When it was sent
+     */
+    public function markAutoReplied(DateTimeImmutable $at): void
+    {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->lastAutoReplyAt = $at;
     }
 }

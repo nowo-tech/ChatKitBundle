@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.11.0] - 2026-10-29](#1110---2026-10-29)
 - [[1.10.1] - 2026-10-29](#1101---2026-10-29)
 - [[1.10.0] - 2026-10-29](#1100---2026-10-29)
 - [[1.9.2] - 2026-10-29](#192---2026-10-29)
@@ -30,6 +31,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.11.0] - 2026-10-29
+
+### Added
+
+- **Automatic replies, set from the chat**: the status menu's *Automatic reply* section — text (Markdown, ≤ 500),
+  *while I am away, busy or in do not disturb* or *between two dates*, and @mentions in channels on request. Posted as
+  the person's own message marked "Automatic reply" (kind `auto`), at most once per conversation per
+  `auto_reply_interval_hours` (4); never to an automatic or assistant message, never in support tickets; no sound, Web
+  Push or digest. `POST /api/auto-reply`.
+- **Quick replies**: each person's snippets (title + text) from the ⚡ button under the composer — insert, add, edit,
+  delete (≤ 50). `GET` / `POST /api/quick-replies`, `PATCH` / `DELETE /api/quick-replies/{id}`; in the personal data
+  export and erasure.
+- **Formatting**: the **Aa** toolbar under the composer (bold, italic, strikethrough, code, link, quote, list, help),
+  <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>K</kbd>; the renderer adds `[text](url)` (http(s) and
+  mailto only, plain text), `www.` and e-mail autolinks and `> ` quotes. New built-in icons `format`, `quick`, `bold`,
+  `italic`, `strike`, `code`, `quote`, `list`, `help`, `auto`.
+
+### Fixed
+
+- **Narrow windows cut cards short**: the message actions took width beside the bubble; they now float over the
+  message's top corner (hover, focus, tap), so bubbles and cards keep the window's width.
 
 ## [1.10.1] - 2026-10-29
 

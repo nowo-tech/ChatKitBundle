@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.11.0](#to-1110)
 - [To 1.10.1](#to-1101)
 - [To 1.10.0](#to-1100)
 - [To 1.9.2](#to-192)
@@ -29,6 +30,31 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.11.0
+
+From **1.10.1** — **schema change**. MySQL / MariaDB (prefix the names with a `doctrine.table_prefix`; take the `IDX_` /
+`FK_` names from `doctrine:migrations:diff` if you validate the schema; `user` is your user table):
+
+```sql
+ALTER TABLE nowo_chat_user_settings
+  ADD auto_reply_enabled TINYINT(1) DEFAULT 0 NOT NULL,
+  ADD auto_reply_text LONGTEXT DEFAULT NULL,
+  ADD auto_reply_when VARCHAR(16) DEFAULT 'status' NOT NULL,
+  ADD auto_reply_from DATETIME DEFAULT NULL,
+  ADD auto_reply_until DATETIME DEFAULT NULL,
+  ADD auto_reply_mentions TINYINT(1) DEFAULT 0 NOT NULL;
+ALTER TABLE nowo_chat_participant ADD last_auto_reply_at DATETIME DEFAULT NULL;
+CREATE TABLE nowo_chat_quick_reply (id INT AUTO_INCREMENT NOT NULL, title VARCHAR(80) NOT NULL, body LONGTEXT NOT NULL,
+  created_at DATETIME NOT NULL, user_id INT NOT NULL, INDEX idx_nowo_chat_quick_reply_user (user_id), PRIMARY KEY (id));
+ALTER TABLE nowo_chat_quick_reply ADD CONSTRAINT FK_nowo_chat_quick_reply_user FOREIGN KEY (user_id) REFERENCES user (id) ON DELETE CASCADE;
+```
+
+Then `assets:install` (or rebuild your bundle of the TS sources). The window template has a composer tools row
+(`data-part="composer-tools"`, `format-toggle`, `quick-replies`, `format-toolbar`) and the status menu an *Automatic
+reply* `<details>`; templates redefined from 1.10 keep working without them. With `icon_set: ux_icon`, import
+`tabler:typography`, `message-bolt`, `bold`, `italic`, `strikethrough`, `code`, `quote`, `list`, `help`, `clock-play`.
+Message actions are now absolutely positioned over the message (restyle `.nowo-chat-msg__actions` if you themed them).
 
 ## To 1.10.1
 

@@ -60,6 +60,11 @@ class ChatUserSettings
 
     public const int STATUS_EMOJI_MAX = 16;
 
+    /** 1.11: when the automatic reply applies — while away / busy / do not disturb, or between two dates. */
+    public const array AUTO_REPLY_WHEN = ['status', 'range'];
+
+    public const int AUTO_REPLY_MAX = 500;
+
     /** "Clear after" choices of a status: never, 30 minutes, 1 hour, 4 hours, end of today, end of this week. */
     public const array CLEAR_AFTER = ['never', '30m', '1h', '4h', 'today', 'week'];
 
@@ -140,6 +145,26 @@ class ChatUserSettings
 
     #[ORM\Column(name: 'status_emoji', length: 32, nullable: true)]
     private ?string $statusEmoji = null;
+
+    /** 1.11: automatic reply (sent at most once per conversation per interval, never to an automatic message). */
+    #[ORM\Column(name: 'auto_reply_enabled', options: ['default' => false])]
+    private bool $autoReplyEnabled = false;
+
+    #[ORM\Column(name: 'auto_reply_text', type: Types::TEXT, nullable: true)]
+    private ?string $autoReplyText = null;
+
+    #[ORM\Column(name: 'auto_reply_when', length: 16, options: ['default' => 'status'])]
+    private string $autoReplyWhen = 'status';
+
+    #[ORM\Column(name: 'auto_reply_from', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?DateTimeImmutable $autoReplyFrom = null;
+
+    #[ORM\Column(name: 'auto_reply_until', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?DateTimeImmutable $autoReplyUntil = null;
+
+    /** Also answer @mentions in channels (direct messages always). */
+    #[ORM\Column(name: 'auto_reply_mentions', options: ['default' => false])]
+    private bool $autoReplyMentions = false;
 
     /** When the status (and its text) go back to available; null = never. */
     #[ORM\Column(name: 'status_expires_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
@@ -685,5 +710,79 @@ class ChatUserSettings
         $value = trim((string) $value);
 
         return $value === '' || preg_match('/\p{Cc}/u', $value) === 1 ? null : $value;
+    }
+
+    /**
+     * Sets the automatic reply (1.11).
+     *
+     * @param bool $enabled Whether it is on
+     * @param string|null $text Markdown text, at most AUTO_REPLY_MAX characters (required when on)
+     * @param string $when One of AUTO_REPLY_WHEN
+     * @param DateTimeImmutable|null $from Start of the out-of-office range (`range`)
+     * @param DateTimeImmutable|null $until End of the out-of-office range (`range`)
+     * @param bool $mentions Also answer @mentions in channels
+     *
+     * @throws InvalidArgumentException When the text, the mode or the range is invalid
+     */
+    public function setAutoReply(bool $enabled, ?string $text, string $when, ?DateTimeImmutable $from, ?DateTimeImmutable $until, bool $mentions): void
+    {
+        $text = trim((string) $text);
+        if (!in_array($when, self::AUTO_REPLY_WHEN, true) || mb_strlen($text) > self::AUTO_REPLY_MAX || ($enabled && $text === '')) {
+            throw new InvalidArgumentException('Invalid automatic reply.');
+        }
+        if ($when === 'range' && $enabled && (!$from instanceof DateTimeImmutable || !$until instanceof DateTimeImmutable || $until <= $from)) {
+            throw new InvalidArgumentException('Invalid automatic reply range.');
+        }
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->autoReplyEnabled = $enabled;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->autoReplyText = $text === '' ? null : $text;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->autoReplyWhen = $when;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->autoReplyFrom = $when === 'range' ? $from : null;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->autoReplyUntil = $when === 'range' ? $until : null;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->autoReplyMentions = $mentions;
+    }
+
+    /**
+     * The automatic reply as the status menu shows it.
+     *
+     * @return array{enabled: bool, text: string, when: string, from: string|null, until: string|null, mentions: bool}
+     */
+    public function autoReplyView(): array
+    {
+        return [
+            'enabled'  => $this->autoReplyEnabled,
+            'text'     => (string) $this->autoReplyText,
+            'when'     => $this->autoReplyWhen,
+            'from'     => $this->autoReplyFrom?->format(DATE_ATOM),
+            'until'    => $this->autoReplyUntil?->format(DATE_ATOM),
+            'mentions' => $this->autoReplyMentions,
+        ];
+    }
+
+    /**
+     * The text to send now, or null when no automatic reply applies: off, empty, outside its range, or (`status`) the
+     * user is neither away, busy nor in do not disturb (`$shownStatus` may say "away" for an idle available user).
+     *
+     * @param DateTimeImmutable $now Current time
+     * @param string $shownStatus What others see now (ChatPresence), e.g. `away` when idle
+     * @param bool $mention Whether the message is an @mention in a channel (not a direct message)
+     *
+     * @return string|null The Markdown text
+     */
+    public function autoReplyFor(DateTimeImmutable $now, string $shownStatus, bool $mention): ?string
+    {
+        if (!$this->autoReplyEnabled || $this->autoReplyText === null || ($mention && !$this->autoReplyMentions)) {
+            return null;
+        }
+        $applies = $this->autoReplyWhen === 'range'
+            ? $this->autoReplyFrom <= $now && $now < $this->autoReplyUntil
+            : in_array($this->getStatus($now), ['away', 'busy', 'dnd'], true) || $shownStatus === 'away';
+
+        return $applies ? $this->autoReplyText : null;
     }
 }

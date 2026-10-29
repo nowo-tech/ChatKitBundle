@@ -117,16 +117,36 @@
                     {{ form_label(nowo_chat_status_form.clearAfter) }}
                     {{ form_widget(nowo_chat_status_form.clearAfter) }}
                 </div>
-                {% for child in nowo_chat_status_form %}
-                    {% if not child.rendered %}
-                        {{ form_row(child) }}
-                    {% endif %}
-                {% endfor %}
                 <p class="nowo-chat-status-form__error" role="alert" data-part="status-error" hidden></p>
                 <span class="nowo-chat-status-form__actions">
                     <button type="button" class="nowo-chat-status-form__clear" data-part="status-clear">{{ 'chat.status_clear'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
                     <button type="submit" class="nowo-chat-status-form__save">{{ 'chat.save'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
                 </span>
+                {# 1.11: the automatic reply, saved on its own. #}
+                <details class="nowo-chat-auto-reply" data-part="auto-reply">
+                    <summary>{{ 'chat.auto_reply'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</summary>
+                    <div class="nowo-chat-auto-reply__check">{{ form_widget(nowo_chat_status_form.autoReplyEnabled) }} {{ form_label(nowo_chat_status_form.autoReplyEnabled) }}</div>
+                    {{ form_label(nowo_chat_status_form.autoReplyText) }}
+                    {{ form_widget(nowo_chat_status_form.autoReplyText) }}
+                    {{ form_label(nowo_chat_status_form.autoReplyWhen) }}
+                    {{ form_widget(nowo_chat_status_form.autoReplyWhen) }}
+                    <div class="nowo-chat-auto-reply__range" data-part="auto-reply-range" hidden>
+                        {{ form_label(nowo_chat_status_form.autoReplyFrom) }}
+                        {{ form_widget(nowo_chat_status_form.autoReplyFrom) }}
+                        {{ form_label(nowo_chat_status_form.autoReplyUntil) }}
+                        {{ form_widget(nowo_chat_status_form.autoReplyUntil) }}
+                    </div>
+                    <div class="nowo-chat-auto-reply__check">{{ form_widget(nowo_chat_status_form.autoReplyMentions) }} {{ form_label(nowo_chat_status_form.autoReplyMentions) }}</div>
+                    <p class="nowo-chat-status-form__error" role="alert" data-part="auto-reply-error" hidden></p>
+                    <span class="nowo-chat-status-form__actions">
+                        <button type="button" class="nowo-chat-status-form__save" data-part="auto-reply-save">{{ 'chat.auto_reply_save'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                    </span>
+                </details>
+                {% for child in nowo_chat_status_form %}
+                    {% if not child.rendered %}
+                        {{ form_row(child) }}
+                    {% endif %}
+                {% endfor %}
             {{ form_end(nowo_chat_status_form) }}
         </div>
     </template>
@@ -234,6 +254,17 @@
                 <p class="nowo-chat-notice" data-part="notice" hidden></p>
                 {% set nowo_chat_composer = nowo_chat_forms.composer %}
                 {{ form_start(nowo_chat_composer) }}
+                    {# 1.11: formatting toolbar (shown with the Aa button) and the quick replies. #}
+                    <div class="nowo-chat-composer__tools" data-part="composer-tools">
+                        {{ ui.icon_button('format', 'chat.format_toolbar'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'format-toggle', 'nowo-chat-composer__tool') }}
+                        {{ ui.icon_button('quick', 'chat.quick_replies'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'quick-replies', 'nowo-chat-composer__tool') }}
+                        <span class="nowo-chat-composer__toolbar" role="toolbar" aria-label="{{ 'chat.format_toolbar'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-part="format-toolbar" hidden>
+                            {% for nowo_chat_format in ['bold', 'italic', 'strike', 'code', 'link', 'quote', 'list', 'help'] %}
+                                {% set nowo_chat_label = ('chat.format_' ~ nowo_chat_format ~ '_button')|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                                <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="{{ nowo_chat_format }}" aria-label="{{ nowo_chat_label }}" title="{{ nowo_chat_label }}"><span data-icon="{{ nowo_chat_format == 'link' ? 'link' : nowo_chat_format }}" data-icon-size="16"></span></button>
+                            {% endfor %}
+                        </span>
+                    </div>
                     <div class="nowo-chat-composer__field">
                         {% set nowo_chat_label = 'chat.composer_placeholder'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
                         {{ form_widget(nowo_chat_composer.body, {translation_domain: false, attr: nowo_chat_composer.body.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}

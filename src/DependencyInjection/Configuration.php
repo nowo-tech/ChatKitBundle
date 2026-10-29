@@ -60,6 +60,16 @@ final class Configuration implements ConfigurationInterface
         'archive'     => 'tabler:archive',
         'unarchive'   => 'tabler:arrow-back-up',
         'pin'         => 'tabler:pin',
+        'format'      => 'tabler:typography',
+        'quick'       => 'tabler:message-bolt',
+        'bold'        => 'tabler:bold',
+        'italic'      => 'tabler:italic',
+        'strike'      => 'tabler:strikethrough',
+        'code'        => 'tabler:code',
+        'quote'       => 'tabler:quote',
+        'list'        => 'tabler:list',
+        'help'        => 'tabler:help',
+        'auto'        => 'tabler:clock-play',
     ];
 
     /** Support ticket topics offered by default (labels and replies in the bundle catalogue). */
@@ -207,6 +217,11 @@ final class Configuration implements ConfigurationInterface
                                 ->info('Seconds a heartbeat keeps a user online.')
                                 ->defaultValue(90)
                                 ->min(30)
+                            ->end()
+                            ->integerNode('auto_reply_interval_hours')
+                                ->info('At most one automatic reply per conversation and person in this many hours (1.11).')
+                                ->defaultValue(4)
+                                ->min(1)
                             ->end()
                             ->integerNode('max_pins')
                                 ->info('Pinned messages per conversation (1.10).')

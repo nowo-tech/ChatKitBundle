@@ -168,6 +168,45 @@ describe('chat status', () => {
     holder.querySelector('.nowo-chat-emoji')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   });
 
+  it('sets the automatic reply from the status menu (1.11)', async () => {
+    const saveAutoReply = vi.fn();
+    const trigger = document.createElement('button');
+    const popover = templates().clone('status-menu');
+    document.body.append(trigger, popover);
+    const abort = new AbortController();
+    const reply = { enabled: true, text: 'Away', when: 'range' as const, from: '2026-11-01T10:00:00Z', until: null, mentions: true };
+    const config = { i18n: { ...i18n, auto_reply_invalid: 'Invalid' }, status: own(), autoReply: reply, endpoints: { autoReply: '/auto' } } as unknown as ChatConfig;
+    new StatusMenu({ config, api: { setStatus: vi.fn(), saveAutoReply } as unknown as ChatApi }, trigger, popover, vi.fn(), abort.signal);
+    const field = <T extends HTMLElement>(name: string) => popover.querySelector<T>(`[data-part="${name}"]`) as T;
+    expect(field<HTMLInputElement>('auto-reply-enabled').checked).toBe(true);
+    expect(field<HTMLTextAreaElement>('auto-reply-text').value).toBe('Away');
+    expect(field('auto-reply-range').hidden).toBe(false);
+    expect(field<HTMLInputElement>('auto-reply-from').value).not.toBe('');
+    field<HTMLSelectElement>('auto-reply-when').value = 'status';
+    field<HTMLSelectElement>('auto-reply-when').dispatchEvent(new Event('change'));
+    expect(field('auto-reply-range').hidden).toBe(true);
+    field<HTMLInputElement>('auto-reply-from').value = '';
+
+    saveAutoReply.mockRejectedValueOnce(new Error('422')).mockResolvedValueOnce({ ...reply, when: 'status' });
+    field<HTMLButtonElement>('auto-reply-save').click();
+    await flush();
+    expect(field('auto-reply-error').textContent).toBe('Invalid');
+    field<HTMLButtonElement>('auto-reply-save').click();
+    await flush();
+    expect(saveAutoReply).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: true, text: 'Away', when: 'status', from: null, mentions: true }));
+    expect(config.autoReply?.when).toBe('status');
+    expect(field('auto-reply-error').hidden).toBe(true);
+    abort.abort();
+
+    // Without the 1.11 configuration the section goes away.
+    const bare = templates().clone('status-menu');
+    new StatusMenu({ config: { i18n, status: own(), endpoints: {} } as unknown as ChatConfig, api: {} as unknown as ChatApi }, document.createElement('button'), bare, vi.fn(), new AbortController().signal);
+    expect(bare.querySelector('[data-part="auto-reply"]')).toBeNull();
+    const nothing = templates().clone('status-menu');
+    nothing.querySelector('[data-part="auto-reply"]')?.remove();
+    expect(() => new StatusMenu({ config, api: {} as unknown as ChatApi }, document.createElement('button'), nothing, vi.fn(), new AbortController().signal)).not.toThrow();
+  });
+
   it('paints a trigger without a dot', () => {
     const setStatus = vi.fn();
     const trigger = document.createElement('button');

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
@@ -101,6 +102,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$cache', service('nowo_chat_kit.cache'))
         ->arg('$urlTemplate', param('nowo_chat_kit.push_url'))
         ->arg('$intervalMinutes', param('nowo_chat_kit.digest.interval_minutes'));
+    $services->get(ChatAutoReplier::class)
+        ->arg('$intervalHours', param('nowo_chat_kit.auto_reply_interval_hours'));
     $services->get(ChatService::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'))
         ->arg('$maxPins', param('nowo_chat_kit.max_pins'));

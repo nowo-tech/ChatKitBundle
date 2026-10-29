@@ -11,6 +11,7 @@ use LogicException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
+use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Enum\ConversationKind;
@@ -426,6 +427,55 @@ final class ChatEntitiesTest extends TestCase
         $message->pin($ana, null);
         self::assertNull($message->getPinnedBy());
         self::assertNull($message->getPinnedAt());
+    }
+
+    public function testAutoReplyAndQuickReply(): void
+    {
+        $user     = $this->user(11);
+        $settings = new ChatUserSettings($user);
+        $now      = new DateTimeImmutable('2026-10-29 10:00:00', new DateTimeZone('UTC'));
+        self::assertNull($settings->autoReplyFor($now, 'away', false), 'off');
+
+        $settings->setAutoReply(true, '  On holiday  ', 'status', null, null, false);
+        self::assertSame(['enabled' => true, 'text' => 'On holiday', 'when' => 'status', 'from' => null, 'until' => null, 'mentions' => false], $settings->autoReplyView());
+        self::assertSame('On holiday', $settings->autoReplyFor($now, 'away', false), 'idle: shown away');
+        self::assertNull($settings->autoReplyFor($now, 'available', false));
+        self::assertNull($settings->autoReplyFor($now, 'away', true), 'mentions not chosen');
+        $settings->setStatus('dnd');
+        self::assertSame('On holiday', $settings->autoReplyFor($now, 'offline', false));
+
+        $settings->setAutoReply(true, 'Out', 'range', $now->modify('-1 hour'), $now->modify('+1 hour'), true);
+        self::assertSame('Out', $settings->autoReplyFor($now, 'available', true));
+        self::assertNull($settings->autoReplyFor($now->modify('+2 hours'), 'available', true));
+        self::assertSame('2026-10-29T09:00:00+00:00', $settings->autoReplyView()['from']);
+        $settings->setAutoReply(false, '', 'status', null, null, false);
+        self::assertNull($settings->autoReplyView()['from']);
+
+        foreach ([[true, '', 'status', null, null], [false, 'x', 'never', null, null], [true, str_repeat('x', 501), 'status', null, null], [true, 'x', 'range', null, null], [true, 'x', 'range', $now, $now]] as [$enabled, $text, $when, $from, $until]) {
+            try {
+                $settings->setAutoReply($enabled, $text, $when, $from, $until, false);
+                self::fail('accepted');
+            } catch (InvalidArgumentException) {
+                self::addToAssertionCount(1);
+            }
+        }
+
+        $participant = new ChatParticipant(ChatConversation::direct($user, $this->user(12), $now), $user, $now);
+        self::assertNull($participant->getLastAutoReplyAt());
+        $participant->markAutoReplied($now);
+        self::assertSame($now, $participant->getLastAutoReplyAt());
+
+        $auto = ChatMessage::autoReply($participant->getConversation(), $user, 'x', '<p>x</p>', $now);
+        self::assertTrue($auto->isAuto());
+        self::assertFalse($auto->isPinnable());
+
+        $reply = new ChatQuickReply($user, ' Hi ', ' Hello there ', $now);
+        self::assertSame([null, 'Hi', 'Hello there'], [$reply->getId(), $reply->getTitle(), $reply->getBody()]);
+        self::assertSame($user, $reply->getUser());
+        self::assertSame($now, $reply->getCreatedAt());
+        self::assertSame(['id' => null, 'title' => 'Hi', 'body' => 'Hello there'], $reply->toArray());
+        $this->expectException(InvalidArgumentException::class);
+        $reply->change(str_repeat('t', 81), 'b');
     }
 
     private function user(int $id): TestUser

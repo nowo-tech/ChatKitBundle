@@ -8,6 +8,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
+use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -47,7 +48,7 @@ final readonly class ChatPersonalData
      *
      * @param ChatUserInterface $user The user whose data is exported
      *
-     * @return array{settings: array<string, bool|int|string|null>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>} Settings, authored messages and the pins the user made
+     * @return array{settings: array<string, mixed>, quick_replies: list<array{title: string, text: string}>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>} Settings, authored messages and the pins the user made
      */
     public function export(ChatUserInterface $user): array
     {
@@ -88,7 +89,13 @@ final readonly class ChatPersonalData
                 'status_text'           => $settings->getStatusText($now),
                 'status_emoji'          => $settings->getStatusEmoji($now),
                 'status_expires_at'     => $settings->getStatusExpiresAt($now)?->format(DATE_ATOM),
+                // 1.11
+                'auto_reply' => $settings->autoReplyView(),
             ],
+            'quick_replies' => array_map(
+                static fn (ChatQuickReply $reply): array => ['title' => $reply->getTitle(), 'text' => $reply->getBody()],
+                $this->entityManager->getRepository(ChatQuickReply::class)->findBy(['user' => $user], ['id' => 'ASC']),
+            ),
             'messages' => array_map(static fn (ChatMessage $message): array => [
                 'conversation_uuid' => $message->getConversation()->getUuid(),
                 'conversation_kind' => $message->getConversation()->getKind()->value,
@@ -126,6 +133,7 @@ final readonly class ChatPersonalData
         $qb()->delete(ChatReaction::class, 'r')->where('r.user = :user')->setParameter('user', $user)->getQuery()->execute();
         $qb()->delete(ChatParticipant::class, 'p')->where('p.user = :user')->setParameter('user', $user)->getQuery()->execute();
         $qb()->delete(ChatUserSettings::class, 's')->where('s.user = :user')->setParameter('user', $user)->getQuery()->execute();
+        $qb()->delete(ChatQuickReply::class, 'q')->where('q.user = :user')->setParameter('user', $user)->getQuery()->execute();
 
         // Every support ticket of the user (and the intake draft), with its messages.
         foreach ($this->conversations->findBy(['supportOwner' => $user]) as $support) {

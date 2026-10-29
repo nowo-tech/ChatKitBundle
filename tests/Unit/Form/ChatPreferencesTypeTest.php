@@ -54,7 +54,7 @@ final class ChatPreferencesTypeTest extends TestCase
         $form = Forms::createFormFactory()->create(ChatDockStatusType::class);
 
         self::assertSame('nowo_chat_status', $form->getName());
-        self::assertSame(['emoji', 'text', 'clearAfter'], array_keys($form->all()));
+        self::assertSame(['emoji', 'text', 'clearAfter', 'autoReplyEnabled', 'autoReplyText', 'autoReplyWhen', 'autoReplyFrom', 'autoReplyUntil', 'autoReplyMentions'], array_keys($form->all()));
         self::assertSame('never', $form->get('clearAfter')->getData());
         self::assertSame(80, $form->get('text')->getConfig()->getOption('attr')['maxlength']);
     }

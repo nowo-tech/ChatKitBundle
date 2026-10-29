@@ -717,6 +717,67 @@ describe('ThreadView', () => {
     view.applySummary(summary({ canPin: true }));
   });
 
+  it('composer tools, automatic replies and quick replies (1.11)', async () => {
+    window.localStorage.removeItem('nowo-chat-format-toolbar');
+    const quick = vi.fn().mockRejectedValueOnce(new Error('x')).mockResolvedValue([{ id: 1, title: 'Thanks', body: 'Thanks a lot' }]);
+    const { view, q } = setup(
+      {},
+      { messages: vi.fn().mockResolvedValue({ messages: [msg({ id: 9, kind: 'auto', html: '<p>Away</p>' })], hasMore: false, readUpTo: null, readers: [] }) },
+      { i18n: { ...i18n, auto_reply_marker: 'Automatic reply' }, endpoints: { page: '/chat/__uuid__', quickReplies: '/q' } as ChatConfig['endpoints'] },
+    );
+    (view as unknown as { host: { api: Record<string, unknown> } }).host.api.quickReplies = quick;
+    await view.load();
+    expect(q('.nowo-chat-msg--auto .nowo-chat-msg__auto').textContent).toBe('Automatic reply');
+    expect(q('.nowo-chat-msg--auto [data-part="actions"]').hidden).toBe(true);
+
+    const toggle = q<HTMLButtonElement>('[data-part="format-toggle"]');
+    const toolbar = q('[data-part="format-toolbar"]');
+    expect(toolbar.hidden).toBe(true);
+    toggle.click();
+    expect(toolbar.hidden).toBe(false);
+    expect(window.localStorage.getItem('nowo-chat-format-toolbar')).toBe('1');
+    const input = q<HTMLTextAreaElement>('.nowo-chat-composer__input');
+    input.value = 'hi';
+    input.setSelectionRange(0, 2);
+    q<HTMLButtonElement>('[data-format="bold"]').click();
+    expect(input.value).toBe('**hi**');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', ctrlKey: true, cancelable: true }));
+    expect(input.value).toBe('**_hi_**');
+    q<HTMLButtonElement>('[data-format="help"]').click();
+    expect(q('[data-part="format-help"]')).not.toBeNull();
+    q<HTMLButtonElement>('[data-format="help"]').click();
+    expect(q('[data-part="format-help"]')).toBeNull();
+    toggle.click();
+    expect(toolbar.hidden).toBe(true);
+
+    q<HTMLButtonElement>('[data-part="quick-replies"]').click();
+    await vi.waitFor(() => expect(q('[data-part="notice"]').hidden).toBe(false));
+    q<HTMLButtonElement>('[data-part="quick-replies"]').click();
+    q<HTMLButtonElement>('[data-part="quick-replies"]').click();
+    await vi.waitFor(() => expect(q('.nowo-chat-quick__use')).not.toBeNull());
+    input.value = '';
+    q<HTMLButtonElement>('.nowo-chat-quick__use').click();
+    expect(input.value).toBe('Thanks a lot');
+
+    // A remembered toolbar opens at once; without the endpoint, no quick replies; no storage, no failure.
+    window.localStorage.setItem('nowo-chat-format-toolbar', '1');
+    const second = setup();
+    expect(second.q('[data-part="format-toolbar"]').hidden).toBe(false);
+    expect(second.q('[data-part="quick-replies"]')).toBeNull();
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const setSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const third = setup();
+    third.q<HTMLButtonElement>('[data-part="format-toggle"]').click();
+    expect(third.q('[data-part="format-toolbar"]').hidden).toBe(false);
+    spy.mockRestore();
+    setSpy.mockRestore();
+    window.localStorage.removeItem('nowo-chat-format-toolbar');
+  });
+
   it('references items: / opens the commands, a picked task is sent as a token and drafts keep it', async () => {
     const { view, api, host, q } = setup({ kind: 'channel' }, {}, { references: true });
     (host.draft as Mock).mockReturnValue('');

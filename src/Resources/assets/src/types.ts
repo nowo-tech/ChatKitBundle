@@ -44,7 +44,7 @@ export interface ChatMessage {
   authorInitials: string;
   mine: boolean;
   /** `pin` (1.10): "X pinned a message" line (`pinnedMessage` = its uuid). */
-  kind: 'text' | 'buzz' | 'bot' | 'pin';
+  kind: 'text' | 'buzz' | 'bot' | 'pin' | 'auto';
   /** 1.10: pinned to the top of the conversation. */
   pinned?: boolean;
   pinnedMessage?: string | null;
@@ -134,6 +134,24 @@ export interface OwnStatus {
   emoji: string | null;
   /** When it goes back to available (ISO 8601); null = never. */
   expiresAt: string | null;
+}
+
+/** The user's automatic reply (1.11). */
+export interface AutoReply {
+  enabled: boolean;
+  text: string;
+  /** `status`: while away, busy or in do not disturb; `range`: between `from` and `until`. */
+  when: 'status' | 'range';
+  from: string | null;
+  until: string | null;
+  mentions: boolean;
+}
+
+/** A saved snippet (1.11). */
+export interface QuickReply {
+  id: number;
+  title: string;
+  body: string;
 }
 
 /** What others see of someone's status. */
@@ -238,12 +256,18 @@ export interface ChatConfig {
     pins?: string;
     /** 1.10: pin (`POST`) / unpin (`DELETE`) a message (`__uuid__`, `__message__`). */
     pin?: string;
+    /** 1.11: save the automatic reply. */
+    autoReply?: string;
+    /** 1.11: the user's quick replies (`GET`, `POST`; `/{id}` `PATCH` / `DELETE`). */
+    quickReplies?: string;
   };
   prefs: ChatPrefs;
   /** 1.10: the user's own status (absent before 1.10: no status menu). */
   status?: OwnStatus;
   /** 1.10: minutes without input before the user shows as away (0 = never). */
   autoAwayMinutes?: number;
+  /** 1.11: the automatic reply (status menu). */
+  autoReply?: AutoReply;
   /** 1.10: the user's own name and initials (status button). */
   me?: { name: string; initials: string };
   isAgent: boolean;

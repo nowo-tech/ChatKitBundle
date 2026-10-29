@@ -50,7 +50,16 @@ final class ChatMarkdownRenderer
         /** @var 'ol'|'ul'|null $list */
         $list = null;
         /** @var list<string> $items */
-        $items          = [];
+        $items = [];
+        /** @var list<string> $quote */
+        $quote      = [];
+        $flushQuote = function () use (&$quote, &$html): void {
+            if ($quote !== []) {
+                // 1.11: `> ` lines are a quote (one paragraph, line breaks kept; no nesting).
+                $html[] = '<blockquote><p>' . implode('<br>', array_map($this->inline(...), $quote)) . '</p></blockquote>';
+                $quote  = [];
+            }
+        };
         $flushParagraph = function () use (&$paragraph, &$html): void {
             if ($paragraph !== []) {
                 $html[]    = '<p>' . implode('<br>', array_map($this->inline(...), $paragraph)) . '</p>';
@@ -66,6 +75,13 @@ final class ChatMarkdownRenderer
         };
 
         foreach (explode("\n", $text) as $line) {
+            if (preg_match('/^\s*>\s?(.*)$/', $line, $q) === 1) {
+                $flushParagraph();
+                $flushList();
+                $quote[] = $q[1];
+                continue;
+            }
+            $flushQuote();
             if (preg_match('/^\x{E000}B(\d+)\x{E000}$/u', trim($line), $m) === 1) {
                 $flushParagraph();
                 $flushList();
@@ -89,6 +105,7 @@ final class ChatMarkdownRenderer
             }
             $paragraph[] = $line;
         }
+        $flushQuote();
         $flushParagraph();
         $flushList();
 
@@ -121,7 +138,7 @@ final class ChatMarkdownRenderer
      */
     public function plainText(string $markdown, int $maxLength = 120): string
     {
-        $text = (string) preg_replace([ChatMentions::TOKEN, ChatReferences::TOKEN, '/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)])[ \t]+/m', '/\s+/'], ['@$1', '#…', '', '', '', ' '], self::clean($markdown));
+        $text = (string) preg_replace([ChatMentions::TOKEN, ChatReferences::TOKEN, '~\[([^\]\n]{1,200})\]\(((?:https?://|mailto:)[^\s)]+)\)~i', '/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)]|>)[ \t]*/m', '/\s+/'], ['@$1', '#…', '$1', '', '', '', ' '], self::clean($markdown));
         $text = trim($text);
 
         return mb_strlen($text) > $maxLength ? rtrim(mb_substr($text, 0, $maxLength - 1)) . '…' : $text;
@@ -150,10 +167,22 @@ final class ChatMarkdownRenderer
         }, $text);
 
         $links = [];
-        $text  = (string) preg_replace_callback('~\bhttps?://[^\s<>"\'`]+~i', static function (array $m) use (&$links): string {
-            $url     = rtrim($m[0], '.,;:!?)');
-            $tail    = substr($m[0], strlen($url));
-            $links[] = '<a href="' . self::escape($url) . '" rel="noopener nofollow ugc" target="_blank">' . self::escape($url) . '</a>';
+        // 1.11: [text](url) with an http(s) or mailto URL; the text is plain (escaped), never markup.
+        $text = (string) preg_replace_callback('~\[([^\]\n]{1,200})\]\(((?:https?://|mailto:)[^\s<>"\'`)]+)\)~i', static function (array $m) use (&$links): string {
+            $links[] = self::anchor($m[2], $m[1]);
+
+            return "\u{E000}L" . (count($links) - 1) . "\u{E000}";
+        }, $text);
+        // Bare links: http(s)://…, www.… (as https) and e-mail addresses (as mailto:).
+        $text = (string) preg_replace_callback('~\b(?:https?://|www\.)[^\s<>"\'`]+|\b(?:mailto:)?[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b~i', static function (array $m) use (&$links): string {
+            $raw  = rtrim($m[0], '.,;:!?)');
+            $tail = substr($m[0], strlen($raw));
+            $href = match (true) {
+                str_contains($raw, '@') && !preg_match('~^https?://~i', $raw) => str_starts_with(strtolower($raw), 'mailto:') ? $raw : 'mailto:' . $raw,
+                stripos($raw, 'www.') === 0                                   => 'https://' . $raw,
+                default                                                       => $raw,
+            };
+            $links[] = self::anchor($href, preg_replace('~^mailto:~i', '', $raw) ?? $raw);
 
             return "\u{E000}L" . (count($links) - 1) . "\u{E000}" . $tail;
         }, $text);
@@ -169,6 +198,14 @@ final class ChatMarkdownRenderer
         $text = (string) preg_replace('/\x{E000}R\d+\x{E000}/u', ChatReferences::SLOT, $text);
 
         return (string) preg_replace_callback('/\x{E000}C(\d+)\x{E000}/u', static fn (array $m): string => $codes[(int) $m[1]], $text);
+    }
+
+    /** A link that opens outside the chat (mailto: in the same tab). */
+    private static function anchor(string $href, string $label): string
+    {
+        $external = !str_starts_with(strtolower($href), 'mailto:');
+
+        return '<a href="' . self::escape($href) . '"' . ($external ? ' rel="noopener nofollow ugc" target="_blank"' : ' rel="nofollow"') . '>' . self::escape($label) . '</a>';
     }
 
     private static function escape(string $text): string
