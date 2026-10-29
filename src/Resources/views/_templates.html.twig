@@ -21,6 +21,11 @@
         <div class="nowo-chat-dock">
             <section class="nowo-chat-panel" data-part="panel" aria-label="{{ 'chat.launcher'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}">
                 <div class="nowo-chat-panel__header">
+                    {# 1.10: the user's own status; opens the status menu (shown by the script when the status API exists). #}
+                    <button type="button" class="nowo-chat-me" data-part="me" aria-haspopup="dialog" aria-expanded="false" aria-controls="nowo-chat-status-menu" hidden>
+                        <span class="nowo-chat-me__avatar" data-part="me-avatar"></span>
+                        <span class="nowo-chat-status-dot" data-part="me-dot" aria-hidden="true"></span>
+                    </button>
                     <button type="button" class="nowo-chat-launcher" data-part="launcher" aria-expanded="false" aria-controls="nowo-chat-panel-body">
                         <span class="nowo-chat-launcher__icon"><span data-icon="chat" data-icon-size="20"></span></span>
                         <span class="nowo-chat-launcher__label">{{ 'chat.launcher'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</span>
@@ -66,6 +71,50 @@
                 <button type="button" class="nowo-chat-overflow__btn" data-part="overflow-btn" aria-controls="nowo-chat-overflow-list" aria-expanded="false"></button>
                 <ul class="nowo-chat-overflow__menu" id="nowo-chat-overflow-list" data-part="overflow-menu" hidden></ul>
             </div>
+        </div>
+    </template>
+{% endblock %}
+
+{% block nowo_chat_template_status_menu %}
+    {# 1.10: the user's own status — an ARIA menu of statuses and the custom status (emoji, text, when it clears). #}
+    {% set nowo_chat_status_form = nowo_chat_forms.status %}
+    <template data-nowo-chat-template="status-menu">
+        <div class="nowo-chat-status-menu" id="nowo-chat-status-menu" role="dialog" aria-labelledby="nowo-chat-status-menu-title" data-testid="nowo-chat-status-menu" hidden>
+            <p class="nowo-chat-status-menu__title" id="nowo-chat-status-menu-title">{{ 'chat.status_menu'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</p>
+            <div class="nowo-chat-status-menu__options" role="menu" aria-labelledby="nowo-chat-status-menu-title">
+                {% for nowo_chat_status in ['available', 'busy', 'away', 'dnd', 'invisible'] %}
+                    <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="{{ nowo_chat_status }}">
+                        <span class="nowo-chat-status-dot nowo-chat-status-dot--{{ nowo_chat_status == 'invisible' ? 'offline' : nowo_chat_status }}" aria-hidden="true"></span>
+                        <span class="nowo-chat-status-option__text">
+                            <span class="nowo-chat-status-option__label">{{ ('chat.status_' ~ nowo_chat_status)|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</span>
+                            <span class="nowo-chat-status-option__hint">{{ ('chat.status_' ~ nowo_chat_status ~ '_hint')|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</span>
+                        </span>
+                    </button>
+                {% endfor %}
+            </div>
+            {{ form_start(nowo_chat_status_form) }}
+                <p class="nowo-chat-status-form__title">{{ 'chat.status_custom'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</p>
+                <div class="nowo-chat-status-form__row">
+                    {% set nowo_chat_label = 'chat.status_emoji'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                    {{ form_widget(nowo_chat_status_form.emoji, {translation_domain: false, attr: nowo_chat_status_form.emoji.vars.attr|merge({placeholder: '🙂', 'aria-label': nowo_chat_label, title: nowo_chat_label})}) }}
+                    {% set nowo_chat_label = 'chat.status_text'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                    {{ form_widget(nowo_chat_status_form.text, {translation_domain: false, attr: nowo_chat_status_form.text.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
+                </div>
+                <div class="nowo-chat-status-form__row">
+                    {{ form_label(nowo_chat_status_form.clearAfter) }}
+                    {{ form_widget(nowo_chat_status_form.clearAfter) }}
+                </div>
+                {% for child in nowo_chat_status_form %}
+                    {% if not child.rendered %}
+                        {{ form_row(child) }}
+                    {% endif %}
+                {% endfor %}
+                <p class="nowo-chat-status-form__error" role="alert" data-part="status-error" hidden></p>
+                <span class="nowo-chat-status-form__actions">
+                    <button type="button" class="nowo-chat-status-form__clear" data-part="status-clear">{{ 'chat.status_clear'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                    <button type="submit" class="nowo-chat-status-form__save">{{ 'chat.save'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                </span>
+            {{ form_end(nowo_chat_status_form) }}
         </div>
     </template>
 {% endblock %}

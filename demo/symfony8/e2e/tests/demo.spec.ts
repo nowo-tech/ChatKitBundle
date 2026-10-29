@@ -31,6 +31,33 @@ test.describe('chat kit demo', () => {
     await expect(window.locator('.nowo-chat-bubble', { hasText: text })).toBeVisible();
   });
 
+  test('alice sets her chat status from the dock and bob sees it', async ({ browser }) => {
+    const alice = await (await browser.newContext()).newPage();
+    await signIn(alice, 'alice');
+    const me = alice.locator('.nowo-chat-me');
+    await me.click();
+    const menu = alice.locator('.nowo-chat-status-menu');
+    await expect(menu).toBeVisible();
+    await menu.locator('.nowo-chat-status-form__text').fill('In a meeting');
+    await menu.locator('[data-status="busy"]').click();
+    await expect(me).toHaveAttribute('data-status', 'busy');
+    await expect(menu).toBeHidden();
+
+    const bob = await (await browser.newContext()).newPage();
+    await signIn(bob, 'bob');
+    await bob.locator('.nowo-chat-launcher').click();
+    const row = bob.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin' });
+    await expect(row).toHaveAttribute('data-peer-status', 'busy');
+    await expect(row.locator('.nowo-chat-row__status')).toHaveText('In a meeting');
+
+    // Back to available, without text.
+    await me.click();
+    await menu.locator('.nowo-chat-status-form__clear').click();
+    await me.click();
+    await menu.locator('[data-status="available"]').click();
+    await expect(me).toHaveAttribute('data-status', 'available');
+  });
+
   test('the full-page chat works without the dock', async ({ page }) => {
     await signIn(page, 'alice');
     await page.goto('/chat/');

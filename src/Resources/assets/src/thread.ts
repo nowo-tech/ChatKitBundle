@@ -10,6 +10,7 @@ import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from 
 import { decodeMentions, markOwnMentions, MentionAutocomplete, mentionsViewer } from './mention';
 import { decodeReferences, ReferenceAutocomplete } from './reference';
 import { SupportPanel } from './support';
+import { customStatus, statusLabel } from './status';
 import { part, text, type Templates } from './templates';
 import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader } from './types';
 
@@ -204,7 +205,12 @@ export class ThreadView {
     // `/` commands and the `#` picker, when the application registers reference providers.
     this.reference = this.referencePicker(this.input, `nowo-chat-${summary.uuid}`);
     this.input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      if (event.key !== 'Enter' || event.isComposing) {
+        return;
+      }
+      // 1.10 send key: Enter (Shift+Enter breaks the line) or Ctrl/Cmd+Enter (Enter breaks the line).
+      const sends = this.host.config.prefs.sendKey === 'ctrl_enter' ? event.ctrlKey || event.metaKey : !event.shiftKey;
+      if (sends) {
         event.preventDefault();
         void this.submit();
       }
@@ -274,6 +280,17 @@ export class ThreadView {
     return this.messages.at(-1)?.id ?? 0;
   }
 
+  /** The composer hint follows the send key (Enter, or Ctrl/Cmd+Enter). */
+  applySendKey(): void {
+    const hint = this.element.querySelector<HTMLElement>('.nowo-chat-composer__hint');
+    if (hint === null) {
+      return;
+    }
+    // The template's own hint (Enter) is kept for when the user switches back.
+    hint.dataset.enterHint ??= hint.textContent;
+    hint.textContent = this.host.config.prefs.sendKey === 'ctrl_enter' ? t(this.host.config.i18n, 'composer_hint_ctrl') : hint.dataset.enterHint;
+  }
+
   /**
    * Applies a conversation summary: header (title, subtitle, avatar, context), buttons, unread badge and the
    * read-only state of the composer.
@@ -284,14 +301,22 @@ export class ThreadView {
     this.summary = summary;
     const i18n = this.host.config.i18n;
     part(this.element, 'title').textContent = summary.title;
+    // 1.10: the other person's status ("Online", "Busy" …) and custom status in a direct conversation.
+    const status = summary.peerStatus ?? (summary.peerOnline ? 'available' : 'offline');
+    const presence = status === 'offline' ? '' : status === 'available' ? t(i18n, 'online') : statusLabel(i18n, status);
+    const peerLine = [presence, customStatus(summary.peerStatusText, summary.peerStatusEmoji)].filter((value) => value !== '').join(' · ');
     part(this.element, 'subtitle').textContent =
       summary.kind === 'support' && summary.supportStatus === 'resolved'
         ? t(i18n, 'support_resolved')
-        : summary.kind === 'direct' && summary.peerOnline
-          ? t(i18n, 'online')
+        : summary.kind === 'direct' && peerLine !== ''
+          ? peerLine
           : summary.subtitle;
+    if (summary.kind === 'direct') {
+      this.element.dataset.peerStatus = status;
+    }
     this.element.setAttribute('aria-label', t(i18n, 'conversation_label', { name: summary.title }));
-    part(this.element, 'avatar').replaceChildren(this.host.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline));
+    part(this.element, 'avatar').replaceChildren(this.host.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline, summary.kind === 'direct' ? status : undefined));
+    this.applySendKey();
     this.applyContext(summary);
     // A buzz is a person-to-person nudge: direct conversations only.
     this.buzzBtn.hidden = !summary.canSend || summary.kind !== 'direct';

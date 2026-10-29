@@ -4,6 +4,7 @@
  * application's UX Icons (<template data-nowo-chat-icon>) or the built-in SVG, unless they already hold one.
  */
 import { builtinIcon, h } from './dom';
+import type { VisibleStatus } from './types';
 
 /** Serial suffix that keeps the ids of cloned form controls unique (several windows clone the same template). */
 let serial = 0;
@@ -65,10 +66,13 @@ export class Templates {
    * @param kind Conversation kind.
    * @param size Avatar size.
    * @param online Adds the online dot.
+   * @param status 1.10: the person's status (busy, away, dnd colour the dot; offline hides it); wins over `online`.
    * @returns The avatar element (aria-hidden).
    */
-  avatar(initials: string, kind: 'direct' | 'channel' | 'support' = 'direct', size: 'sm' | 'md' = 'md', online = false): HTMLElement {
-    const element = h('span', { class: `nowo-chat-avatar nowo-chat-avatar--${kind} nowo-chat-avatar--${size}${online ? ' is-online' : ''}`, 'aria-hidden': 'true' });
+  avatar(initials: string, kind: 'direct' | 'channel' | 'support' = 'direct', size: 'sm' | 'md' = 'md', online = false, status?: VisibleStatus): HTMLElement {
+    const shown = status === undefined ? online : status !== 'offline';
+    const tone = status === undefined || status === 'offline' ? '' : ` is-status-${status}`;
+    const element = h('span', { class: `nowo-chat-avatar nowo-chat-avatar--${kind} nowo-chat-avatar--${size}${shown ? ' is-online' : ''}${tone}`, 'aria-hidden': 'true' });
     if (kind === 'direct') {
       element.textContent = initials;
     } else {

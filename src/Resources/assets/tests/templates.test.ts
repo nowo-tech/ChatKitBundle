@@ -65,6 +65,9 @@ describe('Templates', () => {
     expect(templates.avatar('', 'channel').querySelector('svg')?.getAttribute('width')).toBe('16');
     expect(templates.avatar('', 'support', 'sm').querySelector('svg')?.getAttribute('width')).toBe('14');
     expect(templates.avatar('X').className).toContain('nowo-chat-avatar--md');
+    // 1.10: a status wins over `online` (offline hides the dot).
+    expect(templates.avatar('X', 'direct', 'md', false, 'busy').className).toContain('is-online is-status-busy');
+    expect(templates.avatar('X', 'direct', 'md', true, 'offline').className).not.toContain('is-online');
   });
 
   it('finds parts and sets text', () => {

@@ -29,8 +29,8 @@ final class DockPlaceholderTranslationTest extends DatabaseTestCase
      */
     public static function locales(): iterable
     {
-        yield 'en' => ['en', ['Search conversations', 'Search people', 'Write a message…']];
-        yield 'es' => ['es', ['Buscar conversaciones', 'Buscar personas', 'Escribe un mensaje…']];
+        yield 'en' => ['en', ['Search conversations', 'Search people', '🙂', 'What is your status?', 'Write a message…']];
+        yield 'es' => ['es', ['Buscar conversaciones', 'Buscar personas', '🙂', '¿Cuál es tu estado?', 'Escribe un mensaje…']];
     }
 
     /**

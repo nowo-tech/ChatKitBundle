@@ -144,6 +144,32 @@ final readonly class ChatNotifier
     }
 
     /**
+     * A user changed their chat status: the people with a direct conversation with them get what others may see
+     * (`offline` and no text while invisible), the user's own tabs get the status they picked.
+     *
+     * @param ChatUserInterface $user The user whose status changed
+     * @param array{status: string, text: string|null, emoji: string|null} $visible What others see
+     * @param array{status: string, text: string|null, emoji: string|null, expiresAt: string|null} $own What the user picked
+     * @param list<ChatUserInterface> $peers The user's direct contacts
+     */
+    public function statusChanged(ChatUserInterface $user, array $visible, array $own, array $peers): void
+    {
+        $this->publisher->publish('status', ['userUuid' => $user->getChatPublicId()] + $visible, $peers);
+        $this->publisher->publish('my_status', ['status' => $own], [$user]);
+    }
+
+    /**
+     * The user changed a chat preference: their other tabs and devices apply it at once.
+     *
+     * @param ChatUserInterface $user The user
+     * @param array<string, mixed> $preferences ChatUserSettings::preferences()
+     */
+    public function preferencesChanged(ChatUserInterface $user, array $preferences): void
+    {
+        $this->publisher->publish('prefs', ['prefs' => $preferences], [$user]);
+    }
+
+    /**
      * @param array<string, list<string>> $reactions
      */
     private function messageEvent(string $type, ChatMessage $message, array $reactions): void

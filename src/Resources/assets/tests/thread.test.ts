@@ -44,7 +44,7 @@ function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock
     ...apiOver,
   };
   const host: ThreadHost = {
-    config: { i18n, endpoints: { page: '/chat/__uuid__' }, userUuid: 'me', locale: 'en', maxLength: 50, editWindowSeconds: 900, reactions: ['👍', '🎉'], isAgent: false, ...configOver } as ChatConfig,
+    config: { i18n, endpoints: { page: '/chat/__uuid__' }, userUuid: 'me', locale: 'en', maxLength: 50, editWindowSeconds: 900, reactions: ['👍', '🎉'], isAgent: false, prefs: { sound: 'pop', buzz: true, presence: true }, ...configOver } as ChatConfig,
     api: api as unknown as ChatApi,
     templates: templates(),
     minimise: vi.fn(), close: vi.fn(), saveDraft: vi.fn(), draft: vi.fn().mockReturnValue('borrador'),
@@ -614,6 +614,47 @@ describe('ThreadView', () => {
 
     // A restored draft shows names, not tokens.
     expect(setupWithDraft('@[Ana](u-ana) hola').q<HTMLTextAreaElement>('.nowo-chat-composer__input').value).toBe('@Ana hola');
+  });
+
+  it('sends with Ctrl/Cmd+Enter when the user chose it, and shows the peer status in the header (1.10)', async () => {
+    const { view, api, host, q } = setup(
+      { peerOnline: true, peerStatus: 'dnd', peerStatusText: 'Focus', peerStatusEmoji: '🎧' },
+      { members: vi.fn().mockResolvedValue([{ uuid: 'u-luis', name: 'Luis', initials: 'LU', status: 'away', statusText: 'Lunch', statusEmoji: null }]) },
+      { i18n: { ...i18n, status_dnd: 'Do not disturb', composer_hint_ctrl: 'Ctrl+Enter to send' }, prefs: { sound: 'pop', buzz: true, presence: true, sendKey: 'ctrl_enter' } },
+    );
+    expect(q('[data-part="subtitle"]').textContent).toBe('Do not disturb · 🎧 Focus');
+    expect(view.element.dataset.peerStatus).toBe('dnd');
+    expect(q('.nowo-chat-avatar.is-status-dnd')).not.toBeNull();
+    expect(q('.nowo-chat-composer__hint').textContent).toBe('Ctrl+Enter to send');
+    (host.draft as Mock).mockReturnValue('');
+    const input = q<HTMLTextAreaElement>('.nowo-chat-composer__input');
+    input.value = 'line one';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    expect(api.send).not.toHaveBeenCalled();
+    api.send.mockReturnValueOnce(new Promise(() => undefined));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, cancelable: true }));
+    expect(api.send).toHaveBeenCalledTimes(1);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+
+    // Back to Enter: the template's own hint returns; available reads "Online", offline with text shows the text.
+    host.config.prefs.sendKey = 'enter';
+    view.applySummary(summary({ peerOnline: true, peerStatus: 'available' }));
+    expect(q('.nowo-chat-composer__hint').textContent).not.toBe('Ctrl+Enter to send');
+    expect(q('[data-part="subtitle"]').textContent).toBe('Online');
+    view.applySummary(summary({ peerStatus: 'offline', peerStatusText: 'On holiday', peerStatusEmoji: null }));
+    expect(q('[data-part="subtitle"]').textContent).toBe('On holiday');
+    view.applySummary(summary({ kind: 'channel', peerUuid: null }));
+    q('.nowo-chat-composer__hint').remove();
+    view.applySendKey();
+
+    // The @mention list shows the members' statuses.
+    input.value = '@lu';
+    input.setSelectionRange(3, 3);
+    input.dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(view.element.querySelector('.nowo-chat-mention-option[data-status="away"] .nowo-chat-status-dot--away')).not.toBeNull();
+    expect(view.element.querySelector('.nowo-chat-mention-option__status')?.textContent).toBe('Lunch');
   });
 
   it('references items: / opens the commands, a picked task is sent as a token and drafts keep it', async () => {

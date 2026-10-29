@@ -237,9 +237,9 @@ final class ChatServiceTest extends DatabaseTestCase
         $this->em->flush();
 
         $status = $presence->statusOf([$ana, $luis, $eve]);
-        self::assertSame(['online' => true, 'appOpen' => true], $status[$ana->getChatPublicId()]);
-        self::assertSame(['online' => false, 'appOpen' => false], $status[$luis->getChatPublicId()], 'hidden presence, no visible tab');
-        self::assertSame(['online' => false, 'appOpen' => false], $status[$eve->getChatPublicId()]);
+        self::assertSame(['online' => true, 'appOpen' => true, 'status' => 'available', 'text' => null, 'emoji' => null], $status[$ana->getChatPublicId()]);
+        self::assertSame(['online' => false, 'appOpen' => false, 'status' => 'offline', 'text' => null, 'emoji' => null], $status[$luis->getChatPublicId()], 'hidden presence, no visible tab');
+        self::assertSame(['online' => false, 'appOpen' => false, 'status' => 'offline', 'text' => null, 'emoji' => null], $status[$eve->getChatPublicId()]);
 
         $presence->forget($ana);
         self::assertFalse($presence->statusOf([$ana])[$ana->getChatPublicId()]['online']);

@@ -58,6 +58,7 @@ final readonly class ChatPresenter
      * @param ChatMessage|null $last The newest message; null when none is known
      * @param bool $viewerIsAgent Whether the viewer is a support agent (support thread titles)
      * @param bool $peerOnline Whether the direct peer is online
+     * @param array{status: string, text: string|null, emoji: string|null}|null $peerStatus What the viewer sees of the direct peer's status (ChatPresence::forViewer()); null = offline, no text
      *
      * @return array<string, mixed> The JSON shape
      */
@@ -71,6 +72,7 @@ final readonly class ChatPresenter
         ?ChatMessage $last = null,
         bool $viewerIsAgent = false,
         bool $peerOnline = false,
+        ?array $peerStatus = null,
     ): array {
         [$title, $subtitle, $initials] = match (true) {
             $conversation->isDirect() => [
@@ -95,9 +97,13 @@ final readonly class ChatPresenter
             'ticket'         => $this->ticket($conversation),
             'canSend'        => $canSend,
             'peerOnline'     => $peerOnline,
-            'unread'         => $unread,
-            'lastMessageAt'  => ($last?->getCreatedAt() ?? $conversation->getLastMessageAt())->format(DATE_ATOM),
-            'lastMessage'    => $last instanceof ChatMessage ? [
+            // 1.10: available, busy, away, dnd or offline (invisible people are offline), and the custom status.
+            'peerStatus'      => $peerStatus['status'] ?? 'offline',
+            'peerStatusText'  => $peerStatus['text'] ?? null,
+            'peerStatusEmoji' => $peerStatus['emoji'] ?? null,
+            'unread'          => $unread,
+            'lastMessageAt'   => ($last?->getCreatedAt() ?? $conversation->getLastMessageAt())->format(DATE_ATOM),
+            'lastMessage'     => $last instanceof ChatMessage ? [
                 'preview' => match (true) {
                     $last->isDeleted(), $last->isBuzz() => '',
                     $last->isBot()                      => mb_substr($this->botText($last), 0, 90),

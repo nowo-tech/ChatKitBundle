@@ -52,6 +52,16 @@
     <div class="{{ nowo_ui_class('section', _b) }} nowo-chat-page{{ current ? ' has-current' }}" data-testid="chat-page" data-nowo-ui-region="section"{{ nowo_ui_attrs('section', _b) }}{% if read ?? null %} data-nowo-chat-read-url="{{ read.url }}" data-nowo-chat-read-id="{{ read.messageId }}" data-nowo-chat-read-csrf="{{ read.csrf }}"{% endif %}>
         {% block nowo_chat_page_list %}
             <nav class="nowo-chat-page__list" aria-label="{{ 'chat.launcher'|trans }}">
+                {% block nowo_chat_page_status %}
+                    {# 1.10: the viewer's own chat status; the button opens the dock's status menu (JavaScript). #}
+                    {% if my_status ?? null %}
+                        <button type="button" class="nowo-chat-page__status" data-nowo-chat-status-open data-status="{{ my_status.status }}" aria-haspopup="dialog" data-testid="chat-page-status">
+                            <span class="nowo-chat-status-dot nowo-chat-status-dot--{{ my_status.status }}" aria-hidden="true"></span>
+                            <span class="nowo-chat-page__status-label">{{ ('chat.status_' ~ my_status.status)|trans }}</span>
+                            {% if my_status.text or my_status.emoji %}<span class="nowo-chat-page__status-text">{% if my_status.emoji %}<span aria-hidden="true">{{ my_status.emoji }}</span> {% endif %}{{ my_status.text }}</span>{% endif %}
+                        </button>
+                    {% endif %}
+                {% endblock %}
                 {% if conversations is empty %}
                     <p class="{{ nowo_ui_class('empty', _b) }} nowo-chat-page__empty">{{ 'chat.empty_title'|trans }}</p>
                 {% endif %}
@@ -75,6 +85,10 @@
                         <a class="{{ nowo_ui_class('btn_link', _b) }} nowo-chat-page__back" href="{{ path('nowo_chat_page') }}">{{ 'chat.back'|trans }}</a>
                         <h2>{{ current.title }}</h2>
                         {% if current.subtitle %}<p class="{{ nowo_ui_class('muted', _b) }}">{{ current.subtitle }}</p>{% endif %}
+                        {% set _peer_status = current.peerStatus ?? 'offline' %}
+                        {% if (current.kind ?? null) == 'direct' and (_peer_status != 'offline' or (current.peerStatusText ?? null)) %}
+                            <p class="nowo-chat-page__peer-status" data-status="{{ _peer_status }}"><span class="nowo-chat-status-dot nowo-chat-status-dot--{{ _peer_status }}" aria-hidden="true"></span> {{ ('chat.status_' ~ _peer_status)|trans }}{% if current.peerStatusText ?? null %} · {% if current.peerStatusEmoji %}<span aria-hidden="true">{{ current.peerStatusEmoji }}</span> {% endif %}{{ current.peerStatusText }}{% endif %}</p>
+                        {% endif %}
                     </header>
                     {% set error = app.request.query.get('error') %}
                     {% if error in ['read_only', 'rate_limited', 'too_long', 'error'] %}

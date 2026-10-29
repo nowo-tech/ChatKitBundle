@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.10.0] - 2026-10-29](#1100---2026-10-29)
 - [[1.9.2] - 2026-10-29](#192---2026-10-29)
 - [[1.9.1] - 2026-10-29](#191---2026-10-29)
 - [[1.9.0] - 2026-10-29](#190---2026-10-29)
@@ -29,6 +30,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-29
+
+### Added
+
+- **Chat status, set from the chat itself**: the avatar button at the top of the dock's list opens a status menu (an
+  ARIA menu: ↑ ↓ Home End, Enter / Space, Escape) — available (green), busy (red), away (amber), do not disturb (red
+  with a bar) and invisible (offline to everyone) — with an optional custom status (an emoji and a text of at most 80
+  characters) that clears itself after 30 minutes, 1 hour, 4 hours, today, this week or never. A
+  `data-nowo-chat-status-open` button anywhere on the page opens the same menu; the full-page chat has one at the top of
+  its list and shows the other person's status in a direct conversation's header. `POST /api/status`
+  `{status, text?, emoji?, clearAfter?}`; realtime `status` (to the user's direct contacts) and `my_status` (to the
+  user's other tabs) events.
+- **Where statuses show**: the dot on direct conversations' avatars (list, window, people picker), the label and the
+  custom status in the window subtitle and after the name in the list, the dot and text in the @mention list. Summaries
+  carry `peerStatus`, `peerStatusText`, `peerStatusEmoji`; `/members` carries `status`, `statusText`, `statusEmoji`; the
+  heartbeat answers `statuses` by public id and the caller's own status (`me`).
+- **Auto-away** (`auto_away_minutes`, default 10, `0` = never): an available user shows as away after that long without
+  keyboard or pointer input in any tab of the browser (the heartbeat carries `idle`).
+- **Do not disturb**: no sounds, no buzz opening or shaking, no opening on a message, no Web Push — the badge only.
+- **Chat preferences**: a sound per event (new message, @mention, buzz, support reply) from `none`, `pop`, `chime`,
+  `ding` and three new ones (`bell`, `blip`, `knock`) plus `buzz`; a volume (0 – 100); sounds only while the tab is in
+  the background; "a buzz opens the conversation"; "open the conversation when a message arrives" (otherwise the badge
+  only); send with Enter or Ctrl/⌘+Enter (the composer hint follows); the message text in Web Push (per user, on top of
+  `push_preview`). `POST /api/settings` `{key, value}` saves one preference from an allow-list
+  (`ChatUserSettings::PREFERENCE_KEYS`) and the user's other tabs apply it live (realtime `prefs`); the dock config
+  carries every preference (`prefs`), the own status (`status`), `autoAwayMinutes` and `me`.
+- **For the application's settings screen**: `ChatPreferencesType` (a form bound to `ChatUserSettings`, each sound select
+  with `data-nowo-chat-sound-select`), `saveChatPreference()` / `PREFS_EVENT` / `playSound()` / `SOUND_NAMES` exported
+  by the TypeScript entry point (`playSound(name, volume)`), `ChatUserSettingsRepository::save()`.
+- `ChatDockStatusType` (the menu's custom-status fields, a Form view like the other dock fields) and the template
+  block `nowo_chat_template_status_menu`; the dock header gets the `me` button. Personal data export lists the new
+  preferences and the status.
+
+### Changed
+
+- **Privacy**: an invisible user is `offline` (not online) in every presence answer, without custom text; a viewer who
+  hides their own presence still sees custom status texts (no dots). The single 1.x sound is the new-message sound;
+  existing rows copy it to the @mention and support-reply sounds (see UPGRADING).
 ## [1.9.2] - 2026-10-29
 
 ### Fixed

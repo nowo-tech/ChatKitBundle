@@ -22,6 +22,11 @@ export interface ConversationSummary {
   intake?: SupportIntake;
   canSend: boolean;
   peerOnline: boolean;
+  /** Direct only (1.10): what the viewer sees of the other person's status (absent before 1.10 = offline). */
+  peerStatus?: VisibleStatus;
+  /** Direct only (1.10): the other person's custom status text and emoji. */
+  peerStatusText?: string | null;
+  peerStatusEmoji?: string | null;
   unread: number;
   lastMessageAt: string | null;
   lastMessage: { preview: string; deleted: boolean; buzz?: boolean; mine: boolean; authorName: string | null } | null;
@@ -78,6 +83,10 @@ export interface MentionRef {
 /** A conversation member offered by the @mention list. */
 export interface Member extends MentionRef {
   initials: string;
+  /** 1.10: the member's status as the viewer sees it, and their custom status. */
+  status?: VisibleStatus;
+  statusText?: string | null;
+  statusEmoji?: string | null;
 }
 
 /** A message typed here and not yet confirmed by the server (optimistic send). */
@@ -99,7 +108,53 @@ export interface Contact {
   via: string;
 }
 
-export type SoundName = 'none' | 'pop' | 'chime' | 'ding';
+export type SoundName = 'none' | 'pop' | 'chime' | 'ding' | 'bell' | 'blip' | 'knock' | 'buzz';
+
+/** Events with their own sound (1.10). */
+export type SoundEvent = 'message' | 'mention' | 'buzz' | 'support';
+
+/** A status the user picks (1.10); `invisible` shows them offline to everyone. */
+export type ChatStatus = 'available' | 'busy' | 'away' | 'dnd' | 'invisible';
+
+/** A status as others see it (invisible people are offline). */
+export type VisibleStatus = 'available' | 'busy' | 'away' | 'dnd' | 'offline';
+
+/** The user's own status (ChatUserSettings::statusView()). */
+export interface OwnStatus {
+  status: ChatStatus;
+  text: string | null;
+  emoji: string | null;
+  /** When it goes back to available (ISO 8601); null = never. */
+  expiresAt: string | null;
+}
+
+/** What others see of someone's status. */
+export interface PeerStatus {
+  status: VisibleStatus;
+  text: string | null;
+  emoji: string | null;
+}
+
+/** The user's chat preferences (ChatUserSettings::preferences()); fields after `presence` are 1.10. */
+export interface ChatPrefs {
+  /** Sound of a new message (the 1.x single sound). */
+  sound: SoundName;
+  buzz: boolean;
+  presence: boolean;
+  sounds?: Record<SoundEvent, SoundName>;
+  /** 0 – 100. */
+  volume?: number;
+  /** Sounds only while the tab is hidden or unfocused. */
+  backgroundOnly?: boolean;
+  /** A buzz opens its window (false: it rings and shakes a window already open). */
+  buzzOpenWindow?: boolean;
+  /** An incoming message opens its window (false: only the badge). */
+  openOnMessage?: boolean;
+  sendKey?: 'enter' | 'ctrl_enter';
+  pushPreview?: boolean;
+  push?: boolean;
+  emailDigest?: boolean;
+}
 
 /** Another participant's read cursor (✓✓ in DMs, "Seen by N" in channels). */
 export interface Reader {
@@ -114,7 +169,10 @@ export type RealtimeEvent =
   | { type: 'message_updated'; conversationUuid: string; message: ChatMessage }
   | { type: 'read'; conversationUuid: string; userUuid: string; userName: string; messageId: number }
   | { type: 'typing'; conversationUuid: string; userUuid: string; userName: string }
-  | { type: 'conversation'; conversationUuid: string };
+  | { type: 'conversation'; conversationUuid: string }
+  | ({ type: 'status'; userUuid: string } & PeerStatus)
+  | { type: 'my_status'; status: OwnStatus }
+  | { type: 'prefs'; prefs: ChatPrefs };
 
 export interface ChatConfig {
   userUuid: string;
@@ -158,8 +216,18 @@ export interface ChatConfig {
     resolve: string;
     realtime: string;
     presence: string;
+    /** 1.10: set the own status (`POST {status, text, emoji, clearAfter}`). */
+    status?: string;
+    /** 1.10: save one preference (`POST {key, value}`). */
+    settings?: string;
   };
-  prefs: { sound: SoundName; buzz: boolean; presence: boolean };
+  prefs: ChatPrefs;
+  /** 1.10: the user's own status (absent before 1.10: no status menu). */
+  status?: OwnStatus;
+  /** 1.10: minutes without input before the user shows as away (0 = never). */
+  autoAwayMinutes?: number;
+  /** 1.10: the user's own name and initials (status button). */
+  me?: { name: string; initials: string };
   isAgent: boolean;
   /** Decorative emojis of the support assistant's own lines (`support.emojis`; absent before 1.9.1 = shown). */
   supportEmojis?: boolean;

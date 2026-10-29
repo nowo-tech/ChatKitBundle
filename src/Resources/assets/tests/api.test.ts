@@ -24,6 +24,8 @@ const config = {
     resolve: '/conv/__uuid__/resolve',
     realtime: '/rt',
     presence: '/presence',
+    status: '/status',
+    settings: '/settings',
     supportTickets: '/support/tickets',
     supportTopic: '/support/__uuid__/topic',
     supportResume: '/support/__uuid__/resume',
@@ -101,7 +103,21 @@ describe('chat api client', () => {
     expect(await api.buzz('c')).toEqual({ id: 1 });
     expect(await api.resolve('c')).toEqual({ uuid: 'x' });
     await api.realtime();
-    expect(await api.presence(true)).toEqual(['u']);
+    // A server before 1.10 answers only `online`.
+    expect(await api.presence(true)).toEqual({ online: ['u'], statuses: {}, me: null });
+    const own = { status: 'busy', text: 'Lunch', emoji: '🍝', expiresAt: null };
+    vi.stubGlobal('fetch', respond({ online: [], statuses: { p: { status: 'away', text: null, emoji: null } }, me: own, status: own, prefs: { sound: 'bell' } }));
+    expect(await api.presence(false, true)).toEqual({ online: [], statuses: { p: { status: 'away', text: null, emoji: null } }, me: own });
+    expect(JSON.parse(String((vi.mocked(fetch).mock.calls.at(-1)?.[1] as RequestInit).body))).toEqual({ visible: false, idle: true });
+    expect(await api.setStatus({ status: 'busy', text: 'Lunch', emoji: '🍝', clearAfter: '1h' })).toEqual(own);
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/status', expect.objectContaining({ method: 'POST' }));
+    expect(await api.saveSetting('soundBuzz', 'bell')).toEqual({ sound: 'bell' });
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/settings', expect.objectContaining({ method: 'POST' }));
+    // Without the 1.10 endpoints the calls go nowhere useful (the dock never offers them then).
+    const old = new ChatApi({ ...config, endpoints: { ...config.endpoints, status: undefined, settings: undefined } } as unknown as ChatConfig);
+    await old.setStatus({ status: 'available' });
+    await old.saveSetting('volume', 5);
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('', expect.anything());
     vi.stubGlobal('fetch', respond({ previews: { '/a b': { title: 'A', subtitle: '', badge: '' } } }));
     expect(await api.linkPreviews(['/a b', '/c'])).toEqual({ '/a b': { title: 'A', subtitle: '', badge: '' } });
     vi.stubGlobal('fetch', respond({ previews: [] }));

@@ -3,6 +3,10 @@
         <div class="nowo-chat-dock">
             <section class="nowo-chat-panel" data-part="panel" aria-label="Messaging">
                 <div class="nowo-chat-panel__header">
+                                        <button type="button" class="nowo-chat-me" data-part="me" aria-haspopup="dialog" aria-expanded="false" aria-controls="nowo-chat-status-menu" hidden>
+                        <span class="nowo-chat-me__avatar" data-part="me-avatar"></span>
+                        <span class="nowo-chat-status-dot" data-part="me-dot" aria-hidden="true"></span>
+                    </button>
                     <button type="button" class="nowo-chat-launcher" data-part="launcher" aria-expanded="false" aria-controls="nowo-chat-panel-body">
                         <span class="nowo-chat-launcher__icon"><span data-icon="chat" data-icon-size="20"></span></span>
                         <span class="nowo-chat-launcher__label">Messaging</span>
@@ -49,6 +53,66 @@
                 <button type="button" class="nowo-chat-overflow__btn" data-part="overflow-btn" aria-controls="nowo-chat-overflow-list" aria-expanded="false"></button>
                 <ul class="nowo-chat-overflow__menu" id="nowo-chat-overflow-list" data-part="overflow-menu" hidden></ul>
             </div>
+        </div>
+    </template>
+
+            <template data-nowo-chat-template="status-menu">
+        <div class="nowo-chat-status-menu" id="nowo-chat-status-menu" role="dialog" aria-labelledby="nowo-chat-status-menu-title" data-testid="nowo-chat-status-menu" hidden>
+            <p class="nowo-chat-status-menu__title" id="nowo-chat-status-menu-title">Your chat status</p>
+            <div class="nowo-chat-status-menu__options" role="menu" aria-labelledby="nowo-chat-status-menu-title">
+                                    <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="available">
+                        <span class="nowo-chat-status-dot nowo-chat-status-dot--available" aria-hidden="true"></span>
+                        <span class="nowo-chat-status-option__text">
+                            <span class="nowo-chat-status-option__label">Available</span>
+                            <span class="nowo-chat-status-option__hint">Others see you online</span>
+                        </span>
+                    </button>
+                                    <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="busy">
+                        <span class="nowo-chat-status-dot nowo-chat-status-dot--busy" aria-hidden="true"></span>
+                        <span class="nowo-chat-status-option__text">
+                            <span class="nowo-chat-status-option__label">Busy</span>
+                            <span class="nowo-chat-status-option__hint">Online, but focused</span>
+                        </span>
+                    </button>
+                                    <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="away">
+                        <span class="nowo-chat-status-dot nowo-chat-status-dot--away" aria-hidden="true"></span>
+                        <span class="nowo-chat-status-option__text">
+                            <span class="nowo-chat-status-option__label">Away</span>
+                            <span class="nowo-chat-status-option__hint">Also set automatically when you are idle</span>
+                        </span>
+                    </button>
+                                    <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="dnd">
+                        <span class="nowo-chat-status-dot nowo-chat-status-dot--dnd" aria-hidden="true"></span>
+                        <span class="nowo-chat-status-option__text">
+                            <span class="nowo-chat-status-option__label">Do not disturb</span>
+                            <span class="nowo-chat-status-option__hint">No sounds, buzzes or push — only the badge</span>
+                        </span>
+                    </button>
+                                    <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="invisible">
+                        <span class="nowo-chat-status-dot nowo-chat-status-dot--offline" aria-hidden="true"></span>
+                        <span class="nowo-chat-status-option__text">
+                            <span class="nowo-chat-status-option__label">Invisible</span>
+                            <span class="nowo-chat-status-option__hint">Others see you offline</span>
+                        </span>
+                    </button>
+                            </div>
+            <form name="nowo_chat_status" method="post" class="nowo-chat-status-form" data-part="status-form">
+                <p class="nowo-chat-status-form__title">Custom status</p>
+                <div class="nowo-chat-status-form__row">
+                                        <input type="text" id="nowo_chat_status_emoji" name="nowo_chat_status[emoji]" class="nowo-chat-status-form__emoji" data-part="status-emoji" maxlength="16" autocomplete="off" inputmode="text" placeholder="🙂" aria-label="Status emoji" title="Status emoji" />
+                                        <input type="text" id="nowo_chat_status_text" name="nowo_chat_status[text]" class="nowo-chat-status-form__text" data-part="status-text" maxlength="80" autocomplete="off" placeholder="What is your status?" aria-label="What is your status?" />
+                </div>
+                <div class="nowo-chat-status-form__row">
+                    <label for="nowo_chat_status_clearAfter" class="required">Clear after</label>
+                    <select id="nowo_chat_status_clearAfter" name="nowo_chat_status[clearAfter]" class="nowo-chat-status-form__clear-after" data-part="status-clear-after"><option value="never" selected="selected">Never</option><option value="30m">30 minutes</option><option value="1h">1 hour</option><option value="4h">4 hours</option><option value="today">Today</option><option value="week">This week</option></select>
+                </div>
+                                                                                                                                                                        <input type="hidden" id="nowo_chat_status__token" name="nowo_chat_status[_token]" data-controller="csrf-protection" value="csrf-token" />
+                                                    <p class="nowo-chat-status-form__error" role="alert" data-part="status-error" hidden></p>
+                <span class="nowo-chat-status-form__actions">
+                    <button type="button" class="nowo-chat-status-form__clear" data-part="status-clear">Clear status</button>
+                    <button type="submit" class="nowo-chat-status-form__save">Save</button>
+                </span>
+            </form>
         </div>
     </template>
 

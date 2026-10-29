@@ -36,6 +36,12 @@ describe('chat sounds', () => {
     playSound('ding');
     playSound('buzz');
     expect(started).toHaveLength(1 + 2 + 1 + 3);
+    // 1.10: three more sounds, a volume (0 = silent) and unknown names are ignored.
+    playSound('bell', 50);
+    playSound('blip', 150);
+    playSound('knock', -5);
+    playSound('foghorn' as never);
+    expect(started).toHaveLength(7 + 3 + 2);
   });
 
   it('is silent without Web Audio and uses the webkit prefix when present', async () => {
