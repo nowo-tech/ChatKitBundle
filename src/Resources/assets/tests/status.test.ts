@@ -207,6 +207,18 @@ describe('chat status', () => {
     expect(() => new StatusMenu({ config, api: {} as unknown as ChatApi }, document.createElement('button'), nothing, vi.fn(), new AbortController().signal)).not.toThrow();
   });
 
+  it('starts the accessible name with the visible initials (WCAG 2.5.3, 1.11.1)', () => {
+    const trigger = document.createElement('button');
+    trigger.innerHTML = '<span class="nowo-chat-avatar">DA</span><span data-part="me-dot"></span>';
+    const abort = new AbortController();
+    new StatusMenu({ config: { i18n, status: own({ status: 'busy' }) } as unknown as ChatConfig, api: {} as unknown as ChatApi }, trigger, templates().clone('status-menu'), vi.fn(), abort.signal);
+    const name = trigger.getAttribute('aria-label') ?? '';
+    expect(name).toBe('DA — Your status: Busy');
+    // Word-level match: the visible text is a whole word at the start of the name.
+    expect(name.split(/\s+/)[0]).toBe((trigger.textContent ?? '').trim());
+    abort.abort();
+  });
+
   it('paints a trigger without a dot', () => {
     const setStatus = vi.fn();
     const trigger = document.createElement('button');

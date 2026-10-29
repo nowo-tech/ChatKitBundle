@@ -396,7 +396,10 @@ export class StatusMenu {
     const custom = customStatus(status.text, status.emoji);
     const label = t(i18n, 'status_yours', { status: statusLabel(i18n, status.status) }) + (custom === '' ? '' : ` — ${custom}`);
     this.trigger.dataset.status = status.status;
-    this.trigger.setAttribute('aria-label', label);
+    // 1.11.1 (WCAG 2.5.3, axe label-content-name-mismatch): the accessible name starts with the visible text — the
+    // initials shown on the button — as a word of its own.
+    const visible = (this.trigger.textContent ?? '').trim();
+    this.trigger.setAttribute('aria-label', visible === '' ? label : `${visible} — ${label}`);
     this.trigger.title = label;
     const dot = this.trigger.querySelector<HTMLElement>('[data-part="me-dot"]');
     if (dot !== null) {

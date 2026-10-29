@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.11.1] - 2026-10-29](#1111---2026-10-29)
 - [[1.11.0] - 2026-10-29](#1110---2026-10-29)
 - [[1.10.1] - 2026-10-29](#1101---2026-10-29)
 - [[1.10.0] - 2026-10-29](#1100---2026-10-29)
@@ -31,6 +32,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.11.1] - 2026-10-29
+
+### Fixed
+
+- **Accessible names that hid the visible text** (WCAG 2.5.3, axe `label-content-name-mismatch`): the dock's own
+  avatar / status button now reads "DA — Your status: Available" (the visible initials first, as a word); the pinned
+  bar's latest pin is named by its visible excerpt (the hint moved to `title`); the full-page Close / Reopen buttons read
+  "Close — <conversation>" in every language. Vitest checks the status button.
 
 ## [1.11.0] - 2026-10-29
 

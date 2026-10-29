@@ -331,7 +331,8 @@ export class ThreadView {
       this.pinsBar.replaceChildren();
     } else {
       const excerpt = (message: ChatMessage): string => `${message.authorName}: ${plain(message.html).slice(0, 80)}`;
-      const show = h('button', { type: 'button', class: 'nowo-chat-pins__latest', 'aria-label': t(i18n, 'pinned_show', { text: excerpt(latest) }) });
+      // The visible excerpt is the accessible name (WCAG 2.5.3); the hint goes in the title.
+      const show = h('button', { type: 'button', class: 'nowo-chat-pins__latest', title: t(i18n, 'pinned_show', { text: excerpt(latest) }) });
       show.append(this.host.templates.icon('pin', 14), h('span', { class: 'nowo-chat-pins__text', text: excerpt(latest) }));
       show.addEventListener('click', () => void this.jumpTo(latest));
       const list = h('ul', { class: 'nowo-chat-pins__list', id: `nowo-chat-pins-${this.summary.uuid}`, hidden: true });

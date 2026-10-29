@@ -678,6 +678,8 @@ describe('ThreadView', () => {
     await view.loadPins();
     const bar = q('[data-testid="nowo-chat-pins"]');
     expect(bar.hidden).toBe(false);
+    // The visible excerpt is the accessible name (no aria-label that hides it, WCAG 2.5.3).
+    expect(bar.querySelector('.nowo-chat-pins__latest')?.hasAttribute('aria-label')).toBe(false);
     expect(bar.querySelector('.nowo-chat-pins__text')?.textContent).toBe('Luis: release at 5');
     expect(q('.nowo-chat-pin-line').textContent).toContain('Luis pinned a message');
     q<HTMLElement>('.nowo-chat-pin-line').click();
