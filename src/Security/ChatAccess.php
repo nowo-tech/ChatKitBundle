@@ -8,6 +8,7 @@ use Closure;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -70,6 +71,32 @@ final class ChatAccess implements ResetInterface
         }
 
         return $this->canUseChannel($user, (string) $conversation->getChannelKey());
+    }
+
+    /**
+     * 1.10: whether the user may pin and unpin messages of the conversation — both people of a direct conversation,
+     * support agents in tickets, and in channels only whom the application's policy allows (ChatPinPolicyInterface;
+     * nobody without it). Always within what the user may read.
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $user The user
+     *
+     * @return bool True when allowed
+     */
+    public function canPin(ChatConversation $conversation, ChatUserInterface $user): bool
+    {
+        if (!$this->canView($conversation, $user)) {
+            return false;
+        }
+        if ($conversation->isDirect()) {
+            return true;
+        }
+        if ($conversation->isSupport()) {
+            return $this->isSupportAgent($user);
+        }
+        $channel = $this->channel((string) $conversation->getChannelKey());
+
+        return $this->policy instanceof ChatPinPolicyInterface && $channel instanceof ChatChannel && $this->policy->canPinInChannel($user, $channel);
     }
 
     /**

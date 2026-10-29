@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.10.0](#to-1100)
 - [To 1.9.2](#to-192)
 - [To 1.9.1](#to-191)
 - [To 1.9.0](#to-190)
@@ -28,6 +29,69 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+## To 1.10.0
+
+From **1.9.2** — **schema change** (chat preferences and chat status on `nowo_chat_user_settings`). After
+`composer update nowo-tech/chat-kit-bundle`:
+
+```bash
+php bin/console assets:install public          # nowo-chat.js / nowo-chat.css (or rebuild your bundle of the TS sources)
+php bin/console doctrine:migrations:diff       # or write the migration by hand from the SQL below
+php bin/console doctrine:migrations:migrate
+```
+
+MySQL / MariaDB (with a `doctrine.table_prefix`, prefix the table name):
+
+```sql
+ALTER TABLE nowo_chat_user_settings
+  ADD sound_mention VARCHAR(16) DEFAULT 'chime' NOT NULL,
+  ADD sound_buzz VARCHAR(16) DEFAULT 'buzz' NOT NULL,
+  ADD sound_support VARCHAR(16) DEFAULT 'ding' NOT NULL,
+  ADD volume SMALLINT DEFAULT 80 NOT NULL,
+  ADD sound_background_only TINYINT(1) DEFAULT 0 NOT NULL,
+  ADD buzz_open_window TINYINT(1) DEFAULT 1 NOT NULL,
+  ADD open_on_message TINYINT(1) DEFAULT 0 NOT NULL,
+  ADD send_key VARCHAR(16) DEFAULT 'enter' NOT NULL,
+  ADD push_preview TINYINT(1) DEFAULT 1 NOT NULL,
+  ADD status VARCHAR(16) DEFAULT 'available' NOT NULL,
+  ADD status_text VARCHAR(80) DEFAULT NULL,
+  ADD status_emoji VARCHAR(32) DEFAULT NULL,
+  ADD status_expires_at DATETIME DEFAULT NULL;
+-- The 1.x single sound was the sound of every message: keep it for @mentions and support replies too.
+UPDATE nowo_chat_user_settings SET sound_mention = sound, sound_support = sound;
+-- Closing conversations in one's own list, pinned messages.
+ALTER TABLE nowo_chat_participant ADD archived_at DATETIME DEFAULT NULL;
+ALTER TABLE nowo_chat_message ADD pinned_at DATETIME DEFAULT NULL, ADD pinned_by_id INT DEFAULT NULL;
+ALTER TABLE nowo_chat_message ADD CONSTRAINT FK_nowo_chat_message_pinned_by FOREIGN KEY (pinned_by_id) REFERENCES user (id) ON DELETE SET NULL;
+CREATE INDEX IDX_nowo_chat_message_pinned_by ON nowo_chat_message (pinned_by_id);
+```
+
+PostgreSQL: `BOOLEAN DEFAULT false / true` for the four flags and `TIMESTAMP(0) WITHOUT TIME ZONE DEFAULT NULL` for
+`status_expires_at`. Without a row a user has the defaults (nothing to back-fill).
+
+Then:
+
+- **Templates**: if you override `_templates.html.twig` by extending it, nothing to do — the new block
+  `nowo_chat_template_status_menu` and the `me` button in `nowo_chat_template_dock` come with it. If you redefined
+  `nowo_chat_template_dock`, add the button (`data-part="me"` with `data-part="me-avatar"` and `data-part="me-dot"`
+  inside, `hidden`) before the launcher to offer the status menu; without it the dock works as before.
+  `nowo_chat_dock_forms()` returns a fourth view, `status`.
+- **Full-page chat**: `page.html.twig` has a new block `nowo_chat_page_status` (the user's status button) inside
+  `nowo_chat_page_list`, and the header of a direct conversation shows the other person's status.
+- **Your settings screen** may offer the new preferences (see [USAGE: User settings](USAGE.md#user-settings)): the
+  form type `ChatPreferencesType`, `POST /api/settings` / `saveChatPreference()` for one control at a time, or your own
+  fields on the same getters and setters. `getSound()` / `setSound()` keep meaning the new-message sound.
+- **Presence answers**: `ChatPresence::statusOf()` entries carry `status`, `text`, `emoji`; `online` is false for an
+  invisible user. `POST /api/presence` answers `{online, statuses, me}` (was `{online}`); `ChatApi.presence()` resolves
+  to that object (was the `online` list). `playSound()` / `playOnce()` take an optional volume.
+- **Auto-away**: `auto_away_minutes` (default 10; `0` turns it off).
+- **Closing conversations**: the row template (`nowo_chat_template_row`) has a `data-part="row-archive"` button and
+  the filters a `data-filter="archived"` chip and a `data-part="archive-read"` button; a host template without them
+  keeps working without those actions. `ChatApi.conversations()` takes an optional `archived` flag.
+- **Pinned messages**: the message template has a `data-part="pin"` action. To let people pin in channels, implement
+  `ChatPinPolicyInterface` on your access policy (nobody pins in channels otherwise). New `max_pins` (default 20). With
+  `icon_set: ux_icon`, import `tabler:archive`, `tabler:arrow-back-up` and `tabler:pin` in your icon set (or the dock
+  keeps its built-in SVG).
 ## To 1.9.2
 
 From **1.9.1** — no schema change. Run `php bin/console assets:install public` (or rebuild your bundle of the TS

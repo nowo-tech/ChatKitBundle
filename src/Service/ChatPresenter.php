@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Service;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
@@ -58,6 +59,7 @@ final readonly class ChatPresenter
      * @param ChatMessage|null $last The newest message; null when none is known
      * @param bool $viewerIsAgent Whether the viewer is a support agent (support thread titles)
      * @param bool $peerOnline Whether the direct peer is online
+     * @param array{status: string, text: string|null, emoji: string|null}|null $peerStatus What the viewer sees of the direct peer's status (ChatPresence::forViewer()); null = offline, no text
      *
      * @return array<string, mixed> The JSON shape
      */
@@ -71,6 +73,7 @@ final readonly class ChatPresenter
         ?ChatMessage $last = null,
         bool $viewerIsAgent = false,
         bool $peerOnline = false,
+        ?array $peerStatus = null,
     ): array {
         [$title, $subtitle, $initials] = match (true) {
             $conversation->isDirect() => [
@@ -95,15 +98,20 @@ final readonly class ChatPresenter
             'ticket'         => $this->ticket($conversation),
             'canSend'        => $canSend,
             'peerOnline'     => $peerOnline,
-            'unread'         => $unread,
-            'lastMessageAt'  => ($last?->getCreatedAt() ?? $conversation->getLastMessageAt())->format(DATE_ATOM),
-            'lastMessage'    => $last instanceof ChatMessage ? [
+            // 1.10: available, busy, away, dnd or offline (invisible people are offline), and the custom status.
+            'peerStatus'      => $peerStatus['status'] ?? 'offline',
+            'peerStatusText'  => $peerStatus['text'] ?? null,
+            'peerStatusEmoji' => $peerStatus['emoji'] ?? null,
+            'unread'          => $unread,
+            'lastMessageAt'   => ($last?->getCreatedAt() ?? $conversation->getLastMessageAt())->format(DATE_ATOM),
+            'lastMessage'     => $last instanceof ChatMessage ? [
                 'preview' => match (true) {
                     $last->isDeleted(), $last->isBuzz() => '',
                     $last->isBot()                      => mb_substr($this->botText($last), 0, 90),
                     default                             => $this->plainText($last->getBody(), $viewer, 90),
                 },
                 'buzz'       => $last->isBuzz(),
+                'pin'        => $last->isPinLine(),
                 'deleted'    => $last->isDeleted(),
                 'mine'       => $last->isAuthoredBy($viewer),
                 'authorName' => $last->getAuthor()?->getChatDisplayName(),
@@ -159,6 +167,9 @@ final readonly class ChatPresenter
             // translated in the locale of the request that posted it (an agent's), not the reader's.
             'references'  => $filled['references'],
             'refsPending' => $filled['pending'] || ($bot && !$viewer instanceof ChatUserInterface),
+            // 1.10: pinned to the top of the conversation; a pin line names the message it is about.
+            'pinned'        => $message->getPinnedAt() instanceof DateTimeImmutable,
+            'pinnedMessage' => $message->getPinnedMessageUuid(),
         ];
     }
 

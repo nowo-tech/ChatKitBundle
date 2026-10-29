@@ -167,6 +167,35 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
         self::assertSame('New message', $sender->sent[$luis->getChatPublicId()]['body'] ?? null, 'CHAT-SEC-03: no message text on lock screens by default');
     }
 
+    public function testDoNotDisturbAndThePreviewOptOut(): void
+    {
+        $chat     = $this->get(ChatService::class);
+        $sender   = $this->get(RecordingPushSender::class);
+        $ana      = $this->user('Ana');
+        $luis     = $this->enablePush($this->user('Luis'));
+        $dm       = $chat->openDirect($ana, $luis);
+        $settings = $this->em->getRepository(ChatUserSettings::class)->forUser($luis);
+
+        // Do not disturb: no push at all (the badge stays).
+        $settings->setStatus('dnd');
+        $this->em->flush();
+        $chat->send($ana, $dm, 'are you there?');
+        self::assertSame([], $sender->sent);
+
+        // An expired "do not disturb" is over.
+        $settings->setStatus('dnd', null, null, new DateTimeImmutable('-1 minute'));
+        $this->em->flush();
+        $chat->send($ana, $dm, 'now?');
+        self::assertSame('now?', $this->get(RecordingPushSender::class)->sent[$luis->getChatPublicId()]['body'] ?? null);
+
+        // The recipient turned the message text off: a generic body even though the application allows previews.
+        $sender->sent = [];
+        $settings->setPushPreview(false);
+        $this->em->flush();
+        $chat->send($ana, $dm, 'salary review is on Friday');
+        self::assertSame('New message', $this->get(RecordingPushSender::class)->sent[$luis->getChatPublicId()]['body'] ?? null);
+    }
+
     public function testSenderFailuresPropagateForMessengerRetries(): void
     {
         $chat    = $this->get(ChatService::class);

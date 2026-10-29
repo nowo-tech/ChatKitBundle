@@ -19,6 +19,9 @@
 - [Translations](#translations)
 - [Front end: IIFE or your bundler](#front-end-iife-or-your-bundler)
 - [User settings](#user-settings)
+- [Chat status](#chat-status)
+- [Closing conversations](#closing-conversations)
+- [Pinned messages](#pinned-messages)
 - [Web Push](#web-push)
 - [Messenger: retries and failures](#messenger-retries-and-failures)
 - [Timeouts](#timeouts)
@@ -526,16 +529,104 @@ import { mount, unmount } from '../vendor/nowo-tech/chat-kit-bundle/src/Resource
 
 ## User settings
 
-Per-user settings live in the bundle (`ChatUserSettings`: sound, push, buzzes, presence, email digest). Read / save them with
-`ChatUserSettingsRepository::forUser($user)` (unsaved defaults until changed) from your account page. Hiding presence
-is reciprocal; call `ChatPresence::forget($user)` to hide it at once.
+Per-user settings live in the bundle (`ChatUserSettings`), so your user table needs no columns. Read / save them with
+`ChatUserSettingsRepository::forUser($user)` (unsaved defaults until changed) and `save($settings)`. Hiding presence is
+reciprocal; call `ChatPresence::forget($user)` to hide it at once.
+
+| Preference (1.10 key) | Default | Effect in the dock |
+| --- | --- | --- |
+| `soundMessage` · `soundMention` · `soundBuzz` · `soundSupport` | `pop` · `chime` · `buzz` · `ding` | sound of a new message, a message that @mentions the user, a buzz, a support reply: `none`, `pop`, `chime`, `ding`, `bell`, `blip`, `knock`, `buzz` (`getSound()` / `setSound()` stay the new-message sound) |
+| `volume` | `80` | 0 – 100 |
+| `soundBackgroundOnly` | `false` | sounds only while the tab is hidden or unfocused |
+| `buzzEnabled` | `true` | off: a buzz is only a line in the thread |
+| `buzzOpenWindow` | `true` | off: a buzz rings (and shakes a window already open) without opening it |
+| `openOnMessage` | `false` | an incoming message opens its window (off: only the unread badge) |
+| `sendKey` | `enter` | `enter` (Shift+Enter: new line) or `ctrl_enter` (Ctrl/⌘+Enter sends, Enter: new line); the composer hint follows |
+| `pushPreview` | `true` | off: Web Push says only "New message" even when the application enables `push_preview` |
+| `presenceVisible` | `true` | reciprocal online dot |
+| `emailDigest` | `true` | unread-messages email |
+| `pushEnabled` | `false` | Web Push (your page also needs the browser subscription; not in the JSON allow-list) |
+
+Three ways to offer them:
+
+- **One control at a time** (an "interface preferences" drawer): `POST /api/settings` `{key, value}` with the
+  `nowo_chat` CSRF header — keys from `ChatUserSettings::PREFERENCE_KEYS`, values of their type (bool, int 0 – 100,
+  sound or send-key name); `422 invalid_setting` otherwise. From TypeScript, `saveChatPreference(url, csrf, key, value)`
+  (exported by the entry point) posts it and dispatches `nowo-chat:prefs`, so the dock of the page applies it at once;
+  the user's other tabs follow through the realtime `prefs` event. `playSound(name, volume)` previews a sound.
+- **A whole form**: `Nowo\ChatKitBundle\Form\ChatPreferencesType` (bound to `ChatUserSettings`; each sound select has
+  `data-nowo-chat-sound-select="<event>"` for a ▶ preview button). Persist the entity after a valid submit.
+- **Your own form type** reading and writing the same getters / setters (`getSoundFor()` / `setSoundFor()`,
+  `getVolume()`, `isOpenOnMessage()` …).
+
+## Chat status
+
+Each user picks a status **from the chat itself** — the avatar button at the top of the dock's list opens the status menu
+(an ARIA menu: ↑ ↓ Home End, Enter / Space, Escape), and a button with `data-nowo-chat-status-open` anywhere on the page
+(the full-page chat has one at the top of its list) opens the same menu:
+
+| Status | Others see | Effect for the user |
+| --- | --- | --- |
+| `available` | green dot | — (shown **away** while idle: no keyboard or pointer input in any tab for `auto_away_minutes`, default 10) |
+| `busy` | red dot | — |
+| `away` | amber dot | — |
+| `dnd` | red dot with a bar | no sounds, no buzz opening / shaking, no opening on a message, no Web Push — the badge only |
+| `invisible` | offline (no dot, no custom text) | the user keeps seeing everyone |
+
+Plus an optional custom status — an emoji (at most 16 characters, no letters or digits) and a text (at most 80) — and
+when it all clears: never, 30 minutes, 1 hour, 4 hours, end of today, end of this week (`clearAfter`: `never`, `30m`,
+`1h`, `4h`, `today`, `week`; then back to available, without text). `POST /api/status`
+`{status, text?, emoji?, clearAfter?}` stores it (`422 invalid_status` otherwise) and publishes it live: the user's
+direct contacts get a `status` event (what others see), the user's other tabs a `my_status` event.
+
+Where it shows: the dot on the avatar of a direct conversation (list, window header, people picker), the label and the
+custom status in the window subtitle and after the name in the list, the dot and text in the @mention list
+(`/members` carries `status`, `statusText`, `statusEmoji`), and the full-page chat header. Conversation summaries carry
+`peerStatus` (`available`, `busy`, `away`, `dnd`, `offline`), `peerStatusText`, `peerStatusEmoji`; the heartbeat
+answers `statuses` by public id and the user's own status (`me`).
+
+Privacy: an invisible user, or one who hides presence, is `offline` to everyone; an invisible user's custom text is never
+sent; a viewer who hides their own presence sees nobody's dot (reciprocal) but still the custom text; the status only
+reaches people who already see the user in the chat (direct contacts, members of a conversation the viewer can read).
+Storage: four columns on `nowo_chat_user_settings` (see [UPGRADING](UPGRADING.md#to-1100)).
+
+## Closing conversations
+
+Each person tidies their own list (1.10): the **Close** button on a row of the dock (on hover, focus or touch; the
+`Delete` key on a row does the same) takes the conversation out of their list with an **Undo** notice; the **Closed**
+filter lists them, each with **Reopen**; the archive button next to the filters closes every conversation without
+unread messages ("Close all read"). The full-page chat has a *Closed* link and a Close / Reopen button per row
+(`data-nowo-chat-archive` / `data-nowo-chat-unarchive="<uuid>"`, handled by the dock's script).
+
+Nothing is deleted and nobody else is affected (`nowo_chat_participant.archived_at`). A closed conversation is back in
+the list as soon as a new message arrives — unless the person muted it, and except a resolved or closed support
+ticket, which stays closed. API: `POST` / `DELETE /api/conversations/{uuid}/archive`, `POST
+/api/conversations/archive-read`, `GET /api/conversations?archived=1`; the person's other tabs get a realtime `list`
+event.
+
+## Pinned messages
+
+Messages can be pinned to the top of a conversation (1.10) from the message's actions (Pin / Unpin; keyboard
+reachable like the other actions). The pinned bar above the thread shows the latest pin (a click scrolls to the
+message, loading older pages if needed, and highlights it) and **All pinned (n)** lists every pin with Unpin. A line
+"X pinned a message" appears in the thread (translated for each reader, no sound or push); every reader's bar updates
+live (realtime `pins`); deleting a pinned message unpins it. Pins are shared by the conversation, at most `max_pins`
+(default 20; `422 too_many_pins` beyond).
+
+Who may pin: both people of a direct conversation; support agents in tickets; in channels only whom your access policy
+allows by also implementing `ChatPinPolicyInterface::canPinInChannel()` — nobody otherwise (deny by default). Others
+get no Pin action and the API answers `403 pin_forbidden` (`404` when they cannot read the conversation). API:
+`GET /api/conversations/{uuid}/pins` (`{pins, canPin}`), `POST` / `DELETE /api/conversations/{uuid}/messages/{messageUuid}/pin`.
+Summaries carry `canPin`, messages `pinned` (and a pin line `pinnedMessage`). The personal data export lists the pins a
+person made.
 
 ## Web Push
 
 With `push: true`, each new message queues `DeliverChatPushMessage` (route it to an async transport; handled inline
 without Messenger). At delivery time the bundle keeps participants who enabled push, have not read it, have not muted
-the conversation and do not have the app open in any visible tab (buzzes only to people who accept them), then calls
-your `ChatPushSenderInterface`. One notification per conversation (`tag`), replaced by the next.
+the conversation, are not in "do not disturb" and do not have the app open in any visible tab (buzzes only to people
+who accept them), then calls your `ChatPushSenderInterface`. The message text goes in only with `push_preview: true` and
+the recipient's own `pushPreview` preference on. One notification per conversation (`tag`), replaced by the next.
 
 ## Messenger: retries and failures
 
@@ -596,7 +687,11 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/support/{uuid}/assign` `{assignee}` | agents: an agent's public id, or null |
 | GET | `/api/link-previews?url[]=…` | previews from your provider, per viewer |
 | GET | `/api/realtime` | hub URL + subscriber token for the caller's topic |
-| POST | `/api/presence` `{visible}` | heartbeat; online direct contacts |
+| POST | `/api/presence` `{visible, idle?}` | heartbeat; online direct contacts, their `statuses`, the caller's own status (`me`) |
+| POST | `/api/status` `{status, text?, emoji?, clearAfter?}` | set the caller's chat status (1.10) |
+| POST | `/api/settings` `{key, value}` | save one chat preference (1.10); answers every preference |
+| POST / DELETE | `/api/conversations/{uuid}/archive` · POST `/api/conversations/archive-read` | close / reopen in the caller's list, close all read (1.10) |
+| GET | `/api/conversations/{uuid}/pins` · POST / DELETE `/api/conversations/{uuid}/messages/{messageUuid}/pin` | pinned messages, pin / unpin (1.10) |
 
 ### Pagination and limits
 

@@ -47,7 +47,7 @@ final readonly class ChatPersonalData
      *
      * @param ChatUserInterface $user The user whose data is exported
      *
-     * @return array{settings: array<string, bool|string>, messages: list<array<string, string|null>>} Settings and authored messages
+     * @return array{settings: array<string, bool|int|string|null>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>} Settings, authored messages and the pins the user made
      */
     public function export(ChatUserInterface $user): array
     {
@@ -59,14 +59,35 @@ final readonly class ChatPersonalData
             ->orderBy('m.id', 'ASC')
             ->getQuery()->getResult();
         $settings = $this->settings->forUser($user);
+        $now      = $this->clock->now();
+        /** @var list<ChatMessage> $pins */
+        $pins = $this->entityManager->createQueryBuilder()
+            ->select('m', 'c')->from(ChatMessage::class, 'm')->innerJoin('m.conversation', 'c')
+            ->where('m.pinnedBy = :user AND m.pinnedAt IS NOT NULL')
+            ->setParameter('user', $user)
+            ->orderBy('m.pinnedAt', 'ASC')
+            ->getQuery()->getResult();
 
         return [
             'settings' => [
-                'sound'        => $settings->getSound(),
-                'push'         => $settings->isPushEnabled(),
-                'buzzes'       => $settings->isBuzzEnabled(),
-                'email_digest' => $settings->isEmailDigest(),
-                'show_online'  => $settings->isPresenceVisible(),
+                'sound'                 => $settings->getSound(),
+                'sound_mention'         => $settings->getSoundFor('mention'),
+                'sound_buzz'            => $settings->getSoundFor('buzz'),
+                'sound_support'         => $settings->getSoundFor('support'),
+                'volume'                => $settings->getVolume(),
+                'sound_background_only' => $settings->isSoundBackgroundOnly(),
+                'push'                  => $settings->isPushEnabled(),
+                'push_preview'          => $settings->isPushPreview(),
+                'buzzes'                => $settings->isBuzzEnabled(),
+                'buzz_open_window'      => $settings->isBuzzOpenWindow(),
+                'open_on_message'       => $settings->isOpenOnMessage(),
+                'send_key'              => $settings->getSendKey(),
+                'email_digest'          => $settings->isEmailDigest(),
+                'show_online'           => $settings->isPresenceVisible(),
+                'status'                => $settings->getStatus($now),
+                'status_text'           => $settings->getStatusText($now),
+                'status_emoji'          => $settings->getStatusEmoji($now),
+                'status_expires_at'     => $settings->getStatusExpiresAt($now)?->format(DATE_ATOM),
             ],
             'messages' => array_map(static fn (ChatMessage $message): array => [
                 'conversation_uuid' => $message->getConversation()->getUuid(),
@@ -76,6 +97,12 @@ final readonly class ChatPersonalData
                 'sent_at'           => $message->getCreatedAt()->format(DATE_ATOM),
                 'edited_at'         => $message->getEditedAt()?->format(DATE_ATOM),
             ], $messages),
+            // 1.10: messages the user pinned (any author).
+            'pins' => array_map(static fn (ChatMessage $message): array => [
+                'conversation_uuid' => $message->getConversation()->getUuid(),
+                'message_uuid'      => $message->getUuid(),
+                'pinned_at'         => $message->getPinnedAt()?->format(DATE_ATOM),
+            ], $pins),
         ];
     }
 

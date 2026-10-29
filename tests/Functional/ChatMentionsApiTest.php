@@ -46,7 +46,7 @@ final class ChatMentionsApiTest extends DatabaseTestCase
 
         self::assertSame(['Bea', 'Luis'], array_column($this->getJson('/chat/api/conversations/' . $uuid . '/members')['members'], 'name'), 'sorted, without the caller or strangers');
         $members = $this->getJson('/chat/api/conversations/' . $uuid . '/members?q=LU')['members'];
-        self::assertSame([['uuid' => $luis->getChatPublicId(), 'name' => 'Luis', 'initials' => $luis->getChatInitials()]], $members);
+        self::assertSame([['uuid' => $luis->getChatPublicId(), 'name' => 'Luis', 'initials' => $luis->getChatInitials(), 'status' => 'offline', 'statusText' => null, 'statusEmoji' => null]], $members);
 
         $sent = $this->requestJson(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', ['body' => 'hi @[Luis](' . $luis->getChatPublicId() . ') and @[Eve](' . $stranger->getChatPublicId() . ')'], $config['csrf'])['message'];
         self::assertSame('<p>hi <span class="nowo-chat-mention" data-mention="' . $luis->getChatPublicId() . '">@Luis</span> and @Eve</p>', $sent['html']);

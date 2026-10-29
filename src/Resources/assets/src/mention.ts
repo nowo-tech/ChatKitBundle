@@ -6,6 +6,7 @@
  */
 import { h } from './dom';
 import { t } from './format';
+import { customStatus, statusDot } from './status';
 import type { ChatMessage, Member, MentionRef } from './types';
 
 /** A stored mention token: `@[name](publicId)`. */
@@ -244,6 +245,15 @@ export class MentionAutocomplete {
           h('span', { class: 'nowo-chat-mention-option__initials', 'aria-hidden': 'true', text: member.initials }),
           h('span', { class: 'nowo-chat-mention-option__name', text: member.name }),
         );
+        // 1.10: the member's status dot and custom status (as this viewer may see them).
+        if (member.status !== undefined && member.status !== 'offline') {
+          option.dataset.status = member.status;
+          option.querySelector('.nowo-chat-mention-option__initials')?.append(statusDot(member.status));
+        }
+        const custom = customStatus(member.statusText, member.statusEmoji);
+        if (custom !== '') {
+          option.append(h('span', { class: 'nowo-chat-mention-option__status', text: custom }));
+        }
         // Keep the focus in the text box while clicking an option.
         option.addEventListener('mousedown', (event) => {
           event.preventDefault();

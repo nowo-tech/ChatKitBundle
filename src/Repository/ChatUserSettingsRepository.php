@@ -91,4 +91,16 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
 
         return $byId;
     }
+
+    /**
+     * Stores the settings (the first change of a user persists their defaults row).
+     *
+     * @param ChatUserSettings $settings The changed settings
+     */
+    public function save(ChatUserSettings $settings): void
+    {
+        $manager = $this->getEntityManager();
+        $manager->persist($settings);
+        $manager->flush();
+    }
 }

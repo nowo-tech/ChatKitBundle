@@ -214,4 +214,27 @@ class ChatMessageRepository extends ServiceEntityRepository
             ->getQuery()
             ->execute();
     }
+
+    /**
+     * Pinned messages of a conversation, latest pin first (1.10).
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param int $limit Maximum number of rows
+     *
+     * @return list<ChatMessage> The pinned messages
+     */
+    public function findPinned(ChatConversation $conversation, int $limit = 50): array
+    {
+        /** @var list<ChatMessage> $rows */
+        $rows = $this->createQueryBuilder('m')
+            ->where('m.conversation = :conversation AND m.pinnedAt IS NOT NULL AND m.deletedAt IS NULL')
+            ->setParameter('conversation', $conversation)
+            ->orderBy('m.pinnedAt', 'DESC')
+            ->addOrderBy('m.id', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+
+        return $rows;
+    }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Unit\Entity;
 
 use DateTimeImmutable;
+use DateTimeZone;
 use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -17,6 +18,8 @@ use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
+
+use function sprintf;
 
 /**
  * Chat entity invariants (cardinality keys, support lifecycle, edit window, tombstones, cursors).
@@ -294,6 +297,135 @@ final class ChatEntitiesTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $settings->setSound('foghorn');
+    }
+
+    public function testChatPreferences(): void
+    {
+        $settings = new ChatUserSettings($this->user(5));
+
+        self::assertSame(['message' => 'pop', 'mention' => 'chime', 'buzz' => 'buzz', 'support' => 'ding'], array_map($settings->getSoundFor(...), array_combine(array_keys(ChatUserSettings::SOUND_EVENTS), array_keys(ChatUserSettings::SOUND_EVENTS))));
+        self::assertSame(80, $settings->getVolume());
+        self::assertFalse($settings->isSoundBackgroundOnly());
+        self::assertTrue($settings->isBuzzOpenWindow());
+        self::assertFalse($settings->isOpenOnMessage());
+        self::assertSame('enter', $settings->getSendKey());
+        self::assertTrue($settings->isPushPreview());
+
+        $settings->applyPreference('soundMessage', 'bell');
+        $settings->applyPreference('soundMention', 'knock');
+        $settings->applyPreference('soundBuzz', 'none');
+        $settings->applyPreference('soundSupport', 'blip');
+        $settings->applyPreference('volume', 35);
+        $settings->applyPreference('soundBackgroundOnly', true);
+        $settings->applyPreference('buzzEnabled', false);
+        $settings->applyPreference('buzzOpenWindow', false);
+        $settings->applyPreference('openOnMessage', true);
+        $settings->applyPreference('sendKey', 'ctrl_enter');
+        $settings->applyPreference('pushPreview', false);
+        $settings->applyPreference('presenceVisible', false);
+        $settings->applyPreference('emailDigest', false);
+        self::assertSame([
+            'sound'          => 'bell',
+            'sounds'         => ['message' => 'bell', 'mention' => 'knock', 'buzz' => 'none', 'support' => 'blip'],
+            'volume'         => 35,
+            'backgroundOnly' => true,
+            'buzz'           => false,
+            'buzzOpenWindow' => false,
+            'openOnMessage'  => true,
+            'sendKey'        => 'ctrl_enter',
+            'pushPreview'    => false,
+            'presence'       => false,
+            'push'           => false,
+            'emailDigest'    => false,
+        ], $settings->preferences());
+        self::assertSame('bell', $settings->getSound(), 'the 1.x single sound is the new-message sound');
+
+        foreach ([['pushEnabled', true], ['nope', true], ['volume', '50'], ['volume', 101], ['volume', -1], ['buzzEnabled', 'yes'], ['sendKey', 1], ['sendKey', 'shift'], ['soundMessage', 'foghorn'], ['soundBuzz', null]] as [$key, $value]) {
+            try {
+                $settings->applyPreference($key, $value);
+                self::fail(sprintf('%s accepted %s', $key, var_export($value, true)));
+            } catch (InvalidArgumentException) {
+                self::addToAssertionCount(1);
+            }
+        }
+        $this->expectException(InvalidArgumentException::class);
+        $settings->getSoundFor('ringtone');
+    }
+
+    public function testUnknownSoundEventIsRefused(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        (new ChatUserSettings($this->user(6)))->setSoundFor('ringtone', 'pop');
+    }
+
+    public function testChatStatus(): void
+    {
+        $settings = new ChatUserSettings($this->user(7));
+        $now      = new DateTimeImmutable('2026-10-29 10:00:00', new DateTimeZone('UTC'));
+
+        self::assertSame(['status' => 'available', 'text' => null, 'emoji' => null, 'expiresAt' => null], $settings->statusView($now));
+        $settings->setStatus('busy', '  In a meeting  ', '📅', $now->modify('+1 hour'));
+        self::assertSame(['status' => 'busy', 'text' => 'In a meeting', 'emoji' => '📅', 'expiresAt' => '2026-10-29T11:00:00+00:00'], $settings->statusView($now));
+        // Expired: back to available, without text.
+        self::assertSame(['status' => 'available', 'text' => null, 'emoji' => null, 'expiresAt' => null], $settings->statusView($now->modify('+2 hours')));
+
+        // Empty or control-character text means none.
+        $settings->setStatus('dnd', ' ', 'bad');
+        self::assertSame(['status' => 'dnd', 'text' => null, 'emoji' => null, 'expiresAt' => null], $settings->statusView($now));
+        $settings->setStatus('invisible', str_repeat('x', 80), '👩‍💻');
+        self::assertSame('invisible', $settings->getStatus($now));
+
+        foreach ([['sleeping', null, null], ['busy', str_repeat('x', 81), null], ['busy', null, 'ab'], ['busy', null, str_repeat('🙂', 17)], ['busy', null, '1️⃣']] as [$status, $text, $emoji]) {
+            try {
+                $settings->setStatus($status, $text, $emoji);
+                self::fail('accepted ' . $status);
+            } catch (InvalidArgumentException) {
+                self::addToAssertionCount(1);
+            }
+        }
+
+        self::assertNull(ChatUserSettings::statusExpiry('never', $now));
+        self::assertSame('2026-10-29 10:30:00', ChatUserSettings::statusExpiry('30m', $now)?->format('Y-m-d H:i:s'));
+        self::assertSame('2026-10-29 11:00:00', ChatUserSettings::statusExpiry('1h', $now)?->format('Y-m-d H:i:s'));
+        self::assertSame('2026-10-29 14:00:00', ChatUserSettings::statusExpiry('4h', $now)?->format('Y-m-d H:i:s'));
+        self::assertSame('2026-10-29 23:59:59', ChatUserSettings::statusExpiry('today', $now)?->format('Y-m-d H:i:s'));
+        self::assertSame('2026-11-01 23:59:59', ChatUserSettings::statusExpiry('week', $now)?->format('Y-m-d H:i:s'), 'Thursday → Sunday');
+        $this->expectException(InvalidArgumentException::class);
+        ChatUserSettings::statusExpiry('fortnight', $now);
+    }
+
+    public function testArchiveAndPinMarks(): void
+    {
+        $ana          = $this->user(8);
+        $luis         = $this->user(9);
+        $now          = new DateTimeImmutable('2026-10-29 10:00:00');
+        $conversation = ChatConversation::direct($ana, $luis, $now->modify('-1 day'));
+        $participant  = new ChatParticipant($conversation, $ana, $now);
+        self::assertNull($participant->getArchivedAt());
+        self::assertFalse($participant->isArchived($now));
+        $participant->archive($now);
+        self::assertSame($now, $participant->getArchivedAt());
+        self::assertTrue($participant->isArchived($now));
+        $conversation->touch($now->modify('+1 minute'));
+        self::assertFalse($participant->isArchived($now), 'a newer message brings it back');
+        $participant->muteUntil($now->modify('+1 hour'));
+        self::assertTrue($participant->isArchived($now), 'muted: stays closed');
+        $participant->archive(null);
+        self::assertFalse($participant->isArchived($now));
+
+        $message = new ChatMessage($conversation, $luis, 'hi', '<p>hi</p>', $now);
+        self::assertTrue($message->isPinnable());
+        self::assertNull($message->getPinnedMessageUuid());
+        $message->pin($ana, $now);
+        self::assertSame($ana, $message->getPinnedBy());
+        self::assertSame($now, $message->getPinnedAt());
+        $line = ChatMessage::pinLine($conversation, $ana, $message, $now);
+        self::assertTrue($line->isPinLine());
+        self::assertFalse($line->isPinnable());
+        self::assertSame($message->getUuid(), $line->getPinnedMessageUuid());
+        $message->pin($ana, null);
+        self::assertNull($message->getPinnedBy());
+        self::assertNull($message->getPinnedAt());
     }
 
     private function user(int $id): TestUser

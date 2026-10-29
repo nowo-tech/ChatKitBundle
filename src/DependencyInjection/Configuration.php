@@ -57,6 +57,9 @@ final class Configuration implements ConfigurationInterface
         'ban'         => 'tabler:ban',
         'link'        => 'tabler:link',
         'external'    => 'tabler:external-link',
+        'archive'     => 'tabler:archive',
+        'unarchive'   => 'tabler:arrow-back-up',
+        'pin'         => 'tabler:pin',
     ];
 
     /** Support ticket topics offered by default (labels and replies in the bundle catalogue). */
@@ -204,6 +207,16 @@ final class Configuration implements ConfigurationInterface
                                 ->info('Seconds a heartbeat keeps a user online.')
                                 ->defaultValue(90)
                                 ->min(30)
+                            ->end()
+                            ->integerNode('max_pins')
+                                ->info('Pinned messages per conversation (1.10).')
+                                ->defaultValue(20)
+                                ->min(1)
+                            ->end()
+                            ->integerNode('auto_away_minutes')
+                                ->info('Minutes without keyboard or pointer input (in every tab) before an available user shows as away. 0 = never.')
+                                ->defaultValue(10)
+                                ->min(0)
                             ->end()
                             ->append($this->supportNode())
                             ->arrayNode('limits')

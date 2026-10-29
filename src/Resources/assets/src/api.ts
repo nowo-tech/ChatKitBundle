@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, Member, Reactions, Reader, Reference, ReferenceType, SupportContext, SupportStatus, SupportTicket } from './types';
+import type { ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, LinkPreview, Member, OwnStatus, PeerStatus, Reactions, Reader, Reference, ReferenceType, SupportContext, SupportStatus, SupportTicket } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -38,8 +38,49 @@ export class ChatApi {
    *
    * @returns The conversation summaries and the unread total.
    */
-  async conversations(): Promise<{ conversations: ConversationSummary[]; unreadTotal: number }> {
-    return this.get(this.config.endpoints.conversations);
+  async conversations(archived = false): Promise<{ conversations: ConversationSummary[]; unreadTotal: number }> {
+    return this.get(archived ? `${this.config.endpoints.conversations}?archived=1` : this.config.endpoints.conversations);
+  }
+
+  /**
+   * Closes (archives) a conversation in the user's list, or reopens it (1.10).
+   *
+   * @param uuid Conversation uuid.
+   * @param archived True to close, false to reopen.
+   */
+  async archive(uuid: string, archived: boolean): Promise<void> {
+    await this.request(archived ? 'POST' : 'DELETE', this.url('archive', uuid), {});
+  }
+
+  /**
+   * Pinned messages of a conversation, latest pin first, and whether the user may pin (1.10).
+   *
+   * @param uuid Conversation uuid.
+   * @returns The pins and the permission.
+   */
+  async pins(uuid: string): Promise<{ pins: ChatMessage[]; canPin: boolean }> {
+    return this.get(this.url('pins', uuid));
+  }
+
+  /**
+   * Pins a message, or unpins it (1.10).
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid Message uuid.
+   * @param pinned True to pin, false to unpin.
+   * @returns The pins after the change.
+   */
+  async pin(uuid: string, messageUuid: string, pinned: boolean): Promise<{ pins: ChatMessage[]; canPin: boolean }> {
+    return this.request(pinned ? 'POST' : 'DELETE', this.messageUrl('pin', uuid, messageUuid), {});
+  }
+
+  /**
+   * Closes every conversation of the list without unread messages (1.10).
+   *
+   * @returns How many were closed.
+   */
+  async archiveRead(): Promise<number> {
+    return (await this.post<{ archived: number }>(this.config.endpoints.archiveRead ?? '', {})).archived;
   }
 
   /**
@@ -311,14 +352,38 @@ export class ChatApi {
   }
 
   /**
-   * Presence heartbeat.
+   * Tab heartbeat (`idle`: no input in any tab for the auto-away delay).
    *
-   * @param visible Whether the page is currently visible to the user.
-   * @returns Uuids of the users that are online (matched against the peers of direct conversations).
+   * @param visible Whether this tab is visible.
+   * @param idle Whether the user is idle.
+   * @returns Online peers, the status each shows and the user's own status.
    */
-  async presence(visible: boolean): Promise<string[]> {
-    return (await this.post<{ online: string[] }>(this.config.endpoints.presence, { visible })).online;
+  async presence(visible: boolean, idle = false): Promise<{ online: string[]; statuses: Record<string, PeerStatus>; me: OwnStatus | null }> {
+    const answer = await this.post<{ online: string[]; statuses?: Record<string, PeerStatus>; me?: OwnStatus }>(this.config.endpoints.presence, { visible, idle });
+    return { online: answer.online, statuses: answer.statuses ?? {}, me: answer.me ?? null };
   }
+
+  /**
+   * Sets the user's own status.
+   *
+   * @param status The status, with its optional text / emoji and when it clears (never, 30m, 1h, 4h, today, week).
+   * @returns The stored status.
+   */
+  async setStatus(status: { status: ChatStatus; text?: string | null; emoji?: string | null; clearAfter?: string }): Promise<OwnStatus> {
+    return (await this.post<{ status: OwnStatus }>(this.config.endpoints.status ?? '', status)).status;
+  }
+
+  /**
+   * Saves one preference.
+   *
+   * @param key Preference key (ChatUserSettings::PREFERENCE_KEYS).
+   * @param value Its new value.
+   * @returns Every preference after the change.
+   */
+  async saveSetting(key: string, value: string | number | boolean): Promise<ChatPrefs> {
+    return (await this.post<{ prefs: ChatPrefs }>(this.config.endpoints.settings ?? '', { key, value })).prefs;
+  }
+
 
   /**
    * Endpoint URL of a conversation action (`__uuid__` replaced).
@@ -328,10 +393,10 @@ export class ChatApi {
    * @returns The URL.
    */
   private url(
-    kind: 'conversation' | 'messages' | 'members' | 'references' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign',
+    kind: 'conversation' | 'messages' | 'members' | 'references' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign' | 'archive' | 'pins',
     uuid: string,
   ): string {
-    return this.config.endpoints[kind].replace('__uuid__', encodeURIComponent(uuid));
+    return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid));
   }
 
   /**
@@ -342,8 +407,8 @@ export class ChatApi {
    * @param messageUuid Message uuid.
    * @returns The URL.
    */
-  private messageUrl(kind: 'message' | 'reactions', uuid: string, messageUuid: string): string {
-    return this.config.endpoints[kind].replace('__uuid__', encodeURIComponent(uuid)).replace('__message__', encodeURIComponent(messageUuid));
+  private messageUrl(kind: 'message' | 'reactions' | 'pin', uuid: string, messageUuid: string): string {
+    return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid)).replace('__message__', encodeURIComponent(messageUuid));
   }
 
   /**

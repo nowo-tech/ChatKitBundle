@@ -197,7 +197,7 @@ final class ChatServiceTest extends DatabaseTestCase
         self::assertSame('L', $row['initials']);
         self::assertSame($luis->getChatPublicId(), $row['peerUuid']);
         self::assertTrue($row['peerOnline']);
-        self::assertSame(['preview' => 'Deploy done', 'buzz' => false, 'deleted' => false, 'mine' => false, 'authorName' => 'Luis'], $row['lastMessage']);
+        self::assertSame(['preview' => 'Deploy done', 'buzz' => false, 'pin' => false, 'deleted' => false, 'mine' => false, 'authorName' => 'Luis'], $row['lastMessage']);
         self::assertSame('Deleted user', $presenter->conversation($dm, $ana, null, null, false)['title']);
         self::assertNull($presenter->conversation($dm, $ana, null, null, false)['lastMessage']);
 
@@ -237,9 +237,9 @@ final class ChatServiceTest extends DatabaseTestCase
         $this->em->flush();
 
         $status = $presence->statusOf([$ana, $luis, $eve]);
-        self::assertSame(['online' => true, 'appOpen' => true], $status[$ana->getChatPublicId()]);
-        self::assertSame(['online' => false, 'appOpen' => false], $status[$luis->getChatPublicId()], 'hidden presence, no visible tab');
-        self::assertSame(['online' => false, 'appOpen' => false], $status[$eve->getChatPublicId()]);
+        self::assertSame(['online' => true, 'appOpen' => true, 'status' => 'available', 'text' => null, 'emoji' => null], $status[$ana->getChatPublicId()]);
+        self::assertSame(['online' => false, 'appOpen' => false, 'status' => 'offline', 'text' => null, 'emoji' => null], $status[$luis->getChatPublicId()], 'hidden presence, no visible tab');
+        self::assertSame(['online' => false, 'appOpen' => false, 'status' => 'offline', 'text' => null, 'emoji' => null], $status[$eve->getChatPublicId()]);
 
         $presence->forget($ana);
         self::assertFalse($presence->statusOf([$ana])[$ana->getChatPublicId()]['online']);

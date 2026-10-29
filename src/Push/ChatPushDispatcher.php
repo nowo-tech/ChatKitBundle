@@ -23,8 +23,10 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Picks who gets a Web Push for a message, checked at delivery time: participants only (never everyone who
- * could read it), reachable, push enabled, not muted, not yet read, the app not open in any tab, buzzes only
- * to people who accept them. The application's ChatPushSenderInterface delivers the payloads.
+ * could read it), reachable, push enabled, not in "do not disturb", not muted, not yet read, the app not open in any
+ * tab, buzzes only to people who accept them. The message text goes in only when the application enables
+ * `push_preview` and the recipient keeps their own "message preview" on. The application's ChatPushSenderInterface
+ * delivers the payloads.
  *
  * Messenger handler (when symfony/messenger is installed); signed (JSON + HMAC) when the application signs its messages.
  */
@@ -80,7 +82,7 @@ final readonly class ChatPushDispatcher
         foreach ($participants as $participant) {
             $user        = $participant->getUser();
             $preferences = $settings[(int) $user->getId()];
-            if (!$this->access->isReachable($user) || !$preferences->isPushEnabled() || ($presence[$user->getChatPublicId()]['appOpen'] ?? false)) {
+            if (!$this->access->isReachable($user) || !$preferences->isPushEnabled() || $preferences->getStatus($now) === 'dnd' || ($presence[$user->getChatPublicId()]['appOpen'] ?? false)) {
                 continue;
             }
             if ($this->isSilenced($participant, $message, $now) || ($message->isBuzz() && !$preferences->isBuzzEnabled())) {
@@ -89,7 +91,7 @@ final readonly class ChatPushDispatcher
             $recipients[] = $user;
         }
         if ($recipients !== []) {
-            $this->sender->send($recipients, fn (ChatUserInterface $user): array => $this->payload($message, $user));
+            $this->sender->send($recipients, fn (ChatUserInterface $user): array => $this->payload($message, $user, $settings[(int) $user->getId()]->isPushPreview()));
         }
     }
 
@@ -101,7 +103,7 @@ final readonly class ChatPushDispatcher
     /**
      * @return array<string, string>
      */
-    private function payload(ChatMessage $message, ChatUserInterface $recipient): array
+    private function payload(ChatMessage $message, ChatUserInterface $recipient, bool $recipientPreview): array
     {
         $conversation = $message->getConversation();
         $locale       = $recipient->getChatLocale();
@@ -114,8 +116,8 @@ final readonly class ChatPushDispatcher
         };
         $body = match (true) {
             $message->isBuzz() => $this->translator->trans('chat.buzz_received', ['%name%' => $authorName], 'NowoChatKitBundle', $locale),
-            // `push_preview`: message text on lock screens only when the application opts in.
-            $this->preview => $this->references instanceof ChatReferences
+            // `push_preview`: message text on lock screens only when the application opts in and the recipient keeps it.
+            $this->preview && $recipientPreview => $this->references instanceof ChatReferences
                 ? $this->references->plainText($this->markdown, $message->getBody(), $recipient, 140, $locale)
                 : $this->markdown->plainText($message->getBody(), 140),
             default => $this->translator->trans('chat.new_message', [], 'NowoChatKitBundle', $locale),

@@ -23,7 +23,7 @@ const msg = (over: Partial<ChatMessage> = {}): ChatMessage => ({
   createdAt: '2026-10-15T10:00:00Z', edited: false, deleted: false, moderated: false, ...over,
 });
 
-type ApiMock = Record<'messages' | 'send' | 'typing' | 'buzz' | 'resolve' | 'edit' | 'remove' | 'react' | 'members' | 'references', Mock>;
+type ApiMock = Record<'messages' | 'send' | 'typing' | 'buzz' | 'resolve' | 'edit' | 'remove' | 'react' | 'members' | 'references' | 'pins' | 'pin', Mock>;
 
 function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock> = {}, configOver: Partial<ChatConfig> = {}) {
   const api: ApiMock = {
@@ -36,6 +36,8 @@ function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock
     remove: vi.fn(),
     react: vi.fn(),
     members: vi.fn().mockResolvedValue([{ uuid: 'u-luis', name: 'Luis', initials: 'LU' }]),
+    pins: vi.fn().mockResolvedValue({ pins: [], canPin: false }),
+    pin: vi.fn(),
     references: vi.fn().mockImplementation(async (_uuid: string, type: string) =>
       type === ''
         ? { types: [{ key: 'task', label: 'Task', icon: 'task' }], references: [] }
@@ -44,7 +46,7 @@ function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock
     ...apiOver,
   };
   const host: ThreadHost = {
-    config: { i18n, endpoints: { page: '/chat/__uuid__' }, userUuid: 'me', locale: 'en', maxLength: 50, editWindowSeconds: 900, reactions: ['👍', '🎉'], isAgent: false, ...configOver } as ChatConfig,
+    config: { i18n, endpoints: { page: '/chat/__uuid__' }, userUuid: 'me', locale: 'en', maxLength: 50, editWindowSeconds: 900, reactions: ['👍', '🎉'], isAgent: false, prefs: { sound: 'pop', buzz: true, presence: true }, ...configOver } as ChatConfig,
     api: api as unknown as ChatApi,
     templates: templates(),
     minimise: vi.fn(), close: vi.fn(), saveDraft: vi.fn(), draft: vi.fn().mockReturnValue('borrador'),
@@ -614,6 +616,105 @@ describe('ThreadView', () => {
 
     // A restored draft shows names, not tokens.
     expect(setupWithDraft('@[Ana](u-ana) hola').q<HTMLTextAreaElement>('.nowo-chat-composer__input').value).toBe('@Ana hola');
+  });
+
+  it('sends with Ctrl/Cmd+Enter when the user chose it, and shows the peer status in the header (1.10)', async () => {
+    const { view, api, host, q } = setup(
+      { peerOnline: true, peerStatus: 'dnd', peerStatusText: 'Focus', peerStatusEmoji: '🎧' },
+      { members: vi.fn().mockResolvedValue([{ uuid: 'u-luis', name: 'Luis', initials: 'LU', status: 'away', statusText: 'Lunch', statusEmoji: null }]) },
+      { i18n: { ...i18n, status_dnd: 'Do not disturb', composer_hint_ctrl: 'Ctrl+Enter to send' }, prefs: { sound: 'pop', buzz: true, presence: true, sendKey: 'ctrl_enter' } },
+    );
+    expect(q('[data-part="subtitle"]').textContent).toBe('Do not disturb · 🎧 Focus');
+    expect(view.element.dataset.peerStatus).toBe('dnd');
+    expect(q('.nowo-chat-avatar.is-status-dnd')).not.toBeNull();
+    expect(q('.nowo-chat-composer__hint').textContent).toBe('Ctrl+Enter to send');
+    (host.draft as Mock).mockReturnValue('');
+    const input = q<HTMLTextAreaElement>('.nowo-chat-composer__input');
+    input.value = 'line one';
+    input.dispatchEvent(new Event('input'));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    expect(api.send).not.toHaveBeenCalled();
+    api.send.mockReturnValueOnce(new Promise(() => undefined));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, cancelable: true }));
+    expect(api.send).toHaveBeenCalledTimes(1);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+
+    // Back to Enter: the template's own hint returns; available reads "Online", offline with text shows the text.
+    host.config.prefs.sendKey = 'enter';
+    view.applySummary(summary({ peerOnline: true, peerStatus: 'available' }));
+    expect(q('.nowo-chat-composer__hint').textContent).not.toBe('Ctrl+Enter to send');
+    expect(q('[data-part="subtitle"]').textContent).toBe('Online');
+    view.applySummary(summary({ peerStatus: 'offline', peerStatusText: 'On holiday', peerStatusEmoji: null }));
+    expect(q('[data-part="subtitle"]').textContent).toBe('On holiday');
+    view.applySummary(summary({ kind: 'channel', peerUuid: null }));
+    q('.nowo-chat-composer__hint').remove();
+    view.applySendKey();
+
+    // The @mention list shows the members' statuses.
+    input.value = '@lu';
+    input.setSelectionRange(3, 3);
+    input.dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(view.element.querySelector('.nowo-chat-mention-option[data-status="away"] .nowo-chat-status-dot--away')).not.toBeNull();
+    expect(view.element.querySelector('.nowo-chat-mention-option__status')?.textContent).toBe('Lunch');
+  });
+
+  it('pins: the bar shows the latest pin, jumps to it (loading older pages), lists all with Unpin; pinned lines (1.10)', async () => {
+    const old = msg({ id: 5, uuid: 'old', html: '<p>deploy key in the vault</p>', pinned: true });
+    const recent = msg({ id: 40, uuid: 'recent', html: '<p>release at 5</p>', pinned: true });
+    const line = msg({ id: 41, uuid: 'line', kind: 'pin', html: '', pinnedMessage: 'recent', authorName: 'Luis' });
+    const lost = msg({ id: 2, uuid: 'lost', html: '<p>gone</p>', pinned: true });
+    const pinsI18n = { ...i18n, pin: 'Pin', unpin: 'Unpin', pinned_all: 'All pinned (%count%)', pinned_line: '%name% pinned a message', pinned_show: 'Show %text%', pinned_gone: 'Gone', too_many_pins: 'Too many' };
+    const { view, api, q } = setup(
+      { canPin: true },
+      {
+        messages: vi.fn().mockResolvedValueOnce({ messages: [recent, line], hasMore: true, readUpTo: null, readers: [] }).mockResolvedValueOnce({ messages: [old], hasMore: false, readUpTo: null, readers: [] }),
+        pins: vi.fn().mockResolvedValue({ pins: [recent, old], canPin: true }),
+      },
+      { i18n: pinsI18n, endpoints: { page: '/chat/__uuid__', pins: '/pins/__uuid__' } as ChatConfig['endpoints'] },
+    );
+    Element.prototype.scrollIntoView = vi.fn();
+    await view.load();
+    await view.loadPins();
+    const bar = q('[data-testid="nowo-chat-pins"]');
+    expect(bar.hidden).toBe(false);
+    expect(bar.querySelector('.nowo-chat-pins__text')?.textContent).toBe('Luis: release at 5');
+    expect(q('.nowo-chat-pin-line').textContent).toContain('Luis pinned a message');
+    q<HTMLElement>('.nowo-chat-pin-line').click();
+    bar.querySelector<HTMLButtonElement>('.nowo-chat-pins__latest')?.click();
+    bar.querySelector<HTMLButtonElement>('.nowo-chat-pins__all')?.click();
+    expect(bar.querySelector('.nowo-chat-pins__list')?.hasAttribute('hidden')).toBe(false);
+    bar.querySelector<HTMLButtonElement>('.nowo-chat-pins__all')?.click();
+    // Jump to an older pin: the previous page loads first, then the message is highlighted.
+    (bar.querySelectorAll<HTMLButtonElement>('.nowo-chat-pins__jump')[1] as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(view.element.querySelector('[data-id="5"].is-highlighted')).not.toBeNull());
+    vi.advanceTimersByTime(2_100);
+    await view.jumpTo(lost);
+    expect(q('[data-part="notice"]').textContent).toBe('Gone');
+
+    // The message action pins / unpins; the server's limit and errors become a notice.
+    const pinAction = view.element.querySelector<HTMLButtonElement>('[data-id="40"] [data-part="pin"]') as HTMLButtonElement;
+    expect(pinAction.hidden).toBe(false);
+    expect(pinAction.getAttribute('aria-label')).toBe('Unpin');
+    api.pin.mockResolvedValueOnce({ pins: [old], canPin: true });
+    pinAction.click();
+    await vi.waitFor(() => expect(api.pin).toHaveBeenCalledWith('c1', 'recent', false));
+    api.pin.mockRejectedValueOnce(new ChatApiError(422, 'too_many_pins')).mockRejectedValueOnce(new Error('x'));
+    view.element.querySelector<HTMLButtonElement>('[data-id="40"] [data-part="pin"]')?.click();
+    await vi.waitFor(() => expect(q('[data-part="notice"]').textContent).toBe('Too many'));
+    view.element.querySelector<HTMLButtonElement>('[data-id="40"] [data-part="pin"]')?.click();
+    await vi.waitFor(() => expect(api.pin).toHaveBeenCalledTimes(3));
+    bar.querySelector<HTMLButtonElement>('.nowo-chat-pins__unpin')?.click();
+
+    // Without the right: no Unpin, no action; no pins: no bar; a failed load keeps it.
+    api.pins.mockResolvedValueOnce({ pins: [old], canPin: false }).mockResolvedValueOnce({ pins: [], canPin: false }).mockRejectedValueOnce(new Error('x'));
+    await view.loadPins();
+    expect(bar.querySelector('.nowo-chat-pins__unpin')).toBeNull();
+    expect(view.element.querySelector<HTMLButtonElement>('[data-id="40"] [data-part="pin"]')?.hidden).toBe(true);
+    await view.loadPins();
+    expect(bar.hidden).toBe(true);
+    await view.loadPins();
+    view.applySummary(summary({ canPin: true }));
   });
 
   it('references items: / opens the commands, a picked task is sent as a token and drafts keep it', async () => {

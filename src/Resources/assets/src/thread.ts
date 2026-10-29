@@ -10,6 +10,7 @@ import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from 
 import { decodeMentions, markOwnMentions, MentionAutocomplete, mentionsViewer } from './mention';
 import { decodeReferences, ReferenceAutocomplete } from './reference';
 import { SupportPanel } from './support';
+import { customStatus, statusLabel } from './status';
 import { part, text, type Templates } from './templates';
 import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader } from './types';
 
@@ -100,6 +101,10 @@ export class ThreadView {
   private messages: ChatMessage[] = [];
   private pending: PendingMessage[] = [];
   private hasMore = false;
+  /** 1.10: pinned messages (latest pin first), the bar above the thread and whether the viewer may pin. */
+  private pins: ChatMessage[] = [];
+  private canPin = false;
+  private readonly pinsBar: HTMLElement;
   private loaded = false;
   private loadingOlder = false;
   private minimised = false;
@@ -204,7 +209,12 @@ export class ThreadView {
     // `/` commands and the `#` picker, when the application registers reference providers.
     this.reference = this.referencePicker(this.input, `nowo-chat-${summary.uuid}`);
     this.input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      if (event.key !== 'Enter' || event.isComposing) {
+        return;
+      }
+      // 1.10 send key: Enter (Shift+Enter breaks the line) or Ctrl/Cmd+Enter (Enter breaks the line).
+      const sends = this.host.config.prefs.sendKey === 'ctrl_enter' ? event.ctrlKey || event.metaKey : !event.shiftKey;
+      if (sends) {
         event.preventDefault();
         void this.submit();
       }
@@ -242,9 +252,14 @@ export class ThreadView {
       part(this.element, 'support'),
     );
 
+    this.canPin = summary.canPin === true;
+    this.pinsBar = h('div', { class: 'nowo-chat-pins', 'data-testid': 'nowo-chat-pins', hidden: true });
+    part(this.element, 'context').after(this.pinsBar);
+
     const draft = host.draft(summary.uuid);
     this.mention.load(this.reference?.decode(draft) ?? draft);
     this.applySummary(summary);
+    void this.loadPins();
   }
 
   /**
@@ -275,6 +290,114 @@ export class ThreadView {
   }
 
   /**
+   * Loads the pinned messages (1.10; the dock calls it again on a realtime `pins` event).
+   */
+  async loadPins(): Promise<void> {
+    if (this.host.config.endpoints.pins === undefined) {
+      return;
+    }
+    try {
+      this.applyPins(await this.host.api.pins(this.summary.uuid));
+    } catch {
+      // The bar stays as it was.
+    }
+  }
+
+  /**
+   * Shows the pinned bar: the latest pin (a click shows it in the thread) and "All pinned (n)" with each pin and Unpin.
+   *
+   * @param state Pins and whether the viewer may pin.
+   */
+  private applyPins(state: { pins: ChatMessage[]; canPin: boolean }): void {
+    const i18n = this.host.config.i18n;
+    const changedRight = state.canPin !== this.canPin;
+    this.pins = state.pins;
+    this.canPin = state.canPin;
+    const latest = this.pins[0];
+    this.pinsBar.hidden = latest === undefined;
+    if (latest === undefined) {
+      this.pinsBar.replaceChildren();
+    } else {
+      const excerpt = (message: ChatMessage): string => `${message.authorName}: ${plain(message.html).slice(0, 80)}`;
+      const show = h('button', { type: 'button', class: 'nowo-chat-pins__latest', 'aria-label': t(i18n, 'pinned_show', { text: excerpt(latest) }) });
+      show.append(this.host.templates.icon('pin', 14), h('span', { class: 'nowo-chat-pins__text', text: excerpt(latest) }));
+      show.addEventListener('click', () => void this.jumpTo(latest));
+      const list = h('ul', { class: 'nowo-chat-pins__list', id: `nowo-chat-pins-${this.summary.uuid}`, hidden: true });
+      const all = h('button', { type: 'button', class: 'nowo-chat-pins__all', 'aria-expanded': 'false', 'aria-controls': list.id, text: t(i18n, 'pinned_all', { count: this.pins.length }) });
+      all.addEventListener('click', () => {
+        list.hidden = !list.hidden;
+        all.setAttribute('aria-expanded', list.hidden ? 'false' : 'true');
+      });
+      list.append(
+        ...this.pins.map((pin) => {
+          const item = h('li', { class: 'nowo-chat-pins__item' });
+          const jump = h('button', { type: 'button', class: 'nowo-chat-pins__jump', text: excerpt(pin) });
+          jump.addEventListener('click', () => void this.jumpTo(pin));
+          item.append(jump);
+          if (this.canPin) {
+            const unpin = h('button', { type: 'button', class: 'nowo-chat-pins__unpin', text: t(i18n, 'unpin') });
+            unpin.addEventListener('click', () => void this.setPinned(pin, false));
+            item.append(unpin);
+          }
+          return item;
+        }),
+      );
+      this.pinsBar.replaceChildren(show, all, list);
+    }
+    if (changedRight) {
+      this.render();
+    }
+  }
+
+  /**
+   * Pins or unpins a message; the bar and the thread follow (the server posts the "pinned" line).
+   *
+   * @param message The message.
+   * @param pinned True to pin, false to unpin.
+   */
+  private async setPinned(message: ChatMessage, pinned: boolean): Promise<void> {
+    try {
+      this.applyPins(await this.host.api.pin(this.summary.uuid, message.uuid, pinned));
+      this.update({ ...message, pinned });
+    } catch (error) {
+      this.flashNotice(t(this.host.config.i18n, error instanceof ChatApiError && error.code === 'too_many_pins' ? 'too_many_pins' : 'error'));
+    }
+  }
+
+  /**
+   * Shows a message in the thread (loading older pages until it is there), briefly highlighted.
+   *
+   * @param message The message to show.
+   */
+  async jumpTo(message: ChatMessage): Promise<void> {
+    const find = (): HTMLElement | null => this.log.querySelector<HTMLElement>(`[data-id="${message.id}"]`);
+    let guard = 0;
+    while (find() === null && this.hasMore && guard < 20) {
+      guard += 1;
+      await this.loadOlder();
+    }
+    const target = find();
+    if (target === null) {
+      this.flashNotice(t(this.host.config.i18n, 'pinned_gone'));
+      return;
+    }
+    target.scrollIntoView({ block: 'center' });
+    target.classList.add('is-highlighted');
+    window.setTimeout(() => target.classList.remove('is-highlighted'), 2_000);
+  }
+
+  /** The composer hint follows the send key (Enter, or Ctrl/Cmd+Enter). */
+  applySendKey(): void {
+    const hint = this.element.querySelector<HTMLElement>('.nowo-chat-composer__hint');
+    if (hint === null) {
+      return;
+    }
+    // The template's own hint (Enter) is kept for when the user switches back.
+    hint.dataset.enterHint ??= hint.textContent;
+    hint.textContent = this.host.config.prefs.sendKey === 'ctrl_enter' ? t(this.host.config.i18n, 'composer_hint_ctrl') : hint.dataset.enterHint;
+  }
+
+  /**
    * Applies a conversation summary: header (title, subtitle, avatar, context), buttons, unread badge and the
    * read-only state of the composer.
    *
@@ -284,14 +407,25 @@ export class ThreadView {
     this.summary = summary;
     const i18n = this.host.config.i18n;
     part(this.element, 'title').textContent = summary.title;
+    // 1.10: the other person's status ("Online", "Busy" …) and custom status in a direct conversation.
+    const status = summary.peerStatus ?? (summary.peerOnline ? 'available' : 'offline');
+    const presence = status === 'offline' ? '' : status === 'available' ? t(i18n, 'online') : statusLabel(i18n, status);
+    const peerLine = [presence, customStatus(summary.peerStatusText, summary.peerStatusEmoji)].filter((value) => value !== '').join(' · ');
     part(this.element, 'subtitle').textContent =
       summary.kind === 'support' && summary.supportStatus === 'resolved'
         ? t(i18n, 'support_resolved')
-        : summary.kind === 'direct' && summary.peerOnline
-          ? t(i18n, 'online')
+        : summary.kind === 'direct' && peerLine !== ''
+          ? peerLine
           : summary.subtitle;
+    if (summary.kind === 'direct') {
+      this.element.dataset.peerStatus = status;
+    }
     this.element.setAttribute('aria-label', t(i18n, 'conversation_label', { name: summary.title }));
-    part(this.element, 'avatar').replaceChildren(this.host.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline));
+    if (summary.canPin !== undefined) {
+      this.canPin = summary.canPin;
+    }
+    part(this.element, 'avatar').replaceChildren(this.host.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline, summary.kind === 'direct' ? status : undefined));
+    this.applySendKey();
     this.applyContext(summary);
     // A buzz is a person-to-person nudge: direct conversations only.
     this.buzzBtn.hidden = !summary.canSend || summary.kind !== 'direct';
@@ -1049,7 +1183,7 @@ export class ThreadView {
     let previousAny: ChatMessage | undefined;
     for (const message of this.messages) {
       fragment.append(...this.messageNodes(message, previous, previousAny));
-      previous = message.kind === 'buzz' ? undefined : message;
+      previous = message.kind === 'buzz' || message.kind === 'pin' ? undefined : message;
       previousAny = message;
     }
     const seen = this.seenLine();
@@ -1086,6 +1220,19 @@ export class ThreadView {
     if (this.firstUnseenId === message.id) {
       nodes.push(templates.clone('unseen'));
     }
+    if (message.kind === 'pin') {
+      // 1.10: "X pinned a message" in the reader's language; a click shows the message.
+      const line = templates.clone('buzz-line');
+      line.classList.add('nowo-chat-pin-line');
+      line.querySelector('[data-icon], svg')?.replaceWith(templates.icon('pin', 14));
+      text(line, 'text', `${t(i18n, 'pinned_line', { name: message.mine ? t(i18n, 'you') : message.authorName })} · ${timeLabel(message.createdAt, locale)}`);
+      const target = this.pins.find((pin) => pin.uuid === message.pinnedMessage);
+      if (target !== undefined) {
+        line.addEventListener('click', () => void this.jumpTo(target));
+      }
+      nodes.push(line);
+      return nodes;
+    }
     if (message.kind === 'buzz') {
       const line = templates.clone('buzz-line');
       line.classList.toggle('is-new', this.paintedUpTo > 0 && message.id > this.paintedUpTo);
@@ -1119,10 +1266,10 @@ export class ThreadView {
     }
     this.log.querySelector('.nowo-chat-seen')?.remove();
     let previousAny: ChatMessage = previousLast;
-    let previous: ChatMessage | undefined = previousLast.kind === 'buzz' ? undefined : previousLast;
+    let previous: ChatMessage | undefined = previousLast.kind === 'buzz' || previousLast.kind === 'pin' ? undefined : previousLast;
     for (const message of fresh) {
       this.log.append(...this.messageNodes(message, isNewDay(previousAny, message) ? undefined : previous, previousAny));
-      previous = message.kind === 'buzz' ? undefined : message;
+      previous = message.kind === 'buzz' || message.kind === 'pin' ? undefined : message;
       previousAny = message;
     }
     const seen = this.seenLine();
@@ -1274,10 +1421,20 @@ export class ThreadView {
     const inWindow = Date.now() - new Date(message.createdAt).getTime() <= config.editWindowSeconds * 1000;
     const usable = !message.deleted && message.kind === 'text';
     react.hidden = !(usable && this.summary.canSend && config.reactions.length > 0);
+    // 1.10: pin / unpin for who may pin (the server checks again).
+    const pin = actions.querySelector<HTMLButtonElement>('[data-part="pin"]');
+    if (pin !== null) {
+      pin.hidden = !(usable && this.canPin);
+      const label = t(config.i18n, message.pinned === true ? 'unpin' : 'pin');
+      pin.setAttribute('aria-label', label);
+      pin.title = label;
+      pin.setAttribute('aria-pressed', message.pinned === true ? 'true' : 'false');
+      pin.addEventListener('click', () => void this.setPinned(message, message.pinned !== true));
+    }
     edit.hidden = !(usable && message.mine && inWindow && this.summary.canSend);
     // Only the author, within the edit window (others' messages are never deletable).
     remove.hidden = !(usable && message.mine && inWindow);
-    actions.hidden = react.hidden && edit.hidden && remove.hidden;
+    actions.hidden = react.hidden && edit.hidden && remove.hidden && (pin === null || pin.hidden);
     // Touch screens have no hover: tapping a message shows its actions (one message at a time).
     article.addEventListener('click', (event) => {
       if ((event.target as Element).closest('a, button, form') !== null) {

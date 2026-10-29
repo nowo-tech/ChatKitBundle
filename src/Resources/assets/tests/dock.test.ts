@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChatConfig, ChatMessage, Contact, ConversationSummary, RealtimeEvent } from '../src/types';
+import type { ChatConfig, ChatMessage, Contact, ConversationSummary, OwnStatus, RealtimeEvent } from '../src/types';
 import { templatesRoot } from './support';
 
 const api = {
@@ -17,6 +17,11 @@ const api = {
   resolve: vi.fn(),
   realtime: vi.fn(),
   presence: vi.fn(),
+  setStatus: vi.fn(),
+  archive: vi.fn(),
+  archiveRead: vi.fn(),
+  pins: vi.fn(),
+  pin: vi.fn(),
   linkPreviews: vi.fn(),
   message: vi.fn(),
 };
@@ -107,7 +112,7 @@ describe('ChatDock', () => {
     }
     api.messages.mockResolvedValue({ messages: [], hasMore: false, readUpTo: null, readers: [] });
     api.markRead.mockResolvedValue(undefined);
-    api.presence.mockResolvedValue([]);
+    api.presence.mockResolvedValue({ online: [], statuses: {}, me: null });
     api.contacts.mockResolvedValue([]);
     api.conversation.mockRejectedValue(new Error('unknown'));
     api.openDirect.mockResolvedValue(summary('d'));
@@ -408,7 +413,7 @@ describe('ChatDock', () => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(true);
     rt.onEvent({ type: 'message', conversationUuid: 'b', message: message() });
     expect(q('.nowo-chat-list').textContent).toContain('nuevo');
-    expect(playOnce).toHaveBeenCalledWith(expect.stringMatching(/^msg-/), 'pop');
+    expect(playOnce).toHaveBeenCalledWith(expect.stringMatching(/^msg-/), 'pop', 100);
     rt.onEvent({ type: 'message', conversationUuid: 'b', message: message({ authorUuid: 'me' }) });
     api.conversations.mockResolvedValueOnce({ conversations: [summary('a'), summary('b'), summary('new')], unreadTotal: 0 });
     rt.onEvent({ type: 'message', conversationUuid: 'new', message: message() });
@@ -442,7 +447,7 @@ describe('ChatDock', () => {
     rt.onEvent({ type: 'message', conversationUuid: 'a', message: message({ kind: 'buzz', html: '' }) });
     vi.advanceTimersByTime(200);
     expect(q('.nowo-chat-window[data-buzzed-at]')).not.toBeNull();
-    expect(playOnce).toHaveBeenCalledWith(expect.stringMatching(/^buzz-/), 'buzz');
+    expect(playOnce).toHaveBeenCalledWith(expect.stringMatching(/^buzz-/), 'buzz', 100);
     rt.onEvent({ type: 'message', conversationUuid: 'unknown-buzz', message: message({ kind: 'buzz', html: '' }) });
     await flush();
 
@@ -578,7 +583,8 @@ describe('ChatDock', () => {
   });
 
   it('marks online peers from the presence heartbeat', async () => {
-    api.presence.mockResolvedValueOnce(['peer-a']).mockResolvedValueOnce(['peer-a']).mockRejectedValueOnce(new Error('x'));
+    const online = { online: ['peer-a'], statuses: {}, me: null };
+    api.presence.mockResolvedValueOnce(online).mockResolvedValueOnce(online).mockRejectedValueOnce(new Error('x'));
     const { dock, q } = mount([summary('a'), summary('p', { kind: 'channel', peerUuid: null })]);
     await dock.start();
     await dock.open(summary('a'));
@@ -976,5 +982,233 @@ describe('ChatDock', () => {
     await dock.open(summary('a', { lastMessageAt: '2026-10-15T09:00:00Z' }));
     (dock as unknown as { onSync: (e: unknown) => void }).onSync({ type: 'messages', uuid: 'a', messages: [message()] });
     expect(q('.nowo-chat-launcher .nowo-chat-badge').hidden).toBe(true);
+  });
+
+  describe('chat status and preferences (1.10)', () => {
+    const own = (over: Partial<OwnStatus> = {}): OwnStatus => ({ status: 'available', text: null, emoji: null, expiresAt: null, ...over });
+    const withStatus = (over: Partial<ChatConfig> = {}): Partial<ChatConfig> => ({
+      status: own(),
+      me: { name: 'Me', initials: 'ME' },
+      autoAwayMinutes: 10,
+      endpoints: { page: '/chat/__uuid__', status: '/status', settings: '/settings' } as ChatConfig['endpoints'],
+      ...over,
+    });
+
+    it('offers no status menu without the 1.10 configuration or template', () => {
+      const { q } = mount([summary('a')]);
+      expect(q<HTMLButtonElement>('[data-part="me"]').hidden).toBe(true);
+      const root = templatesRoot();
+      root.querySelector('template[data-nowo-chat-template="status-menu"]')?.remove();
+      document.body.append(root);
+      const dock = new ChatDock(root, config(withStatus()));
+      mounted.push(dock);
+      expect(root.querySelector<HTMLButtonElement>('[data-part="me"]')?.hidden).toBe(true);
+      dock.openStatusMenu();
+      expect(dock.isDoNotDisturb()).toBe(false);
+    });
+
+    it('sets the own status from the dock and the chat page button; other tabs and expiry follow', async () => {
+      api.setStatus.mockResolvedValueOnce(own({ status: 'busy', text: 'Lunch', emoji: '🍝' }));
+      const { dock, q, all } = mount([summary('a')], withStatus());
+      await dock.start();
+      const trigger = q<HTMLButtonElement>('[data-part="me"]');
+      expect(trigger.hidden).toBe(false);
+      expect(q('[data-part="me-avatar"]').textContent).toBe('ME');
+
+      // A status button elsewhere on the page opens the menu, bringing a tucked dock back.
+      dock.setTucked(true);
+      const pageButton = document.createElement('button');
+      pageButton.dataset.nowoChatStatusOpen = '';
+      document.body.append(pageButton);
+      pageButton.click();
+      expect(q('.nowo-chat-status-menu').hidden).toBe(false);
+      q<HTMLInputElement>('[data-part="status-text"]').value = 'Lunch';
+      q<HTMLInputElement>('[data-part="status-emoji"]').value = '🍝';
+      all('[data-status]').find((option) => option.dataset.status === 'busy')?.click();
+      await flush();
+      expect(api.setStatus).toHaveBeenCalledWith({ status: 'busy', text: 'Lunch', emoji: '🍝', clearAfter: 'never' });
+      expect(trigger.dataset.status).toBe('busy');
+
+      // Another tab picked "do not disturb"; the heartbeat says it expired.
+      realtimeHandlers?.onEvent({ type: 'my_status', status: own({ status: 'dnd' }) });
+      expect(dock.isDoNotDisturb()).toBe(true);
+      api.presence.mockResolvedValueOnce({ online: [], statuses: {}, me: own() });
+      vi.advanceTimersByTime(30_000);
+      await flush();
+      expect(dock.isDoNotDisturb()).toBe(false);
+      pageButton.remove();
+    });
+
+    it('shows what contacts picked: list rows, window header, realtime changes and reciprocal presence', async () => {
+      api.presence.mockResolvedValue({ online: ['peer-a'], statuses: { 'peer-a': { status: 'busy', text: 'Focus', emoji: '🎧' } }, me: null });
+      const { dock, q } = mount([summary('a'), summary('b'), summary('c', { kind: 'channel', peerUuid: null })], withStatus());
+      await dock.start();
+      await flush();
+      const row = q<HTMLElement>('.nowo-chat-list [data-peer-status="busy"]');
+      expect(row.querySelector('.nowo-chat-row__status')?.textContent).toBe('🎧 Focus');
+      expect(row.querySelector('.nowo-chat-avatar.is-status-busy')).not.toBeNull();
+      await dock.open(summary('a', { peerOnline: true, peerStatus: 'busy', peerStatusText: 'Focus', peerStatusEmoji: '🎧' }));
+      expect(q('.nowo-chat-window').dataset.peerStatus).toBe('busy');
+
+      // Live: b goes away; an event about someone else changes nothing.
+      realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-b', status: 'away', text: null, emoji: null });
+      expect(q('.nowo-chat-list [data-peer-status="away"]')).not.toBeNull();
+      realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-b', status: 'away', text: null, emoji: null });
+      realtimeHandlers?.onEvent({ type: 'status', userUuid: 'nobody', status: 'dnd', text: null, emoji: null });
+
+      // Someone who hides their own presence sees no dots, only the text.
+      const hidden = mount([summary('h')], withStatus({ prefs: { sound: 'pop', buzz: true, presence: false } }));
+      await hidden.dock.start();
+      realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-h', status: 'dnd', text: 'Away from keyboard', emoji: null });
+      expect(hidden.root.querySelector('[data-peer-status="offline"] .nowo-chat-row__status')?.textContent).toBe('Away from keyboard');
+    });
+
+    it('reports idle to the heartbeat after the auto-away delay', async () => {
+      const { dock } = mount([summary('a')], withStatus({ autoAwayMinutes: 1 }));
+      await dock.start();
+      expect(api.presence).toHaveBeenLastCalledWith(true, false);
+      vi.advanceTimersByTime(90_000);
+      expect(api.presence).toHaveBeenLastCalledWith(true, true);
+      document.dispatchEvent(new KeyboardEvent('keydown'));
+      vi.advanceTimersByTime(30_000);
+      expect(api.presence).toHaveBeenLastCalledWith(true, false);
+    });
+
+    it('follows the sound, buzz and opening preferences, and stays quiet in do not disturb', async () => {
+      const prefs = { sound: 'pop' as const, buzz: true, presence: true, sounds: { message: 'chime' as const, mention: 'bell' as const, buzz: 'knock' as const, support: 'ding' as const }, volume: 40, openOnMessage: true, buzzOpenWindow: false, backgroundOnly: false };
+      const { dock, q } = mount([summary('a'), summary('b'), summary('sup', { kind: 'support' })], withStatus({ prefs }));
+      await dock.start();
+      vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+      const rt = realtimeHandlers as NonNullable<typeof realtimeHandlers>;
+
+      rt.onEvent({ type: 'message', conversationUuid: 'b', message: message() });
+      expect(playOnce).toHaveBeenLastCalledWith(expect.stringMatching(/^msg-/), 'chime', 40);
+      await flush();
+      expect(q('.nowo-chat-window')).not.toBeNull();
+      rt.onEvent({ type: 'message', conversationUuid: 'a', message: message({ mentionsMe: true }) });
+      expect(playOnce).toHaveBeenLastCalledWith(expect.stringMatching(/^msg-/), 'bell', 40);
+      rt.onEvent({ type: 'message', conversationUuid: 'sup', message: message() });
+      expect(playOnce).toHaveBeenLastCalledWith(expect.stringMatching(/^msg-/), 'ding', 40);
+
+      // A buzz without "open the window": it rings, the closed window stays closed.
+      rt.onEvent({ type: 'message', conversationUuid: 'zz', message: message({ kind: 'buzz', html: '' }) });
+      expect(playOnce).toHaveBeenLastCalledWith(expect.stringMatching(/^buzz-/), 'knock', 40);
+
+      // Sounds only in the background (the application's settings form tells the dock).
+      document.dispatchEvent(new CustomEvent('nowo-chat:prefs', { detail: { ...prefs, backgroundOnly: true, sendKey: 'ctrl_enter' } }));
+      expect(q('.nowo-chat-composer__hint').textContent).not.toBe('');
+      playOnce.mockClear();
+      rt.onEvent({ type: 'message', conversationUuid: 'zz', message: message({ kind: 'buzz', html: '' }) });
+      expect(playOnce).not.toHaveBeenCalled();
+      rt.onEvent({ type: 'prefs', prefs: { ...prefs, backgroundOnly: false } });
+
+      // Do not disturb: badge only.
+      rt.onEvent({ type: 'my_status', status: own({ status: 'dnd' }) });
+      playOnce.mockClear();
+      rt.onEvent({ type: 'message', conversationUuid: 'zz', message: message() });
+      rt.onEvent({ type: 'message', conversationUuid: 'a', message: message({ kind: 'buzz', html: '' }) });
+      expect(playOnce).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the single 1.x sound and the stored status without a menu', async () => {
+      const { dock } = mount([summary('a')], { status: own({ status: 'dnd', expiresAt: '2000-01-01T00:00:00Z' }) });
+      await dock.start();
+      expect(dock.isDoNotDisturb()).toBe(false);
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: message() });
+      expect(playOnce).toHaveBeenLastCalledWith(expect.stringMatching(/^msg-/), 'pop', 100);
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    });
+  });
+
+  describe('closing conversations and pins (1.10)', () => {
+    const endpoints = { page: '/chat/__uuid__', archive: '/c/__uuid__/archive', archiveRead: '/c/archive-read', pins: '/c/__uuid__/pins', pin: '/p' } as ChatConfig['endpoints'];
+    const i18nPlus = { ...i18n, archived_one: 'Closed.', unarchived_one: 'Reopened.', archived_many: '%count% closed', undo: 'Undo', archived_empty: 'None closed', close_conversation: 'Close %name%', reopen_conversation: 'Reopen %name%', pinned_line: '%name% pinned a message' };
+
+    it('closes a conversation with Undo, the Delete key, the Closed filter with Reopen, and "close all read"', async () => {
+      api.archive.mockResolvedValue(undefined);
+      const { dock, q, all } = mount([summary('a'), summary('b')], { endpoints, i18n: i18nPlus });
+      await dock.start();
+      await dock.open(summary('a'));
+      const close = all('.nowo-chat-list [data-part="row-archive"]')[0] as HTMLButtonElement;
+      expect(close.getAttribute('aria-label')).toBe('Close T a');
+      close.click();
+      await flush();
+      expect(api.archive).toHaveBeenLastCalledWith('a', true);
+      expect(q('.nowo-chat-list').textContent).not.toContain('T a');
+      expect(q('.nowo-chat-window[data-uuid="a"]')).toBeNull();
+      const toast = q('[data-testid="nowo-chat-toast"]');
+      expect(toast.hidden).toBe(false);
+      toast.querySelector<HTMLButtonElement>('button')?.click();
+      await flush();
+      expect(api.archive).toHaveBeenLastCalledWith('a', false);
+      expect(q('.nowo-chat-list').textContent).toContain('T a');
+      vi.advanceTimersByTime(6_100);
+      expect(toast.hidden).toBe(true);
+
+      all('.nowo-chat-list .nowo-chat-row')[1]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+      all('.nowo-chat-list .nowo-chat-row')[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+      await flush();
+      expect(api.archive).toHaveBeenCalledTimes(3);
+
+      // Closed filter: the closed ones, each with Reopen; an empty answer says so.
+      api.conversations.mockResolvedValueOnce({ conversations: [summary('z', { archived: true })], unreadTotal: 0 });
+      q<HTMLButtonElement>('[data-filter="archived"]').click();
+      await flush();
+      const reopen = q<HTMLButtonElement>('.nowo-chat-list [data-part="row-archive"]');
+      expect(reopen.getAttribute('aria-label')).toBe('Reopen T z');
+      reopen.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+      reopen.click();
+      await flush();
+      expect(api.archive).toHaveBeenLastCalledWith('z', false);
+      expect(q('.nowo-chat-list').textContent).toContain('None closed');
+      api.conversations.mockRejectedValueOnce(new Error('x')).mockRejectedValueOnce(new Error('x'));
+      realtimeHandlers?.onEvent({ type: 'list' });
+      await flush();
+      q<HTMLButtonElement>('[data-filter="all"]').click();
+
+      api.archiveRead.mockResolvedValueOnce(2).mockRejectedValueOnce(new Error('x'));
+      api.conversations.mockResolvedValueOnce({ conversations: [summary('b')], unreadTotal: 0 });
+      q<HTMLButtonElement>('[data-part="archive-read"]').click();
+      await flush();
+      expect(toast.textContent).toContain('2 closed');
+      q<HTMLButtonElement>('[data-part="archive-read"]').click();
+      await flush();
+      api.archive.mockRejectedValueOnce(new Error('x'));
+      q<HTMLButtonElement>('.nowo-chat-list [data-part="row-archive"]').click();
+      await flush();
+    });
+
+    it('drops the row button without the 1.10 endpoint, and serves the chat page buttons', async () => {
+      api.archive.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('x'));
+      const { dock, q } = mount([summary('a')]);
+      await dock.start();
+      expect(q('.nowo-chat-list [data-part="row-archive"]')).toBeNull();
+      document.body.insertAdjacentHTML('beforeend', '<ul id="page"><li><button data-nowo-chat-archive="a">Close</button></li><li><button data-nowo-chat-unarchive="b">Reopen</button></li></ul>');
+      document.querySelector<HTMLButtonElement>('[data-nowo-chat-archive]')?.click();
+      await flush();
+      expect(api.archive).toHaveBeenLastCalledWith('a', true);
+      expect(document.querySelector('[data-nowo-chat-archive]')).toBeNull();
+      document.querySelector<HTMLButtonElement>('[data-nowo-chat-unarchive]')?.click();
+      await flush();
+      expect(api.archive).toHaveBeenLastCalledWith('b', false);
+      document.getElementById('page')?.click();
+    });
+
+    it('reloads the pinned bar on a pins event, never rings for a pinned line, and previews it in the list', async () => {
+      api.pins.mockResolvedValue({ pins: [], canPin: true });
+      const { dock, q } = mount([summary('a'), summary('b')], { endpoints, i18n: i18nPlus });
+      await dock.start();
+      await dock.open(summary('a'));
+      api.pins.mockClear();
+      realtimeHandlers?.onEvent({ type: 'pins', conversationUuid: 'a' });
+      realtimeHandlers?.onEvent({ type: 'pins', conversationUuid: 'closed' });
+      expect(api.pins).toHaveBeenCalledTimes(1);
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'b', message: message({ kind: 'pin', html: '', pinnedMessage: 'x' }) });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+      expect(playOnce).not.toHaveBeenCalled();
+      expect(q('.nowo-chat-list').textContent).toContain('Peer pinned a message');
+    });
   });
 });

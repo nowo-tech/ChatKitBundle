@@ -5,16 +5,18 @@
  * launcher opens a full-screen sheet. Everything happens in place: no request reloads or navigates the page.
  */
 import { ChatApi } from './api';
-import { setBadge } from './dom';
+import { h, setBadge } from './dom';
 import { listTimeLabel, t } from './format';
 import { ChatRealtime } from './realtime';
+import { PREFS_EVENT } from './prefs';
 import { playOnce } from './sounds';
+import { ActivityTracker, currentStatus, customStatus, StatusMenu, statusLabel } from './status';
 import { clearChatStorage, DockStore, DraftStore, type SyncEvent, ThreadCache } from './state';
 import { part, Templates, text } from './templates';
 import { plain, ThreadView, type ThreadHost } from './thread';
-import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, RealtimeEvent, SupportContext } from './types';
+import type { ChatConfig, ChatMessage, ChatPrefs, Contact, ConversationSummary, LinkPreview, PeerStatus, RealtimeEvent, SoundName, SupportContext } from './types';
 
-type Filter = 'all' | 'unread' | 'channel' | 'support';
+type Filter = 'all' | 'unread' | 'channel' | 'support' | 'archived';
 
 const MOBILE_QUERY = '(max-width: 768px)';
 const WINDOW_WIDTH = 336;
@@ -39,6 +41,11 @@ export class ChatDock implements ThreadHost {
   private leader = typeof navigator === 'undefined' || !('locks' in navigator);
   private presenceTimer: number | null = null;
   private readonly conversations = new Map<string, ConversationSummary>();
+  /** 1.10: the conversations the user closed (loaded when the "Closed" filter is picked). */
+  private readonly archived = new Map<string, ConversationSummary>();
+  /** 1.10: "Conversation closed — Undo" notice. */
+  private readonly toast: HTMLElement;
+  private toastTimer: number | undefined;
   private readonly windows = new Map<string, ThreadView>();
   private filter: Filter = 'all';
   private query = '';
@@ -59,6 +66,10 @@ export class ChatDock implements ThreadHost {
   private previewBatch: { urls: string[]; resolve: (map: Record<string, LinkPreview>) => void } | null = null;
   /** Conversation uuid → "typing…" timer for the list rows. */
   private readonly listTyping = new Map<string, number>();
+  /** 1.10: input in any tab of the browser (auto-away). */
+  private readonly activity: ActivityTracker;
+  /** 1.10: the user's own status menu; null when the application's templates or API predate it. */
+  private readonly statusMenu: StatusMenu | null;
 
   private readonly root: HTMLElement;
   private readonly dock: HTMLElement;
@@ -120,8 +131,68 @@ export class ChatDock implements ThreadHost {
     // The templates stay in the root (cloned again for every row / window); the dock and its edge tab go after them.
     root.append(this.dock, this.edge);
 
+    this.toast = h('div', { class: 'nowo-chat-toast', role: 'status', 'data-testid': 'nowo-chat-toast', hidden: true });
+    (this.dock.querySelector('[data-part="panel-body"]') ?? this.panel).before(this.toast);
+    this.activity = new ActivityTracker(config.userUuid, this.abort.signal);
+    this.statusMenu = this.buildStatusMenu();
     this.bind();
     this.store.subscribe((event) => this.onSync(event));
+  }
+
+  /**
+   * The user's own status button and its menu (1.10), when the configuration carries a status and the templates
+   * have the `me` button and the `status-menu` template.
+   *
+   * @returns The menu, or null.
+   */
+  private buildStatusMenu(): StatusMenu | null {
+    const trigger = this.dock.querySelector<HTMLButtonElement>('[data-part="me"]');
+    if (trigger === null || this.config.status === undefined || this.config.endpoints.status === undefined) {
+      return null;
+    }
+    let popover: HTMLElement;
+    try {
+      popover = this.templates.clone('status-menu');
+    } catch {
+      return null;
+    }
+    trigger.querySelector('[data-part="me-avatar"]')?.replaceChildren(this.templates.avatar(this.config.me?.initials ?? '', 'direct', 'sm'));
+    // In the panel's flow under its header (the panel clips anything outside it).
+    (trigger.parentElement ?? this.panel).after(popover);
+    return new StatusMenu(this, trigger, popover, (status) => (this.config.status = status), this.abort.signal);
+  }
+
+  /**
+   * Applies preferences changed elsewhere (the application's settings, another tab): sounds, buzz, opening, send key.
+   *
+   * @param prefs Every preference (ChatUserSettings::preferences()).
+   */
+  applyPrefs(prefs: ChatPrefs): void {
+    Object.assign(this.config.prefs, prefs);
+    this.windows.forEach((view) => view.applySendKey());
+  }
+
+  /**
+   * Whether the user is in "do not disturb" now: no sounds, no buzz opening or shaking, no opening on a message.
+   *
+   * @returns True in do not disturb.
+   */
+  isDoNotDisturb(): boolean {
+    const status = this.statusMenu?.current ?? (this.config.status === undefined ? null : currentStatus(this.config.status));
+    return status?.status === 'dnd';
+  }
+
+  /**
+   * Opens the user's own status menu (the chat page's status button), bringing the dock back when it is tucked away.
+   */
+  openStatusMenu(): void {
+    if (this.statusMenu === null) {
+      return;
+    }
+    if (this.store.get().tucked) {
+      this.setTucked(false, false);
+    }
+    this.statusMenu.open();
   }
 
   /** Starts the dock: leader election, restored layout, first list load, `?chat=` link, polling, realtime and presence. */
@@ -218,6 +289,7 @@ export class ChatDock implements ThreadHost {
     window.clearTimeout(this.pollTimer ?? undefined);
     window.clearInterval(this.presenceTimer ?? undefined);
     window.clearTimeout(this.statusTimer);
+    window.clearTimeout(this.toastTimer);
     this.dock.remove();
     this.edge.remove();
   }
@@ -390,7 +462,7 @@ export class ChatDock implements ThreadHost {
     const summary = this.conversations.get(uuid);
     if (summary !== undefined && last !== undefined) {
       summary.lastMessageAt = last.createdAt;
-      summary.lastMessage = { preview: plain(last.html).slice(0, 90), deleted: last.deleted, buzz: last.kind === 'buzz', mine: last.mine, authorName: last.authorName };
+      summary.lastMessage = { preview: plain(last.html).slice(0, 90), deleted: last.deleted, buzz: last.kind === 'buzz', pin: last.kind === 'pin', mine: last.mine, authorName: last.authorName };
       const view = this.windows.get(uuid);
       if (view !== undefined && view.isMinimised) {
         summary.unread += fresh.filter((message) => !message.mine).length;
@@ -468,9 +540,13 @@ export class ChatDock implements ThreadHost {
       chip.addEventListener('click', () => {
         this.filter = (chip.dataset.filter ?? 'all') as Filter;
         this.filters.querySelectorAll('[data-filter]').forEach((element) => element.setAttribute('aria-pressed', element === chip ? 'true' : 'false'));
+        if (this.filter === 'archived') {
+          void this.loadArchived();
+        }
         this.renderList();
       });
     });
+    this.dock.querySelector('[data-part="archive-read"]')?.addEventListener('click', () => void this.archiveRead());
     this.searchInput.addEventListener('input', () => {
       this.query = this.searchInput.value.trim().toLowerCase();
       this.renderList();
@@ -514,6 +590,38 @@ export class ChatDock implements ThreadHost {
       },
       { signal },
     );
+    // 1.10: a status button elsewhere on the page (the chat page's header) opens the dock's status menu; the
+    // application's settings form tells the dock about changed preferences with a `nowo-chat:prefs` event.
+    document.addEventListener(
+      'click',
+      (event) => {
+        if ((event.target as Element | null)?.closest?.('[data-nowo-chat-status-open]')) {
+          event.preventDefault();
+          // The same click must not close the menu it opens (document click outside the popover).
+          event.stopPropagation();
+          this.openStatusMenu();
+        }
+      },
+      { signal, capture: true },
+    );
+    // 1.10: the full-page chat's Close / Reopen buttons (data-nowo-chat-archive / -unarchive="<uuid>").
+    document.addEventListener(
+      'click',
+      (event) => {
+        const button = (event.target as Element | null)?.closest?.<HTMLElement>('[data-nowo-chat-archive], [data-nowo-chat-unarchive]');
+        if (button === null || button === undefined) {
+          return;
+        }
+        const archive = button.hasAttribute('data-nowo-chat-archive');
+        const uuid = (archive ? button.dataset.nowoChatArchive : button.dataset.nowoChatUnarchive) ?? '';
+        void this.api
+          .archive(uuid, archive)
+          .then(() => button.closest('li')?.remove())
+          .catch(() => this.showStatus('error'));
+      },
+      { signal },
+    );
+    document.addEventListener(PREFS_EVENT, (event) => this.applyPrefs((event as CustomEvent<ChatPrefs>).detail), { signal });
     // Links anywhere on the page: data-nowo-chat-open="support" (data-nowo-chat-context-url / -label),
     // "user:<public id>", "channel:<key>" or "conversation:<uuid>" open that conversation in the dock.
     document.addEventListener(
@@ -671,6 +779,32 @@ export class ChatDock implements ThreadHost {
    * @param event Event from the user's private topic.
    */
   private onRealtime(event: RealtimeEvent): void {
+    if (event.type === 'status') {
+      // Reciprocal presence: someone who hides their own presence sees no dots, only the custom text.
+      this.applyPeerStatuses({ [event.userUuid]: { status: this.config.prefs.presence ? event.status : 'offline', text: event.text, emoji: event.emoji } });
+      return;
+    }
+    if (event.type === 'my_status') {
+      this.config.status = event.status;
+      this.statusMenu?.apply(event.status);
+      return;
+    }
+    if (event.type === 'prefs') {
+      this.applyPrefs(event.prefs);
+      return;
+    }
+    if (event.type === 'pins') {
+      void this.windows.get(event.conversationUuid)?.loadPins();
+      return;
+    }
+    if (event.type === 'list') {
+      // Closed or reopened in another tab.
+      void this.refreshList(true);
+      if (this.filter === 'archived') {
+        void this.loadArchived();
+      }
+      return;
+    }
     if (event.type === 'message' || event.type === 'message_updated') {
       const message: ChatMessage = { ...event.message, mine: event.message.authorUuid === this.config.userUuid };
       if (message.refsPending === true) {
@@ -690,11 +824,12 @@ export class ChatDock implements ThreadHost {
         void this.refreshList();
       } else {
         summary.lastMessageAt = message.createdAt;
-        summary.lastMessage = { preview: plain(message.html).slice(0, 90), deleted: false, buzz: message.kind === 'buzz', mine: message.mine, authorName: message.authorName };
+        summary.lastMessage = { preview: plain(message.html).slice(0, 90), deleted: false, buzz: message.kind === 'buzz', pin: message.kind === 'pin', mine: message.mine, authorName: message.authorName };
         summary.unread += message.mine ? 0 : 1;
         this.renderList();
       }
-      if (!message.mine) {
+      // A "pinned a message" line rings nothing.
+      if (!message.mine && message.kind !== 'pin') {
         this.alert(event.conversationUuid, message);
       }
       return;
@@ -730,53 +865,116 @@ export class ChatDock implements ThreadHost {
   }
 
   /**
-   * Sound / buzz for an incoming message: once across tabs, only when it is not already in front of the user.
+   * Sound / buzz for an incoming message, once across tabs, following the user's preferences (1.10): the sound of
+   * the event (message, @mention, support reply, buzz) at their volume, only in the background when they asked so,
+   * the window opened on a message or a buzz when they asked so — and nothing but the badge in "do not disturb".
    *
    * @param uuid Conversation uuid.
    * @param message The incoming message (a buzz also opens and shakes its window).
    */
   private alert(uuid: string, message: ChatMessage): void {
+    const prefs = this.config.prefs;
     const view = this.windows.get(uuid);
+    const summary = this.conversations.get(uuid);
+    const dnd = this.isDoNotDisturb();
+    const background = document.visibilityState !== 'visible' || !document.hasFocus();
+    const audible = !dnd && (prefs.backgroundOnly !== true || background);
+    const volume = prefs.volume ?? 100;
     if (message.kind === 'buzz') {
-      if (!this.config.prefs.buzz) {
+      if (!prefs.buzz || dnd) {
         return;
       }
-      const summary = this.conversations.get(uuid);
-      if ((view === undefined || view.isMinimised) && summary !== undefined) {
+      if ((view === undefined || view.isMinimised) && summary !== undefined && prefs.buzzOpenWindow !== false) {
         void this.open(summary, false);
       }
       window.setTimeout(() => this.windows.get(uuid)?.shake(), 120);
-      playOnce(`buzz-${message.id}`, 'buzz');
+      if (audible) {
+        playOnce(`buzz-${message.id}`, prefs.sounds?.buzz ?? 'buzz', volume);
+      }
       return;
     }
-    const inFront = document.visibilityState === 'visible' && document.hasFocus() && view !== undefined && !view.isMinimised;
-    if (!inFront) {
-      playOnce(`msg-${message.id}`, this.config.prefs.sound);
+    if (!dnd && prefs.openOnMessage === true && view === undefined && summary !== undefined) {
+      void this.open(summary, false);
+    }
+    const inFront = !background && view !== undefined && !view.isMinimised;
+    if (!inFront && audible) {
+      playOnce(`msg-${message.id}`, this.soundOf(summary, message), volume);
     }
   }
 
-  /** Heartbeat every 30 s (visible or not); the answer lights the online dots of direct contacts. */
+  /**
+   * The sound of an incoming message: @mention, support reply or plain message (one sound before 1.10).
+   *
+   * @param summary Its conversation, when known.
+   * @param message The message.
+   * @returns The sound name.
+   */
+  private soundOf(summary: ConversationSummary | undefined, message: ChatMessage): SoundName {
+    const sounds = this.config.prefs.sounds;
+    if (sounds === undefined) {
+      return this.config.prefs.sound;
+    }
+    if (message.mentionsMe === true) {
+      return sounds.mention;
+    }
+    return summary?.kind === 'support' ? sounds.support : sounds.message;
+  }
+
+  /**
+   * Applies what the viewer sees of people's statuses to their direct conversations (list row, window header).
+   *
+   * @param statuses Status by public id.
+   * @param online Public ids online (presence answer); undefined = derive from the statuses.
+   */
+  private applyPeerStatuses(statuses: Record<string, PeerStatus>, online?: Set<string>): void {
+    let changed = false;
+    for (const summary of this.conversations.values()) {
+      if (summary.kind !== 'direct' || summary.peerUuid === null) {
+        continue;
+      }
+      const status = statuses[summary.peerUuid];
+      if (status === undefined && online === undefined) {
+        continue;
+      }
+      const next = {
+        peerOnline: online === undefined ? status?.status !== 'offline' : online.has(summary.peerUuid),
+        peerStatus: status?.status ?? summary.peerStatus,
+        peerStatusText: status === undefined ? summary.peerStatusText : status.text,
+        peerStatusEmoji: status === undefined ? summary.peerStatusEmoji : status.emoji,
+      };
+      if (
+        next.peerOnline !== summary.peerOnline ||
+        next.peerStatus !== summary.peerStatus ||
+        next.peerStatusText !== summary.peerStatusText ||
+        next.peerStatusEmoji !== summary.peerStatusEmoji
+      ) {
+        Object.assign(summary, next);
+        this.windows.get(summary.uuid)?.applySummary(summary);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.renderList();
+    }
+  }
+
+  /**
+   * Heartbeat every 30 s (visible or not, idle or not); the answer lights the status dots of direct contacts and
+   * refreshes the user's own status (an expired one is back to available).
+   */
   private startPresence(): void {
-    /** One heartbeat (followers skip it while hidden): updates the online dots that changed. */
+    /** One heartbeat (followers skip it while hidden): updates the dots and statuses that changed. */
     const beat = (): void => {
       if (document.visibilityState !== 'visible' && !this.leader) {
         return;
       }
       void this.api
-        .presence(document.visibilityState === 'visible')
-        .then((online) => {
-          const set = new Set(online);
-          let changed = false;
-          for (const summary of this.conversations.values()) {
-            const next = summary.peerUuid !== null && set.has(summary.peerUuid);
-            if (summary.kind === 'direct' && summary.peerOnline !== next) {
-              summary.peerOnline = next;
-              this.windows.get(summary.uuid)?.applySummary(summary);
-              changed = true;
-            }
-          }
-          if (changed) {
-            this.renderList();
+        .presence(document.visibilityState === 'visible', this.activity.isIdle(this.config.autoAwayMinutes ?? 0))
+        .then(({ online, statuses, me }) => {
+          this.applyPeerStatuses(statuses, new Set(online));
+          if (me !== null && this.config.status !== undefined) {
+            this.config.status = me;
+            this.statusMenu?.apply(me);
           }
         })
         .catch(() => undefined);
@@ -983,9 +1181,14 @@ export class ChatDock implements ThreadHost {
    * Reloads the conversation list: updates open windows (catching up the ones whose last message changed),
    * toggles the offline state, then renders the list and the layout.
    */
-  private async refreshList(): Promise<void> {
+  private async refreshList(prune = false): Promise<void> {
     try {
       const { conversations } = await this.api.conversations();
+      if (prune) {
+        // Closed elsewhere: out of the list (a window still open keeps its summary).
+        const listed = new Set(conversations.map((summary) => summary.uuid));
+        [...this.conversations.keys()].filter((uuid) => !listed.has(uuid) && !this.windows.has(uuid)).forEach((uuid) => this.conversations.delete(uuid));
+      }
       for (const summary of conversations) {
         const known = this.conversations.get(summary.uuid);
         this.conversations.set(summary.uuid, summary);
@@ -1040,6 +1243,9 @@ export class ChatDock implements ThreadHost {
     if (last === null) {
       return summary.subtitle;
     }
+    if (last.pin === true) {
+      return t(i18n, 'pinned_line', { name: last.mine ? t(i18n, 'you') : last.authorName ?? summary.title });
+    }
     if (last.buzz === true) {
       return t(i18n, 'buzz_sent', { name: last.mine ? t(i18n, 'you') : last.authorName ?? summary.title });
     }
@@ -1057,13 +1263,14 @@ export class ChatDock implements ThreadHost {
   /** Renders the conversation list (filter, search, newest first) and the launcher badge. */
   private renderList(): void {
     const i18n = this.config.i18n;
-    const rows = [...this.conversations.values()]
+    const archivedFilter = this.filter === 'archived';
+    const rows = [...(archivedFilter ? this.archived : this.conversations).values()]
       .filter((summary) => {
         // An empty direct conversation stays out of the list until someone writes (it lives in its window).
         if (summary.kind === 'direct' && summary.lastMessage === null) {
           return false;
         }
-        if ((this.filter === 'unread' && summary.unread === 0) || (this.filter !== 'all' && this.filter !== 'unread' && summary.kind !== this.filter)) {
+        if (!archivedFilter && ((this.filter === 'unread' && summary.unread === 0) || (this.filter !== 'all' && this.filter !== 'unread' && summary.kind !== this.filter))) {
           return false;
         }
         return this.query === '' || summary.title.toLowerCase().includes(this.query) || summary.subtitle.toLowerCase().includes(this.query);
@@ -1072,6 +1279,10 @@ export class ChatDock implements ThreadHost {
 
     if (!this.listLoaded) {
       this.listEl.replaceChildren(this.listState(t(i18n, 'loading')));
+      return;
+    }
+    if (rows.length === 0 && archivedFilter) {
+      this.listEl.replaceChildren(this.listState(t(i18n, 'archived_empty')));
       return;
     }
     if (rows.length === 0) {
@@ -1086,18 +1297,146 @@ export class ChatDock implements ThreadHost {
         const row = part<HTMLButtonElement>(item, 'row');
         row.classList.toggle('is-unread', summary.unread > 0);
         row.classList.toggle('is-typing', this.listTyping.has(summary.uuid));
-        part(item, 'avatar').replaceWith(this.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline));
-        text(item, 'title', summary.title);
+        part(item, 'avatar').replaceWith(this.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline, summary.kind === 'direct' ? summary.peerStatus : undefined));
+        const title = text(item, 'title', summary.title);
+        if (summary.kind === 'direct') {
+          this.decoratePeer(row, title, summary);
+        }
         part(item, 'tag').hidden = summary.kind !== 'support';
         const time = text(item, 'time', listTimeLabel(summary.lastMessageAt, this.config.locale));
         time.setAttribute('datetime', summary.lastMessageAt ?? '');
         text(item, 'preview', this.previewOf(summary));
         setBadge(part(item, 'badge'), summary.unread, t(i18n, 'unread', { count: summary.unread }));
         row.addEventListener('click', () => void this.open(summary));
+        this.bindArchive(item, row, summary, archivedFilter);
         return item;
       }),
     );
     this.renderBadge();
+  }
+
+  /**
+   * The row's Close (archive) button — Reopen under the "Closed" filter — and the Delete key on the row (1.10).
+   *
+   * @param item The list item.
+   * @param row The row button.
+   * @param summary The conversation.
+   * @param archived Whether the row is listed under "Closed".
+   */
+  private bindArchive(item: HTMLElement, row: HTMLElement, summary: ConversationSummary, archived: boolean): void {
+    const button = item.querySelector<HTMLButtonElement>('[data-part="row-archive"]');
+    if (button === null || this.config.endpoints.archive === undefined) {
+      button?.remove();
+      return;
+    }
+    const label = t(this.config.i18n, archived ? 'reopen_conversation' : 'close_conversation', { name: summary.title });
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    if (archived) {
+      button.querySelector('[data-icon]')?.replaceChildren(this.templates.icon('unarchive', 16));
+    }
+    button.addEventListener('click', () => void this.setArchived(summary, !archived));
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'Delete' && !archived) {
+        event.preventDefault();
+        void this.setArchived(summary, true);
+      }
+    });
+  }
+
+  /**
+   * Closes a conversation in the user's list (with Undo), or reopens it.
+   *
+   * @param summary The conversation.
+   * @param archived True to close, false to reopen.
+   */
+  private async setArchived(summary: ConversationSummary, archived: boolean): Promise<void> {
+    const i18n = this.config.i18n;
+    try {
+      await this.api.archive(summary.uuid, archived);
+    } catch {
+      this.showStatus('error');
+      return;
+    }
+    if (archived) {
+      this.conversations.delete(summary.uuid);
+      if (this.windows.has(summary.uuid)) {
+        this.close(summary.uuid);
+      }
+      this.showToast(t(i18n, 'archived_one'), () => void this.setArchived(summary, false));
+    } else {
+      this.archived.delete(summary.uuid);
+      this.conversations.set(summary.uuid, { ...summary, archived: false });
+      this.showToast(t(i18n, 'unarchived_one'));
+    }
+    this.renderList();
+  }
+
+  /** "Close all read": every conversation without unread messages leaves the list. */
+  private async archiveRead(): Promise<void> {
+    try {
+      const count = await this.api.archiveRead();
+      this.showToast(t(this.config.i18n, 'archived_many', { count }));
+      await this.refreshList(true);
+    } catch {
+      this.showStatus('error');
+    }
+  }
+
+  /** Loads the conversations the user closed (the "Closed" filter). */
+  private async loadArchived(): Promise<void> {
+    try {
+      const { conversations } = await this.api.conversations(true);
+      this.archived.clear();
+      conversations.forEach((summary) => this.archived.set(summary.uuid, summary));
+    } catch {
+      this.showStatus('error');
+    }
+    this.renderList();
+  }
+
+  /**
+   * A short notice under the panel header, with an optional Undo, gone after 6 s.
+   *
+   * @param message The notice.
+   * @param undo What Undo does; no button without it.
+   */
+  private showToast(message: string, undo?: () => void): void {
+    window.clearTimeout(this.toastTimer);
+    this.toast.replaceChildren(h('span', { text: message }));
+    if (undo !== undefined) {
+      const button = h('button', { type: 'button', class: 'nowo-chat-toast__undo', text: t(this.config.i18n, 'undo') });
+      button.addEventListener('click', () => {
+        this.toast.hidden = true;
+        undo();
+      });
+      this.toast.append(button);
+    }
+    this.toast.hidden = false;
+    this.toastTimer = window.setTimeout(() => {
+      this.toast.hidden = true;
+    }, 6_000);
+  }
+
+  /**
+   * A direct row: its peer's status (data attribute, a hidden label for screen readers) and custom status after the name.
+   *
+   * @param row The row button.
+   * @param title The name element.
+   * @param summary The conversation.
+   */
+  private decoratePeer(row: HTMLElement, title: HTMLElement, summary: ConversationSummary): void {
+    const status = summary.peerStatus ?? (summary.peerOnline ? 'available' : 'offline');
+    row.dataset.peerStatus = status;
+    const extras: HTMLElement[] = [];
+    if (status !== 'offline') {
+      extras.push(h('span', { class: 'nowo-chat-sr-only', text: `, ${statusLabel(this.config.i18n, status)}` }));
+    }
+    const custom = customStatus(summary.peerStatusText, summary.peerStatusEmoji);
+    if (custom !== '') {
+      extras.push(h('span', { class: 'nowo-chat-row__status', title: custom, text: custom }));
+    }
+    title.after(...extras);
   }
 
   /** Total unread count on the launcher badge (and the `has-unread` root class). */
@@ -1182,7 +1521,7 @@ export class ChatDock implements ThreadHost {
       sections.push(
         this.section(
           t(i18n, 'people_recent'),
-          recent.map((summary) => this.pickerRow(summary.title, summary.subtitle, this.templates.avatar(summary.initials, 'direct', 'md', summary.peerOnline), async () => this.open(summary))),
+          recent.map((summary) => this.pickerRow(summary.title, summary.subtitle, this.templates.avatar(summary.initials, 'direct', 'md', summary.peerOnline, summary.peerStatus), async () => this.open(summary))),
         ),
       );
     }

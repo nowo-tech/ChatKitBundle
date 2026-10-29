@@ -13,6 +13,7 @@ use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
+use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Http\ChatApiException;
 use Nowo\ChatKitBundle\Model\ChatChannel;
@@ -117,14 +118,18 @@ final class ChatApiController extends AbstractController
 
     /**
      * Lists the caller's conversations (newest activity first) with unread counts, last messages and peer
-     * presence, plus the total unread count.
+     * presence, plus the total unread count. 1.10: conversations the user closed are left out (`?archived=1` lists only
+     * them); a closed one is back as soon as a message arrives, unless muted or a resolved / closed ticket.
+     *
+     * @param Request $request The request (query `archived`)
      *
      * @return JsonResponse `{conversations, unreadTotal}`
      */
     #[Route('/conversations', name: 'conversations', methods: ['GET'])]
-    public function conversations(): JsonResponse
+    public function conversations(Request $request): JsonResponse
     {
         $user        = $this->reader();
+        $archived    = $request->query->getBoolean('archived');
         $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
         // Participant rows outlive access (left channel, demoted agent): list only what the user may read today.
         $list = array_values(array_filter(
@@ -133,24 +138,118 @@ final class ChatApiController extends AbstractController
         ));
         $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
         $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $closed = $this->closedIds($user, $ids);
+        $list   = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => isset($closed[(int) $conversation->getId()]) === $archived));
+        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
         $latest = $this->messages->findLatestByConversationIds($ids);
         // Peers of direct threads in one query (memoized in ChatAccess, so the per-row SEND vote reuses them) and
-        // their presence in one cache round trip.
+        // their presence and status in one cache round trip (the custom text shows even to viewers who hide presence).
         $peerIds = [];
         foreach ($list as $conversation) {
             $peerIds = [...$peerIds, ...$conversation->directUserIds()];
         }
         $peers    = $this->access->usersByIds(array_values(array_unique($peerIds)));
-        $presence = $this->showsPresence($user) ? $this->presence->statusOf(array_values($peers)) : [];
+        $presence = $this->presence->statusOf(array_values($peers));
 
         $rows = [];
         foreach ($list as $conversation) {
             $id     = (int) $conversation->getId();
             $peerId = $conversation->peerIdOf($user);
-            $rows[] = $this->present($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $unread[$id] ?? 0, $latest[$id] ?? null, $presence);
+            $rows[] = ['archived' => $archived] + $this->present($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $unread[$id] ?? 0, $latest[$id] ?? null, $presence);
         }
 
         return $this->json(['conversations' => $rows, 'unreadTotal' => array_sum($unread)]);
+    }
+
+    /**
+     * 1.10: closes (archives) the conversation in the caller's list only — nothing is deleted, the others keep it; or
+     * reopens it. The caller's other tabs refresh their list.
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{archived}`
+     */
+    #[Route('/conversations/{uuid}/archive', name: 'archive', requirements: ['uuid' => self::UUID], methods: ['POST', 'DELETE'])]
+    public function archive(string $uuid, Request $request): JsonResponse
+    {
+        $user     = $this->writer($request);
+        $archived = $request->isMethod('POST');
+        $this->chat->archive($user, [$this->find($uuid, ChatVoter::VIEW)], $archived);
+        $this->notifier->listChanged($user);
+
+        return $this->json(['archived' => $archived]);
+    }
+
+    /**
+     * 1.10: the conversation's pinned messages (latest pin first) and whether the caller may pin; same access as
+     * reading it (unknown or foreign → 404).
+     *
+     * @param string $uuid Conversation uuid
+     *
+     * @return JsonResponse `{pins: list<message>, canPin}`
+     */
+    #[Route('/conversations/{uuid}/pins', name: 'pins', requirements: ['uuid' => self::UUID], methods: ['GET'])]
+    public function pins(string $uuid): JsonResponse
+    {
+        $user         = $this->reader();
+        $conversation = $this->find($uuid, ChatVoter::VIEW);
+
+        return $this->json($this->pinsOf($conversation, $user));
+    }
+
+    /**
+     * 1.10: pins a message (`POST`) or unpins it (`DELETE`): both people of a direct conversation, agents in tickets,
+     * whom the application allows in channels (403 `pin_forbidden` otherwise); a "pinned a message" line follows and
+     * every reader's pinned bar refreshes.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{pins, canPin}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/pin', name: 'pin', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST', 'DELETE'])]
+    public function pin(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $user    = $this->writer($request);
+        $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
+        $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($message instanceof ChatMessage);
+        $this->deny(!$this->access->canPin($message->getConversation(), $user), 'pin_forbidden', Response::HTTP_FORBIDDEN);
+        try {
+            $this->chat->pin($user, $message, $request->isMethod('POST'));
+        } catch (InvalidArgumentException $exception) {
+            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
+        }
+
+        return $this->json($this->pinsOf($message->getConversation(), $user));
+    }
+
+    /**
+     * 1.10: "Close all read" — closes every conversation of the caller's list without unread messages.
+     *
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{archived: count}`
+     */
+    #[Route('/conversations/archive-read', name: 'archive_read', methods: ['POST'])]
+    public function archiveRead(Request $request): JsonResponse
+    {
+        $user        = $this->writer($request);
+        $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
+        $list        = array_values(array_filter(
+            $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT),
+            fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
+        ));
+        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $closed = $this->closedIds($user, $ids);
+        $read   = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => ($unread[(int) $conversation->getId()] ?? 0) === 0 && !isset($closed[(int) $conversation->getId()])));
+        $this->chat->archive($user, $read, true);
+        $this->notifier->listChanged($user);
+
+        return $this->json(['archived' => count($read)]);
     }
 
     /**
@@ -488,7 +587,7 @@ final class ChatApiController extends AbstractController
      * @param string $uuid Conversation uuid
      * @param Request $request The request (query `q`)
      *
-     * @return JsonResponse `{members: list<{uuid, name, initials}>}`
+     * @return JsonResponse `{members: list<{uuid, name, initials, status, statusText, statusEmoji}>}`
      */
     #[Route('/conversations/{uuid}/members', name: 'members', requirements: ['uuid' => self::UUID], methods: ['GET'])]
     public function members(string $uuid, Request $request): JsonResponse
@@ -502,13 +601,23 @@ final class ChatApiController extends AbstractController
                 && ($query === '' || str_contains(mb_strtolower($member->getChatDisplayName()), $query)),
         ));
         usort($members, static fn (ChatUserInterface $a, ChatUserInterface $b): int => strnatcasecmp($a->getChatDisplayName(), $b->getChatDisplayName()));
+        $members  = array_slice($members, 0, self::MEMBERS_LIMIT);
+        $statuses = $this->presence->statusOf($members);
+        $shows    = $this->showsPresence($user);
 
         return $this->json([
-            'members' => array_map(static fn (ChatUserInterface $member): array => [
-                'uuid'     => $member->getChatPublicId(),
-                'name'     => $member->getChatDisplayName(),
-                'initials' => $member->getChatInitials(),
-            ], array_slice($members, 0, self::MEMBERS_LIMIT)),
+            'members' => array_map(static function (ChatUserInterface $member) use ($statuses, $shows): array {
+                $status = ChatPresence::forViewer($statuses[$member->getChatPublicId()] ?? null, $shows);
+
+                return [
+                    'uuid'        => $member->getChatPublicId(),
+                    'name'        => $member->getChatDisplayName(),
+                    'initials'    => $member->getChatInitials(),
+                    'status'      => $status['status'],
+                    'statusText'  => $status['text'],
+                    'statusEmoji' => $status['emoji'],
+                ];
+            }, $members),
         ]);
     }
 
@@ -702,29 +811,92 @@ final class ChatApiController extends AbstractController
     }
 
     /**
-     * Tab heartbeat; answers who of the caller's direct contacts is online (reciprocal opt-out).
+     * Tab heartbeat; answers who of the caller's direct contacts is online (reciprocal opt-out), what status each
+     * shows, and the caller's own status (a status that expired went back to available).
      *
-     * @param Request $request JSON body `{visible}`
+     * @param Request $request JSON body `{visible, idle}` (`idle`: no input in any tab for the auto-away delay)
      *
-     * @return JsonResponse `{online}` public ids of online peers
+     * @return JsonResponse `{online, statuses, me}` public ids of online peers, `{status, text, emoji}` by public id, own status
      */
     #[Route('/presence', name: 'presence', methods: ['POST'])]
     public function presence(Request $request): JsonResponse
     {
-        $user = $this->writer($request);
-        $this->presence->heartbeat($user, true === ($this->payload($request)['visible'] ?? false));
-        $online = [];
-        if ($this->showsPresence($user)) {
-            $peerIds = $this->conversations->findDirectPeerIds($user);
-            $peers   = array_values(array_filter($peerIds === [] ? [] : $this->directory->findByIds($peerIds), $this->access->isReachable(...)));
-            foreach ($this->presence->statusOf($peers) as $publicId => $status) {
-                if ($status['online']) {
-                    $online[] = $publicId;
-                }
+        $user    = $this->writer($request);
+        $payload = $this->payload($request);
+        $this->presence->heartbeat($user, true === ($payload['visible'] ?? false), true === ($payload['idle'] ?? false));
+        $shows    = $this->showsPresence($user);
+        $online   = [];
+        $statuses = [];
+        foreach ($this->presence->statusOf($this->directPeers($user)) as $publicId => $status) {
+            if ($shows && $status['online']) {
+                $online[] = $publicId;
             }
+            $statuses[$publicId] = ChatPresence::forViewer($status, $shows);
         }
 
-        return $this->json(['online' => $online]);
+        return $this->json(['online' => $online, 'statuses' => (object) $statuses, 'me' => $this->settings->forUser($user)->statusView($this->clock->now())]);
+    }
+
+    /**
+     * Sets the caller's chat status from the dock or the chat page: available, busy, away, dnd (no sounds, buzz or
+     * push) or invisible (offline to everyone), an optional custom text (at most 80 characters) and emoji, and when it
+     * clears itself. Direct contacts get the change live (an invisible user is offline to them, without text).
+     *
+     * @param Request $request JSON body `{status, text?, emoji?, clearAfter?}` (`clearAfter`: never, 30m, 1h, 4h, today, week)
+     *
+     * @return JsonResponse `{status: {status, text, emoji, expiresAt}}`
+     */
+    #[Route('/status', name: 'status', methods: ['POST'])]
+    public function status(Request $request): JsonResponse
+    {
+        $user        = $this->writer($request);
+        $payload     = $this->payload($request);
+        $now         = $this->clock->now();
+        $preferences = $this->settings->forUser($user);
+        $text        = $payload['text'] ?? null;
+        $emoji       = $payload['emoji'] ?? null;
+        $after       = $payload['clearAfter'] ?? 'never';
+        try {
+            if (!is_string($payload['status'] ?? null) || !is_string($after) || ($text !== null && !is_string($text)) || ($emoji !== null && !is_string($emoji))) {
+                throw new InvalidArgumentException('invalid_status');
+            }
+            // @igor-ignore - the caller's own settings row (a Doctrine entity), not a shared worker service.
+            $preferences->setStatus($payload['status'], $text, $emoji, ChatUserSettings::statusExpiry($after, $now));
+        } catch (InvalidArgumentException) {
+            throw new ChatApiException('invalid_status', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        $this->settings->save($preferences);
+        $own     = $preferences->statusView($now);
+        $visible = ChatPresence::forViewer($this->presence->statusOf([$user])[$user->getChatPublicId()] ?? null, true);
+        $this->notifier->statusChanged($user, $visible, $own, $this->directPeers($user));
+
+        return $this->json(['status' => $own]);
+    }
+
+    /**
+     * Changes one chat preference of the caller (sounds, volume, buzz, opening the dock, send key, push preview,
+     * presence, e-mail digest); the caller's other tabs apply it live.
+     *
+     * @param Request $request JSON body `{key, value}` (key: ChatUserSettings::PREFERENCE_KEYS)
+     *
+     * @return JsonResponse `{prefs}` every preference after the change
+     */
+    #[Route('/settings', name: 'settings', methods: ['POST'])]
+    public function settings(Request $request): JsonResponse
+    {
+        $user    = $this->writer($request);
+        $payload = $this->payload($request);
+        $mine    = $this->settings->forUser($user);
+        try {
+            $mine->applyPreference(is_string($payload['key'] ?? null) ? $payload['key'] : '', $payload['value'] ?? null);
+        } catch (InvalidArgumentException) {
+            throw new ChatApiException('invalid_setting', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        $this->settings->save($mine);
+        $preferences = $mine->preferences();
+        $this->notifier->preferencesChanged($user, $preferences);
+
+        return $this->json(['prefs' => $preferences]);
     }
 
     /**
@@ -827,17 +999,17 @@ final class ChatApiController extends AbstractController
     }
 
     /**
-     * @param array<string, array{online: bool, appOpen: bool}>|null $presence precomputed by the list endpoint
+     * @param array<string, array{online: bool, appOpen: bool, status: string, text: string|null, emoji: string|null}>|null $presence precomputed by the list endpoint
      *
      * @return array<string, mixed>
      */
     private function present(ChatConversation $conversation, ChatUserInterface $user, ?ChatUserInterface $peer = null, int $unread = 0, ?ChatMessage $last = null, ?array $presence = null): array
     {
         $peer ??= $this->access->directPeer($conversation, $user);
-        $online = false;
-        if ($peer instanceof ChatUserInterface && $this->showsPresence($user)) {
+        $status = null;
+        if ($peer instanceof ChatUserInterface) {
             $presence ??= $this->presence->statusOf([$peer]);
-            $online = $presence[$peer->getChatPublicId()]['online'] ?? false;
+            $status = ChatPresence::forViewer($presence[$peer->getChatPublicId()] ?? null, $this->showsPresence($user));
         }
 
         $summary = $this->presenter->conversation(
@@ -849,8 +1021,10 @@ final class ChatApiController extends AbstractController
             $unread,
             $last,
             $this->access->isSupportAgent($user),
-            $online,
+            $status !== null && $status['status'] !== 'offline',
+            $status,
         );
+        $summary['canPin'] = $this->access->canPin($conversation, $user);
         if ($conversation->isSupportDraft() && $this->owns($conversation, $user)) {
             // The requester's draft: the topic question (or "continue or new?") and their earlier tickets.
             $summary['intake'] = $this->tickets->intake($user);
@@ -872,6 +1046,49 @@ final class ChatApiController extends AbstractController
         $this->deny(!$conversation->isSupport(), 'not_found', Response::HTTP_NOT_FOUND);
 
         return $conversation;
+    }
+
+    /**
+     * @return array{pins: list<array<string, mixed>>, canPin: bool}
+     */
+    private function pinsOf(ChatConversation $conversation, ChatUserInterface $user): array
+    {
+        return [
+            'pins'   => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $this->messages->findPinned($conversation)),
+            'canPin' => $this->access->canPin($conversation, $user),
+        ];
+    }
+
+    /**
+     * Conversations of the list the user closed and that stay closed now.
+     *
+     * @param list<int> $ids Conversation ids
+     *
+     * @return array<int, true> conversation id => closed
+     */
+    private function closedIds(ChatUserInterface $user, array $ids): array
+    {
+        $now    = $this->clock->now();
+        $closed = [];
+        foreach ($this->participants->findForUser($user, $ids) as $id => $participant) {
+            if ($participant->isArchived($now)) {
+                $closed[$id] = true;
+            }
+        }
+
+        return $closed;
+    }
+
+    /**
+     * People with a direct conversation with the user, still reachable.
+     *
+     * @return list<ChatUserInterface>
+     */
+    private function directPeers(ChatUserInterface $user): array
+    {
+        $peerIds = $this->conversations->findDirectPeerIds($user);
+
+        return array_values(array_filter($peerIds === [] ? [] : $this->directory->findByIds($peerIds), $this->access->isReachable(...)));
     }
 
     /** Reciprocal: hiding your own presence also hides everyone else's. */

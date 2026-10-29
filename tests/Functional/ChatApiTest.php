@@ -58,7 +58,9 @@ final class ChatApiTest extends DatabaseTestCase
         self::assertStringContainsString('__uuid__', $config['endpoints']['messages']);
         self::assertStringContainsString('__message__', $config['endpoints']['message']);
         self::assertNull($config['contextChannel']);
-        self::assertSame(['sound' => 'pop', 'buzz' => true, 'presence' => true], $config['prefs']);
+        self::assertSame(['sound' => 'pop', 'sounds' => ['message' => 'pop', 'mention' => 'chime', 'buzz' => 'buzz', 'support' => 'ding'], 'volume' => 80, 'backgroundOnly' => false, 'buzz' => true, 'buzzOpenWindow' => true, 'openOnMessage' => false, 'sendKey' => 'enter', 'pushPreview' => true, 'presence' => true, 'push' => false, 'emailDigest' => true], $config['prefs']);
+        self::assertSame(['status' => 'available', 'text' => null, 'emoji' => null, 'expiresAt' => null], $config['status']);
+        self::assertSame(10, $config['autoAwayMinutes']);
         $csrf = $config['csrf'];
 
         // Contacts: the policy hides the stranger.
@@ -133,7 +135,7 @@ final class ChatApiTest extends DatabaseTestCase
         self::assertSame(['ok' => true], $this->postJson('/chat/api/conversations/' . $uuid . '/typing', [], $csrf));
         $this->postJson('/chat/api/conversations/' . $uuid . '/typing', [], 'bad');
         $this->assertStatus(403);
-        self::assertSame(['online' => []], $this->postJson('/chat/api/presence', ['visible' => true], $csrf));
+        self::assertSame(['online' => [], 'statuses' => [$luis->getChatPublicId() => ['status' => 'offline', 'text' => null, 'emoji' => null]], 'me' => ['status' => 'available', 'text' => null, 'emoji' => null, 'expiresAt' => null]], $this->postJson('/chat/api/presence', ['visible' => true], $csrf));
         $realtime = $this->getJson('/chat/api/realtime');
         self::assertTrue($realtime['enabled']);
         self::assertSame('/nowo-chat/users/' . $ana->getChatPublicId(), $realtime['topic']);
@@ -270,7 +272,7 @@ final class ChatApiTest extends DatabaseTestCase
 
         // Luis is online (heartbeat) and both show presence.
         $this->get(ChatPresence::class)->heartbeat($luis, true);
-        self::assertSame(['online' => [$luis->getChatPublicId()]], $this->postJson('/chat/api/presence', ['visible' => false], $csrf));
+        self::assertSame(['online' => [$luis->getChatPublicId()], 'statuses' => [$luis->getChatPublicId() => ['status' => 'available', 'text' => null, 'emoji' => null]], 'me' => ['status' => 'available', 'text' => null, 'emoji' => null, 'expiresAt' => null]], $this->postJson('/chat/api/presence', ['visible' => false], $csrf));
         self::assertTrue($this->getJson('/chat/api/conversations')['conversations'][0]['peerOnline']);
 
         // A body announced larger than the limit is ignored.

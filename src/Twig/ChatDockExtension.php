@@ -12,6 +12,7 @@ use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Form\ChatDockComposerType;
 use Nowo\ChatKitBundle\Form\ChatDockEditType;
 use Nowo\ChatKitBundle\Form\ChatDockSearchType;
+use Nowo\ChatKitBundle\Form\ChatDockStatusType;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -20,6 +21,8 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\Clock\Clock;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormView;
 use Symfony\Component\HttpFoundation\Request;
@@ -59,6 +62,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param string|null $pageLayout Deprecated 1.x layout (`page_layout`); null = the bundle's 1.x default document
      * @param ChatReferences|null $references #references (whether `/` commands and `#` are offered)
      * @param bool $supportEmojis Decorative emojis of the support assistant (`support.emojis`)
+     * @param int $autoAwayMinutes Minutes without input before the dock reports the user idle (away); 0 = never
+     * @param ClockInterface $clock Clock for the user's own status (expiry)
      */
     public function __construct(
         private readonly Security $security,
@@ -79,6 +84,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly ?string $pageLayout = null,
         private readonly ?ChatReferences $references = null,
         private readonly bool $supportEmojis = true,
+        private readonly int $autoAwayMinutes = 10,
+        private readonly ClockInterface $clock = new Clock(),
     ) {
     }
 
@@ -109,9 +116,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
 
     /**
      * Fresh Form views of the dock markup (a view renders once): `search` (children `query` and `people`),
-     * `composer` and `edit` (child `body` each).
+     * `composer` and `edit` (child `body` each), `status` (children `emoji`, `text` and `clearAfter`, 1.10).
      *
-     * @return array{search: FormView, composer: FormView, edit: FormView} The Form views
+     * @return array{search: FormView, composer: FormView, edit: FormView, status: FormView} The Form views
      */
     public function forms(): array
     {
@@ -119,6 +126,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'search'   => $this->forms->create(ChatDockSearchType::class)->createView(),
             'composer' => $this->forms->create(ChatDockComposerType::class)->createView(),
             'edit'     => $this->forms->create(ChatDockEditType::class)->createView(),
+            'status'   => $this->forms->create(ChatDockStatusType::class)->createView(),
         ];
     }
 
@@ -143,6 +151,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
 
         return [
             'userUuid'          => $user->getChatPublicId(),
+            'me'                => ['name' => $user->getChatDisplayName(), 'initials' => $user->getChatInitials()],
             'csrf'              => $this->csrf->getToken(ChatApiController::CSRF_ID)->getValue(),
             'locale'            => $locale,
             'contextChannel'    => $channel instanceof ChatChannel ? ['key' => $channel->key, 'label' => $channel->label] : null,
@@ -176,14 +185,20 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'resolve'        => $this->pattern('nowo_chat_api_resolve'),
                 'realtime'       => $this->urls->generate('nowo_chat_api_realtime'),
                 'presence'       => $this->urls->generate('nowo_chat_api_presence'),
+                'status'         => $this->urls->generate('nowo_chat_api_status'),
+                'settings'       => $this->urls->generate('nowo_chat_api_settings'),
+                'archive'        => $this->pattern('nowo_chat_api_archive'),
+                'archiveRead'    => $this->urls->generate('nowo_chat_api_archive_read'),
+                'pins'           => $this->pattern('nowo_chat_api_pins'),
+                'pin'            => $this->pattern('nowo_chat_api_pin', ['messageUuid' => self::PLACEHOLDER], '__message__'),
             ],
-            'prefs' => [
-                'sound'    => $settings->getSound(),
-                'buzz'     => $settings->isBuzzEnabled(),
-                'presence' => $settings->isPresenceVisible(),
-            ],
-            'isAgent'      => $this->access->isSupportAgent($user),
-            'linkPreviews' => !$this->linkPreviews instanceof NullLinkPreviewProvider,
+            // Sounds per event, volume, buzz, opening, send key … (ChatUserSettings::preferences()).
+            'prefs' => $settings->preferences(),
+            // The user's own chat status (set from the dock's status menu) and the auto-away delay.
+            'status'          => $settings->statusView($this->clock->now()),
+            'autoAwayMinutes' => $this->autoAwayMinutes,
+            'isAgent'         => $this->access->isSupportAgent($user),
+            'linkPreviews'    => !$this->linkPreviews instanceof NullLinkPreviewProvider,
             // `/` commands and the `#` picker are offered only when the application registers reference providers.
             'references' => $this->references?->isEnabled() ?? false,
             // Decorative emojis of the support assistant's own lines (greeting, "continue or new?").
