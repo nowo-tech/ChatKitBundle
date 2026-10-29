@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Service;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
@@ -167,7 +168,7 @@ final readonly class ChatPresenter
             'references'  => $filled['references'],
             'refsPending' => $filled['pending'] || ($bot && !$viewer instanceof ChatUserInterface),
             // 1.10: pinned to the top of the conversation; a pin line names the message it is about.
-            'pinned'        => $message->getPinnedAt() !== null,
+            'pinned'        => $message->getPinnedAt() instanceof DateTimeImmutable,
             'pinnedMessage' => $message->getPinnedMessageUuid(),
         ];
     }

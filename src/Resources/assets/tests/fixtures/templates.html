@@ -32,6 +32,9 @@
                             <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="unread">Unread</button>
                             <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="channel">Channels</button>
                             <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="support">Support</button>
+                                                        <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="archived">Closed</button>
+                                <button type="button" class="nowo-chat-icon-btn nowo-chat-filters__archive-read" data-part="archive-read" aria-label="Close all read conversations" title="Close all read conversations"><span data-icon="archive"></span></button>
+
                         </div>
                         <ul class="nowo-chat-list" role="list" data-part="list"></ul>
                     </div>
@@ -132,6 +135,7 @@
                     </span>
                 </span>
             </button>
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-row__archive" data-part="row-archive"><span data-icon="archive" data-icon-size="16"></span></button>
         </li>
     </template>
 
@@ -235,6 +239,8 @@
             </div>
             <div class="nowo-chat-msg__actions" data-part="actions">
                     <button type="button" class="nowo-chat-icon-btn " data-part="react" aria-label="React" title="React"><span data-icon="smile"></span></button>
+
+                                    <button type="button" class="nowo-chat-icon-btn " data-part="pin" aria-label="Pin" title="Pin"><span data-icon="pin"></span></button>
 
                     <button type="button" class="nowo-chat-icon-btn " data-part="edit" aria-label="Edit" title="Edit"><span data-icon="edit"></span></button>
 

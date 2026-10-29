@@ -213,12 +213,14 @@ final class ChatApiController extends AbstractController
     public function pin(string $uuid, string $messageUuid, Request $request): JsonResponse
     {
         $user    = $this->writer($request);
-        $message = $this->findMessage($uuid, $messageUuid, ChatVoter::VIEW);
+        $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
+        $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($message instanceof ChatMessage);
         $this->deny(!$this->access->canPin($message->getConversation(), $user), 'pin_forbidden', Response::HTTP_FORBIDDEN);
         try {
             $this->chat->pin($user, $message, $request->isMethod('POST'));
         } catch (InvalidArgumentException $exception) {
-            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
         }
 
         return $this->json($this->pinsOf($message->getConversation(), $user));

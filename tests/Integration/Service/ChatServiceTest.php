@@ -197,7 +197,7 @@ final class ChatServiceTest extends DatabaseTestCase
         self::assertSame('L', $row['initials']);
         self::assertSame($luis->getChatPublicId(), $row['peerUuid']);
         self::assertTrue($row['peerOnline']);
-        self::assertSame(['preview' => 'Deploy done', 'buzz' => false, 'deleted' => false, 'mine' => false, 'authorName' => 'Luis'], $row['lastMessage']);
+        self::assertSame(['preview' => 'Deploy done', 'buzz' => false, 'pin' => false, 'deleted' => false, 'mine' => false, 'authorName' => 'Luis'], $row['lastMessage']);
         self::assertSame('Deleted user', $presenter->conversation($dm, $ana, null, null, false)['title']);
         self::assertNull($presenter->conversation($dm, $ana, null, null, false)['lastMessage']);
 

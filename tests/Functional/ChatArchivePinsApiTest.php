@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use DateTimeImmutable;
+use Nowo\ChatKitBundle\Entity\ChatConversation;
+use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
@@ -49,7 +51,7 @@ final class ChatArchivePinsApiTest extends DatabaseTestCase
 
         $config = $this->login($ana);
         self::assertStringContainsString('__uuid__', $config['endpoints']['archive']);
-        $csrf = $config['csrf'];
+        $csrf                = $config['csrf'];
         $realtime->published = [];
         self::assertSame(['archived' => true], $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $dm->getUuid() . '/archive', $csrf));
         self::assertSame(['list'], $this->get(RecordingRealtime::class)->types(), 'the other tabs reload the list');
@@ -62,12 +64,14 @@ final class ChatArchivePinsApiTest extends DatabaseTestCase
         self::assertSame([$dm->getUuid()], array_column($this->getJson('/chat/api/conversations')['conversations'], 'uuid'));
 
         // A new message brings it back.
+        [$luis, $dm, $ana, $bea, $other] = [$this->fresh($luis), $this->fresh($dm), $this->fresh($ana), $this->fresh($bea), $this->fresh($other)];
         $chat->send($luis, $dm, 'are you there?');
         $this->login($ana);
         self::assertContains($dm->getUuid(), array_column($this->getJson('/chat/api/conversations')['conversations'], 'uuid'));
 
         // Muted: it stays closed whatever arrives.
         $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $dm->getUuid() . '/archive', $csrf);
+        [$luis, $dm, $ana] = [$this->fresh($luis), $this->fresh($dm), $this->fresh($ana)];
         $chat->participant($dm, $ana)->muteUntil(new DateTimeImmutable('+1 day'));
         $this->em->flush();
         $chat->send($luis, $dm, 'still?');
@@ -75,6 +79,7 @@ final class ChatArchivePinsApiTest extends DatabaseTestCase
 
         // Reopen, then "close all read" closes only what has no unread messages.
         self::assertSame(['archived' => false], $this->send(Request::METHOD_DELETE, '/chat/api/conversations/' . $dm->getUuid() . '/archive', $csrf));
+        [$ana, $bea, $other] = [$this->fresh($ana), $this->fresh($bea), $this->fresh($other)];
         $chat->markRead($ana, $other, (int) $chat->send($bea, $other, 'read me')->getId());
         self::assertSame(['archived' => 1], $this->send(Request::METHOD_POST, '/chat/api/conversations/archive-read', $csrf));
         self::assertSame([$dm->getUuid()], array_column($this->getJson('/chat/api/conversations')['conversations'], 'uuid'));
@@ -86,6 +91,7 @@ final class ChatArchivePinsApiTest extends DatabaseTestCase
         self::assertSame($dm->getUuid(), $page->filter('[data-nowo-chat-archive]')->attr('data-nowo-chat-archive'));
 
         // A foreign conversation: 404; no CSRF: 403.
+        [$luis, $bea] = [$this->fresh($luis), $this->fresh($bea)];
         $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $chat->openDirect($luis, $bea)->getUuid() . '/archive', $csrf, 404);
         $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $dm->getUuid() . '/archive', 'forged', 403);
     }
@@ -101,7 +107,7 @@ final class ChatArchivePinsApiTest extends DatabaseTestCase
 
         $csrf = $this->login($ana)['csrf'];
         $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $support->getUuid() . '/archive', $csrf);
-        $chat->send($agent, $support, 'anything else?');
+        $chat->send($this->fresh($agent), $this->fresh($support), 'anything else?');
         self::assertNotContains($support->getUuid(), array_column($this->getJson('/chat/api/conversations')['conversations'], 'uuid'));
     }
 
@@ -118,7 +124,7 @@ final class ChatArchivePinsApiTest extends DatabaseTestCase
         $url  = '/chat/api/conversations/' . $dm->getUuid() . '/messages/' . $message->getUuid() . '/pin';
         self::assertSame(['pins' => [], 'canPin' => true], $this->getJson('/chat/api/conversations/' . $dm->getUuid() . '/pins'));
         $realtime->published = [];
-        $pins = $this->send(Request::METHOD_POST, $url, $csrf);
+        $pins                = $this->send(Request::METHOD_POST, $url, $csrf);
         self::assertTrue($pins['canPin']);
         self::assertSame([$message->getUuid()], array_column($pins['pins'], 'uuid'));
         self::assertTrue($pins['pins'][0]['pinned']);
@@ -131,13 +137,13 @@ final class ChatArchivePinsApiTest extends DatabaseTestCase
 
         // A line cannot be pinned; the export lists Ana's pin.
         $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $dm->getUuid() . '/messages/' . $line[1]['uuid'] . '/pin', $csrf, 422);
-        self::assertSame($message->getUuid(), $this->get(ChatPersonalData::class)->export($ana)['pins'][0]['message_uuid']);
+        self::assertSame($message->getUuid(), $this->get(ChatPersonalData::class)->export($this->fresh($ana))['pins'][0]['message_uuid']);
 
         // Luis unpins; deleting a pinned message unpins it too.
         $csrfLuis = $this->login($luis)['csrf'];
         self::assertSame([], $this->send(Request::METHOD_DELETE, $url, $csrfLuis)['pins']);
         $this->send(Request::METHOD_POST, $url, $csrfLuis);
-        $chat->delete($luis, $message);
+        $chat->delete($this->fresh($luis), $this->fresh($message));
         $this->login($ana);
         self::assertSame([], $this->getJson('/chat/api/conversations/' . $dm->getUuid() . '/pins')['pins']);
     }
@@ -161,16 +167,38 @@ final class ChatArchivePinsApiTest extends DatabaseTestCase
         $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $support->getUuid() . '/messages/' . $asked->getUuid() . '/pin', $csrfAgent);
 
         // Someone who cannot read the conversation: 404.
-        $dm   = $chat->openDirect($ana, $luis);
-        $note = $chat->send($ana, $dm, 'private');
+        [$ana, $luis] = [$this->fresh($ana), $this->fresh($luis)];
+        $dm           = $chat->openDirect($ana, $luis);
+        $note         = $chat->send($ana, $dm, 'private');
         $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $dm->getUuid() . '/messages/' . $note->getUuid() . '/pin', $csrfAgent, 404);
 
         // The limit (20 by default).
-        $csrf = $this->login($ana)['csrf'];
+        $csrf  = $this->login($ana)['csrf'];
+        $notes = [];
         for ($i = 0; $i < 20; ++$i) {
-            $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $dm->getUuid() . '/messages/' . $chat->send($ana, $dm, 'm' . $i)->getUuid() . '/pin', $csrf);
+            $notes[] = $chat->send($this->fresh($ana), $this->fresh($dm), 'm' . $i)->getUuid();
+        }
+        foreach ($notes as $uuid) {
+            $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $dm->getUuid() . '/messages/' . $uuid . '/pin', $csrf);
         }
         self::assertSame('too_many_pins', $this->send(Request::METHOD_POST, '/chat/api/conversations/' . $dm->getUuid() . '/messages/' . $note->getUuid() . '/pin', $csrf, 422)['error']);
+    }
+
+    /**
+     * The managed copy of an entity (the kernel clears the entity manager after each request).
+     *
+     * @template T of ChatConversation|ChatMessage|TestUser
+     *
+     * @param T $entity
+     *
+     * @return T
+     */
+    private function fresh(ChatConversation|ChatMessage|TestUser $entity): ChatConversation|ChatMessage|TestUser
+    {
+        $managed = $this->em->find($entity::class, $entity->getId());
+        self::assertNotNull($managed);
+
+        return $managed;
     }
 
     /**

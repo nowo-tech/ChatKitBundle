@@ -59,6 +59,11 @@ ALTER TABLE nowo_chat_user_settings
   ADD status_expires_at DATETIME DEFAULT NULL;
 -- The 1.x single sound was the sound of every message: keep it for @mentions and support replies too.
 UPDATE nowo_chat_user_settings SET sound_mention = sound, sound_support = sound;
+-- Closing conversations in one's own list, pinned messages.
+ALTER TABLE nowo_chat_participant ADD archived_at DATETIME DEFAULT NULL;
+ALTER TABLE nowo_chat_message ADD pinned_at DATETIME DEFAULT NULL, ADD pinned_by_id INT DEFAULT NULL;
+ALTER TABLE nowo_chat_message ADD CONSTRAINT FK_nowo_chat_message_pinned_by FOREIGN KEY (pinned_by_id) REFERENCES user (id) ON DELETE SET NULL;
+CREATE INDEX IDX_nowo_chat_message_pinned_by ON nowo_chat_message (pinned_by_id);
 ```
 
 PostgreSQL: `BOOLEAN DEFAULT false / true` for the four flags and `TIMESTAMP(0) WITHOUT TIME ZONE DEFAULT NULL` for
@@ -80,6 +85,13 @@ Then:
   invisible user. `POST /api/presence` answers `{online, statuses, me}` (was `{online}`); `ChatApi.presence()` resolves
   to that object (was the `online` list). `playSound()` / `playOnce()` take an optional volume.
 - **Auto-away**: `auto_away_minutes` (default 10; `0` turns it off).
+- **Closing conversations**: the row template (`nowo_chat_template_row`) has a `data-part="row-archive"` button and
+  the filters a `data-filter="archived"` chip and a `data-part="archive-read"` button; a host template without them
+  keeps working without those actions. `ChatApi.conversations()` takes an optional `archived` flag.
+- **Pinned messages**: the message template has a `data-part="pin"` action. To let people pin in channels, implement
+  `ChatPinPolicyInterface` on your access policy (nobody pins in channels otherwise). New `max_pins` (default 20). With
+  `icon_set: ux_icon`, import `tabler:archive`, `tabler:arrow-back-up` and `tabler:pin` in your icon set (or the dock
+  keeps its built-in SVG).
 ## To 1.9.2
 
 From **1.9.1** — no schema change. Run `php bin/console assets:install public` (or rebuild your bundle of the TS

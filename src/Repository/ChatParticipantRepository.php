@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Repository;
 
+use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+
+use function is_int;
 
 /**
  * Queries for participant rows (read cursors, mute state).
@@ -78,5 +81,36 @@ class ChatParticipantRepository extends ServiceEntityRepository
         }
 
         return $byConversation;
+    }
+
+    /**
+     * Brings the conversation back to the lists of the people who closed it, except those who muted it (1.10).
+     *
+     * @param ChatConversation $conversation The conversation that got a new message
+     * @param DateTimeImmutable $now Current time (mutes still running keep it closed)
+     *
+     * @return int Rows reopened
+     */
+    public function reopenArchived(ChatConversation $conversation, DateTimeImmutable $now): int
+    {
+        $reopened = $this->createQueryBuilder('p')
+            ->update()
+            ->set('p.archivedAt', ':none')
+            ->where('p.conversation = :conversation AND p.archivedAt IS NOT NULL')
+            ->andWhere('p.mutedUntil IS NULL OR p.mutedUntil <= :now')
+            ->setParameter('none', null)
+            ->setParameter('conversation', $conversation)
+            ->setParameter('now', $now)
+            ->getQuery()
+            ->execute();
+        $count = is_int($reopened) ? $reopened : 0;
+        if ($count > 0) {
+            // Managed rows read again (the UPDATE bypassed them).
+            foreach ($this->findBy(['conversation' => $conversation]) as $row) {
+                $this->getEntityManager()->refresh($row);
+            }
+        }
+
+        return $count;
     }
 }

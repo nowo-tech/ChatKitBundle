@@ -59,6 +59,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **For the application's settings screen**: `ChatPreferencesType` (a form bound to `ChatUserSettings`, each sound select
   with `data-nowo-chat-sound-select`), `saveChatPreference()` / `PREFS_EVENT` / `playSound()` / `SOUND_NAMES` exported
   by the TypeScript entry point (`playSound(name, volume)`), `ChatUserSettingsRepository::save()`.
+- **Close conversations in your own list**: a Close button on each row of the dock (and the `Delete` key) with Undo, a
+  **Closed** filter with Reopen, "Close all read", and Close / Reopen on the full-page chat (`?archived=1` lists the
+  closed ones). Only for that person, nothing deleted (`archived_at` per participant); a new message brings it back
+  unless muted, resolved / closed tickets stay closed. `POST` / `DELETE /api/conversations/{uuid}/archive`,
+  `POST /api/conversations/archive-read`, `?archived=1`; realtime `list` to the person's other tabs.
+- **Pinned messages**: Pin / Unpin in the message actions, a pinned bar above the thread (latest pin, jump with older
+  pages loaded, "All pinned (n)" with Unpin), a translated "X pinned a message" line (no sound), realtime `pins`,
+  deleting a message unpins it, `max_pins` (default 20). Direct conversations: both people; tickets: agents;
+  channels: whom the application's policy allows through the new optional `ChatPinPolicyInterface` (deny by default).
+  `GET /api/conversations/{uuid}/pins`, `POST` / `DELETE …/messages/{messageUuid}/pin`; summaries carry `canPin`,
+  messages `pinned`; new built-in icons `archive`, `unarchive`, `pin` (UX Icons `tabler:archive`,
+  `tabler:arrow-back-up`, `tabler:pin`). The personal data export lists the pins a person made.
 - `ChatDockStatusType` (the menu's custom-status fields, a Form view like the other dock fields) and the template
   block `nowo_chat_template_status_menu`; the dock header gets the `me` button. Personal data export lists the new
   preferences and the status.

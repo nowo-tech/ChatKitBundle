@@ -118,6 +118,25 @@ describe('chat api client', () => {
     await old.setStatus({ status: 'available' });
     await old.saveSetting('volume', 5);
     expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('', expect.anything());
+
+    // Closing conversations and pins (1.10).
+    const full = new ChatApi({ ...config, endpoints: { ...config.endpoints, archive: '/c/__uuid__/archive', archiveRead: '/c/archive-read', pins: '/c/__uuid__/pins', pin: '/c/__uuid__/m/__message__/pin' } } as unknown as ChatConfig);
+    vi.stubGlobal('fetch', respond({ conversations: [], unreadTotal: 0, archived: 3, pins: [], canPin: true }));
+    await full.conversations(true);
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c?archived=1', expect.anything());
+    await full.archive('x', true);
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c/x/archive', expect.objectContaining({ method: 'POST' }));
+    await full.archive('x', false);
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c/x/archive', expect.objectContaining({ method: 'DELETE' }));
+    expect(await full.archiveRead()).toBe(3);
+    expect(await full.pins('x')).toMatchObject({ canPin: true });
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c/x/pins', expect.anything());
+    await full.pin('x', 'm', true);
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c/x/m/m/pin', expect.objectContaining({ method: 'POST' }));
+    await full.pin('x', 'm', false);
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c/x/m/m/pin', expect.objectContaining({ method: 'DELETE' }));
+    await old.archiveRead();
+    await old.pins('x');
     vi.stubGlobal('fetch', respond({ previews: { '/a b': { title: 'A', subtitle: '', badge: '' } } }));
     expect(await api.linkPreviews(['/a b', '/c'])).toEqual({ '/a b': { title: 'A', subtitle: '', badge: '' } });
     vi.stubGlobal('fetch', respond({ previews: [] }));

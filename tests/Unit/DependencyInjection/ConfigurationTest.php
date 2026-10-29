@@ -41,6 +41,7 @@ final class ConfigurationTest extends TestCase
             'icon_set'          => 'ux_icon',
             'icons'             => Configuration::DEFAULT_ICONS,
             'presence_ttl'      => 90,
+            'max_pins'          => 20,
             'auto_away_minutes' => 10,
             'support'           => [
                 'ticket_prefix'      => 'SUP-',

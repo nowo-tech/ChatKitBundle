@@ -201,6 +201,7 @@ class ChatParticipant
             return true;
         }
 
+        // A message newer than the closing (the send also clears the mark; this covers messages from elsewhere).
         return $conversation->getLastMessageAt() <= $this->archivedAt || $this->isMuted($now);
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Service;
 
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -221,7 +222,7 @@ final readonly class ChatService
     {
         $message->delete($by, $this->clock->now());
         // A deleted message leaves the pinned bar.
-        $wasPinned = $message->getPinnedAt() !== null;
+        $wasPinned = $message->getPinnedAt() instanceof DateTimeImmutable;
         $message->pin(null, null);
         foreach ($this->reactionRepository->findBy(['message' => $message]) as $reaction) {
             $this->entityManager->remove($reaction);
@@ -351,7 +352,7 @@ final readonly class ChatService
         if (!$message->isPinnable()) {
             throw new InvalidArgumentException('not_pinnable');
         }
-        if ($pinned === ($message->getPinnedAt() !== null)) {
+        if ($pinned === ($message->getPinnedAt() instanceof DateTimeImmutable)) {
             return;
         }
         $conversation = $message->getConversation();
@@ -442,6 +443,12 @@ final readonly class ChatService
         // The author has read everything up to their own message.
         $participant->markReadUpTo((int) $message->getId());
         $this->entityManager->flush();
+        // 1.10: a new message brings the conversation back to the lists of those who closed it (not muted ones; a
+        // resolved or closed ticket stays closed).
+        $conversation = $message->getConversation();
+        if (!$conversation->isSupport() || !in_array($conversation->getSupportStatus(), [SupportStatus::Resolved, SupportStatus::Closed], true)) {
+            $this->participants->reopenArchived($conversation, $this->clock->now());
+        }
         $this->notifier->messageCreated($message);
         $this->events?->dispatch(new ChatMessageSentEvent($message));
 

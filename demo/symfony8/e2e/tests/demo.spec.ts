@@ -58,6 +58,38 @@ test.describe('chat kit demo', () => {
     await expect(me).toHaveAttribute('data-status', 'available');
   });
 
+  test('alice closes and reopens a conversation, and pins a message', async ({ page }) => {
+    await signIn(page, 'alice');
+    await page.locator('.nowo-chat-launcher').click();
+    const list = page.locator('.nowo-chat-list');
+    const row = list.locator('li', { hasText: 'Bob Lee' });
+    await row.hover();
+    await row.locator('[data-part="row-archive"]').click();
+    await expect(list.locator('li', { hasText: 'Bob Lee' })).toHaveCount(0);
+    await expect(page.getByTestId('nowo-chat-toast')).toBeVisible();
+    await page.locator('[data-filter="archived"]').click();
+    const closed = list.locator('li', { hasText: 'Bob Lee' });
+    await expect(closed).toBeVisible();
+    await closed.hover();
+    await closed.locator('[data-part="row-archive"]').click();
+    await page.locator('[data-filter="all"]').click();
+    await list.locator('.nowo-chat-row', { hasText: 'Bob Lee' }).click();
+
+    const window = page.locator('.nowo-chat-window', { hasText: 'Bob Lee' });
+    const text = `Pin me ${Date.now()}`;
+    await window.locator('.nowo-chat-composer__input').fill(text);
+    await window.locator('.nowo-chat-composer__input').press('Enter');
+    const bubble = window.locator('.nowo-chat-msg', { hasText: text });
+    await bubble.hover();
+    await bubble.locator('[data-part="pin"]').click();
+    const bar = window.getByTestId('nowo-chat-pins');
+    await expect(bar).toContainText(text);
+    await expect(window.locator('.nowo-chat-pin-line').last()).toBeVisible();
+    await bubble.hover();
+    await bubble.locator('[data-part="pin"]').click();
+    await expect(bar).not.toContainText(text);
+  });
+
   test('the full-page chat works without the dock', async ({ page }) => {
     await signIn(page, 'alice');
     await page.goto('/chat/');

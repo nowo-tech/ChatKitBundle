@@ -681,6 +681,7 @@ describe('ThreadView', () => {
     expect(bar.querySelector('.nowo-chat-pins__text')?.textContent).toBe('Luis: release at 5');
     expect(q('.nowo-chat-pin-line').textContent).toContain('Luis pinned a message');
     q<HTMLElement>('.nowo-chat-pin-line').click();
+    bar.querySelector<HTMLButtonElement>('.nowo-chat-pins__latest')?.click();
     bar.querySelector<HTMLButtonElement>('.nowo-chat-pins__all')?.click();
     expect(bar.querySelector('.nowo-chat-pins__list')?.hasAttribute('hidden')).toBe(false);
     bar.querySelector<HTMLButtonElement>('.nowo-chat-pins__all')?.click();

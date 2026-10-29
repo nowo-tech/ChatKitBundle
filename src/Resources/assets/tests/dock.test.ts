@@ -1162,7 +1162,7 @@ describe('ChatDock', () => {
       await flush();
       expect(api.archive).toHaveBeenLastCalledWith('z', false);
       expect(q('.nowo-chat-list').textContent).toContain('None closed');
-      api.conversations.mockRejectedValueOnce(new Error('x'));
+      api.conversations.mockRejectedValueOnce(new Error('x')).mockRejectedValueOnce(new Error('x'));
       realtimeHandlers?.onEvent({ type: 'list' });
       await flush();
       q<HTMLButtonElement>('[data-filter="all"]').click();

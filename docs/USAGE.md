@@ -20,6 +20,8 @@
 - [Front end: IIFE or your bundler](#front-end-iife-or-your-bundler)
 - [User settings](#user-settings)
 - [Chat status](#chat-status)
+- [Closing conversations](#closing-conversations)
+- [Pinned messages](#pinned-messages)
 - [Web Push](#web-push)
 - [Messenger: retries and failures](#messenger-retries-and-failures)
 - [Timeouts](#timeouts)
@@ -588,6 +590,36 @@ sent; a viewer who hides their own presence sees nobody's dot (reciprocal) but s
 reaches people who already see the user in the chat (direct contacts, members of a conversation the viewer can read).
 Storage: four columns on `nowo_chat_user_settings` (see [UPGRADING](UPGRADING.md#to-1100)).
 
+## Closing conversations
+
+Each person tidies their own list (1.10): the **Close** button on a row of the dock (on hover, focus or touch; the
+`Delete` key on a row does the same) takes the conversation out of their list with an **Undo** notice; the **Closed**
+filter lists them, each with **Reopen**; the archive button next to the filters closes every conversation without
+unread messages ("Close all read"). The full-page chat has a *Closed* link and a Close / Reopen button per row
+(`data-nowo-chat-archive` / `data-nowo-chat-unarchive="<uuid>"`, handled by the dock's script).
+
+Nothing is deleted and nobody else is affected (`nowo_chat_participant.archived_at`). A closed conversation is back in
+the list as soon as a new message arrives — unless the person muted it, and except a resolved or closed support
+ticket, which stays closed. API: `POST` / `DELETE /api/conversations/{uuid}/archive`, `POST
+/api/conversations/archive-read`, `GET /api/conversations?archived=1`; the person's other tabs get a realtime `list`
+event.
+
+## Pinned messages
+
+Messages can be pinned to the top of a conversation (1.10) from the message's actions (Pin / Unpin; keyboard
+reachable like the other actions). The pinned bar above the thread shows the latest pin (a click scrolls to the
+message, loading older pages if needed, and highlights it) and **All pinned (n)** lists every pin with Unpin. A line
+"X pinned a message" appears in the thread (translated for each reader, no sound or push); every reader's bar updates
+live (realtime `pins`); deleting a pinned message unpins it. Pins are shared by the conversation, at most `max_pins`
+(default 20; `422 too_many_pins` beyond).
+
+Who may pin: both people of a direct conversation; support agents in tickets; in channels only whom your access policy
+allows by also implementing `ChatPinPolicyInterface::canPinInChannel()` — nobody otherwise (deny by default). Others
+get no Pin action and the API answers `403 pin_forbidden` (`404` when they cannot read the conversation). API:
+`GET /api/conversations/{uuid}/pins` (`{pins, canPin}`), `POST` / `DELETE /api/conversations/{uuid}/messages/{messageUuid}/pin`.
+Summaries carry `canPin`, messages `pinned` (and a pin line `pinnedMessage`). The personal data export lists the pins a
+person made.
+
 ## Web Push
 
 With `push: true`, each new message queues `DeliverChatPushMessage` (route it to an async transport; handled inline
@@ -658,6 +690,8 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/presence` `{visible, idle?}` | heartbeat; online direct contacts, their `statuses`, the caller's own status (`me`) |
 | POST | `/api/status` `{status, text?, emoji?, clearAfter?}` | set the caller's chat status (1.10) |
 | POST | `/api/settings` `{key, value}` | save one chat preference (1.10); answers every preference |
+| POST / DELETE | `/api/conversations/{uuid}/archive` · POST `/api/conversations/archive-read` | close / reopen in the caller's list, close all read (1.10) |
+| GET | `/api/conversations/{uuid}/pins` · POST / DELETE `/api/conversations/{uuid}/messages/{messageUuid}/pin` | pinned messages, pin / unpin (1.10) |
 
 ### Pagination and limits
 

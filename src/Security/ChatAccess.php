@@ -6,9 +6,9 @@ namespace Nowo\ChatKitBundle\Security;
 
 use Closure;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
-use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
