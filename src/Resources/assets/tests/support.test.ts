@@ -180,7 +180,7 @@ describe('decorative emoji styles (1.9.2)', () => {
 
 describe('message times (1.10.1)', () => {
   it('reveal on hover without moving anything: no display, height or margin change', () => {
-    const rules = [...CSS_SOURCE.matchAll(/([^{}]*\.nowo-chat-msg:(?:hover|focus-within)[^{}]*\.nowo-chat-msg__meta[^{}]*)\{([^}]*)\}/g)];
+    const rules = [...CSS_SOURCE.matchAll(/([^{}]*\.nowo-chat-msg[^{}\s]*:(?:hover|focus-within)[^{}]*\.nowo-chat-msg__meta[^{}]*)\{([^}]*)\}/g)];
     expect(rules.length).toBeGreaterThan(0);
     for (const [, , body] of rules) {
       expect(body).not.toMatch(/display|height|margin|padding|position/);
