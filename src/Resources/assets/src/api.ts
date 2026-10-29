@@ -38,8 +38,49 @@ export class ChatApi {
    *
    * @returns The conversation summaries and the unread total.
    */
-  async conversations(): Promise<{ conversations: ConversationSummary[]; unreadTotal: number }> {
-    return this.get(this.config.endpoints.conversations);
+  async conversations(archived = false): Promise<{ conversations: ConversationSummary[]; unreadTotal: number }> {
+    return this.get(archived ? `${this.config.endpoints.conversations}?archived=1` : this.config.endpoints.conversations);
+  }
+
+  /**
+   * Closes (archives) a conversation in the user's list, or reopens it (1.10).
+   *
+   * @param uuid Conversation uuid.
+   * @param archived True to close, false to reopen.
+   */
+  async archive(uuid: string, archived: boolean): Promise<void> {
+    await this.request(archived ? 'POST' : 'DELETE', this.url('archive', uuid), {});
+  }
+
+  /**
+   * Pinned messages of a conversation, latest pin first, and whether the user may pin (1.10).
+   *
+   * @param uuid Conversation uuid.
+   * @returns The pins and the permission.
+   */
+  async pins(uuid: string): Promise<{ pins: ChatMessage[]; canPin: boolean }> {
+    return this.get(this.url('pins', uuid));
+  }
+
+  /**
+   * Pins a message, or unpins it (1.10).
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid Message uuid.
+   * @param pinned True to pin, false to unpin.
+   * @returns The pins after the change.
+   */
+  async pin(uuid: string, messageUuid: string, pinned: boolean): Promise<{ pins: ChatMessage[]; canPin: boolean }> {
+    return this.request(pinned ? 'POST' : 'DELETE', this.messageUrl('pin', uuid, messageUuid), {});
+  }
+
+  /**
+   * Closes every conversation of the list without unread messages (1.10).
+   *
+   * @returns How many were closed.
+   */
+  async archiveRead(): Promise<number> {
+    return (await this.post<{ archived: number }>(this.config.endpoints.archiveRead ?? '', {})).archived;
   }
 
   /**
@@ -352,10 +393,10 @@ export class ChatApi {
    * @returns The URL.
    */
   private url(
-    kind: 'conversation' | 'messages' | 'members' | 'references' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign',
+    kind: 'conversation' | 'messages' | 'members' | 'references' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign' | 'archive' | 'pins',
     uuid: string,
   ): string {
-    return this.config.endpoints[kind].replace('__uuid__', encodeURIComponent(uuid));
+    return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid));
   }
 
   /**
@@ -366,8 +407,8 @@ export class ChatApi {
    * @param messageUuid Message uuid.
    * @returns The URL.
    */
-  private messageUrl(kind: 'message' | 'reactions', uuid: string, messageUuid: string): string {
-    return this.config.endpoints[kind].replace('__uuid__', encodeURIComponent(uuid)).replace('__message__', encodeURIComponent(messageUuid));
+  private messageUrl(kind: 'message' | 'reactions' | 'pin', uuid: string, messageUuid: string): string {
+    return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid)).replace('__message__', encodeURIComponent(messageUuid));
   }
 
   /**

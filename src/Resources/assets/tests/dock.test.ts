@@ -18,6 +18,10 @@ const api = {
   realtime: vi.fn(),
   presence: vi.fn(),
   setStatus: vi.fn(),
+  archive: vi.fn(),
+  archiveRead: vi.fn(),
+  pins: vi.fn(),
+  pin: vi.fn(),
   linkPreviews: vi.fn(),
   message: vi.fn(),
 };
@@ -1114,6 +1118,97 @@ describe('ChatDock', () => {
       realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: message() });
       expect(playOnce).toHaveBeenLastCalledWith(expect.stringMatching(/^msg-/), 'pop', 100);
       Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    });
+  });
+
+  describe('closing conversations and pins (1.10)', () => {
+    const endpoints = { page: '/chat/__uuid__', archive: '/c/__uuid__/archive', archiveRead: '/c/archive-read', pins: '/c/__uuid__/pins', pin: '/p' } as ChatConfig['endpoints'];
+    const i18nPlus = { ...i18n, archived_one: 'Closed.', unarchived_one: 'Reopened.', archived_many: '%count% closed', undo: 'Undo', archived_empty: 'None closed', close_conversation: 'Close %name%', reopen_conversation: 'Reopen %name%', pinned_line: '%name% pinned a message' };
+
+    it('closes a conversation with Undo, the Delete key, the Closed filter with Reopen, and "close all read"', async () => {
+      api.archive.mockResolvedValue(undefined);
+      const { dock, q, all } = mount([summary('a'), summary('b')], { endpoints, i18n: i18nPlus });
+      await dock.start();
+      await dock.open(summary('a'));
+      const close = all('.nowo-chat-list [data-part="row-archive"]')[0] as HTMLButtonElement;
+      expect(close.getAttribute('aria-label')).toBe('Close T a');
+      close.click();
+      await flush();
+      expect(api.archive).toHaveBeenLastCalledWith('a', true);
+      expect(q('.nowo-chat-list').textContent).not.toContain('T a');
+      expect(q('.nowo-chat-window[data-uuid="a"]')).toBeNull();
+      const toast = q('[data-testid="nowo-chat-toast"]');
+      expect(toast.hidden).toBe(false);
+      toast.querySelector<HTMLButtonElement>('button')?.click();
+      await flush();
+      expect(api.archive).toHaveBeenLastCalledWith('a', false);
+      expect(q('.nowo-chat-list').textContent).toContain('T a');
+      vi.advanceTimersByTime(6_100);
+      expect(toast.hidden).toBe(true);
+
+      all('.nowo-chat-list .nowo-chat-row')[1]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+      all('.nowo-chat-list .nowo-chat-row')[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+      await flush();
+      expect(api.archive).toHaveBeenCalledTimes(3);
+
+      // Closed filter: the closed ones, each with Reopen; an empty answer says so.
+      api.conversations.mockResolvedValueOnce({ conversations: [summary('z', { archived: true })], unreadTotal: 0 });
+      q<HTMLButtonElement>('[data-filter="archived"]').click();
+      await flush();
+      const reopen = q<HTMLButtonElement>('.nowo-chat-list [data-part="row-archive"]');
+      expect(reopen.getAttribute('aria-label')).toBe('Reopen T z');
+      reopen.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+      reopen.click();
+      await flush();
+      expect(api.archive).toHaveBeenLastCalledWith('z', false);
+      expect(q('.nowo-chat-list').textContent).toContain('None closed');
+      api.conversations.mockRejectedValueOnce(new Error('x'));
+      realtimeHandlers?.onEvent({ type: 'list' });
+      await flush();
+      q<HTMLButtonElement>('[data-filter="all"]').click();
+
+      api.archiveRead.mockResolvedValueOnce(2).mockRejectedValueOnce(new Error('x'));
+      api.conversations.mockResolvedValueOnce({ conversations: [summary('b')], unreadTotal: 0 });
+      q<HTMLButtonElement>('[data-part="archive-read"]').click();
+      await flush();
+      expect(toast.textContent).toContain('2 closed');
+      q<HTMLButtonElement>('[data-part="archive-read"]').click();
+      await flush();
+      api.archive.mockRejectedValueOnce(new Error('x'));
+      q<HTMLButtonElement>('.nowo-chat-list [data-part="row-archive"]').click();
+      await flush();
+    });
+
+    it('drops the row button without the 1.10 endpoint, and serves the chat page buttons', async () => {
+      api.archive.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('x'));
+      const { dock, q } = mount([summary('a')]);
+      await dock.start();
+      expect(q('.nowo-chat-list [data-part="row-archive"]')).toBeNull();
+      document.body.insertAdjacentHTML('beforeend', '<ul id="page"><li><button data-nowo-chat-archive="a">Close</button></li><li><button data-nowo-chat-unarchive="b">Reopen</button></li></ul>');
+      document.querySelector<HTMLButtonElement>('[data-nowo-chat-archive]')?.click();
+      await flush();
+      expect(api.archive).toHaveBeenLastCalledWith('a', true);
+      expect(document.querySelector('[data-nowo-chat-archive]')).toBeNull();
+      document.querySelector<HTMLButtonElement>('[data-nowo-chat-unarchive]')?.click();
+      await flush();
+      expect(api.archive).toHaveBeenLastCalledWith('b', false);
+      document.getElementById('page')?.click();
+    });
+
+    it('reloads the pinned bar on a pins event, never rings for a pinned line, and previews it in the list', async () => {
+      api.pins.mockResolvedValue({ pins: [], canPin: true });
+      const { dock, q } = mount([summary('a'), summary('b')], { endpoints, i18n: i18nPlus });
+      await dock.start();
+      await dock.open(summary('a'));
+      api.pins.mockClear();
+      realtimeHandlers?.onEvent({ type: 'pins', conversationUuid: 'a' });
+      realtimeHandlers?.onEvent({ type: 'pins', conversationUuid: 'closed' });
+      expect(api.pins).toHaveBeenCalledTimes(1);
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'b', message: message({ kind: 'pin', html: '', pinnedMessage: 'x' }) });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+      expect(playOnce).not.toHaveBeenCalled();
+      expect(q('.nowo-chat-list').textContent).toContain('Peer pinned a message');
     });
   });
 });

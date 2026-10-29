@@ -22,12 +22,14 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
+use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
+use function count;
 use function in_array;
 use function is_string;
 
@@ -61,6 +63,8 @@ final readonly class ChatService
         private ?ChatMentions $mentions = null,
         private ?ChatMessageMentionRepository $mentionRows = null,
         private ?ChatReferences $references = null,
+        private int $maxPins = 20,
+        private ?ChatMessageRepository $messageRepository = null,
     ) {
     }
 
@@ -216,12 +220,18 @@ final readonly class ChatService
     public function delete(ChatUserInterface $by, ChatMessage $message): void
     {
         $message->delete($by, $this->clock->now());
+        // A deleted message leaves the pinned bar.
+        $wasPinned = $message->getPinnedAt() !== null;
+        $message->pin(null, null);
         foreach ($this->reactionRepository->findBy(['message' => $message]) as $reaction) {
             $this->entityManager->remove($reaction);
         }
         $this->mentionRows?->removeFor($message);
         $this->entityManager->flush();
         $this->notifier->messageUpdated($message);
+        if ($wasPinned) {
+            $this->notifier->pinsChanged($message->getConversation());
+        }
         $this->events?->dispatch(new ChatMessageDeletedEvent($message, $by, $message->isModerated()));
     }
 
@@ -324,6 +334,60 @@ final readonly class ChatService
         }
 
         return $participant;
+    }
+
+    /**
+     * Pins a message to the top of its conversation (1.10) and posts the "X pinned a message" line, or unpins it.
+     * Access (ChatAccess::canPin) is the caller's job.
+     *
+     * @param ChatUserInterface $user Who pins or unpins
+     * @param ChatMessage $message A text message, not deleted
+     * @param bool $pinned True to pin, false to unpin
+     *
+     * @throws InvalidArgumentException `not_pinnable` for lines, bot messages and tombstones; `too_many_pins` over the limit
+     */
+    public function pin(ChatUserInterface $user, ChatMessage $message, bool $pinned): void
+    {
+        if (!$message->isPinnable()) {
+            throw new InvalidArgumentException('not_pinnable');
+        }
+        if ($pinned === ($message->getPinnedAt() !== null)) {
+            return;
+        }
+        $conversation = $message->getConversation();
+        if ($pinned && $this->messageRepository instanceof ChatMessageRepository && count($this->messageRepository->findPinned($conversation, $this->maxPins)) >= $this->maxPins) {
+            throw new InvalidArgumentException('too_many_pins');
+        }
+        $now  = $this->clock->now();
+        $line = null;
+        $message->pin($user, $pinned ? $now : null);
+        if ($pinned) {
+            $line = ChatMessage::pinLine($conversation, $user, $message, $now);
+            $this->entityManager->persist($line);
+            $conversation->touch($now);
+        }
+        $this->entityManager->flush();
+        $this->notifier->messageUpdated($message);
+        if ($line instanceof ChatMessage) {
+            $this->notifier->botMessage($line);
+        }
+        $this->notifier->pinsChanged($conversation);
+    }
+
+    /**
+     * Closes (archives) conversations in the user's list, or reopens them; only for that user, nothing is deleted.
+     *
+     * @param ChatUserInterface $user The user
+     * @param list<ChatConversation> $conversations The conversations
+     * @param bool $archived True to close, false to reopen
+     */
+    public function archive(ChatUserInterface $user, array $conversations, bool $archived): void
+    {
+        $now = $this->clock->now();
+        foreach ($conversations as $conversation) {
+            $this->participant($conversation, $user)->archive($archived ? $now : null);
+        }
+        $this->entityManager->flush();
     }
 
     /**

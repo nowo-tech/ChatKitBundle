@@ -51,4 +51,32 @@ class ChatParticipantRepository extends ServiceEntityRepository
 
         return $rows;
     }
+
+    /**
+     * The user's participant rows of these conversations, in one query.
+     *
+     * @param ChatUserInterface $user The user
+     * @param list<int> $conversationIds Doctrine ids of the conversations
+     *
+     * @return array<int, ChatParticipant> conversation id => row (conversations without a row are absent)
+     */
+    public function findForUser(ChatUserInterface $user, array $conversationIds): array
+    {
+        if ($conversationIds === []) {
+            return [];
+        }
+        /** @var list<ChatParticipant> $rows */
+        $rows = $this->createQueryBuilder('p')
+            ->where('p.user = :user AND IDENTITY(p.conversation) IN (:ids)')
+            ->setParameter('user', $user)
+            ->setParameter('ids', $conversationIds)
+            ->getQuery()
+            ->getResult();
+        $byConversation = [];
+        foreach ($rows as $row) {
+            $byConversation[(int) $row->getConversation()->getId()] = $row;
+        }
+
+        return $byConversation;
+    }
 }

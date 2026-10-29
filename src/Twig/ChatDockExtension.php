@@ -187,6 +187,10 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'presence'       => $this->urls->generate('nowo_chat_api_presence'),
                 'status'         => $this->urls->generate('nowo_chat_api_status'),
                 'settings'       => $this->urls->generate('nowo_chat_api_settings'),
+                'archive'        => $this->pattern('nowo_chat_api_archive'),
+                'archiveRead'    => $this->urls->generate('nowo_chat_api_archive_read'),
+                'pins'           => $this->pattern('nowo_chat_api_pins'),
+                'pin'            => $this->pattern('nowo_chat_api_pin', ['messageUuid' => self::PLACEHOLDER], '__message__'),
             ],
             // Sounds per event, volume, buzz, opening, send key … (ChatUserSettings::preferences()).
             'prefs' => $settings->preferences(),

@@ -159,6 +159,26 @@ final readonly class ChatNotifier
     }
 
     /**
+     * The pinned messages of a conversation changed (1.10): every reader reloads its pinned bar.
+     *
+     * @param ChatConversation $conversation The conversation
+     */
+    public function pinsChanged(ChatConversation $conversation): void
+    {
+        $this->publisher->publish('pins', ['conversationUuid' => $conversation->getUuid()], $this->recipients->of($conversation));
+    }
+
+    /**
+     * The user closed or reopened conversations: their other tabs and devices reload the list.
+     *
+     * @param ChatUserInterface $user The user
+     */
+    public function listChanged(ChatUserInterface $user): void
+    {
+        $this->publisher->publish('list', [], [$user]);
+    }
+
+    /**
      * The user changed a chat preference: their other tabs and devices apply it at once.
      *
      * @param ChatUserInterface $user The user

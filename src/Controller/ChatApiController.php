@@ -118,14 +118,18 @@ final class ChatApiController extends AbstractController
 
     /**
      * Lists the caller's conversations (newest activity first) with unread counts, last messages and peer
-     * presence, plus the total unread count.
+     * presence, plus the total unread count. 1.10: conversations the user closed are left out (`?archived=1` lists only
+     * them); a closed one is back as soon as a message arrives, unless muted or a resolved / closed ticket.
+     *
+     * @param Request $request The request (query `archived`)
      *
      * @return JsonResponse `{conversations, unreadTotal}`
      */
     #[Route('/conversations', name: 'conversations', methods: ['GET'])]
-    public function conversations(): JsonResponse
+    public function conversations(Request $request): JsonResponse
     {
         $user        = $this->reader();
+        $archived    = $request->query->getBoolean('archived');
         $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
         // Participant rows outlive access (left channel, demoted agent): list only what the user may read today.
         $list = array_values(array_filter(
@@ -134,6 +138,9 @@ final class ChatApiController extends AbstractController
         ));
         $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
         $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $closed = $this->closedIds($user, $ids);
+        $list   = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => isset($closed[(int) $conversation->getId()]) === $archived));
+        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
         $latest = $this->messages->findLatestByConversationIds($ids);
         // Peers of direct threads in one query (memoized in ChatAccess, so the per-row SEND vote reuses them) and
         // their presence and status in one cache round trip (the custom text shows even to viewers who hide presence).
@@ -148,10 +155,99 @@ final class ChatApiController extends AbstractController
         foreach ($list as $conversation) {
             $id     = (int) $conversation->getId();
             $peerId = $conversation->peerIdOf($user);
-            $rows[] = $this->present($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $unread[$id] ?? 0, $latest[$id] ?? null, $presence);
+            $rows[] = ['archived' => $archived] + $this->present($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $unread[$id] ?? 0, $latest[$id] ?? null, $presence);
         }
 
         return $this->json(['conversations' => $rows, 'unreadTotal' => array_sum($unread)]);
+    }
+
+    /**
+     * 1.10: closes (archives) the conversation in the caller's list only — nothing is deleted, the others keep it; or
+     * reopens it. The caller's other tabs refresh their list.
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{archived}`
+     */
+    #[Route('/conversations/{uuid}/archive', name: 'archive', requirements: ['uuid' => self::UUID], methods: ['POST', 'DELETE'])]
+    public function archive(string $uuid, Request $request): JsonResponse
+    {
+        $user     = $this->writer($request);
+        $archived = $request->isMethod('POST');
+        $this->chat->archive($user, [$this->find($uuid, ChatVoter::VIEW)], $archived);
+        $this->notifier->listChanged($user);
+
+        return $this->json(['archived' => $archived]);
+    }
+
+    /**
+     * 1.10: the conversation's pinned messages (latest pin first) and whether the caller may pin; same access as
+     * reading it (unknown or foreign → 404).
+     *
+     * @param string $uuid Conversation uuid
+     *
+     * @return JsonResponse `{pins: list<message>, canPin}`
+     */
+    #[Route('/conversations/{uuid}/pins', name: 'pins', requirements: ['uuid' => self::UUID], methods: ['GET'])]
+    public function pins(string $uuid): JsonResponse
+    {
+        $user         = $this->reader();
+        $conversation = $this->find($uuid, ChatVoter::VIEW);
+
+        return $this->json($this->pinsOf($conversation, $user));
+    }
+
+    /**
+     * 1.10: pins a message (`POST`) or unpins it (`DELETE`): both people of a direct conversation, agents in tickets,
+     * whom the application allows in channels (403 `pin_forbidden` otherwise); a "pinned a message" line follows and
+     * every reader's pinned bar refreshes.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{pins, canPin}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/pin', name: 'pin', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST', 'DELETE'])]
+    public function pin(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $user    = $this->writer($request);
+        $message = $this->findMessage($uuid, $messageUuid, ChatVoter::VIEW);
+        $this->deny(!$this->access->canPin($message->getConversation(), $user), 'pin_forbidden', Response::HTTP_FORBIDDEN);
+        try {
+            $this->chat->pin($user, $message, $request->isMethod('POST'));
+        } catch (InvalidArgumentException $exception) {
+            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return $this->json($this->pinsOf($message->getConversation(), $user));
+    }
+
+    /**
+     * 1.10: "Close all read" — closes every conversation of the caller's list without unread messages.
+     *
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{archived: count}`
+     */
+    #[Route('/conversations/archive-read', name: 'archive_read', methods: ['POST'])]
+    public function archiveRead(Request $request): JsonResponse
+    {
+        $user        = $this->writer($request);
+        $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
+        $list        = array_values(array_filter(
+            $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT),
+            fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
+        ));
+        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $closed = $this->closedIds($user, $ids);
+        $read   = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => ($unread[(int) $conversation->getId()] ?? 0) === 0 && !isset($closed[(int) $conversation->getId()])));
+        $this->chat->archive($user, $read, true);
+        $this->notifier->listChanged($user);
+
+        return $this->json(['archived' => count($read)]);
     }
 
     /**
@@ -926,6 +1022,7 @@ final class ChatApiController extends AbstractController
             $status !== null && $status['status'] !== 'offline',
             $status,
         );
+        $summary['canPin'] = $this->access->canPin($conversation, $user);
         if ($conversation->isSupportDraft() && $this->owns($conversation, $user)) {
             // The requester's draft: the topic question (or "continue or new?") and their earlier tickets.
             $summary['intake'] = $this->tickets->intake($user);
@@ -947,6 +1044,37 @@ final class ChatApiController extends AbstractController
         $this->deny(!$conversation->isSupport(), 'not_found', Response::HTTP_NOT_FOUND);
 
         return $conversation;
+    }
+
+    /**
+     * @return array{pins: list<array<string, mixed>>, canPin: bool}
+     */
+    private function pinsOf(ChatConversation $conversation, ChatUserInterface $user): array
+    {
+        return [
+            'pins'   => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $this->messages->findPinned($conversation)),
+            'canPin' => $this->access->canPin($conversation, $user),
+        ];
+    }
+
+    /**
+     * Conversations of the list the user closed and that stay closed now.
+     *
+     * @param list<int> $ids Conversation ids
+     *
+     * @return array<int, true> conversation id => closed
+     */
+    private function closedIds(ChatUserInterface $user, array $ids): array
+    {
+        $now    = $this->clock->now();
+        $closed = [];
+        foreach ($this->participants->findForUser($user, $ids) as $id => $participant) {
+            if ($participant->isArchived($now)) {
+                $closed[$id] = true;
+            }
+        }
+
+        return $closed;
     }
 
     /**

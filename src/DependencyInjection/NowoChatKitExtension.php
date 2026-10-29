@@ -94,7 +94,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
 
         $profile          = $config['profiles'][$config['default_profile']];
         $profile['icons'] = array_replace(Configuration::DEFAULT_ICONS, $profile['icons']);
-        foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'push_preview', 'cache_pool', 'page_layout', 'web_ui', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'auto_away_minutes', 'limits', 'digest', 'doctrine', 'support'] as $key) {
+        foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'push_preview', 'cache_pool', 'page_layout', 'web_ui', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'auto_away_minutes', 'max_pins', 'limits', 'digest', 'doctrine', 'support'] as $key) {
             $container->setParameter(Configuration::ALIAS . '.' . $key, $profile[$key]);
         }
 

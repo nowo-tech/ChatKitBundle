@@ -47,7 +47,7 @@ final readonly class ChatPersonalData
      *
      * @param ChatUserInterface $user The user whose data is exported
      *
-     * @return array{settings: array<string, bool|int|string|null>, messages: list<array<string, string|null>>} Settings and authored messages
+     * @return array{settings: array<string, bool|int|string|null>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>} Settings, authored messages and the pins the user made
      */
     public function export(ChatUserInterface $user): array
     {
@@ -60,6 +60,13 @@ final readonly class ChatPersonalData
             ->getQuery()->getResult();
         $settings = $this->settings->forUser($user);
         $now      = $this->clock->now();
+        /** @var list<ChatMessage> $pins */
+        $pins = $this->entityManager->createQueryBuilder()
+            ->select('m', 'c')->from(ChatMessage::class, 'm')->innerJoin('m.conversation', 'c')
+            ->where('m.pinnedBy = :user AND m.pinnedAt IS NOT NULL')
+            ->setParameter('user', $user)
+            ->orderBy('m.pinnedAt', 'ASC')
+            ->getQuery()->getResult();
 
         return [
             'settings' => [
@@ -90,6 +97,12 @@ final readonly class ChatPersonalData
                 'sent_at'           => $message->getCreatedAt()->format(DATE_ATOM),
                 'edited_at'         => $message->getEditedAt()?->format(DATE_ATOM),
             ], $messages),
+            // 1.10: messages the user pinned (any author).
+            'pins' => array_map(static fn (ChatMessage $message): array => [
+                'conversation_uuid' => $message->getConversation()->getUuid(),
+                'message_uuid'      => $message->getUuid(),
+                'pinned_at'         => $message->getPinnedAt()?->format(DATE_ATOM),
+            ], $pins),
         ];
     }
 

@@ -9,6 +9,8 @@ use Doctrine\ORM\Mapping as ORM;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 
+use function is_string;
+
 /**
  * One chat message. `body` keeps the author's Markdown, `bodyHtml` the sanitised render
  * (ChatMarkdownRenderer); a deleted message keeps its row as a tombstone (body cleared).
@@ -32,6 +34,9 @@ class ChatMessage
     public const string KIND_BUZZ = 'buzz';
     public const string KIND_BOT  = 'bot';
 
+    /** 1.10: "X pinned a message" (a system line; `meta.message` = the pinned message uuid). */
+    public const string KIND_PIN = 'pin';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -47,7 +52,7 @@ class ChatMessage
     /**
      * Bot messages only: how to render the body (`domain` of the key, `params`, optional `topic` key).
      *
-     * @var array{domain?: string|null, params?: array<string, string>, topic?: string|null}|null
+     * @var array{domain?: string|null, params?: array<string, string>, topic?: string|null, message?: string}|null
      */
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $meta = null;
@@ -61,6 +66,14 @@ class ChatMessage
     #[ORM\ManyToOne(targetEntity: ChatUserInterface::class)]
     #[ORM\JoinColumn(name: 'deleted_by_id', nullable: true, onDelete: 'SET NULL')]
     private ?ChatUserInterface $deletedBy = null;
+
+    /** 1.10: pinned to the top of its conversation since then (shared by every participant); null = not pinned. */
+    #[ORM\Column(name: 'pinned_at', nullable: true)]
+    private ?DateTimeImmutable $pinnedAt = null;
+
+    #[ORM\ManyToOne(targetEntity: ChatUserInterface::class)]
+    #[ORM\JoinColumn(name: 'pinned_by_id', nullable: true, onDelete: 'SET NULL')]
+    private ?ChatUserInterface $pinnedBy = null;
 
     /**
      * Creates a text message, stamped with a new public uuid.
@@ -104,6 +117,91 @@ class ChatMessage
         $message->kind = self::KIND_BUZZ;
 
         return $message;
+    }
+
+    /**
+     * Creates the "X pinned a message" line (1.10), translated for each reader by the client.
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $author Who pinned
+     * @param self $pinned The pinned message
+     * @param DateTimeImmutable|null $createdAt Creation time; null for now
+     *
+     * @return self The new, unpersisted message
+     */
+    public static function pinLine(ChatConversation $conversation, ChatUserInterface $author, self $pinned, ?DateTimeImmutable $createdAt = null): self
+    {
+        $message       = new self($conversation, $author, '', '', $createdAt);
+        $message->kind = self::KIND_PIN;
+        $message->meta = ['message' => $pinned->getUuid()];
+
+        return $message;
+    }
+
+    /**
+     * Whether this is a "pinned a message" line.
+     *
+     * @return bool True for a pin line
+     */
+    public function isPinLine(): bool
+    {
+        return $this->kind === self::KIND_PIN;
+    }
+
+    /**
+     * Whether people may pin it: a text message, not deleted (lines, bot messages and tombstones are not).
+     *
+     * @return bool True when it can be pinned
+     */
+    public function isPinnable(): bool
+    {
+        return $this->kind === self::KIND_TEXT && !$this->isDeleted();
+    }
+
+    /**
+     * Pins the message (or unpins it with a null time).
+     *
+     * @param ChatUserInterface|null $by Who pinned it; null to unpin
+     * @param DateTimeImmutable|null $at When; null to unpin
+     */
+    public function pin(?ChatUserInterface $by, ?DateTimeImmutable $at): void
+    {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->pinnedBy = $at instanceof DateTimeImmutable ? $by : null;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->pinnedAt = $at;
+    }
+
+    /**
+     * When the message was pinned.
+     *
+     * @return DateTimeImmutable|null The time; null when not pinned
+     */
+    public function getPinnedAt(): ?DateTimeImmutable
+    {
+        return $this->pinnedAt;
+    }
+
+    /**
+     * Who pinned the message.
+     *
+     * @return ChatUserInterface|null The user; null when not pinned or the account is gone
+     */
+    public function getPinnedBy(): ?ChatUserInterface
+    {
+        return $this->pinnedBy;
+    }
+
+    /**
+     * Uuid of the message a pin line is about.
+     *
+     * @return string|null The uuid; null for other kinds
+     */
+    public function getPinnedMessageUuid(): ?string
+    {
+        $uuid = $this->meta['message'] ?? null;
+
+        return $this->isPinLine() && is_string($uuid) ? $uuid : null;
     }
 
     /**

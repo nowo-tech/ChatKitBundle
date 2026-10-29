@@ -22,6 +22,8 @@ export interface ConversationSummary {
   intake?: SupportIntake;
   canSend: boolean;
   peerOnline: boolean;
+  /** 1.10: the viewer closed it (listed under the "Closed" filter). */
+  archived?: boolean;
   /** Direct only (1.10): what the viewer sees of the other person's status (absent before 1.10 = offline). */
   peerStatus?: VisibleStatus;
   /** Direct only (1.10): the other person's custom status text and emoji. */
@@ -29,7 +31,9 @@ export interface ConversationSummary {
   peerStatusEmoji?: string | null;
   unread: number;
   lastMessageAt: string | null;
-  lastMessage: { preview: string; deleted: boolean; buzz?: boolean; mine: boolean; authorName: string | null } | null;
+  lastMessage: { preview: string; deleted: boolean; buzz?: boolean; pin?: boolean; mine: boolean; authorName: string | null } | null;
+  /** 1.10: the viewer may pin and unpin messages here. */
+  canPin?: boolean;
 }
 
 export interface ChatMessage {
@@ -39,7 +43,11 @@ export interface ChatMessage {
   authorName: string;
   authorInitials: string;
   mine: boolean;
-  kind: 'text' | 'buzz' | 'bot';
+  /** `pin` (1.10): "X pinned a message" line (`pinnedMessage` = its uuid). */
+  kind: 'text' | 'buzz' | 'bot' | 'pin';
+  /** 1.10: pinned to the top of the conversation. */
+  pinned?: boolean;
+  pinnedMessage?: string | null;
   html: string;
   createdAt: string;
   edited: boolean;
@@ -172,7 +180,9 @@ export type RealtimeEvent =
   | { type: 'conversation'; conversationUuid: string }
   | ({ type: 'status'; userUuid: string } & PeerStatus)
   | { type: 'my_status'; status: OwnStatus }
-  | { type: 'prefs'; prefs: ChatPrefs };
+  | { type: 'prefs'; prefs: ChatPrefs }
+  | { type: 'list' }
+  | { type: 'pins'; conversationUuid: string };
 
 export interface ChatConfig {
   userUuid: string;
@@ -220,6 +230,14 @@ export interface ChatConfig {
     status?: string;
     /** 1.10: save one preference (`POST {key, value}`). */
     settings?: string;
+    /** 1.10: close (`POST`) or reopen (`DELETE`) a conversation in the user's list (`__uuid__`). */
+    archive?: string;
+    /** 1.10: close every read conversation. */
+    archiveRead?: string;
+    /** 1.10: pinned messages of a conversation (`__uuid__`). */
+    pins?: string;
+    /** 1.10: pin (`POST`) / unpin (`DELETE`) a message (`__uuid__`, `__message__`). */
+    pin?: string;
   };
   prefs: ChatPrefs;
   /** 1.10: the user's own status (absent before 1.10: no status menu). */

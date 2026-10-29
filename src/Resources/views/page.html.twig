@@ -62,6 +62,9 @@
                         </button>
                     {% endif %}
                 {% endblock %}
+                {# 1.10: conversations the viewer closed are listed apart; the buttons below need JavaScript (the dock). #}
+                {% set _archived = archived ?? false %}
+                <a class="{{ nowo_ui_class('btn_link', _b) }} nowo-chat-page__archived-link" href="{{ path('nowo_chat_page', _archived ? {} : {archived: 1}) }}" data-testid="chat-page-archived-link">{{ (_archived ? 'chat.filter_all' : 'chat.filter_archived')|trans }}</a>
                 {% if conversations is empty %}
                     <p class="{{ nowo_ui_class('empty', _b) }} nowo-chat-page__empty">{{ 'chat.empty_title'|trans }}</p>
                 {% endif %}
@@ -73,6 +76,8 @@
                                 <span class="nowo-chat-page__row-preview">{{ conversation.lastMessage ? conversation.lastMessage.preview : conversation.subtitle }}</span>
                                 {% if conversation.unread > 0 %}<span class="nowo-chat-badge"><span aria-hidden="true">{{ conversation.unread }}</span><span class="nowo-chat-sr-only">{{ 'chat.unread'|trans({'%count%': conversation.unread}) }}</span></span>{% endif %}
                             </a>
+                            {% set _action = _archived ? 'chat.reopen_conversation' : 'chat.close_conversation' %}
+                            <button type="button" class="nowo-chat-page__row-archive" {{ _archived ? 'data-nowo-chat-unarchive' : 'data-nowo-chat-archive' }}="{{ conversation.uuid }}" aria-label="{{ _action|trans({'%name%': conversation.title}) }}" title="{{ _action|trans({'%name%': conversation.title}) }}">{{ (_archived ? 'chat.reopen' : 'chat.close_short')|trans }}</button>
                         </li>
                     {% endfor %}
                 </ul>

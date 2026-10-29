@@ -49,6 +49,9 @@
                             <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="unread">{{ 'chat.filter_unread'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
                             <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="channel">{{ 'chat.filter_channels'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
                             <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="support">{{ 'chat.filter_support'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                            {# 1.10: the conversations the user closed (each with Reopen) and "Close all read". #}
+                            <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="archived">{{ 'chat.filter_archived'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                            {{ ui.icon_button('archive', 'chat.archive_read'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'archive-read', 'nowo-chat-filters__archive-read') }}
                         </div>
                         <ul class="nowo-chat-list" role="list" data-part="list"></ul>
                     </div>
@@ -137,6 +140,8 @@
                     </span>
                 </span>
             </button>
+            {# 1.10: close (archive) the conversation for this user, or reopen it under the "Closed" filter. #}
+            <button type="button" class="nowo-chat-icon-btn nowo-chat-row__archive" data-part="row-archive"><span data-icon="archive" data-icon-size="16"></span></button>
         </li>
     </template>
 {% endblock %}
@@ -259,6 +264,8 @@
             </div>
             <div class="nowo-chat-msg__actions" data-part="actions">
                 {{ ui.icon_button('smile', 'chat.react'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'react') }}
+                {# 1.10: pin / unpin (shown to who may pin; the script sets the label). #}
+                {{ ui.icon_button('pin', 'chat.pin'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'pin') }}
                 {{ ui.icon_button('edit', 'chat.edit'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'edit') }}
                 {{ ui.icon_button('trash', 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'delete') }}
             </div>

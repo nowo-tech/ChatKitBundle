@@ -110,6 +110,7 @@ final readonly class ChatPresenter
                     default                             => $this->plainText($last->getBody(), $viewer, 90),
                 },
                 'buzz'       => $last->isBuzz(),
+                'pin'        => $last->isPinLine(),
                 'deleted'    => $last->isDeleted(),
                 'mine'       => $last->isAuthoredBy($viewer),
                 'authorName' => $last->getAuthor()?->getChatDisplayName(),
@@ -165,6 +166,9 @@ final readonly class ChatPresenter
             // translated in the locale of the request that posted it (an agent's), not the reader's.
             'references'  => $filled['references'],
             'refsPending' => $filled['pending'] || ($bot && !$viewer instanceof ChatUserInterface),
+            // 1.10: pinned to the top of the conversation; a pin line names the message it is about.
+            'pinned'        => $message->getPinnedAt() !== null,
+            'pinnedMessage' => $message->getPinnedMessageUuid(),
         ];
     }
 

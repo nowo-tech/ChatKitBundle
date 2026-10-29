@@ -15,6 +15,7 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
@@ -58,6 +59,7 @@ final class ChatPageController extends AbstractController
      * @param ChatUserSettingsRepository|null $settings The viewer's own status (the page's status button)
      * @param ChatPresence|null $presence Status of the person of the open direct conversation
      * @param ClockInterface $clock Clock for status expiry
+     * @param ChatParticipantRepository|null $participants Conversations the viewer closed (1.10)
      */
     public function __construct(
         private readonly ChatService $chat,
@@ -79,6 +81,7 @@ final class ChatPageController extends AbstractController
         private readonly ?ChatUserSettingsRepository $settings = null,
         private readonly ?ChatPresence $presence = null,
         private readonly ClockInterface $clock = new Clock(),
+        private readonly ?ChatParticipantRepository $participants = null,
     ) {
     }
 
@@ -88,11 +91,11 @@ final class ChatPageController extends AbstractController
      * @return Response The rendered page
      */
     #[Route('', name: 'nowo_chat_page', methods: ['GET'])]
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $user = $this->chatUser();
 
-        return $this->render($this->template(), $this->context($user, null));
+        return $this->render($this->template(), $this->context($user, null, $request->query->getBoolean('archived')));
     }
 
     /**
@@ -185,13 +188,23 @@ final class ChatPageController extends AbstractController
     /**
      * @return array<string, mixed>
      */
-    private function context(ChatUserInterface $user, ?ChatConversation $current): array
+    private function context(ChatUserInterface $user, ?ChatConversation $current, bool $archived = false): array
     {
         $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
         $list        = array_values(array_filter(
             $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT),
             fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
         ));
+        $ids = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        // 1.10: conversations the viewer closed are listed apart (`?archived=1`); the open one always shows.
+        $closed = [];
+        $now    = $this->clock->now();
+        foreach ($this->participants?->findForUser($user, $ids) ?? [] as $id => $participant) {
+            if ($participant->isArchived($now)) {
+                $closed[$id] = true;
+            }
+        }
+        $list   = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => $conversation === $current || isset($closed[(int) $conversation->getId()]) === $archived));
         $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
         $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
         $latest = $this->messages->findLatestByConversationIds($ids);
@@ -219,6 +232,7 @@ final class ChatPageController extends AbstractController
             'can_send'      => false,
             // 1.10: the viewer's own status (the status button opens the dock's status menu).
             'my_status' => $this->settings?->forUser($user)->statusView($this->clock->now()),
+            'archived'  => $archived,
         ];
     }
 

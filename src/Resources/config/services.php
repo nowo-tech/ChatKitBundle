@@ -102,7 +102,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$urlTemplate', param('nowo_chat_kit.push_url'))
         ->arg('$intervalMinutes', param('nowo_chat_kit.digest.interval_minutes'));
     $services->get(ChatService::class)
-        ->arg('$reactions', param('nowo_chat_kit.reactions'));
+        ->arg('$reactions', param('nowo_chat_kit.reactions'))
+        ->arg('$maxPins', param('nowo_chat_kit.max_pins'));
     $services->get(ChatDockExtension::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'))
         ->arg('$iconSet', param('nowo_chat_kit.icon_set'))

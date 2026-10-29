@@ -6,8 +6,11 @@ namespace Nowo\ChatKitBundle\Entity;
 
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
+use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
+
+use function in_array;
 
 /**
  * Per-user state in a conversation — read cursor (receipts, unread counts) and mute.
@@ -31,6 +34,10 @@ class ChatParticipant
 
     #[ORM\Column(name: 'muted_until', nullable: true)]
     private ?DateTimeImmutable $mutedUntil = null;
+
+    /** 1.10: the user closed (archived) the conversation in their list at that time; null = in the list. */
+    #[ORM\Column(name: 'archived_at', nullable: true)]
+    private ?DateTimeImmutable $archivedAt = null;
 
     #[ORM\Column(name: 'joined_at')]
     private DateTimeImmutable $joinedAt;
@@ -153,5 +160,47 @@ class ChatParticipant
     public function getJoinedAt(): DateTimeImmutable
     {
         return $this->joinedAt;
+    }
+
+    /**
+     * When the user closed the conversation in their list (null = never, or reopened).
+     *
+     * @return DateTimeImmutable|null The time
+     */
+    public function getArchivedAt(): ?DateTimeImmutable
+    {
+        return $this->archivedAt;
+    }
+
+    /**
+     * Closes (archives) the conversation for this user only, or reopens it with null. Nothing is deleted.
+     *
+     * @param DateTimeImmutable|null $at When it was closed; null reopens it
+     */
+    public function archive(?DateTimeImmutable $at): void
+    {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->archivedAt = $at;
+    }
+
+    /**
+     * Whether the conversation stays out of the user's list: closed, and no message since — unless the user muted it
+     * (it stays closed) or it is a resolved / closed support ticket (it stays closed whatever arrives).
+     *
+     * @param DateTimeImmutable $now Current time
+     *
+     * @return bool True while closed
+     */
+    public function isArchived(DateTimeImmutable $now): bool
+    {
+        if (!$this->archivedAt instanceof DateTimeImmutable) {
+            return false;
+        }
+        $conversation = $this->conversation;
+        if ($conversation->isSupport() && in_array($conversation->getSupportStatus(), [SupportStatus::Resolved, SupportStatus::Closed], true)) {
+            return true;
+        }
+
+        return $conversation->getLastMessageAt() <= $this->archivedAt || $this->isMuted($now);
     }
 }
