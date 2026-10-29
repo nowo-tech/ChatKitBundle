@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\DependencyInjection;
 
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Contract\ChatReferenceProviderInterface;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\FileLocator;
@@ -60,6 +61,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 'nowo_chat_action'      => $limiter($limits['actions_per_minute'], '1 minute'),
                 'nowo_chat_typing'      => $limiter($limits['typing_per_minute'], '1 minute'),
                 'nowo_chat_read'        => $limiter($limits['reads_per_minute'], '1 minute'),
+                'nowo_chat_reference'   => $limiter($limits['references_per_minute'], '1 minute'),
                 'nowo_chat_buzz'        => $limiter(1, $limits['buzz_interval_seconds'] . ' seconds'),
                 'nowo_chat_buzz_global' => $limiter($limits['buzz_per_minute'], '1 minute'),
             ],
@@ -95,6 +97,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'push_preview', 'cache_pool', 'page_layout', 'web_ui', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'limits', 'digest', 'doctrine', 'support'] as $key) {
             $container->setParameter(Configuration::ALIAS . '.' . $key, $profile[$key]);
         }
+
+        // #references: every application service implementing the contract is a provider.
+        $container->registerForAutoconfiguration(ChatReferenceProviderInterface::class)->addTag(ChatReferenceProviderInterface::TAG);
 
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.php');

@@ -117,6 +117,7 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 | `limits.actions_per_minute` | `nowo_chat_action` (opens, reads, edits, reactions, presence) | 240 |
 | `limits.typing_per_minute` | `nowo_chat_typing` (over the limit: dropped silently) | 30 |
 | `limits.reads_per_minute` | `nowo_chat_read` (list, messages, contacts, realtime token) | 600 |
+| `limits.references_per_minute` | `nowo_chat_reference` (`/` command menu and `#` search) | 120 |
 | `limits.buzz_interval_seconds` | `nowo_chat_buzz` (per conversation) | 15 |
 | `limits.buzz_per_minute` | `nowo_chat_buzz_global` | 10 |
 

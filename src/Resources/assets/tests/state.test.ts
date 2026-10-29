@@ -105,6 +105,19 @@ describe('chat dock state', () => {
     expect(cache.read('c')).toBeNull();
   });
 
+  it('forgets one conversation of the cache (a resumed ticket), best effort', () => {
+    const cache = new ThreadCache('u7');
+    cache.remove('nothing cached yet');
+    cache.write('c', [message(1)], false);
+    cache.write('d', [message(2)], false);
+    cache.remove('c');
+    expect(cache.read('c')).toBeNull();
+    expect(cache.read('d')?.messages[0]?.id).toBe(2);
+    cache.remove('none');
+    window.sessionStorage.setItem('nowo-chat-cache:u7', '{broken');
+    expect(() => cache.remove('d')).not.toThrow();
+  });
+
   it('keeps drafts apart from the shared layout and clears chat storage on logout', async () => {
     const { DraftStore, clearChatStorage } = await import('../src/state');
     const drafts = new DraftStore('u9');

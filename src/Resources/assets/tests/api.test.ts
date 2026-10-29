@@ -17,6 +17,7 @@ const config = {
     conversation: '/conv/__uuid__',
     messages: '/conv/__uuid__/messages',
     members: '/conv/__uuid__/members',
+    references: '/conv/__uuid__/references',
     read: '/conv/__uuid__/read',
     typing: '/conv/__uuid__/typing',
     buzz: '/conv/__uuid__/buzz',
@@ -70,6 +71,12 @@ describe('chat api client', () => {
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ members: [{ uuid: 'u' }] }) });
     expect(await api.members('c 1', 'lu')).toEqual([{ uuid: 'u' }]);
     expect(fetchMock).toHaveBeenLastCalledWith('/conv/c%201/members?q=lu', expect.anything());
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ types: [], references: [{ id: '1' }] }) });
+    expect(await api.references('c 1', 'task', 'de ploy')).toEqual({ types: [], references: [{ id: '1' }] });
+    expect(fetchMock).toHaveBeenLastCalledWith('/conv/c%201/references?type=task&q=de%20ploy', expect.anything());
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve({ message: { id: 7 } }) });
+    expect(await api.message('c1', 'm 1')).toEqual({ id: 7 });
+    expect(fetchMock).toHaveBeenLastCalledWith('/conv/c1/messages/m%201', expect.anything());
     expect(await api.openDirect('u')).toEqual({ uuid: 'x' });
     expect(fetchMock.mock.lastCall?.[1]).toMatchObject({ method: 'POST', body: '{"userUuid":"u"}', headers: expect.objectContaining({ 'X-CSRF-TOKEN': 'tok' }) });
     expect(await api.openChannel('project:p')).toEqual({ uuid: 'x' });

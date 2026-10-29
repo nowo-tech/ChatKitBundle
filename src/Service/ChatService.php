@@ -46,6 +46,7 @@ final readonly class ChatService
      * @param EventDispatcherInterface|null $events Receives the chat events; null dispatches none
      * @param ChatMentions|null $mentions Validates and stores @mentions; null keeps mention tokens as written
      * @param ChatMessageMentionRepository|null $mentionRows Mention rows (removed with a deleted message, read with the thread)
+     * @param ChatReferences|null $references Validates #reference tokens; null keeps them as written
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -59,6 +60,7 @@ final readonly class ChatService
         private ?EventDispatcherInterface $events = null,
         private ?ChatMentions $mentions = null,
         private ?ChatMessageMentionRepository $mentionRows = null,
+        private ?ChatReferences $references = null,
     ) {
     }
 
@@ -121,7 +123,7 @@ final readonly class ChatService
     }
 
     /**
-     * Stores a new message (rendered to HTML) with its @mentions of conversation members, bumps the conversation
+     * Stores a new message (rendered to HTML) with its validated #references (ChatReferences) and its @mentions of conversation members, bumps the conversation
      * activity, moves the support status (the owner's message reopens a resolved ticket and turns a waiting one open;
      * an agent's reply turns an open ticket to waiting for the user), notifies and dispatches ChatMentionEvent when
      * it mentions someone.
@@ -137,6 +139,7 @@ final readonly class ChatService
     public function send(ChatUserInterface $author, ChatConversation $conversation, string $body): ChatMessage
     {
         $body               = $this->normalize($body);
+        $body               = $this->references?->validate($conversation, $author, $body) ?? $body;
         [$body, $mentioned] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, []];
         $now                = $this->clock->now();
         $message            = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
@@ -187,8 +190,10 @@ final readonly class ChatService
      */
     public function edit(ChatMessage $message, string $body): void
     {
-        $body               = $this->normalize($body);
-        $author             = $message->getAuthor();
+        $body   = $this->normalize($body);
+        $author = $message->getAuthor();
+        // A reference the author may no longer open (or a forged one) is kept as plain text.
+        $body               = $author instanceof ChatUserInterface ? ($this->references?->validate($message->getConversation(), $author, $body) ?? $body) : $body;
         [$body, $mentioned] = $author instanceof ChatUserInterface && $this->mentions instanceof ChatMentions
             ? $this->mentions->resolve($message->getConversation(), $author, $body)
             : [$body, []];

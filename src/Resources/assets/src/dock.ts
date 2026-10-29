@@ -354,12 +354,19 @@ export class ChatDock implements ThreadHost {
   }
 
   /**
-   * Opens another conversation in place of a window (a support draft replaced by the ticket it continues).
+   * Opens another conversation in place of a window (a support draft replaced by the ticket it continues). The
+   * server moved the draft's messages into the ticket: both cached threads are dropped, an open ticket window
+   * reloads its messages, the draft row leaves the list and the list is fetched again.
    *
    * @param from Uuid of the window to replace.
    * @param summary Conversation to open.
    */
   replaceWith(from: string, summary: ConversationSummary): void {
+    this.cache.remove(from);
+    this.cache.remove(summary.uuid);
+    this.conversations.delete(from);
+    void this.windows.get(summary.uuid)?.reload();
+    void this.refreshList();
     if (!this.isMobile()) {
       this.store.update((state) => {
         state.tabs = state.tabs.filter((item) => item.uuid !== from);
@@ -646,6 +653,19 @@ export class ChatDock implements ThreadHost {
   }
 
   /**
+   * Fetches a message as the viewer sees it (its #reference cards) and repaints it in its open window.
+   *
+   * @param conversationUuid Conversation of the message.
+   * @param messageUuid The message.
+   */
+  private resolveReferences(conversationUuid: string, messageUuid: string): void {
+    void this.api
+      .message(conversationUuid, messageUuid)
+      .then((resolved) => this.windows.get(conversationUuid)?.update(resolved))
+      .catch(() => undefined);
+  }
+
+  /**
    * Applies a realtime event: new / updated messages, read cursors, typing, or a changed conversation.
    *
    * @param event Event from the user's private topic.
@@ -653,6 +673,10 @@ export class ChatDock implements ThreadHost {
   private onRealtime(event: RealtimeEvent): void {
     if (event.type === 'message' || event.type === 'message_updated') {
       const message: ChatMessage = { ...event.message, mine: event.message.authorUuid === this.config.userUuid };
+      if (message.refsPending === true) {
+        // One payload for every member: its #reference cards are resolved for this viewer by the server.
+        this.resolveReferences(event.conversationUuid, message.uuid);
+      }
       if (event.type === 'message_updated') {
         this.windows.get(event.conversationUuid)?.update(message);
         return;

@@ -16,6 +16,7 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingDigestSender;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
@@ -130,7 +131,25 @@ final class ChatDigestTest extends DatabaseTestCase
         self::assertSame([], $sender->sent, 'CHAT-SEC-01: no email with snippets of a channel she left');
     }
 
-    private function dispatcher(RecordingDigestSender $sender, ArrayAdapter $cache): ChatDigestDispatcher
+    public function testReferencesShowAsTheRecipientMaySeeThem(): void
+    {
+        $chat    = $this->get(ChatService::class);
+        $ana     = $this->user('Ana');
+        $luis    = $this->user('Luis');
+        $nora    = $this->user('NoTasks Nora');
+        $acme    = $this->get(ChatAccess::class)->channel(TestChannelProvider::KEY) ?? self::fail('channel');
+        $channel = $chat->openChannel($ana, $acme);
+        $chat->openChannel($luis, $acme);
+        $chat->openChannel($nora, $acme);
+        $chat->send($ana, $channel, 'ship #[x](task:1) now');
+
+        $sender = new RecordingDigestSender();
+        $this->dispatcher($sender, new ArrayAdapter(), $this->get(ChatReferences::class))(new SendChatDigestMessage((int) $luis->getId()));
+        $this->dispatcher($sender, new ArrayAdapter(), $this->get(ChatReferences::class))(new SendChatDigestMessage((int) $nora->getId()));
+        self::assertSame(['ship #Deploy the API now', 'ship [Content not visible] now'], [$sender->sent[0]['items'][0]->preview, $sender->sent[1]['items'][0]->preview]);
+    }
+
+    private function dispatcher(RecordingDigestSender $sender, ArrayAdapter $cache, ?ChatReferences $references = null): ChatDigestDispatcher
     {
         return new ChatDigestDispatcher(
             $this->get(TestDirectory::class),
@@ -145,6 +164,7 @@ final class ChatDigestTest extends DatabaseTestCase
             $cache,
             '/inbox?chat={uuid}',
             60,
+            $references,
         );
     }
 }

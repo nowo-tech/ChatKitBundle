@@ -15,6 +15,7 @@ use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
+use Nowo\ChatKitBundle\Service\ChatReferences;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
@@ -37,6 +38,7 @@ final readonly class ChatPushDispatcher
      * @param string|null $icon Icon and badge URL of the notification; null omits them
      * @param ClockInterface $clock Clock used for the mute check
      * @param bool $preview Whether the body carries the message text (`push_preview`); otherwise a generic "New message"
+     * @param ChatReferences|null $references Shows #references as each recipient may see them
      */
     public function __construct(
         private ChatMessageRepository $messages,
@@ -51,6 +53,7 @@ final readonly class ChatPushDispatcher
         private ?string $icon = null,
         private ClockInterface $clock = new Clock(),
         private bool $preview = false,
+        private ?ChatReferences $references = null,
     ) {
     }
 
@@ -112,8 +115,10 @@ final readonly class ChatPushDispatcher
         $body = match (true) {
             $message->isBuzz() => $this->translator->trans('chat.buzz_received', ['%name%' => $authorName], 'NowoChatKitBundle', $locale),
             // `push_preview`: message text on lock screens only when the application opts in.
-            $this->preview => $this->markdown->plainText($message->getBody(), 140),
-            default        => $this->translator->trans('chat.new_message', [], 'NowoChatKitBundle', $locale),
+            $this->preview => $this->references instanceof ChatReferences
+                ? $this->references->plainText($this->markdown, $message->getBody(), $recipient, 140, $locale)
+                : $this->markdown->plainText($message->getBody(), 140),
+            default => $this->translator->trans('chat.new_message', [], 'NowoChatKitBundle', $locale),
         };
 
         return array_filter([

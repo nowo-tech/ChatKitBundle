@@ -8,6 +8,7 @@ use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatDigestItem;
+use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
@@ -15,6 +16,7 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatReferences;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
@@ -33,6 +35,7 @@ final readonly class ChatDigestDispatcher
      *
      * @param string $urlTemplate Link of each conversation; `{uuid}` is replaced by the conversation id
      * @param int $intervalMinutes Minimum minutes between two digests to the same user
+     * @param ChatReferences|null $references Shows #references as the recipient may see them
      */
     public function __construct(
         private ChatDirectoryInterface $directory,
@@ -47,6 +50,7 @@ final readonly class ChatDigestDispatcher
         private CacheItemPoolInterface $cache,
         private string $urlTemplate = '/?chat={uuid}',
         private int $intervalMinutes = 60,
+        private ?ChatReferences $references = null,
     ) {
     }
 
@@ -97,7 +101,7 @@ final readonly class ChatDigestDispatcher
             $items[] = new ChatDigestItem(
                 (string) $summary['title'],
                 $count,
-                $last === null || $last->isDeleted() || $last->isBuzz() ? '' : $this->markdown->plainText($last->getBody(), 140),
+                $last === null || $last->isDeleted() || $last->isBuzz() ? '' : $this->preview($last->getBody(), $user),
                 str_replace('{uuid}', $conversation->getUuid(), $this->urlTemplate),
             );
         }
@@ -106,5 +110,13 @@ final readonly class ChatDigestDispatcher
         }
         $this->sender->send($user, $items);
         $this->cache->save($sent->set(true)->expiresAfter($this->intervalMinutes * 60));
+    }
+
+    /** Plain text of the last message in the recipient's locale (#references as the recipient may see them). */
+    private function preview(string $body, ChatUserInterface $user): string
+    {
+        return $this->references instanceof ChatReferences
+            ? $this->references->plainText($this->markdown, $body, $user, 140, $user->getChatLocale())
+            : $this->markdown->plainText($body, 140);
     }
 }

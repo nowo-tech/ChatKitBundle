@@ -16,7 +16,8 @@ use const ENT_SUBSTITUTE;
  * HTML-escaped first, then a closed set of rules adds tags: fenced code blocks, inline code, **bold**,
  * *italic* / _italic_, ~~strike~~, bullet / numbered lists, line breaks, http(s) autolinks
  * (`rel="noopener nofollow ugc"`, new tab) and @mention tokens (`@[name](publicId)`, ChatMentions) as
- * `<span class="nowo-chat-mention" data-mention="publicId">@name</span>`. No raw HTML, no images, no other URL schemes.
+ * `<span class="nowo-chat-mention" data-mention="publicId">@name</span>`, and #references (`#[Title](type:id)`,
+ * ChatReferences) as an empty slot filled for each viewer at read time. No raw HTML, no images, no other URL schemes.
  */
 final class ChatMarkdownRenderer
 {
@@ -110,7 +111,8 @@ final class ChatMarkdownRenderer
     }
 
     /**
-     * Plain text for previews, push bodies and email digests (no Markdown markers, collapsed whitespace).
+     * Plain text for previews, push bodies and email digests (no Markdown markers, collapsed whitespace). A reference
+     * token becomes `#…` here (no title): ChatReferences::plainText() shows it as the reader may see it.
      *
      * @param string $markdown The raw message text
      * @param int $maxLength Maximum length in characters; longer text is cut and ends with an ellipsis
@@ -119,7 +121,7 @@ final class ChatMarkdownRenderer
      */
     public function plainText(string $markdown, int $maxLength = 120): string
     {
-        $text = (string) preg_replace([ChatMentions::TOKEN, '/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)])[ \t]+/m', '/\s+/'], ['@$1', '', '', '', ' '], self::clean($markdown));
+        $text = (string) preg_replace([ChatMentions::TOKEN, ChatReferences::TOKEN, '/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)])[ \t]+/m', '/\s+/'], ['@$1', '#…', '', '', '', ' '], self::clean($markdown));
         $text = trim($text);
 
         return mb_strlen($text) > $maxLength ? rtrim(mb_substr($text, 0, $maxLength - 1)) . '…' : $text;
@@ -141,6 +143,12 @@ final class ChatMarkdownRenderer
             return "\u{E000}M" . (count($mentions) - 1) . "\u{E000}";
         }, $text);
 
+        // A reference token becomes an empty slot, filled for each viewer at read time (ChatReferences::fill()).
+        $references = 0;
+        $text       = (string) preg_replace_callback(ChatReferences::TOKEN, static function () use (&$references): string {
+            return "\u{E000}R" . $references++ . "\u{E000}";
+        }, $text);
+
         $links = [];
         $text  = (string) preg_replace_callback('~\bhttps?://[^\s<>"\'`]+~i', static function (array $m) use (&$links): string {
             $url     = rtrim($m[0], '.,;:!?)');
@@ -158,6 +166,7 @@ final class ChatMarkdownRenderer
 
         $text = (string) preg_replace_callback('/\x{E000}L(\d+)\x{E000}/u', static fn (array $m): string => $links[(int) $m[1]], $text);
         $text = (string) preg_replace_callback('/\x{E000}M(\d+)\x{E000}/u', static fn (array $m): string => $mentions[(int) $m[1]], $text);
+        $text = (string) preg_replace('/\x{E000}R\d+\x{E000}/u', ChatReferences::SLOT, $text);
 
         return (string) preg_replace_callback('/\x{E000}C(\d+)\x{E000}/u', static fn (array $m): string => $codes[(int) $m[1]], $text);
     }

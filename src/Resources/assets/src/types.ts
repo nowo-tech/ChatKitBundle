@@ -45,6 +45,28 @@ export interface ChatMessage {
   mentions?: MentionRef[];
   /** The viewer is one of them (false in viewer-neutral realtime payloads: use `mentions`). */
   mentionsMe?: boolean;
+  /** #references the viewer may open (the editor turns their cards back into tokens). */
+  references?: Reference[];
+  /** Viewer-neutral realtime payload: its reference cards are fetched for the viewer (`GET` the message). */
+  refsPending?: boolean;
+}
+
+/** A #reference the viewer may open: an issue, a task, a project … (ChatReference). */
+export interface Reference {
+  type: string;
+  id: string;
+  title: string;
+  url: string;
+  subtitle: string;
+  badge: string;
+  tone: string;
+}
+
+/** A `/` command: one type of item the conversation may refer to. */
+export interface ReferenceType {
+  key: string;
+  label: string;
+  icon: string;
 }
 
 /** One @mention of a message: public id and display name. */
@@ -126,6 +148,8 @@ export interface ChatConfig {
     messages: string;
     /** Members a message may @mention (`__uuid__`). */
     members: string;
+    /** `/` commands and #reference search (`__uuid__`). */
+    references: string;
     message: string;
     reactions: string;
     read: string;
@@ -139,6 +163,8 @@ export interface ChatConfig {
   isAgent: boolean;
   /** The application resolves link previews (issue cards …). */
   linkPreviews: boolean;
+  /** The application registers reference providers: `/` commands and the `#` picker are offered. */
+  references?: boolean;
   i18n: Record<string, string>;
 }
 

@@ -97,11 +97,12 @@ export class Templates {
   }
 
   /**
-   * Fills every empty `data-icon` slot of a cloned template (`data-icon-size`, default 18); slots that already hold markup are kept.
+   * Fills every empty `data-icon` slot of a cloned template or a rendered message (`data-icon-size`, default 18);
+   * slots that already hold markup are kept.
    *
-   * @param scope Cloned element.
+   * @param scope Cloned element or message body.
    */
-  private fillIcons(scope: Element): void {
+  fillIcons(scope: Element): void {
     scope.querySelectorAll<HTMLElement>('[data-icon]').forEach((slot) => {
       if (slot.childElementCount === 0) {
         slot.replaceChildren(this.icon(slot.dataset.icon ?? '', Number(slot.dataset.iconSize ?? 18)));

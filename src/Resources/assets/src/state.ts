@@ -187,6 +187,21 @@ export class ThreadCache {
   }
 
   /**
+   * Forgets the cached messages of a conversation (its messages changed on the server, e.g. a resumed ticket).
+   *
+   * @param uuid Conversation uuid.
+   */
+  remove(uuid: string): void {
+    try {
+      const all = JSON.parse(window.sessionStorage.getItem(this.key) ?? '{}') as Record<string, unknown>;
+      delete all[uuid];
+      window.sessionStorage.setItem(this.key, JSON.stringify(all));
+    } catch {
+      // Best effort.
+    }
+  }
+
+  /**
    * Caches the last 40 messages of a conversation (best effort).
    *
    * @param uuid Conversation uuid.

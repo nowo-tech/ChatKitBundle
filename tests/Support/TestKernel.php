@@ -18,6 +18,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestAccessPolicy;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestLinkPreviewProvider;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestReferenceProvider;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCountingMiddleware;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
@@ -143,6 +144,8 @@ final class TestKernel extends Kernel
         foreach ([TestDirectory::class, TestAccessPolicy::class, TestChannelProvider::class, RecordingRealtime::class, RecordingPushSender::class, TestLinkPreviewProvider::class] as $class) {
             $services->set($class);
         }
+        // #references: one provider, autoconfigured through the interface's tag.
+        $services->set(TestReferenceProvider::class)->autoconfigure();
         // Query-count regression tests (N+1): every SQL statement of the connection is recorded.
         $services->set(QueryCounter::class);
         $services->set(QueryCountingMiddleware::class)->tag('doctrine.middleware');

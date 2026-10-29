@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.9.0] - 2026-10-29](#190---2026-10-29)
 - [[1.8.0] - 2026-10-29](#180---2026-10-29)
 - [[1.7.0] - 2026-10-29](#170---2026-10-29)
 - [[1.6.0] - 2026-10-23](#160---2026-10-23)
@@ -25,6 +26,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.9.0] - 2026-10-29
+
+### Added
+
+- **References in messages (`/` commands and `#`).** `/` at the start of a message opens a command menu (`/task`,
+  `/issue` … one per reference type the application registers); after a command, the text typed searches its items
+  (`/task deploy`). `#` anywhere searches every type. Same combobox as @mentions (↑ ↓, Enter / Tab, Escape,
+  `aria-activedescendant`). A picked item is written `#Title` and sent as the token `#[Title](type:id)`.
+- `ChatReferenceProviderInterface` (autoconfigured, tag `nowo_chat_kit.reference_provider`): `key()`, `label()`,
+  `icon()`, `isAvailable(scope)`, `search(scope, query, limit)`, `resolve(scope, ids)`; models `ChatReference` (type,
+  id, title, url, subtitle, badge, tone) and `ChatReferenceScope` (viewer, audience, conversation). Generic: issues,
+  tasks, projects, monitors, a wiki … plug in the same way.
+- **Permissions, deny by default.** The command menu lists a type only when the conversation's audience may open one of
+  its items; search and validation use the audience of the conversation — the writer, plus the other person of a direct
+  conversation (an item only one of them may open is never offered nor posted) — and a channel's own items. On send and
+  edit a forged, foreign, unknown or unreadable token is stored as plain text (the same for "does not exist" and
+  "forbidden"); at most 10 references per message.
+- **Cards resolved per viewer at read time.** The stored HTML holds an empty slot per reference (no type, id or title);
+  each reader gets a card (icon, type, title, subtitle, status badge, link) or the neutral *Content not visible* chip
+  (`chat.reference_restricted`, 7 locales). Conversation previews, Web Push bodies and the e-mail digest render the same
+  way for their recipient. Viewer-neutral realtime payloads carry `refsPending`; the dock fetches the message for its
+  user (`GET /api/conversations/{uuid}/messages/{messageUuid}`). Resolutions are batched per page (one `resolve()` per
+  type) and cached per request.
+- API `GET /api/conversations/{uuid}/references?type=&q=` (same access as reading the conversation, 404 otherwise; rate
+  limited by `limits.references_per_minute`, default 120); message payloads carry `references` and `refsPending`; dock
+  config `references` and endpoint `references`; built-in icons `lock`, `issue`, `task`, `project`, `monitor`,
+  `report`, `ticket`, `page`.
+- `/` commands that *do* something (assign, resolve …) are not part of this version: commands only insert references.
+
+### Fixed
+
+- Continuing a support ticket from the draft (*Continue SUP-…*) showed the ticket's cached messages without the text
+  moved from the draft, and left the draft row in the list: the dock now drops both cached threads, reloads an open
+  ticket window and refreshes the list.
 
 ## [1.8.0] - 2026-10-29
 

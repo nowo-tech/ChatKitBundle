@@ -30,6 +30,7 @@ This bundle is **FrankenPHP worker mode friendly**. See [docs/FRANKENPHP-WORKER-
 - **Direct messages** between people your application allows to talk (you decide: same team, same project, anyone…)
 - **Channels**: one group conversation per resource of your application (project, room, team) — `project:<uuid>`-style keys from your own provider
 - **Support tickets**: a support assistant greets users with topics (incident, billing, how do I…, account, other — configurable), opens numbered tickets (`SUP-000123`) with a topic-specific first reply, asks "continue or new?" after a quiet week, lists earlier tickets with Reopen; agents filter by topic, status and assignee
+- **References** in messages: `/task`, `/issue` … commands and a `#` picker insert cards of your application's items, filtered by what everyone in the conversation may open and rendered per viewer (a neutral *Content not visible* chip otherwise)
 - **Realtime** through **Mercure** (FrankenPHP's built-in hub or standalone) with private per-user topics — polling fallback when it is off
 - **Presence** (online dot, reciprocal opt-out), **typing** indicator and **read receipts** (✓✓ / "Seen by")
 - **Edit and delete** your own messages within 15 minutes ("You deleted this message" tombstone; nobody deletes someone else's), **relative times** today with the exact time on hover, **emoji reactions**, **buzz**, configurable **sounds**, **emoji picker**, light **Markdown** (sanitised on the server)

@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.9.0](#to-190)
 - [To 1.8.0](#to-180)
 - [To 1.7.0](#to-170)
 - [To 1.6.0](#to-160)
@@ -24,6 +25,13 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.9.0
+
+From **1.8.0** — no schema change. Run `php bin/console assets:install public` (or rebuild your bundle of the TS
+sources). To offer `/` commands and `#` references, implement `ChatReferenceProviderInterface` (autoconfigured) for each
+kind of item — see [USAGE: References](USAGE.md#references). Without a provider nothing changes. New optional rate limit
+`limits.references_per_minute` (default 120). Two providers with the same key, or an invalid key, now fail loudly.
 
 ## To 1.8.0
 

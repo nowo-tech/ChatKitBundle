@@ -8,6 +8,7 @@ import { h, prefersReducedMotion, setBadge } from './dom';
 import { emojiPicker, insertAtCaret } from './emoji';
 import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from './format';
 import { decodeMentions, markOwnMentions, MentionAutocomplete, mentionsViewer } from './mention';
+import { decodeReferences, ReferenceAutocomplete } from './reference';
 import { SupportPanel } from './support';
 import { part, text, type Templates } from './templates';
 import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader } from './types';
@@ -138,6 +139,7 @@ export class ThreadView {
   private readonly resolveBtn: HTMLButtonElement;
   private readonly emojiBtn: HTMLButtonElement;
   private readonly mention: MentionAutocomplete;
+  private readonly reference: ReferenceAutocomplete | null;
   private readonly support: SupportPanel;
 
   private readonly host: ThreadHost;
@@ -199,6 +201,8 @@ export class ThreadView {
       i18n,
       idPrefix: `nowo-chat-${summary.uuid}`,
     });
+    // `/` commands and the `#` picker, when the application registers reference providers.
+    this.reference = this.referencePicker(this.input, `nowo-chat-${summary.uuid}`);
     this.input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
@@ -211,7 +215,7 @@ export class ThreadView {
       this.updateComposerState();
       // Drafts are stored at most twice a second (each save is a storage write).
       window.clearTimeout(draftTimer);
-      draftTimer = window.setTimeout(() => this.host.saveDraft(this.summary.uuid, this.mention.encode()), 500);
+      draftTimer = window.setTimeout(() => this.host.saveDraft(this.summary.uuid, this.encodeComposer()), 500);
       this.pingTyping();
     });
     this.buzzBtn.addEventListener('click', () => void this.sendBuzz());
@@ -238,7 +242,8 @@ export class ThreadView {
       part(this.element, 'support'),
     );
 
-    this.mention.load(host.draft(summary.uuid));
+    const draft = host.draft(summary.uuid);
+    this.mention.load(this.reference?.decode(draft) ?? draft);
     this.applySummary(summary);
   }
 
@@ -408,6 +413,14 @@ export class ThreadView {
     } catch {
       this.logState('error');
     }
+  }
+
+  /** Drops the messages shown and loads the newest page again (messages moved in from elsewhere). */
+  async reload(): Promise<void> {
+    this.messages = [];
+    this.hasMore = false;
+    this.loaded = false;
+    await this.load();
   }
 
   /** Poll / reconnect: fetch only what arrived after the newest message we have. */
@@ -833,6 +846,9 @@ export class ThreadView {
       idPrefix: `nowo-chat-edit-${message.uuid}`,
     });
     editMention.seed(message.mentions ?? []);
+    // Cards read as `#Title` in the editor; the references the author may still open turn back into tokens on save.
+    const editReference = this.referencePicker(input, `nowo-chat-edit-${message.uuid}`);
+    editReference?.seed(message.references ?? []);
     /** Leaves the editor and repaints the line from the current message. */
     const stop = (): void => {
       this.editing = null;
@@ -841,7 +857,8 @@ export class ThreadView {
     };
     /** Saves a non-blank edit; on failure, leaves the editor with an error notice. */
     const save = async (): Promise<void> => {
-      const body = editMention.encode().trim();
+      const mentioned = editMention.encode();
+      const body = (editReference?.encode(mentioned) ?? mentioned).trim();
       if (body === '') {
         return;
       }
@@ -913,11 +930,40 @@ export class ThreadView {
   }
 
   /**
+   * The `/` command menu and `#` picker of a text box, or null when the application registers no reference provider.
+   *
+   * @param input Composer or editor text box.
+   * @param idPrefix Unique id prefix of its list.
+   * @returns The picker, or null.
+   */
+  private referencePicker(input: HTMLTextAreaElement, idPrefix: string): ReferenceAutocomplete | null {
+    if (this.host.config.references !== true) {
+      return null;
+    }
+    return new ReferenceAutocomplete(input, {
+      load: (type, query) => this.host.api.references(this.summary.uuid, type, query),
+      icon: (name) => this.host.templates.icon(name, 16),
+      i18n: this.host.config.i18n,
+      idPrefix,
+    });
+  }
+
+  /**
+   * The composer text with its @mentions and #references as tokens (what is sent and kept as a draft).
+   *
+   * @returns The encoded text.
+   */
+  private encodeComposer(): string {
+    const mentioned = this.mention.encode();
+    return this.reference?.encode(mentioned) ?? mentioned;
+  }
+
+  /**
    * Sends the composer text: appended at once as pending, the composer and draft cleared, then delivered.
    * Blank, read-only or too long texts are not sent.
    */
   private async submit(): Promise<void> {
-    const body = this.mention.encode().trim();
+    const body = this.encodeComposer().trim();
     if (body === '' || !this.summary.canSend) {
       return;
     }
@@ -934,6 +980,7 @@ export class ThreadView {
     this.pending.push(pending);
     this.input.value = '';
     this.mention.reset();
+    this.reference?.reset();
     this.host.saveDraft(this.summary.uuid, '');
     this.autoGrow();
     this.updateComposerState();
@@ -1124,6 +1171,8 @@ export class ThreadView {
       // eslint-disable-next-line no-restricted-syntax -- sanitised on the server, see ChatMarkdownRenderer
       bubble.innerHTML = message.html;
       markOwnMentions(bubble, this.host.config.userUuid);
+      // Icons of the #reference cards (data-icon slots of the server render).
+      this.host.templates.fillIcons(bubble);
     }
 
     const time = part(article, 'time');
@@ -1289,7 +1338,7 @@ export class ThreadView {
     const i18n = this.host.config.i18n;
     const article = this.host.templates.clone('pending');
     article.classList.toggle('nowo-chat-msg--failed', pending.status === 'failed');
-    part(article, 'bubble').textContent = decodeMentions(pending.body).text;
+    part(article, 'bubble').textContent = decodeMentions(decodeReferences(pending.body).text).text;
     const status = part(article, 'status');
     if (pending.status === 'sending') {
       status.textContent = t(i18n, 'sending');
@@ -1426,6 +1475,11 @@ export class ThreadView {
  */
 export function plain(html: string, lines = false): string {
   const doc = new DOMParser().parseFromString(html.replace(/<br\s*\/?>/g, '\n').replace(/<\/(p|li|pre)>/g, '\n'), 'text/html');
+  // A #reference card reads `#Title`; the neutral chip of an item the viewer may not open, `[Content not visible]`.
+  doc.body.querySelectorAll('.nowo-chat-ref').forEach((chip) => {
+    const title = chip.querySelector('.nowo-chat-ref__title')?.textContent ?? '';
+    chip.replaceWith(chip.classList.contains('nowo-chat-ref--restricted') ? `[${title}]` : `#${title}`);
+  });
   const text = doc.body.textContent ?? '';
   // One line for previews: block boundaries become spaces ("supports:\n- dms" → "supports: dms").
   return (lines ? text.replace(/\n{3,}/g, '\n\n') : text.replace(/\s+/g, ' ')).trim();

@@ -54,6 +54,7 @@ final class ConfigurationTest extends TestCase
                 'actions_per_minute'    => 240,
                 'typing_per_minute'     => 30,
                 'reads_per_minute'      => 600,
+                'references_per_minute' => 120,
                 'buzz_interval_seconds' => 15,
                 'buzz_per_minute'       => 10,
             ],

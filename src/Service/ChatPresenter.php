@@ -34,12 +34,14 @@ final readonly class ChatPresenter
      * @param TranslatorInterface $translator Translates fallback titles in the bundle domain
      * @param ChatSupportTopics $topics Topic labels of support tickets and bot messages
      * @param ChatSupportPolicy $policy Readable ticket numbers and the read-only rule
+     * @param ChatReferences|null $references Fills #reference cards for the viewer; null leaves the slots empty
      */
     public function __construct(
         private ChatMarkdownRenderer $markdown,
         private TranslatorInterface $translator,
         private ChatSupportTopics $topics,
         private ChatSupportPolicy $policy,
+        private ?ChatReferences $references = null,
     ) {
     }
 
@@ -99,7 +101,7 @@ final readonly class ChatPresenter
                 'preview' => match (true) {
                     $last->isDeleted(), $last->isBuzz() => '',
                     $last->isBot()                      => mb_substr($this->botText($last), 0, 90),
-                    default                             => $this->markdown->plainText($last->getBody(), 90),
+                    default                             => $this->plainText($last->getBody(), $viewer, 90),
                 },
                 'buzz'       => $last->isBuzz(),
                 'deleted'    => $last->isDeleted(),
@@ -110,7 +112,9 @@ final readonly class ChatPresenter
     }
 
     /**
-     * Message shape for the dock (sanitized HTML, author, flags, reactions and @mentions).
+     * Message shape for the dock (sanitized HTML with the viewer's #reference cards, author, flags, reactions and.
+     *
+     * @mentions).
      *
      * @param ChatMessage $message The message
      * @param ChatUserInterface|null $viewer The reader (sets `mine`); null for viewer-neutral realtime payloads
@@ -128,6 +132,10 @@ final readonly class ChatPresenter
         }
 
         $bot = $message->isBot();
+        // #references: cards the viewer may open, the neutral chip for the rest; empty slots without a viewer.
+        $filled = $bot || $message->isDeleted() || !$this->references instanceof ChatReferences
+            ? ['html' => $message->getBodyHtml(), 'references' => [], 'pending' => false]
+            : $this->references->fill($message->getBodyHtml(), $message->getBody(), $viewer);
 
         return [
             'id'             => $message->getId(),
@@ -137,7 +145,7 @@ final readonly class ChatPresenter
             'authorInitials' => $bot ? '★' : ($author?->getChatInitials() ?? '?'),
             'mine'           => $viewer instanceof ChatUserInterface && $message->isAuthoredBy($viewer),
             'kind'           => $message->getKind(),
-            'html'           => $bot ? '<p>' . htmlspecialchars($this->botText($message), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>' : $message->getBodyHtml(),
+            'html'           => $bot ? '<p>' . htmlspecialchars($this->botText($message), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>' : $filled['html'],
             'createdAt'      => $message->getCreatedAt()->format(DATE_ATOM),
             'edited'         => $message->isEdited(),
             'deleted'        => $message->isDeleted(),
@@ -146,6 +154,10 @@ final readonly class ChatPresenter
             // Members the message mentions (from its stored tokens, no query) and whether the viewer is one of them.
             'mentions'   => $mentions,
             'mentionsMe' => $viewer instanceof ChatUserInterface && isset($ids[$viewer->getChatPublicId()]),
+            // Cards of the references the viewer may open (the editor turns them back into tokens); `refsPending`:
+            // a viewer-neutral payload whose slots the client fetches for its user.
+            'references'  => $filled['references'],
+            'refsPending' => $filled['pending'],
         ];
     }
 
@@ -218,6 +230,16 @@ final readonly class ChatPresenter
         return $ticket === null
             ? [$this->trans('chat.support_title'), $this->trans('chat.support_hint'), '★']
             : [$ticket, $this->trans('chat.support_title'), '★'];
+    }
+
+    /**
+     * Plain text of a message for the viewer (#references as the viewer may see them).
+     */
+    private function plainText(string $body, ChatUserInterface $viewer, int $maxLength): string
+    {
+        return $this->references instanceof ChatReferences
+            ? $this->references->plainText($this->markdown, $body, $viewer, $maxLength)
+            : $this->markdown->plainText($body, $maxLength);
     }
 
     private function trans(string $key): string

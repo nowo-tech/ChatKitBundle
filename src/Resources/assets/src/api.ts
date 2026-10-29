@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, Member, Reactions, Reader, SupportContext, SupportStatus, SupportTicket } from './types';
+import type { ChatConfig, ChatMessage, Contact, ConversationSummary, LinkPreview, Member, Reactions, Reader, Reference, ReferenceType, SupportContext, SupportStatus, SupportTicket } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -72,6 +72,30 @@ export class ChatApi {
    */
   async members(uuid: string, query: string): Promise<Member[]> {
     return (await this.get<{ members: Member[] }>(`${this.url('members', uuid)}?q=${encodeURIComponent(query)}`)).members;
+  }
+
+  /**
+   * `/` commands offered in a conversation (no `type`), or the #references matching a query (a type key, or `*`
+   * for every offered type). The server offers only what everyone in the conversation may open.
+   *
+   * @param uuid Conversation uuid.
+   * @param type Type key, `*`, or "" for the commands.
+   * @param query Search text.
+   * @returns The commands and the matching items.
+   */
+  async references(uuid: string, type: string, query: string): Promise<{ types: ReferenceType[]; references: Reference[] }> {
+    return this.get<{ types: ReferenceType[]; references: Reference[] }>(`${this.url('references', uuid)}?type=${encodeURIComponent(type)}&q=${encodeURIComponent(query)}`);
+  }
+
+  /**
+   * One message as the caller sees it (its #reference cards resolved for the caller).
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid Message uuid.
+   * @returns The message.
+   */
+  async message(uuid: string, messageUuid: string): Promise<ChatMessage> {
+    return (await this.get<{ message: ChatMessage }>(this.messageUrl('message', uuid, messageUuid))).message;
   }
 
   /**
@@ -304,7 +328,7 @@ export class ChatApi {
    * @returns The URL.
    */
   private url(
-    kind: 'conversation' | 'messages' | 'members' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign',
+    kind: 'conversation' | 'messages' | 'members' | 'references' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign',
     uuid: string,
   ): string {
     return this.config.endpoints[kind].replace('__uuid__', encodeURIComponent(uuid));

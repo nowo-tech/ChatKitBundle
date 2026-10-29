@@ -2124,3 +2124,128 @@
 .nowo-chat-support__status.is-closed {
   color: var(--nowo-chat-text);
 }
+
+/* #references (1.9): a compact card per item the viewer may open, a neutral chip for the rest. */
+.nowo-chat-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin: 1px 0;
+  padding: 1px 6px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+  font-size: 0.95em;
+  line-height: 1.4;
+  text-decoration: none;
+  vertical-align: baseline;
+}
+
+a.nowo-chat-ref:hover,
+a.nowo-chat-ref:focus-visible {
+  border-color: var(--nowo-chat-accent);
+  text-decoration: none;
+}
+
+.nowo-chat-ref__icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--nowo-chat-accent);
+}
+
+.nowo-chat-ref__type {
+  flex: none;
+  opacity: 0.75;
+  font-size: 0.85em;
+}
+
+.nowo-chat-ref__title {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowo-chat-ref__subtitle {
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0.8;
+  font-size: 0.85em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowo-chat-ref__badge {
+  flex: none;
+  padding: 0 6px;
+  border-radius: var(--nowo-chat-radius-pill);
+  background: var(--nowo-chat-surface-muted);
+  font-size: 0.8em;
+  font-weight: 600;
+}
+
+.nowo-chat-ref__badge--info {
+  background: var(--nowo-chat-mist);
+}
+
+.nowo-chat-ref__badge--success {
+  background: color-mix(in srgb, var(--nowo-chat-accent) 22%, transparent);
+}
+
+.nowo-chat-ref__badge--warning {
+  background: color-mix(in srgb, var(--nowo-chat-warn) 32%, transparent);
+}
+
+.nowo-chat-ref__badge--danger {
+  background: color-mix(in srgb, var(--nowo-chat-danger) 24%, transparent);
+}
+
+.nowo-chat-ref--restricted {
+  border-style: dashed;
+  background: var(--nowo-chat-surface-muted);
+  font-style: italic;
+}
+
+.nowo-chat-ref--restricted .nowo-chat-ref__icon {
+  color: inherit;
+}
+
+.nowo-chat-ref--restricted .nowo-chat-ref__title {
+  font-weight: 400;
+}
+
+/* A slot waiting for the viewer's card (viewer-neutral realtime payload). */
+.nowo-chat-ref-slot {
+  display: inline-block;
+  width: 5em;
+  height: 1em;
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface-muted);
+  vertical-align: middle;
+}
+
+.nowo-chat-msg--mine .nowo-chat-ref {
+  border-color: color-mix(in srgb, var(--nowo-chat-on-accent) 40%, transparent);
+}
+
+.nowo-chat-ref-option__icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--nowo-chat-accent);
+}
+
+.nowo-chat-ref-option__command {
+  font-weight: 600;
+}
+
+.nowo-chat-ref-option__meta {
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0.75;
+  font-size: 0.85em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

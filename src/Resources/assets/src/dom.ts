@@ -63,6 +63,15 @@ const ICONS: Record<string, string> = {
   ban: '<circle cx="12" cy="12" r="8.5" /><path d="m6 6 12 12" />',
   external: '<path d="M14 4h6v6" /><path d="M20 4 11 13" /><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />',
+  // #reference cards and `/` commands.
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" />',
+  issue: '<path d="M9 9V7a3 3 0 0 1 6 0v2" /><rect x="7" y="9" width="10" height="11" rx="5" /><path d="M4 13h3M17 13h3M5 19l2.5-2M19 19l-2.5-2M12 12v5" />',
+  task: '<rect x="4" y="4" width="16" height="16" rx="3" /><path d="m8.5 12 2.5 2.5 4.5-5" />',
+  project: '<path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Z" />',
+  monitor: '<path d="M3 12h4l3-7 4 14 3-7h4" />',
+  report: '<path d="M6 3h9l4 4v14H6V3Z" /><path d="M14 3v5h5M9 17v-3M12 17v-6M15 17v-2" />',
+  ticket: '<path d="M4 8a2 2 0 0 0 0 4v4h16v-4a2 2 0 0 1 0-4V4H4v4Z" /><path d="M10 4v12" />',
+  page: '<path d="M6 3h9l4 4v14H6V3Z" /><path d="M14 3v5h5M9 12h6M9 16h6" />',
 };
 
 /**

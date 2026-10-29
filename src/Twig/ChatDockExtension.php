@@ -18,6 +18,7 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatReferences;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormView;
@@ -74,6 +75,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly array $icons = [],
         private readonly ?IconRendererInterface $iconRenderer = null,
         private readonly ?string $pageLayout = null,
+        private readonly ?ChatReferences $references = null,
     ) {
     }
 
@@ -162,6 +164,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'conversation'   => $this->pattern('nowo_chat_api_conversation'),
                 'messages'       => $this->pattern('nowo_chat_api_messages'),
                 'members'        => $this->pattern('nowo_chat_api_members'),
+                'references'     => $this->pattern('nowo_chat_api_references'),
                 'message'        => $this->pattern('nowo_chat_api_edit', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 'reactions'      => $this->pattern('nowo_chat_api_react', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 'read'           => $this->pattern('nowo_chat_api_read'),
@@ -178,7 +181,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             ],
             'isAgent'      => $this->access->isSupportAgent($user),
             'linkPreviews' => !$this->linkPreviews instanceof NullLinkPreviewProvider,
-            'i18n'         => $this->strings($locale),
+            // `/` commands and the `#` picker are offered only when the application registers reference providers.
+            'references' => $this->references?->isEnabled() ?? false,
+            'i18n'       => $this->strings($locale),
         ];
     }
 

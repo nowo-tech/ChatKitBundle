@@ -18,6 +18,7 @@ const api = {
   realtime: vi.fn(),
   presence: vi.fn(),
   linkPreviews: vi.fn(),
+  message: vi.fn(),
 };
 let realtimeHandlers: { onEvent: (event: RealtimeEvent) => void; onState: (connected: boolean) => void } | null = null;
 const playOnce = vi.fn();
@@ -473,6 +474,30 @@ describe('ChatDock', () => {
     expect(playOnce).not.toHaveBeenCalled();
   });
 
+  it('fetches the viewer\'s cards of a realtime message whose references are pending', async () => {
+    const original = message({ html: '<p>before</p>' });
+    api.messages.mockResolvedValue({ messages: [original], hasMore: false, readUpTo: null, readers: [] });
+    const { dock, q } = mount([summary('a')]);
+    await dock.start();
+    await dock.open(summary('a'));
+    await flush();
+    const pending = { ...original, html: '<p><span class="nowo-chat-ref-slot"></span></p>', refsPending: true };
+    api.message.mockResolvedValueOnce({ ...original, html: '<p><span class="nowo-chat-ref nowo-chat-ref--restricted"><span class="nowo-chat-ref__title">Hidden</span></span></p>' });
+    realtimeHandlers?.onEvent({ type: 'message_updated', conversationUuid: 'a', message: pending });
+    await flush();
+    expect(api.message).toHaveBeenCalledWith('a', original.uuid);
+    expect(q(`[data-id="${original.id}"] .nowo-chat-ref__title`).textContent).toBe('Hidden');
+
+    // A failed fetch keeps the empty slot; a closed window is not repainted.
+    api.message.mockRejectedValueOnce(new Error('offline'));
+    realtimeHandlers?.onEvent({ type: 'message_updated', conversationUuid: 'a', message: pending });
+    await flush();
+    expect(q(`[data-id="${original.id}"] .nowo-chat-ref-slot`)).not.toBeNull();
+    api.message.mockResolvedValueOnce(original);
+    realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'closed', message: { ...message(), refsPending: true } });
+    await flush();
+  });
+
   it('opens conversations from data-nowo-chat-open links (support with context, people, channels)', async () => {
     const { dock, all, q } = mount([]);
     await dock.start();
@@ -646,6 +671,28 @@ describe('ChatDock', () => {
     await flush();
     const uuids = () => all('.nowo-chat-window').filter((element) => !element.hidden).map((element) => element.dataset.uuid);
     expect(uuids()).toEqual(['ticket']);
+  });
+
+  it('after continuing a ticket, drops the cached threads, reloads an open ticket window and the draft row', async () => {
+    const stale = message({ html: '<p>stale</p>' });
+    const moved = message({ html: '<p>moved draft text</p>' });
+    const { dock, all, q } = mount([summary('draft', { kind: 'support', title: 'Draft row' }), summary('ticket', { kind: 'support' })]);
+    await dock.start();
+    api.messages.mockResolvedValue({ messages: [stale], hasMore: false, readUpTo: null, readers: [] });
+    await dock.open(summary('ticket', { kind: 'support' }));
+    await dock.open(summary('draft', { kind: 'support' }));
+    await flush();
+    dock.messagesChanged('draft', [moved], false, []);
+    api.messages.mockClear();
+    api.messages.mockResolvedValue({ messages: [stale, moved], hasMore: false, readUpTo: null, readers: [] });
+    api.conversations.mockResolvedValue({ conversations: [summary('ticket', { kind: 'support' })], unreadTotal: 0 });
+    dock.replaceWith('draft', summary('ticket', { kind: 'support' }));
+    await flush();
+    // A full page, not a catch-up after the cached newest message.
+    expect(api.messages).toHaveBeenCalledWith('ticket');
+    expect(q('.nowo-chat-window[data-uuid="ticket"] .nowo-chat-thread').textContent).toContain('moved draft text');
+    expect(all('.nowo-chat-window').filter((element) => !element.hidden).map((element) => element.dataset.uuid)).toEqual(['ticket']);
+    expect(q('.nowo-chat-list').textContent).not.toContain('Draft row');
   });
 
   it('replaces the phone thread with another ticket', async () => {

@@ -17,6 +17,7 @@ use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\View\ChatPage;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -67,6 +68,7 @@ final class ChatPageController extends AbstractController
         private readonly ?string $webUiLayout = null,
         #[Autowire(param: 'nowo_chat_kit.web_ui.templates.page')]
         private readonly string $pageTemplate = Configuration::PAGE_TEMPLATE,
+        private readonly ?ChatReferences $references = null,
     ) {
     }
 
@@ -99,6 +101,8 @@ final class ChatPageController extends AbstractController
         $conversation = $this->find($uuid);
         $page         = $this->messages->findPage($conversation, self::PAGE_SIZE);
         $last         = end($page);
+        // The page's #references for this reader in one resolve() per type.
+        $this->references?->prime($user, $page);
 
         return $this->render($this->template(), [
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $page),

@@ -128,6 +128,21 @@ final class ChatPushDispatcherTest extends DatabaseTestCase
         return $user;
     }
 
+    public function testPreviewShowsReferencesAsEachRecipientMaySeeThem(): void
+    {
+        $chat   = $this->get(ChatService::class);
+        $sender = $this->get(RecordingPushSender::class);
+        $ana    = $this->user('Ana');
+        $luis   = $this->enablePush($this->user('Luis'));
+        $nora   = $this->enablePush($this->user('NoTasks Nora'));
+
+        $chat->send($ana, $chat->openDirect($ana, $luis), 'see #[x](task:1)');
+        self::assertSame('see #Deploy the API', $sender->sent[$luis->getChatPublicId()]['body'] ?? null);
+        // Nora may open no task: the item is not even kept in a conversation with her; a forged slot would read neutral.
+        $chat->send($ana, $chat->openDirect($ana, $nora), 'see #[x](task:1)');
+        self::assertSame('see #x', $sender->sent[$nora->getChatPublicId()]['body'] ?? null);
+    }
+
     public function testGenericBodyWithoutPreview(): void
     {
         $sender = new RecordingPushSender();

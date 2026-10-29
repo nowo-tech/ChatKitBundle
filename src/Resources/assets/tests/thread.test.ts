@@ -23,7 +23,7 @@ const msg = (over: Partial<ChatMessage> = {}): ChatMessage => ({
   createdAt: '2026-10-15T10:00:00Z', edited: false, deleted: false, moderated: false, ...over,
 });
 
-type ApiMock = Record<'messages' | 'send' | 'typing' | 'buzz' | 'resolve' | 'edit' | 'remove' | 'react' | 'members', Mock>;
+type ApiMock = Record<'messages' | 'send' | 'typing' | 'buzz' | 'resolve' | 'edit' | 'remove' | 'react' | 'members' | 'references', Mock>;
 
 function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock> = {}, configOver: Partial<ChatConfig> = {}) {
   const api: ApiMock = {
@@ -36,6 +36,11 @@ function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock
     remove: vi.fn(),
     react: vi.fn(),
     members: vi.fn().mockResolvedValue([{ uuid: 'u-luis', name: 'Luis', initials: 'LU' }]),
+    references: vi.fn().mockImplementation(async (_uuid: string, type: string) =>
+      type === ''
+        ? { types: [{ key: 'task', label: 'Task', icon: 'task' }], references: [] }
+        : { types: [], references: [{ type: 'task', id: '42', title: 'Deploy', url: '/t/42', subtitle: '', badge: '', tone: 'neutral' }] },
+    ),
     ...apiOver,
   };
   const host: ThreadHost = {
@@ -611,6 +616,48 @@ describe('ThreadView', () => {
     expect(setupWithDraft('@[Ana](u-ana) hola').q<HTMLTextAreaElement>('.nowo-chat-composer__input').value).toBe('@Ana hola');
   });
 
+  it('references items: / opens the commands, a picked task is sent as a token and drafts keep it', async () => {
+    const { view, api, host, q } = setup({ kind: 'channel' }, {}, { references: true });
+    (host.draft as Mock).mockReturnValue('');
+    const input = q<HTMLTextAreaElement>('.nowo-chat-composer__input');
+    input.value = '/';
+    input.setSelectionRange(1, 1);
+    input.dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(200);
+    expect(api.references).toHaveBeenCalledWith('c1', '', '');
+    expect(view.element.querySelector('.nowo-chat-ref-list [data-command="task"] svg')).not.toBeNull();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    expect(input.value).toBe('/task ');
+    await vi.advanceTimersByTimeAsync(200);
+    expect(api.references).toHaveBeenLastCalledWith('c1', 'task', '');
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    expect(api.send).not.toHaveBeenCalled();
+    expect(input.value).toBe('#Deploy ');
+    await vi.advanceTimersByTimeAsync(600);
+    expect(host.saveDraft).toHaveBeenLastCalledWith('c1', '#[Deploy](task:42) ');
+
+    api.send.mockReturnValueOnce(new Promise(() => undefined));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+    expect(api.send).toHaveBeenCalledWith('c1', '#[Deploy](task:42)');
+    expect(view.element.querySelector('.nowo-chat-msg--pending .nowo-chat-bubble')?.textContent).toBe('#Deploy');
+
+    // A restored draft shows titles, not tokens; without providers the picker is not bound.
+    const restored = setupWithDraft('#[Deploy](task:42) hola');
+    expect(restored.q<HTMLTextAreaElement>('.nowo-chat-composer__input').value).toBe('#[Deploy](task:42) hola');
+    expect(restored.view.element.querySelector('.nowo-chat-ref-list')).toBeNull();
+    const enabled = setup({}, {}, { references: true });
+    enabled.view.element.remove();
+    (enabled.host.draft as Mock).mockReturnValue('#[Deploy](task:42) hola');
+    const view2 = new ThreadView(enabled.host, summary());
+    expect(view2.element.querySelector<HTMLTextAreaElement>('.nowo-chat-composer__input')?.value).toBe('#Deploy hola');
+  });
+
+  it('renders the icons of reference cards in a message', async () => {
+    const { view } = setup();
+    view.merge([msg({ html: '<p><a class="nowo-chat-ref" href="/t/1"><span class="nowo-chat-ref__icon" data-icon="task" data-icon-size="14"></span><span class="nowo-chat-ref__title">Deploy</span></a></p>' })], false);
+    expect(view.element.querySelector('.nowo-chat-ref__icon svg')?.getAttribute('width')).toBe('14');
+  });
+
   it('highlights messages that mention the viewer and marks their chips', async () => {
     const chip = (uuid: string, name: string) => `<p><span class="nowo-chat-mention" data-mention="${uuid}">@${name}</span> hi</p>`;
     const forMe = msg({ html: chip('me', 'Me'), mentions: [{ uuid: 'me', name: 'Me' }] });
@@ -769,6 +816,24 @@ describe('ThreadView', () => {
       expect(second.article(other.id).querySelector('.nowo-chat-edit')).not.toBeNull();
     });
 
+    it('keeps the readable references of an edited message as tokens; a restricted chip stays text', async () => {
+      const card = '<a class="nowo-chat-ref" href="/t/42"><span class="nowo-chat-ref__type">Task</span><span class="nowo-chat-ref__title">Deploy</span></a>';
+      const hidden = '<span class="nowo-chat-ref nowo-chat-ref--restricted"><span class="nowo-chat-ref__title">Hidden</span></span>';
+      const mine = msg({ mine: true, authorUuid: 'me', uuid: 'r1', html: `<p>see ${card} ${hidden}</p>`, references: [{ type: 'task', id: '42', title: 'Deploy', url: '/t/42', subtitle: '', badge: '', tone: 'neutral' }] });
+      const plainOne = msg({ mine: true, authorUuid: 'me', uuid: 'r2', html: '<p>x</p>' });
+      const { action, article, api } = await loaded([mine, plainOne], {}, { references: true });
+      action(mine.id, 'edit').click();
+      const input = article(mine.id).querySelector<HTMLTextAreaElement>('.nowo-chat-edit__input') as HTMLTextAreaElement;
+      expect(input.value).toBe('see #Deploy [Hidden]');
+      api.edit.mockReturnValueOnce(new Promise(() => undefined));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(api.edit).toHaveBeenCalledWith('c1', 'r1', 'see #[Deploy](task:42) [Hidden]');
+
+      action(plainOne.id, 'edit').click();
+      const box = article(plainOne.id).querySelector<HTMLTextAreaElement>('.nowo-chat-edit__input') as HTMLTextAreaElement;
+      expect(box.value).toBe('x');
+    });
+
     it('cancels an edit whose message left the thread (cache repaint) with the original text', async () => {
       const mine = msg({ mine: true, authorUuid: 'me', uuid: 'e2', html: '<p>original</p>' });
       const { action, article, view } = await loaded([mine]);
@@ -850,5 +915,6 @@ describe('plain', () => {
     const html = '<p>It supports:</p><ul><li>dms</li><li>channels<br>and more</li></ul>';
     expect(plain(html)).toBe('It supports: dms channels and more');
     expect(plain(html, true)).toBe('It supports:\ndms\nchannels\nand more');
+    expect(plain('<p>see <a class="nowo-chat-ref"><span>Task</span><span class="nowo-chat-ref__title">Deploy</span></a>, <span class="nowo-chat-ref nowo-chat-ref--restricted"><span class="nowo-chat-ref__title">Hidden</span></span> <span class="nowo-chat-ref"></span></p>')).toBe('see #Deploy, [Hidden] #');
   });
 });

@@ -18,6 +18,7 @@ use Nowo\ChatKitBundle\Http\ChatApiException;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatContact;
 use Nowo\ChatKitBundle\Model\ChatLinkPreview;
+use Nowo\ChatKitBundle\Model\ChatReference;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
@@ -31,6 +32,7 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatSupportInbox;
 use Nowo\ChatKitBundle\Support\ChatSupportTickets;
@@ -72,7 +74,7 @@ final class ChatApiController extends AbstractController
 
     /**
      * Builds the API controller from the chat services, repositories, realtime helpers and the rate limiters
-     * (send, action, typing, buzz per conversation, buzz per minute, read).
+     * (send, action, typing, buzz per conversation, buzz per minute, read, reference search).
      *
      * @param ClockInterface $clock Clock for the realtime token expiry
      */
@@ -106,6 +108,9 @@ final class ChatApiController extends AbstractController
         private readonly RateLimiterFactoryInterface $buzzGlobalLimiter,
         #[Autowire(service: 'limiter.nowo_chat_read')]
         private readonly RateLimiterFactoryInterface $readLimiter,
+        #[Autowire(service: 'limiter.nowo_chat_reference')]
+        private readonly RateLimiterFactoryInterface $referenceLimiter,
+        private readonly ChatReferences $references,
         private readonly ClockInterface $clock = new Clock(),
     ) {
     }
@@ -459,6 +464,8 @@ final class ChatApiController extends AbstractController
             $page = $after === null ? array_slice($page, 1) : array_slice($page, 0, self::PAGE_SIZE);
         }
         $reactions = $this->reactions->summaryFor(array_map(static fn (ChatMessage $message): int => (int) $message->getId(), $page));
+        // The page's #references for this reader in one resolve() per type (no N+1).
+        $this->references->prime($user, $page);
 
         return $this->json([
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, $reactions[(int) $message->getId()] ?? []), $page),
@@ -503,6 +510,55 @@ final class ChatApiController extends AbstractController
                 'initials' => $member->getChatInitials(),
             ], array_slice($members, 0, self::MEMBERS_LIMIT)),
         ]);
+    }
+
+    /**
+     * #references the caller may insert (rate limited: an enumeration surface). Without `type`: the commands offered in
+     * this conversation (`/task` only for someone who may open a task in its scope). With `type` (a key, or `*` for
+     * every offered type) and `q` (at most 80 characters): the matching items every person of the conversation's
+     * audience may open — the caller, and the other person of a direct conversation; a project channel keeps its
+     * project's items (the providers' job). An empty result says nothing about what exists. Same access as reading the
+     * conversation (unknown or foreign → 404).
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request The request (query `type`, `q`)
+     *
+     * @return JsonResponse `{types: list<{key, label, icon}>, references: list<{type, id, title, url, subtitle, badge, tone}>}`
+     */
+    #[Route('/conversations/{uuid}/references', name: 'references', requirements: ['uuid' => self::UUID], methods: ['GET'])]
+    public function references(string $uuid, Request $request): JsonResponse
+    {
+        $user         = $this->reader();
+        $conversation = $this->find($uuid, ChatVoter::VIEW);
+        $this->deny(!$this->referenceLimiter->create('nowo_chat_reference_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        $scope = $this->references->scopeFor($conversation, $user);
+        $type  = (string) $request->query->get('type', '');
+        $query = mb_substr(trim((string) $request->query->get('q', '')), 0, 80);
+
+        return $this->json([
+            'types'      => $type === '' ? $this->references->types($scope) : [],
+            'references' => $type === '' ? [] : array_map(static fn (ChatReference $reference): array => $reference->toArray(), $this->references->search($scope, $type, $query)),
+        ]);
+    }
+
+    /**
+     * One message as the caller sees it (its #reference cards resolved for the caller): the dock fetches it after a
+     * viewer-neutral realtime payload. Same access as reading the conversation (unknown or foreign → 404).
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     *
+     * @return JsonResponse `{message}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}', name: 'message', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['GET'])]
+    public function message(string $uuid, string $messageUuid): JsonResponse
+    {
+        $user    = $this->reader();
+        $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
+        $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($message instanceof ChatMessage);
+
+        return $this->json(['message' => $this->presenter->message($message, $user, $this->reactionsOf($message))]);
     }
 
     /**

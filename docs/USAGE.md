@@ -11,6 +11,7 @@
 - [Full-page chat](#full-page-chat)
 - [Events](#events)
 - [Mentions](#mentions)
+- [References](#references)
 - [Link previews](#link-previews)
 - [Email digest](#email-digest)
 - [Customising the markup](#customising-the-markup)
@@ -89,6 +90,19 @@ public function previews(ChatUserInterface $viewer, array $urls): array; // url 
 ```
 
 See [Link previews](#link-previews).
+
+### `ChatReferenceProviderInterface` (optional, one per kind of item)
+
+```php
+public function key(): string;                                    // 'task' — the token type and the /task command
+public function label(): string;                                  // 'Task', translated
+public function icon(): string;                                   // built-in: issue, task, project, monitor, report, ticket, page, link
+public function isAvailable(ChatReferenceScope $scope): bool;     // offer /task at all?
+public function search(ChatReferenceScope $scope, string $query, int $limit): array; // list<ChatReference>
+public function resolve(ChatReferenceScope $scope, array $ids): array;               // id => ChatReference
+```
+
+See [References](#references).
 
 ### `ChatDigestSenderInterface` (optional)
 
@@ -255,6 +269,37 @@ $isSupportAgent, $limit, $unreadOnly, $since, $channelsOnly)` and `countForUser(
 threads, the channels you pass (`ChatChannelProviderInterface::channelsFor()` keys) and the support threads the user may
 read; `read_at` is set when the user reads the conversation past the message (or you call `markRead()` and flush).
 `countUnreadByConversation()` gives an "@" count per conversation.
+
+## References
+
+`/` at the start of a message opens the command menu — one command per registered provider the conversation may use
+(`/task`, `/issue` …); after a command the text typed searches its items (`/task deploy`). `#` anywhere searches every
+offered type. Picking an item writes `#Title`; the message carries the token `#[Title](type:id)`. Commands only insert
+references in this version; they never act (no `/assign`, `/resolve`).
+
+Implement `ChatReferenceProviderInterface` for each kind of item (autoconfigured; tag
+`nowo_chat_kit.reference_provider`). The contract is generic — issues, tasks, projects, monitors, reports, tickets, a
+wiki page — and **permissions are the provider's job, deny by default**:
+
+- `ChatReferenceScope::$audience` lists everyone who must be able to open the item: the writer, plus the other person of
+  a direct conversation. Filter **inside your query** by the permission of each of them (never fetch then filter after
+  a `LIMIT`, which leaks counts and empty pages).
+- `ChatReferenceScope::channelKey()` is set in a channel: offer and accept only that channel's items (e.g. a project
+  channel keeps its project).
+- `isAvailable()` decides whether the command is listed: no `/monitor` for someone who may open no monitor in scope. An
+  empty search answer never says why.
+- Return nothing for a user or a type without an explicit permission mapping. Do not rely on the security token:
+  `resolve()` also runs in Messenger handlers (Web Push, digest) for the recipient.
+
+On send and edit, `ChatReferences::validate()` keeps a token only when `resolve()` returns the item for the writer's
+scope (its title becomes the item's current title); anything else — forged, foreign, unknown, unreadable, or past 10 per
+message — is stored as the plain text `#Title`. The stored HTML holds an empty slot per token; each reader's payload
+fills it through `resolve()` with `ChatReferenceScope::reader($viewer)`: a card (`.nowo-chat-ref`, icon, type, title,
+subtitle, badge with a tone, link — root-relative or http(s) only) or the neutral chip
+`.nowo-chat-ref--restricted` with *Content not visible* (`chat.reference_restricted`), never a title, project, status or
+id. `ChatReferences::plainText()` gives the same per-reader text for previews, push bodies and digests; use it (and the
+same string) in your own notifications. A page of messages resolves its references in one `resolve()` per type,
+cached for the request.
 
 ## Link previews
 
@@ -528,6 +573,8 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/direct` `{userUuid}` · `/api/channel` `{channelKey}` · `/api/support` `{context?}` | open (support: the active ticket or the intake draft, whose summary carries `intake`) |
 | GET | `/api/conversations/{uuid}` | one conversation |
 | GET | `/api/conversations/{uuid}/members?q=` | members the caller may @mention |
+| GET | `/api/conversations/{uuid}/references` (`?type=key\|*&q=`) | without `type`: the `/` commands offered; with it: the items everyone in the conversation may open (rate limited) |
+| GET | `/api/conversations/{uuid}/messages/{messageUuid}` | one message as the caller sees it (its reference cards) |
 | GET / POST | `/api/conversations/{uuid}/messages` (`?before=` / `?after=`) | page / send `{body}` |
 | PATCH / DELETE | `/api/conversations/{uuid}/messages/{messageUuid}` | edit `{body}` / delete |
 | POST | `/api/conversations/{uuid}/messages/{messageUuid}/reactions` `{emoji}` | toggle a reaction |
@@ -553,6 +600,7 @@ Every list is bounded server-side (constants, not configuration); nothing return
 | `GET /api/contacts?q=` | 30 contacts from `ChatDirectoryInterface::contactsFor()` | narrow with `q` |
 | `GET /api/conversations/{uuid}/members?q=` | 20 members (cached recipient ids, one user query) | narrow with `q` |
 | `GET /api/support/inbox` | 50 threads (`ChatSupportInbox::list()` default) | narrow with `status` / `q` |
+| `GET /api/conversations/{uuid}/references` | 8 items (`ChatReferences::SEARCH_LIMIT`), query capped at 80 characters | narrow with `q` |
 | `GET /api/link-previews?url[]=…` | 10 URLs per request (500 characters each) | the dock batches |
 | Full page `/chat/`, `/chat/{uuid}` | 50 conversations, last 50 messages | none (server-rendered view) |
 

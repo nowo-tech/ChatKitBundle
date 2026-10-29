@@ -182,10 +182,13 @@ export class MentionAutocomplete {
     this.seq += 1;
     this.items = [];
     this.active = -1;
+    // The box may also host the #reference picker: leave its ARIA state alone unless this list was open.
+    if (!this.list.hidden) {
+      this.input.setAttribute('aria-expanded', 'false');
+      this.input.removeAttribute('aria-activedescendant');
+    }
     this.list.hidden = true;
     this.list.replaceChildren();
-    this.input.setAttribute('aria-expanded', 'false');
-    this.input.removeAttribute('aria-activedescendant');
   }
 
   /** Looks for `@query` before the caret and asks for members after a short pause. */
@@ -250,6 +253,7 @@ export class MentionAutocomplete {
       }),
     );
     this.list.hidden = false;
+    this.input.setAttribute('aria-controls', this.list.id);
     this.input.setAttribute('aria-expanded', 'true');
     this.setActive(0);
   }
