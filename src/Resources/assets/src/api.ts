@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, LinkPreview, Member, OwnStatus, PeerStatus, Reactions, Reader, Reference, ReferenceType, SupportContext, SupportStatus, SupportTicket } from './types';
+import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, LinkPreview, Member, OwnStatus, PeerStatus, QuickReply, Reactions, Reader, Reference, ReferenceType, SupportContext, SupportStatus, SupportTicket } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -50,6 +50,57 @@ export class ChatApi {
    */
   async archive(uuid: string, archived: boolean): Promise<void> {
     await this.request(archived ? 'POST' : 'DELETE', this.url('archive', uuid), {});
+  }
+
+  /**
+   * Saves the automatic reply (1.11).
+   *
+   * @param reply The automatic reply.
+   * @returns The stored automatic reply.
+   */
+  async saveAutoReply(reply: AutoReply): Promise<AutoReply> {
+    return (await this.post<{ autoReply: AutoReply }>(this.config.endpoints.autoReply ?? '', reply)).autoReply;
+  }
+
+  /**
+   * The user's quick replies (1.11).
+   *
+   * @returns The snippets, by title.
+   */
+  async quickReplies(): Promise<QuickReply[]> {
+    return (await this.get<{ quickReplies: QuickReply[] }>(this.config.endpoints.quickReplies ?? '')).quickReplies;
+  }
+
+  /**
+   * Saves a new quick reply.
+   *
+   * @param title Title.
+   * @param body Text.
+   * @returns The snippet.
+   */
+  async createQuickReply(title: string, body: string): Promise<QuickReply> {
+    return (await this.post<{ quickReply: QuickReply }>(this.config.endpoints.quickReplies ?? '', { title, body })).quickReply;
+  }
+
+  /**
+   * Changes a quick reply.
+   *
+   * @param id Snippet id.
+   * @param title Title.
+   * @param body Text.
+   * @returns The snippet.
+   */
+  async updateQuickReply(id: number, title: string, body: string): Promise<QuickReply> {
+    return (await this.request<{ quickReply: QuickReply }>('PATCH', `${this.config.endpoints.quickReplies ?? ''}/${id}`, { title, body })).quickReply;
+  }
+
+  /**
+   * Deletes a quick reply.
+   *
+   * @param id Snippet id.
+   */
+  async deleteQuickReply(id: number): Promise<void> {
+    await this.request('DELETE', `${this.config.endpoints.quickReplies ?? ''}/${id}`, {});
   }
 
   /**

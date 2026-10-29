@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Service;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -66,6 +67,7 @@ final readonly class ChatService
         private ?ChatReferences $references = null,
         private int $maxPins = 20,
         private ?ChatMessageRepository $messageRepository = null,
+        private ?ChatAutoReplier $autoReplies = null,
     ) {
     }
 
@@ -163,6 +165,8 @@ final readonly class ChatService
         if ($mentioned !== []) {
             $this->events?->dispatch(new ChatMentionEvent($message, $mentioned, $conversation));
         }
+        // 1.11: automatic replies of the other person (direct) or of the people mentioned (channels).
+        $this->autoReplies?->afterSend($message, array_values($mentioned));
 
         return $message;
     }

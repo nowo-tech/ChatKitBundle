@@ -90,6 +90,31 @@ test.describe('chat kit demo', () => {
     await expect(bar).not.toContainText(text);
   });
 
+  test('alice formats a message and inserts a quick reply', async ({ page }) => {
+    await signIn(page, 'alice');
+    await page.locator('.nowo-chat-launcher').click();
+    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    const window = page.locator('.nowo-chat-window', { hasText: 'Bob Lee' });
+    const input = window.locator('.nowo-chat-composer__input');
+    const word = `bold${Date.now()}`;
+    await input.fill(word);
+    await input.selectText();
+    await input.press('Control+b');
+    await input.press('End');
+    await input.press('Enter');
+    await expect(window.locator('.nowo-chat-bubble strong', { hasText: word })).toBeVisible();
+
+    await window.locator('[data-part="quick-replies"]').click();
+    const menu = window.getByTestId('nowo-chat-quick-replies');
+    await menu.locator('.nowo-chat-quick__add').click();
+    const title = `QR ${Date.now()}`;
+    await menu.locator('input').fill(title);
+    await menu.locator('textarea').fill('Thanks, on it.');
+    await menu.locator('.nowo-chat-quick__save').click();
+    await menu.locator('.nowo-chat-quick__use', { hasText: title }).click();
+    await expect(input).toHaveValue('Thanks, on it.');
+  });
+
   test('the full-page chat works without the dock', async ({ page }) => {
     await signIn(page, 'alice');
     await page.goto('/chat/');

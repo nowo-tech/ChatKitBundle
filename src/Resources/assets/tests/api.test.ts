@@ -137,6 +137,23 @@ describe('chat api client', () => {
     expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c/x/m/m/pin', expect.objectContaining({ method: 'DELETE' }));
     await old.archiveRead();
     await old.pins('x');
+
+    // Automatic reply and quick replies (1.11).
+    const reply = { enabled: true, text: 'Away', when: 'status' as const, from: null, until: null, mentions: false };
+    vi.stubGlobal('fetch', respond({ autoReply: reply, quickReplies: [], quickReply: { id: 3, title: 't', body: 'b' } }));
+    const withReplies = new ChatApi({ ...config, endpoints: { ...config.endpoints, autoReply: '/auto', quickReplies: '/quick' } } as unknown as ChatConfig);
+    expect(await withReplies.saveAutoReply(reply)).toEqual(reply);
+    expect(await withReplies.quickReplies()).toEqual([]);
+    expect(await withReplies.createQuickReply('t', 'b')).toEqual({ id: 3, title: 't', body: 'b' });
+    expect(await withReplies.updateQuickReply(3, 't', 'b')).toEqual({ id: 3, title: 't', body: 'b' });
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/quick/3', expect.objectContaining({ method: 'PATCH' }));
+    await withReplies.deleteQuickReply(3);
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/quick/3', expect.objectContaining({ method: 'DELETE' }));
+    await old.saveAutoReply(reply);
+    await old.quickReplies();
+    await old.createQuickReply('t', 'b');
+    await old.updateQuickReply(1, 't', 'b');
+    await old.deleteQuickReply(1);
     vi.stubGlobal('fetch', respond({ previews: { '/a b': { title: 'A', subtitle: '', badge: '' } } }));
     expect(await api.linkPreviews(['/a b', '/c'])).toEqual({ '/a b': { title: 'A', subtitle: '', badge: '' } });
     vi.stubGlobal('fetch', respond({ previews: [] }));

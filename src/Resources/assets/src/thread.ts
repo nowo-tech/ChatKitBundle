@@ -5,6 +5,7 @@
  */
 import { ChatApiError, type ChatApi } from './api';
 import { h, prefersReducedMotion, setBadge } from './dom';
+import { applyFormat, type Format, formatHelp, QuickRepliesMenu, shortcutFormat } from './composer-tools';
 import { emojiPicker, insertAtCaret } from './emoji';
 import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from './format';
 import { decodeMentions, markOwnMentions, MentionAutocomplete, mentionsViewer } from './mention';
@@ -93,6 +94,9 @@ export interface ThreadHost {
 const TYPING_SEND_EVERY_MS = 3_000;
 const TYPING_SHOW_MS = 5_000;
 const NEAR_BOTTOM_PX = 48;
+
+/** localStorage key: the formatting toolbar stays open (1.11). */
+const TOOLBAR_KEY = 'nowo-chat-format-toolbar';
 
 /** One conversation window: header, thread (messages, receipts, reactions, previews) and composer. */
 export class ThreadView {
@@ -209,6 +213,13 @@ export class ThreadView {
     // `/` commands and the `#` picker, when the application registers reference providers.
     this.reference = this.referencePicker(this.input, `nowo-chat-${summary.uuid}`);
     this.input.addEventListener('keydown', (event) => {
+      // 1.11: Ctrl/⌘+B, I and K format the selection.
+      const shortcut = shortcutFormat(event);
+      if (shortcut !== null) {
+        event.preventDefault();
+        applyFormat(this.input, shortcut);
+        return;
+      }
       if (event.key !== 'Enter' || event.isComposing) {
         return;
       }
@@ -240,6 +251,7 @@ export class ThreadView {
         });
     });
     this.emojiBtn.addEventListener('click', () => this.toggleEmoji());
+    this.bindComposerTools(i18n);
     this.support = new SupportPanel(
       {
         config: host.config,
@@ -384,6 +396,65 @@ export class ThreadView {
     target.scrollIntoView({ block: 'center' });
     target.classList.add('is-highlighted');
     window.setTimeout(() => target.classList.remove('is-highlighted'), 2_000);
+  }
+
+  /**
+   * The composer tools (1.11), when the template has them: the Aa button shows the formatting toolbar (remembered in
+   * this browser), whose buttons format the selection or show the formatting help; the quick replies menu.
+   */
+  private bindComposerTools(i18n: Record<string, string>): void {
+    const toggle = this.element.querySelector<HTMLButtonElement>('[data-part="format-toggle"]');
+    const toolbar = this.element.querySelector<HTMLElement>('[data-part="format-toolbar"]');
+    if (toggle !== null && toolbar !== null) {
+      const show = (open: boolean): void => {
+        toolbar.hidden = !open;
+        toggle.setAttribute('aria-pressed', open ? 'true' : 'false');
+        try {
+          window.localStorage.setItem(TOOLBAR_KEY, open ? '1' : '0');
+        } catch {
+          // No storage: just this window.
+        }
+      };
+      const remembered = ((): boolean => {
+        try {
+          return window.localStorage.getItem(TOOLBAR_KEY) === '1';
+        } catch {
+          return false;
+        }
+      })();
+      toolbar.hidden = !remembered;
+      toggle.setAttribute('aria-pressed', remembered ? 'true' : 'false');
+      toggle.addEventListener('click', () => show(toolbar.hidden === true));
+      toolbar.querySelectorAll<HTMLButtonElement>('[data-format]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const format = button.dataset.format ?? '';
+          if (format === 'help') {
+            const open = this.element.querySelector('[data-part="format-help"]');
+            if (open === null) {
+              toolbar.after(formatHelp(i18n));
+            } else {
+              open.remove();
+            }
+            button.setAttribute('aria-expanded', open === null ? 'true' : 'false');
+            return;
+          }
+          applyFormat(this.input, format as Format);
+        });
+      });
+    }
+    const quick = this.element.querySelector<HTMLButtonElement>('[data-part="quick-replies"]');
+    if (quick !== null) {
+      if (this.host.config.endpoints.quickReplies === undefined) {
+        quick.remove();
+        return;
+      }
+      quick.setAttribute('aria-expanded', 'false');
+      const menu = new QuickRepliesMenu(
+        { api: this.host.api, i18n, insert: (value) => insertAtCaret(this.input, value), notice: (message) => this.flashNotice(message) },
+        quick,
+      );
+      this.composer.append(menu.element);
+    }
   }
 
   /** The composer hint follows the send key (Enter, or Ctrl/Cmd+Enter). */
@@ -1322,6 +1393,12 @@ export class ThreadView {
       markOwnMentions(bubble, this.host.config.userUuid);
       // Icons of the #reference cards (data-icon slots of the server render).
       this.host.templates.fillIcons(bubble);
+      if (message.kind === 'auto') {
+        // 1.11: an automatic reply says so (the icon is decorative; the label is read).
+        article.classList.add('nowo-chat-msg--auto');
+        article.dataset.auto = '';
+        bubble.before(h('span', { class: 'nowo-chat-msg__auto' }, this.host.templates.icon('auto', 12), h('span', { text: t(i18n, 'auto_reply_marker') })));
+      }
     }
 
     const time = part(article, 'time');

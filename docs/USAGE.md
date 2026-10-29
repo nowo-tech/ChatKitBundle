@@ -22,6 +22,9 @@
 - [Chat status](#chat-status)
 - [Closing conversations](#closing-conversations)
 - [Pinned messages](#pinned-messages)
+- [Automatic replies](#automatic-replies)
+- [Quick replies](#quick-replies)
+- [Formatting](#formatting)
 - [Web Push](#web-push)
 - [Messenger: retries and failures](#messenger-retries-and-failures)
 - [Timeouts](#timeouts)
@@ -620,6 +623,33 @@ get no Pin action and the API answers `403 pin_forbidden` (`404` when they canno
 Summaries carry `canPin`, messages `pinned` (and a pin line `pinnedMessage`). The personal data export lists the pins a
 person made.
 
+## Automatic replies
+
+Set from the chat (1.11): the **Automatic reply** section of the status menu — on / off, a Markdown text (at most 500
+characters), when it applies (*while I am away, busy or in do not disturb* — auto-away included — or *between two
+dates*, out of office) and whether it also answers @mentions in channels. When someone writes to the person in a direct
+conversation (or @mentions them in a channel, if chosen), the reply is posted as a message of that person, kind `auto`,
+marked "Automatic reply" (`nowo-chat-msg--auto`, `data-auto`), at most once per conversation per
+`auto_reply_interval_hours` (default 4). Never to an automatic or assistant message (no loops), never in support
+tickets, never for an unreachable account; it rings no sound and sends no Web Push or digest.
+`POST /api/auto-reply {enabled, text, when, from?, until?, mentions}`; the dock config carries `autoReply`.
+
+## Quick replies
+
+Each person's saved snippets (1.11): the ⚡ button under the composer lists them (a click inserts the text at the caret),
+with **New quick reply**, Edit and Delete (title ≤ 80, text ≤ 2000 characters, at most 50 each). Table
+`nowo_chat_quick_reply`; `GET` / `POST /api/quick-replies`, `PATCH` / `DELETE /api/quick-replies/{id}` (someone else's →
+404). The personal data export lists them and the erasure deletes them.
+
+## Formatting
+
+The **Aa** button under the composer shows the formatting toolbar (remembered in the browser): bold, italic,
+strikethrough, code (a code block for several lines), link (`[text](https://…)` with the URL selected), quote (`> `),
+list (`- `) and a formatting help. <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>B</kbd>, <kbd>I</kbd> and <kbd>K</kbd> do the
+same. The server renders the Markdown escape-first with a closed tag set: `[text](url)` only with http(s) or mailto
+URLs (the text stays plain), bare `http(s)://`, `www.` (as https) and e-mail addresses (as mailto) become links, `> `
+lines a quote; anything else stays text.
+
 ## Web Push
 
 With `push: true`, each new message queues `DeliverChatPushMessage` (route it to an async transport; handled inline
@@ -691,6 +721,8 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/status` `{status, text?, emoji?, clearAfter?}` | set the caller's chat status (1.10) |
 | POST | `/api/settings` `{key, value}` | save one chat preference (1.10); answers every preference |
 | POST / DELETE | `/api/conversations/{uuid}/archive` · POST `/api/conversations/archive-read` | close / reopen in the caller's list, close all read (1.10) |
+| POST | `/api/auto-reply` `{enabled, text, when, from?, until?, mentions}` | the caller's automatic reply (1.11) |
+| GET / POST | `/api/quick-replies` · PATCH / DELETE `/api/quick-replies/{id}` | the caller's quick replies (1.11) |
 | GET | `/api/conversations/{uuid}/pins` · POST / DELETE `/api/conversations/{uuid}/messages/{messageUuid}/pin` | pinned messages, pin / unpin (1.10) |
 
 ### Pagination and limits

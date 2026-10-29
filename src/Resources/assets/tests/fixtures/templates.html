@@ -118,13 +118,32 @@
                     <label for="nowo_chat_status_clearAfter" class="required">Clear after</label>
                     <select id="nowo_chat_status_clearAfter" name="nowo_chat_status[clearAfter]" class="nowo-chat-status-form__clear-after" data-part="status-clear-after"><option value="never" selected="selected">Never</option><option value="30m">30 minutes</option><option value="1h">1 hour</option><option value="4h">4 hours</option><option value="today">Today</option><option value="week">This week</option></select>
                 </div>
-                                                                                                                                                                        <input type="hidden" id="nowo_chat_status__token" name="nowo_chat_status[_token]" data-controller="csrf-protection" value="csrf-token" />
-                                                    <p class="nowo-chat-status-form__error" role="alert" data-part="status-error" hidden></p>
+                <p class="nowo-chat-status-form__error" role="alert" data-part="status-error" hidden></p>
                 <span class="nowo-chat-status-form__actions">
                     <button type="button" class="nowo-chat-status-form__clear" data-part="status-clear">Clear status</button>
                     <button type="submit" class="nowo-chat-status-form__save">Save</button>
                 </span>
-            </form>
+                                <details class="nowo-chat-auto-reply" data-part="auto-reply">
+                    <summary>Automatic reply</summary>
+                    <div class="nowo-chat-auto-reply__check"><input type="checkbox" id="nowo_chat_status_autoReplyEnabled" name="nowo_chat_status[autoReplyEnabled]" data-part="auto-reply-enabled" value="1" /> <label for="nowo_chat_status_autoReplyEnabled">Send an automatic reply</label></div>
+                    <label for="nowo_chat_status_autoReplyText">Message</label>
+                    <textarea id="nowo_chat_status_autoReplyText" name="nowo_chat_status[autoReplyText]" class="nowo-chat-auto-reply__text" data-part="auto-reply-text" maxlength="500" rows="3"></textarea>
+                    <label for="nowo_chat_status_autoReplyWhen" class="required">When</label>
+                    <select id="nowo_chat_status_autoReplyWhen" name="nowo_chat_status[autoReplyWhen]" class="nowo-chat-status-form__clear-after" data-part="auto-reply-when"><option value="status" selected="selected">While I am away, busy or in do not disturb</option><option value="range">Between two dates (out of office)</option></select>
+                    <div class="nowo-chat-auto-reply__range" data-part="auto-reply-range" hidden>
+                        <label for="nowo_chat_status_autoReplyFrom">From</label>
+                        <input type="datetime-local" id="nowo_chat_status_autoReplyFrom" name="nowo_chat_status[autoReplyFrom]" class="nowo-chat-status-form__clear-after" data-part="auto-reply-from" />
+                        <label for="nowo_chat_status_autoReplyUntil">Until</label>
+                        <input type="datetime-local" id="nowo_chat_status_autoReplyUntil" name="nowo_chat_status[autoReplyUntil]" class="nowo-chat-status-form__clear-after" data-part="auto-reply-until" />
+                    </div>
+                    <div class="nowo-chat-auto-reply__check"><input type="checkbox" id="nowo_chat_status_autoReplyMentions" name="nowo_chat_status[autoReplyMentions]" data-part="auto-reply-mentions" value="1" /> <label for="nowo_chat_status_autoReplyMentions">Also answer @mentions in channels</label></div>
+                    <p class="nowo-chat-status-form__error" role="alert" data-part="auto-reply-error" hidden></p>
+                    <span class="nowo-chat-status-form__actions">
+                        <button type="button" class="nowo-chat-status-form__save" data-part="auto-reply-save">Save automatic reply</button>
+                    </span>
+                </details>
+                                                                                                                                                                                                                                                                                                                                                                                                <input type="hidden" id="nowo_chat_status__token" name="nowo_chat_status[_token]" data-controller="csrf-protection" value="csrf-token" />
+                                                </form>
         </div>
     </template>
 
@@ -217,6 +236,22 @@
                 <p class="nowo-chat-typing" aria-live="polite" data-part="typing" hidden></p>
                 <p class="nowo-chat-notice" data-part="notice" hidden></p>
                                 <form name="nowo_chat_composer" method="post" class="nowo-chat-composer" data-part="composer" novalidate="novalidate">
+                                        <div class="nowo-chat-composer__tools" data-part="composer-tools">
+                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-part="format-toggle" aria-label="Formatting" title="Formatting"><span data-icon="format"></span></button>
+
+                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-part="quick-replies" aria-label="Quick replies" title="Quick replies"><span data-icon="quick"></span></button>
+
+                        <span class="nowo-chat-composer__toolbar" role="toolbar" aria-label="Formatting" data-part="format-toolbar" hidden>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="bold" aria-label="Bold (Ctrl+B)" title="Bold (Ctrl+B)"><span data-icon="bold" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="italic" aria-label="Italic (Ctrl+I)" title="Italic (Ctrl+I)"><span data-icon="italic" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="strike" aria-label="Strikethrough" title="Strikethrough"><span data-icon="strike" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="code" aria-label="Code" title="Code"><span data-icon="code" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="link" aria-label="Link (Ctrl+K)" title="Link (Ctrl+K)"><span data-icon="link" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="quote" aria-label="Quote" title="Quote"><span data-icon="quote" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="list" aria-label="List" title="List"><span data-icon="list" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="help" aria-label="Formatting help" title="Formatting help"><span data-icon="help" data-icon-size="16"></span></button>
+                                                    </span>
+                    </div>
                     <div class="nowo-chat-composer__field">
                                                 <textarea id="nowo_chat_composer_body" name="nowo_chat_composer[body]" class="nowo-chat-composer__input" data-part="input" rows="1" placeholder="Write a message…" aria-label="Write a message…"></textarea>
                         <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__emoji" data-part="emoji-toggle" data-nowo-chat-emoji-toggle aria-label="Emoji" title="Emoji" aria-expanded="false"><span data-icon="smile"></span></button>

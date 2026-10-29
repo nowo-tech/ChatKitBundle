@@ -829,7 +829,8 @@ export class ChatDock implements ThreadHost {
         this.renderList();
       }
       // A "pinned a message" line rings nothing.
-      if (!message.mine && message.kind !== 'pin') {
+      // An automatic reply rings nothing either (1.11).
+      if (!message.mine && message.kind !== 'pin' && message.kind !== 'auto') {
         this.alert(event.conversationUuid, message);
       }
       return;

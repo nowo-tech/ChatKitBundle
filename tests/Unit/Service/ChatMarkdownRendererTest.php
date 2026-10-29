@@ -31,6 +31,15 @@ final class ChatMarkdownRendererTest extends TestCase
         yield 'injected placeholders are stripped' => ["a\u{E000}B0\u{E000}b", '<p>aB0b</p>'];
         yield 'bidi overrides are stripped' => ["evil\u{202E}txt.exe", '<p>eviltxt.exe</p>'];
         yield 'block marker inline with text' => ['see ```x``` now', '<p>see <pre><code>x</code></pre> now</p>'];
+        // 1.11: [text](url), www. / e-mail autolinks, quotes.
+        yield 'markdown link' => ['see [the docs](https://x.test/a?b=1&c=2)', '<p>see <a href="https://x.test/a?b=1&amp;c=2" rel="noopener nofollow ugc" target="_blank">the docs</a></p>'];
+        yield 'markdown link text is plain' => ['[<b>x</b>](https://x.test)', '<p><a href="https://x.test" rel="noopener nofollow ugc" target="_blank">&lt;b&gt;x&lt;/b&gt;</a></p>'];
+        yield 'markdown mailto link' => ['[write](mailto:ana@x.test)', '<p><a href="mailto:ana@x.test" rel="nofollow">write</a></p>'];
+        yield 'javascript link stays text' => ['[x](javascript:alert(1))', '<p>[x](javascript:alert(1))</p>'];
+        yield 'www autolink' => ['go www.x.test.', '<p>go <a href="https://www.x.test" rel="noopener nofollow ugc" target="_blank">www.x.test</a>.</p>'];
+        yield 'e-mail autolink' => ['mail ana.b@x.test or mailto:c@y.test', '<p>mail <a href="mailto:ana.b@x.test" rel="nofollow">ana.b@x.test</a> or <a href="mailto:c@y.test" rel="nofollow">c@y.test</a></p>'];
+        yield 'quote' => ["> one *a*\n> two\n\nafter", '<blockquote><p>one <em>a</em><br>two</p></blockquote><p>after</p>'];
+        yield 'quote between list and text' => ["- a\n> q\nb", '<ul><li>a</li></ul><blockquote><p>q</p></blockquote><p>b</p>'];
         yield 'quotes in link escaped' => ['https://x.test/"onmouseover', '<p><a href="https://x.test/" rel="noopener nofollow ugc" target="_blank">https://x.test/</a>&quot;onmouseover</p>'];
     }
 
@@ -47,6 +56,7 @@ final class ChatMarkdownRendererTest extends TestCase
 
         self::assertSame('hola mundo code', $renderer->plainText("**hola**\n\n- _mundo_\n```\ncode\n```"));
         self::assertSame('abcd…', $renderer->plainText('abcdefgh', 5));
+        self::assertSame('quoted see docs', $renderer->plainText("> quoted\nsee [docs](https://x.test)"));
         self::assertSame('It supports: dms channels', $renderer->plainText("It supports:\n- dms\n  1. channels"), 'list markers never eat the line break');
     }
 }

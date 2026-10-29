@@ -126,7 +126,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'search'   => $this->forms->create(ChatDockSearchType::class)->createView(),
             'composer' => $this->forms->create(ChatDockComposerType::class)->createView(),
             'edit'     => $this->forms->create(ChatDockEditType::class)->createView(),
-            'status'   => $this->forms->create(ChatDockStatusType::class)->createView(),
+            'status'   => $this->forms->create(ChatDockStatusType::class, null, ['locale' => $this->requestStack->getMainRequest()?->getLocale()])->createView(),
         ];
     }
 
@@ -190,12 +190,16 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'archive'        => $this->pattern('nowo_chat_api_archive'),
                 'archiveRead'    => $this->urls->generate('nowo_chat_api_archive_read'),
                 'pins'           => $this->pattern('nowo_chat_api_pins'),
+                'autoReply'      => $this->urls->generate('nowo_chat_api_auto_reply'),
+                'quickReplies'   => $this->urls->generate('nowo_chat_api_quick_replies'),
                 'pin'            => $this->pattern('nowo_chat_api_pin', ['messageUuid' => self::PLACEHOLDER], '__message__'),
             ],
             // Sounds per event, volume, buzz, opening, send key … (ChatUserSettings::preferences()).
             'prefs' => $settings->preferences(),
             // The user's own chat status (set from the dock's status menu) and the auto-away delay.
-            'status'          => $settings->statusView($this->clock->now()),
+            'status' => $settings->statusView($this->clock->now()),
+            // 1.11: the automatic reply, set from the status menu.
+            'autoReply'       => $settings->autoReplyView(),
             'autoAwayMinutes' => $this->autoAwayMinutes,
             'isAgent'         => $this->access->isSupportAgent($user),
             'linkPreviews'    => !$this->linkPreviews instanceof NullLinkPreviewProvider,

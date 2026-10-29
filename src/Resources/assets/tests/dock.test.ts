@@ -1055,6 +1055,9 @@ describe('ChatDock', () => {
       expect(q('.nowo-chat-list [data-peer-status="away"]')).not.toBeNull();
       realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-b', status: 'away', text: null, emoji: null });
       realtimeHandlers?.onEvent({ type: 'status', userUuid: 'nobody', status: 'dnd', text: null, emoji: null });
+      // Only an emoji: the row says what it is (1.10.1).
+      realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-b', status: 'away', text: null, emoji: '🌴' });
+      expect(q('.nowo-chat-list [data-peer-status="away"] .nowo-chat-row__status')?.getAttribute('aria-label')).not.toBeNull();
 
       // Someone who hides their own presence sees no dots, only the text.
       const hidden = mount([summary('h')], withStatus({ prefs: { sound: 'pop', buzz: true, presence: false } }));
@@ -1209,6 +1212,9 @@ describe('ChatDock', () => {
       Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
       expect(playOnce).not.toHaveBeenCalled();
       expect(q('.nowo-chat-list').textContent).toContain('Peer pinned a message');
+      // An automatic reply rings nothing either (1.11).
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'b', message: message({ kind: 'auto', html: '<p>away</p>' }) });
+      expect(playOnce).not.toHaveBeenCalled();
     });
   });
 });

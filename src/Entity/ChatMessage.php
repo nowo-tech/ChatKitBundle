@@ -37,6 +37,9 @@ class ChatMessage
     /** 1.10: "X pinned a message" (a system line; `meta.message` = the pinned message uuid). */
     public const string KIND_PIN = 'pin';
 
+    /** 1.11: an automatic reply of its author (shown with an "Automatic reply" marker; never answered automatically). */
+    public const string KIND_AUTO = 'auto';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -136,6 +139,35 @@ class ChatMessage
         $message->meta = ['message' => $pinned->getUuid()];
 
         return $message;
+    }
+
+    /**
+     * Creates an automatic reply of the user (1.11).
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $author Whose automatic reply it is
+     * @param string $body The Markdown text
+     * @param string $bodyHtml Its sanitized render
+     * @param DateTimeImmutable|null $createdAt Creation time; null for now
+     *
+     * @return self The new, unpersisted message
+     */
+    public static function autoReply(ChatConversation $conversation, ChatUserInterface $author, string $body, string $bodyHtml, ?DateTimeImmutable $createdAt = null): self
+    {
+        $message       = new self($conversation, $author, $body, $bodyHtml, $createdAt);
+        $message->kind = self::KIND_AUTO;
+
+        return $message;
+    }
+
+    /**
+     * Whether this is an automatic reply.
+     *
+     * @return bool True for an automatic reply
+     */
+    public function isAuto(): bool
+    {
+        return $this->kind === self::KIND_AUTO;
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Controller;
 
+use DateTimeImmutable;
 use InvalidArgumentException;
 use JsonException;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
@@ -13,6 +14,7 @@ use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
+use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Http\ChatApiException;
@@ -28,6 +30,7 @@ use Nowo\ChatKitBundle\Realtime\ChatTopics;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
+use Nowo\ChatKitBundle\Repository\ChatQuickReplyRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
@@ -113,6 +116,7 @@ final class ChatApiController extends AbstractController
         private readonly RateLimiterFactoryInterface $referenceLimiter,
         private readonly ChatReferences $references,
         private readonly ClockInterface $clock = new Clock(),
+        private readonly ?ChatQuickReplyRepository $quickReplies = null,
     ) {
     }
 
@@ -874,6 +878,112 @@ final class ChatApiController extends AbstractController
     }
 
     /**
+     * 1.11: the caller's automatic reply — on / off, the Markdown text (at most 500 characters), when it applies
+     * (`status`: while away, busy or in do not disturb; `range`: between `from` and `until`, ISO 8601) and whether it
+     * also answers @mentions in channels.
+     *
+     * @param Request $request JSON body `{enabled, text, when, from?, until?, mentions}`
+     *
+     * @return JsonResponse `{autoReply}`
+     */
+    #[Route('/auto-reply', name: 'auto_reply', methods: ['POST'])]
+    public function autoReply(Request $request): JsonResponse
+    {
+        $user    = $this->writer($request);
+        $payload = $this->payload($request);
+        $mine    = $this->settings->forUser($user);
+        $date    = static function (mixed $value): ?DateTimeImmutable {
+            if (!is_string($value) || $value === '') {
+                return null;
+            }
+            $parsed = date_create_immutable($value);
+
+            return $parsed === false ? null : $parsed;
+        };
+        $text = $payload['text'] ?? null;
+        $when = $payload['when'] ?? 'status';
+        try {
+            if (($text !== null && !is_string($text)) || !is_string($when)) {
+                throw new InvalidArgumentException('invalid_auto_reply');
+            }
+            // @igor-ignore - the caller's own settings row (a Doctrine entity), not a shared worker service.
+            $mine->setAutoReply(true === ($payload['enabled'] ?? false), $text, $when, $date($payload['from'] ?? null), $date($payload['until'] ?? null), true === ($payload['mentions'] ?? false));
+        } catch (InvalidArgumentException) {
+            throw new ChatApiException('invalid_auto_reply', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        $this->settings->save($mine);
+
+        return $this->json(['autoReply' => $mine->autoReplyView()]);
+    }
+
+    /**
+     * 1.11: the caller's quick replies (snippets), by title.
+     *
+     * @return JsonResponse `{quickReplies: list<{id, title, body}>}`
+     */
+    #[Route('/quick-replies', name: 'quick_replies', methods: ['GET'])]
+    public function quickReplies(): JsonResponse
+    {
+        $user = $this->reader();
+
+        return $this->json(['quickReplies' => array_map(static fn (ChatQuickReply $reply): array => $reply->toArray(), $this->quickReplies?->forUser($user) ?? [])]);
+    }
+
+    /**
+     * 1.11: saves a new quick reply (at most 50 per person; title ≤ 80, text ≤ 2000 characters).
+     *
+     * @param Request $request JSON body `{title, body}`
+     *
+     * @return JsonResponse `{quickReply}` with status 201
+     */
+    #[Route('/quick-replies', name: 'quick_reply_create', methods: ['POST'])]
+    public function createQuickReply(Request $request): JsonResponse
+    {
+        $user = $this->writer($request);
+        $this->deny(count($this->quickReplies?->forUser($user) ?? []) >= ChatQuickReply::MAX_PER_USER, 'too_many_quick_replies', Response::HTTP_UNPROCESSABLE_ENTITY);
+        $payload = $this->payload($request);
+        try {
+            $reply = new ChatQuickReply($user, $this->text($payload, 'title'), $this->text($payload, 'body'), $this->clock->now());
+        } catch (InvalidArgumentException) {
+            throw new ChatApiException('invalid_quick_reply', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        $this->quickReplies?->save($reply);
+
+        return $this->json(['quickReply' => $reply->toArray()], Response::HTTP_CREATED);
+    }
+
+    /**
+     * 1.11: changes (`PATCH {title, body}`) or deletes (`DELETE`) one of the caller's quick replies (others' → 404).
+     *
+     * @param int $id Quick reply id
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{quickReply}` or `{deleted: true}`
+     */
+    #[Route('/quick-replies/{id}', name: 'quick_reply', requirements: ['id' => '\d+'], methods: ['PATCH', 'DELETE'])]
+    public function quickReply(int $id, Request $request): JsonResponse
+    {
+        $user  = $this->writer($request);
+        $reply = $this->quickReplies?->findOwned($user, $id);
+        $this->deny(!$reply instanceof ChatQuickReply, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($reply instanceof ChatQuickReply);
+        if ($request->isMethod('DELETE')) {
+            $this->quickReplies?->remove($reply);
+
+            return $this->json(['deleted' => true]);
+        }
+        $payload = $this->payload($request);
+        try {
+            $reply->change($this->text($payload, 'title'), $this->text($payload, 'body'));
+        } catch (InvalidArgumentException) {
+            throw new ChatApiException('invalid_quick_reply', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+        $this->quickReplies?->save($reply);
+
+        return $this->json(['quickReply' => $reply->toArray()]);
+    }
+
+    /**
      * Changes one chat preference of the caller (sounds, volume, buzz, opening the dock, send key, push preview,
      * presence, e-mail digest); the caller's other tabs apply it live.
      *
@@ -1183,6 +1293,18 @@ final class ChatApiController extends AbstractController
         if ($condition) {
             throw new ChatApiException($error, $status);
         }
+    }
+
+    /**
+     * A string field of the JSON body ('' when missing or not a string).
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function text(array $payload, string $key): string
+    {
+        $value = $payload[$key] ?? '';
+
+        return is_string($value) ? $value : '';
     }
 
     /**
