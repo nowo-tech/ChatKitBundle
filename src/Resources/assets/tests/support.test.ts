@@ -166,7 +166,8 @@ describe('SupportPanel', () => {
   });
 });
 
-const CSS_SOURCE = readFileSync(new URL('../../public/css/nowo-chat.css', import.meta.url), 'utf8');
+// Vitest runs from the bundle root.
+const CSS_SOURCE = readFileSync('src/Resources/public/css/nowo-chat.css', 'utf8');
 
 describe('decorative emoji styles (1.9.2)', () => {
   it('are inline only: no positioning, unlike the emoji picker popover', () => {
