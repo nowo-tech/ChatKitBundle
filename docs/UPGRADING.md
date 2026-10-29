@@ -31,7 +31,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## To 1.10.0
 
-From **1.9.1** — **schema change** (chat preferences and chat status on `nowo_chat_user_settings`). After
+From **1.9.2** — **schema change** (chat preferences and chat status on `nowo_chat_user_settings`). After
 `composer update nowo-tech/chat-kit-bundle`:
 
 ```bash
