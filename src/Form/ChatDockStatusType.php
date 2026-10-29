@@ -14,6 +14,9 @@ use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
+use Symfony\Contracts\Translation\TranslatorInterface;
+
+use function is_string;
 
 /**
  * The custom status of the dock's status menu (`_templates.html.twig`, template `status-menu`): an emoji
@@ -27,6 +30,15 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 final class ChatDockStatusType extends AbstractType
 {
     /**
+     * Builds the type; labels and choices are translated in the dock locale (option `locale`), not the request's.
+     *
+     * @param TranslatorInterface|null $translator The translator; null leaves the translation keys
+     */
+    public function __construct(private readonly ?TranslatorInterface $translator = null)
+    {
+    }
+
+    /**
      * Adds the emoji, the text and the "clear after" choice.
      *
      * @param FormBuilderInterface<array<string, mixed>|null> $builder The form builder
@@ -34,9 +46,11 @@ final class ChatDockStatusType extends AbstractType
      */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
+        $locale  = is_string($options['locale']) ? $options['locale'] : null;
+        $label   = fn (string $key): string => $this->translator?->trans($key, [], 'NowoChatKitBundle', $locale) ?? $key;
         $choices = [];
         foreach (ChatUserSettings::CLEAR_AFTER as $choice) {
-            $choices['chat.status_clear_' . $choice] = $choice;
+            $choices[$label('chat.status_clear_' . $choice)] = $choice;
         }
         $builder
             ->add('emoji', TextType::class, [
@@ -50,7 +64,7 @@ final class ChatDockStatusType extends AbstractType
                 'attr'     => ['class' => 'nowo-chat-status-form__text', 'data-part' => 'status-text', 'maxlength' => ChatUserSettings::STATUS_TEXT_MAX, 'autocomplete' => 'off'],
             ])
             ->add('clearAfter', ChoiceType::class, [
-                'label'       => 'chat.status_clear_after',
+                'label'       => $label('chat.status_clear_after'),
                 'required'    => true,
                 'choices'     => $choices,
                 'placeholder' => false,
@@ -59,39 +73,39 @@ final class ChatDockStatusType extends AbstractType
             ])
             // 1.11: the automatic reply (saved on its own, POST /api/auto-reply).
             ->add('autoReplyEnabled', CheckboxType::class, [
-                'label'    => 'chat.auto_reply_enabled',
+                'label'    => $label('chat.auto_reply_enabled'),
                 'required' => false,
                 'attr'     => ['data-part' => 'auto-reply-enabled'],
             ])
             ->add('autoReplyText', TextareaType::class, [
-                'label'    => 'chat.auto_reply_text',
+                'label'    => $label('chat.auto_reply_text'),
                 'required' => false,
                 'attr'     => ['class' => 'nowo-chat-auto-reply__text', 'data-part' => 'auto-reply-text', 'maxlength' => ChatUserSettings::AUTO_REPLY_MAX, 'rows' => 3],
             ])
             ->add('autoReplyWhen', ChoiceType::class, [
-                'label'       => 'chat.auto_reply_when',
+                'label'       => $label('chat.auto_reply_when'),
                 'required'    => true,
                 'placeholder' => false,
-                'choices'     => ['chat.auto_reply_when_status' => 'status', 'chat.auto_reply_when_range' => 'range'],
+                'choices'     => [$label('chat.auto_reply_when_status') => 'status', $label('chat.auto_reply_when_range') => 'range'],
                 'data'        => 'status',
                 'attr'        => ['class' => 'nowo-chat-status-form__clear-after', 'data-part' => 'auto-reply-when'],
             ])
             ->add('autoReplyFrom', DateTimeType::class, [
-                'label'    => 'chat.auto_reply_from',
+                'label'    => $label('chat.auto_reply_from'),
                 'required' => false,
                 'widget'   => 'single_text',
                 'input'    => 'datetime_immutable',
                 'attr'     => ['class' => 'nowo-chat-status-form__clear-after', 'data-part' => 'auto-reply-from'],
             ])
             ->add('autoReplyUntil', DateTimeType::class, [
-                'label'    => 'chat.auto_reply_until',
+                'label'    => $label('chat.auto_reply_until'),
                 'required' => false,
                 'widget'   => 'single_text',
                 'input'    => 'datetime_immutable',
                 'attr'     => ['class' => 'nowo-chat-status-form__clear-after', 'data-part' => 'auto-reply-until'],
             ])
             ->add('autoReplyMentions', CheckboxType::class, [
-                'label'    => 'chat.auto_reply_mentions',
+                'label'    => $label('chat.auto_reply_mentions'),
                 'required' => false,
                 'attr'     => ['data-part' => 'auto-reply-mentions'],
             ]);
@@ -106,7 +120,9 @@ final class ChatDockStatusType extends AbstractType
     public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults([
-            'translation_domain' => 'NowoChatKitBundle',
+            // Labels and choices come translated in the dock locale (see buildForm()).
+            'translation_domain' => false,
+            'locale'             => null,
             'csrf_token_id'      => ChatApiController::CSRF_ID,
             'attr'               => ['class' => 'nowo-chat-status-form', 'data-part' => 'status-form'],
         ]);

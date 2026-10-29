@@ -126,7 +126,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'search'   => $this->forms->create(ChatDockSearchType::class)->createView(),
             'composer' => $this->forms->create(ChatDockComposerType::class)->createView(),
             'edit'     => $this->forms->create(ChatDockEditType::class)->createView(),
-            'status'   => $this->forms->create(ChatDockStatusType::class)->createView(),
+            'status'   => $this->forms->create(ChatDockStatusType::class, null, ['locale' => $this->requestStack->getMainRequest()?->getLocale()])->createView(),
         ];
     }
 

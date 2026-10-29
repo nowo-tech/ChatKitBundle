@@ -51,6 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- **Status menu fields in the request language**: the custom-status and automatic-reply labels and choices are now
+  translated in the dock locale (they could show in another language than the dock).
 - **Narrow windows cut cards short**: the message actions took width beside the bubble; they now float over the
   message's top corner (hover, focus, tap), so bubbles and cards keep the window's width.
 
