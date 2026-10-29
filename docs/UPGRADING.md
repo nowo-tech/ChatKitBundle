@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.11.2](#to-1112)
 - [To 1.11.1](#to-1111)
 - [To 1.11.0](#to-1110)
 - [To 1.10.1](#to-1101)
@@ -31,6 +32,12 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.11.2
+
+From **1.11.1** — no schema change. Run `assets:install`. The `/` `#` reference list no longer has the
+`.nowo-chat-mention-list` class: style or select it with `.nowo-chat-ref-list`. Tests that read `aria-expanded` on the
+composer box should check that the list is visible (or `aria-controls` is set) instead.
 
 ## To 1.11.1
 

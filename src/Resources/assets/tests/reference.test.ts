@@ -89,7 +89,9 @@ describe('ReferenceAutocomplete', () => {
     expect(auto.isOpen).toBe(true);
     expect(list().getAttribute('aria-label')).toBe('Commands');
     expect(input.getAttribute('aria-controls')).toBe('c1-references');
-    expect(input.getAttribute('aria-expanded')).toBe('true');
+    expect(input.hasAttribute('aria-expanded')).toBe(false);
+    // Its own class, distinct from the @mention list.
+    expect(list().classList.contains('nowo-chat-mention-list')).toBe(false);
     expect(options().map((option) => option.dataset.command)).toEqual(['task', 'issue']);
     expect(options()[0]?.querySelector('i')?.dataset.name).toBe('task');
     expect(input.getAttribute('aria-activedescendant')).toBe('c1-references-0');
@@ -112,7 +114,8 @@ describe('ReferenceAutocomplete', () => {
     key('Tab');
     expect(input.value).toBe('#Crash ');
     expect(auto.isOpen).toBe(false);
-    expect(input.getAttribute('aria-expanded')).toBe('false');
+    expect(input.hasAttribute('aria-controls')).toBe(false);
+    expect(input.hasAttribute('aria-activedescendant')).toBe(false);
     expect(auto.encode(`${input.value}!`)).toBe('#[Crash](issue:i-1) !');
   });
 

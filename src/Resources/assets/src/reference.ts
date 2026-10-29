@@ -111,7 +111,7 @@ export class ReferenceAutocomplete {
   constructor(input: HTMLTextAreaElement, options: ReferenceOptions) {
     this.input = input;
     this.options = options;
-    this.list = h('ul', { class: 'nowo-chat-mention-list nowo-chat-ref-list', role: 'listbox', id: `${options.idPrefix}-references`, 'aria-label': t(options.i18n, 'reference_list'), hidden: true });
+    this.list = h('ul', { class: 'nowo-chat-ref-list', role: 'listbox', id: `${options.idPrefix}-references`, 'aria-label': t(options.i18n, 'reference_list'), hidden: true });
     const host = input.parentElement as HTMLElement;
     host.classList.add('nowo-chat-mention-host');
     host.append(this.list);
@@ -185,7 +185,7 @@ export class ReferenceAutocomplete {
     this.items = [];
     this.active = -1;
     if (!this.list.hidden) {
-      this.input.setAttribute('aria-expanded', 'false');
+      this.input.removeAttribute('aria-controls');
       this.input.removeAttribute('aria-activedescendant');
     }
     this.list.hidden = true;
@@ -287,7 +287,6 @@ export class ReferenceAutocomplete {
     );
     this.list.hidden = false;
     this.input.setAttribute('aria-controls', this.list.id);
-    this.input.setAttribute('aria-expanded', 'true');
     this.setActive(0);
   }
 
