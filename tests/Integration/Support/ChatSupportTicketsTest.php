@@ -93,7 +93,7 @@ final class ChatSupportTicketsTest extends DatabaseTestCase
         $message = $presenter->message($posted[0], $ana);
         self::assertSame('Support assistant', $message['authorName']);
         self::assertSame('bot', $message['kind']);
-        self::assertStringStartsWith('<p><span class="nowo-chat-emoji" aria-hidden="true">🎫</span>Ticket SUP-000001', $message['html']);
+        self::assertStringStartsWith('<p><span class="nowo-chat-deco" aria-hidden="true">🎫</span>Ticket SUP-000001', $message['html']);
         self::assertFalse($message['refsPending']);
         self::assertTrue($presenter->message($posted[0], null)['refsPending'], 'a viewer-neutral bot line is fetched again in the reader\'s locale');
         self::assertInstanceOf(SupportTicketCreatedEvent::class, $this->recorded()[0]);

@@ -1,3 +1,4 @@
+import CSS_SOURCE from '../../public/css/nowo-chat.css?raw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatApi } from '../src/api';
 import { emojiSpan, fill, SupportPanel, type SupportHost } from '../src/support';
@@ -136,11 +137,15 @@ describe('SupportPanel', () => {
 
   it('puts decorative aria-hidden emojis before the status, the topic and the assistant lines', () => {
     const { element, host, panel, button } = setup();
-    const hidden = () => [...element.querySelectorAll('.nowo-chat-emoji')].map((span) => [span.textContent, span.getAttribute('aria-hidden')]);
+    const hidden = () => [...element.querySelectorAll('.nowo-chat-deco')].map((span) => [span.textContent, span.getAttribute('aria-hidden')]);
 
     panel.render(summary({ ticket: ticket({ topicEmoji: '💳', statusEmoji: '🟢' }) }));
     expect(element.textContent).toBe('SUP-000001 · 💳Billing · 🟢Open');
     expect(hidden()).toEqual([['💳', 'true'], ['🟢', 'true']]);
+    // 1.9.2 regression: the emojis sit inside the status line, never with the emoji picker's popover class.
+    const line = element.querySelector('.nowo-chat-support__status') ?? element;
+    expect(line.querySelectorAll('.nowo-chat-deco')).toHaveLength(2);
+    expect(element.querySelector('.nowo-chat-emoji')).toBeNull();
 
     panel.render(summary({ intake: intake({ topics: [{ key: 'billing', label: 'Billing', icon: null, emoji: '💳' }] }) }));
     expect(hidden()).toEqual([['👋', 'true'], ['💳', 'true']]);
@@ -158,5 +163,14 @@ describe('SupportPanel', () => {
     expect(emojiSpan('')).toBeNull();
     expect(emojiSpan(undefined)).toBeNull();
     expect(fill('%a% and %b%', { a: ['x'] })).toEqual(['', 'x', ' and ', '%b%', '']);
+  });
+});
+
+describe('decorative emoji styles (1.9.2)', () => {
+  it('are inline only: no positioning, unlike the emoji picker popover', () => {
+    const rule = CSS_SOURCE.match(/\.nowo-chat-deco\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toContain('display: inline-block');
+    expect(rule).not.toMatch(/position|box-shadow|background/);
+    expect(CSS_SOURCE).toMatch(/\.nowo-chat-emoji\s*\{[^}]*position: absolute/);
   });
 });

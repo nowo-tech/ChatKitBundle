@@ -143,17 +143,34 @@ export class DockStore {
   }
 }
 
-/** Per-tab cache of the last messages of open conversations: instant paint after navigating (sessionStorage). */
+/**
+ * Version of the cached message shape (1.9.2: 2). Bumped whenever the server renders messages differently, so an
+ * upgrade never paints stale lines (e.g. support assistant lines rendered in another language).
+ */
+export const THREAD_CACHE_VERSION = 2;
+
+/**
+ * Per-tab cache of the last messages of open conversations: instant paint after navigating (sessionStorage). The key
+ * carries the cache version and the dock locale: after an upgrade or a language change the old entries are dropped.
+ */
 export class ThreadCache {
   private readonly key: string;
 
   /**
-   * Creates the cache of one user.
+   * Creates the cache of one user and drops their entries of another version or locale.
    *
    * @param userUuid Current user (part of the storage key).
+   * @param locale Dock locale (part of the storage key).
    */
-  constructor(userUuid: string) {
-    this.key = `nowo-chat-cache:${userUuid}`;
+  constructor(userUuid: string, locale = '') {
+    this.key = `nowo-chat-cache:${THREAD_CACHE_VERSION}:${locale}:${userUuid}`;
+    try {
+      Object.keys(window.sessionStorage)
+        .filter((key) => key.startsWith('nowo-chat-cache:') && key.endsWith(`:${userUuid}`) && key !== this.key)
+        .forEach((key) => window.sessionStorage.removeItem(key));
+    } catch {
+      // No storage: nothing cached anyway.
+    }
   }
 
   /**

@@ -915,7 +915,7 @@ describe('plain', () => {
     const html = '<p>It supports:</p><ul><li>dms</li><li>channels<br>and more</li></ul>';
     expect(plain(html)).toBe('It supports: dms channels and more');
     expect(plain(html, true)).toBe('It supports:\ndms\nchannels\nand more');
-    expect(plain('<p><span class="nowo-chat-emoji" aria-hidden="true">🎫</span>Ticket opened</p>')).toBe('Ticket opened');
+    expect(plain('<p><span class="nowo-chat-deco" aria-hidden="true">🎫</span>Ticket opened</p>')).toBe('Ticket opened');
     expect(plain('<p>see <a class="nowo-chat-ref"><span>Task</span><span class="nowo-chat-ref__title">Deploy</span></a>, <span class="nowo-chat-ref nowo-chat-ref--restricted"><span class="nowo-chat-ref__title">Hidden</span></span> <span class="nowo-chat-ref"></span></p>')).toBe('see #Deploy, [Hidden] #');
   });
 });

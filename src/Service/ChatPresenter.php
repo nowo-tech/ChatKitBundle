@@ -226,7 +226,7 @@ final readonly class ChatPresenter
         $topic = $message->getMeta()['topic'] ?? null;
         $emoji = $this->topics->botEmoji($message->getBody(), is_string($topic) ? $topic : null);
 
-        return '<p>' . ($emoji === '' ? '' : '<span class="nowo-chat-emoji" aria-hidden="true">' . $this->escape($emoji) . '</span>')
+        return '<p>' . ($emoji === '' ? '' : '<span class="nowo-chat-deco" aria-hidden="true">' . $this->escape($emoji) . '</span>')
             . $this->escape($this->botText($message)) . '</p>';
     }
 

@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.9.2](#to-192)
 - [To 1.9.1](#to-191)
 - [To 1.9.0](#to-190)
 - [To 1.8.0](#to-180)
@@ -26,6 +27,12 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.9.2
+
+From **1.9.1** — no schema change. Run `php bin/console assets:install public` (or rebuild your bundle of the TS
+sources). If your stylesheet styled the support emojis through `.nowo-chat-emoji`, use `.nowo-chat-deco` (the former is
+the emoji picker). `ThreadCache` takes an optional second argument, the locale.
 
 ## To 1.9.1
 

@@ -91,6 +91,25 @@ describe('chat dock state', () => {
     spy.mockRestore();
   });
 
+  it('never serves entries of an older version or another locale (1.9.2)', () => {
+    window.sessionStorage.setItem('nowo-chat-cache:u9', JSON.stringify({ c: { messages: [message(1)], hasMore: false } }));
+    window.sessionStorage.setItem('nowo-chat-cache:2:es:u9', JSON.stringify({ c: { messages: [message(2)], hasMore: false } }));
+    window.sessionStorage.setItem('nowo-chat-cache:2:en:other', '{}');
+    const english = new ThreadCache('u9', 'en');
+    expect(english.read('c')).toBeNull();
+    expect(window.sessionStorage.getItem('nowo-chat-cache:u9')).toBeNull();
+    expect(window.sessionStorage.getItem('nowo-chat-cache:2:es:u9')).toBeNull();
+    expect(window.sessionStorage.getItem('nowo-chat-cache:2:en:other')).toBe('{}');
+    english.write('c', [message(3)], false);
+    expect(new ThreadCache('u9', 'en').read('c')?.messages[0]?.id).toBe(3);
+    const spy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    window.sessionStorage.setItem('nowo-chat-cache:1:en:u9', '{}');
+    expect(() => new ThreadCache('u9', 'fr')).not.toThrow();
+    spy.mockRestore();
+  });
+
   it('caches the last 40 messages per conversation for this tab', () => {
     const cache = new ThreadCache('u6');
     expect(cache.read('c')).toBeNull();
@@ -101,7 +120,7 @@ describe('chat dock state', () => {
     expect(cached?.hasMore).toBe(true);
     cache.write('d', [message(1)], false);
     expect(cache.read('d')?.hasMore).toBe(false);
-    window.sessionStorage.setItem('nowo-chat-cache:u6', '{broken');
+    window.sessionStorage.setItem('nowo-chat-cache:2::u6', '{broken');
     expect(cache.read('c')).toBeNull();
   });
 
