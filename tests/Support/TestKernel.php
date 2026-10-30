@@ -65,9 +65,13 @@ final class TestKernel extends Kernel
     /**
      * @param array<string, mixed> $chatKitConfig
      */
-    public function __construct(private readonly array $chatKitConfig = [])
-    {
-        parent::__construct('test', false);
+    public function __construct(
+        private readonly array $chatKitConfig = [],
+        private readonly bool $hostControllersRoutesOnly = false,
+    ) {
+        // Own environment for the routing.controllers-only host: its container class must not collide with the
+        // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir).
+        parent::__construct($hostControllersRoutesOnly ? 'test_controllers' : 'test', false);
     }
 
     public function registerBundles(): iterable
@@ -90,7 +94,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize($this->chatKitConfig)) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -162,6 +166,13 @@ final class TestKernel extends Kernel
 
     protected function configureRoutes(RoutingConfigurator $routes): void
     {
+        if ($this->hostControllersRoutesOnly) {
+            // Symfony's default config/routes.yaml (`controllers: { resource: routing.controllers }`), no bundle import.
+            $routes->import('routing.controllers');
+
+            return;
+        }
+
         $routes->import('@NowoChatKitBundle/Resources/config/routes.php')->prefix('/chat');
         $routes->add('test_page', '/page')->controller([self::class, 'page']);
         $routes->add('test_project_page', '/projects/acme/page')->controller([self::class, 'page']);

@@ -47,7 +47,7 @@ return static function (ContainerConfigurator $container): void {
 
     $services->load('Nowo\\ChatKitBundle\\', '../../')
         ->exclude([
-            '../../{DependencyInjection,Entity,Enum,Event,Model,Contract,Resources}',
+            '../../{Controller,DependencyInjection,Entity,Enum,Event,Model,Contract,Resources}',
             '../../NowoChatKitBundle.php',
             '../../Repository',
             '../../Push/DeliverChatPushMessage.php',
@@ -55,6 +55,13 @@ return static function (ContainerConfigurator $container): void {
             '../../Http/ChatApiException.php',
             '../../Realtime/ChatTopics.php',
         ]);
+    // REQ-SF-004 rule 7: controllers are NOT autoconfigured. On Symfony >= 7.3 autoconfiguration tags every #[Route]
+    // class with routing.controller, and the host's default `routing.controllers` import would then register the chat
+    // routes without the documented routes.php import (no prefix). Tags are explicit instead.
+    $services->load('Nowo\\ChatKitBundle\\Controller\\', '../../Controller/')
+        ->autoconfigure(false)
+        ->tag('controller.service_arguments')
+        ->tag('container.service_subscriber');
     $services->load('Nowo\\ChatKitBundle\\Repository\\', '../../Repository/')
         ->tag('doctrine.repository_service');
 
