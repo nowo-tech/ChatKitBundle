@@ -38,6 +38,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Chat routes are opt-in again (REQ-SF-004 rule 7).** On Symfony >= 7.3 autoconfiguration tagged the page and API
+  controllers (`#[Route]`) with `routing.controller`, so a host's default `config/routes.yaml`
+  (`controllers: { resource: routing.controllers }`) registered them without importing `routes.php`, without its prefix
+  (`/api/conversations`, `/{uuid}`, …). The controllers are no longer autoconfigured (explicit
+  `controller.service_arguments` + `container.service_subscriber` tags); permissions are unchanged.
+
 ## [1.13.1] - 2026-10-30
 
 ### Fixed

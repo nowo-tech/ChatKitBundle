@@ -18,6 +18,8 @@ use Symfony\Component\Asset\Packages;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Routing\Loader\AttributeServicesLoader;
+use Symfony\Component\Routing\RouterInterface;
 
 /**
  * Smoke test: the bundle boots in a real kernel with default configuration.
@@ -175,5 +177,29 @@ final class BundleBootTest extends TestCase
         $container->registerExtension(new NowoChatKitExtension());
 
         return $container;
+    }
+
+    /**
+     * REQ-SF-004 rule 7: the chat routes exist only when the host imports routes.php; the host's default
+     * `routing.controllers` resource (Symfony >= 7.3) must not pick the bundle controllers up.
+     */
+    public function testRoutingControllersDoesNotRegisterTheBundleRoutes(): void
+    {
+        if (!class_exists(AttributeServicesLoader::class)) {
+            self::markTestSkipped('The routing.controllers resource needs symfony/routing >= 7.3.');
+        }
+
+        $kernel = new TestKernel([], true);
+        $kernel->boot();
+
+        try {
+            $router = $kernel->getContainer()->get('router');
+            self::assertInstanceOf(RouterInterface::class, $router);
+            $names = array_keys($router->getRouteCollection()->all());
+
+            self::assertSame([], array_values(array_filter($names, static fn (string $name): bool => str_starts_with($name, 'nowo_chat'))));
+        } finally {
+            $kernel->shutdown();
+        }
     }
 }
