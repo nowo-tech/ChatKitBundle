@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.13.2](#to-1132)
 - [To 1.13.0](#to-1130)
 - [To 1.12.0](#to-1120)
 - [To 1.11.3](#to-1113)
@@ -35,6 +36,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.13.2
+
+From **1.13.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 The chat routes are only registered by the documented import of `@NowoChatKitBundle/Resources/config/routes.php`
 (with your prefix, e.g. `/chat`). On Symfony >= 7.3 a host without that import got them through
