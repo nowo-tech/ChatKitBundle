@@ -28,6 +28,10 @@ No page fits a scaffold: the chat (conversation list + thread + composer) is lis
   stacked with `parent()`), `nowo_ui_page_header` (UiKit `page_header` partial; `header` =
   `Nowo\ChatKitBundle\View\ChatPage::header()`, title "Messages" (`chat.page_title`)) and `nowo_ui_content`. Content blocks:
   `nowo_chat_page_list` (conversation list) and `nowo_chat_page_thread` (thread header, messages, composer form).
+  Page mode (1.13): the content element carries `data-nowo-chat-page-mode` (plus `data-nowo-chat-current` and
+  `data-nowo-chat-archived`); with JavaScript the dock script renders the dock's list panel and one conversation there
+  (`.nowo-chat-pagemode`, built from `_templates.html.twig`) and hides the two blocks above, which remain the page
+  without JavaScript. Overrides must keep that element (redefine `nowo_ui_content` only around `{{ parent() }}`).
   Theme slots: `section` (+ attributes, root `[data-testid="chat-page"]`), `empty`, `muted`, `flash_error` (send
   errors), `btn_link` (back to the list, phones), `btn_primary` (send), `form` (composer). The chat surfaces
   (`nowo-chat-page__*`, bubbles) are painted by `nowo-chat.css` from the `--nowo-chat-*` tokens.

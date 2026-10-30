@@ -64,6 +64,12 @@ final class ChatPageTest extends DatabaseTestCase
         self::assertSame(['Luis'], $crawler->filter('.nowo-chat-page__row-title')->each(static fn ($node): string => $node->text()));
         self::assertCount(1, $crawler->filter('.nowo-chat-page__row.is-unread'));
         self::assertSame('Pick a conversation.', $crawler->filter('.nowo-chat-page__thread .nowo-chat-page__empty')->text());
+        // 1.13 page mode: the element the dock script renders into; no conversation open, not the "Closed" filter.
+        $page = $crawler->filter('[data-testid="chat-page"][data-nowo-chat-page-mode]');
+        self::assertCount(1, $page);
+        self::assertNull($page->attr('data-nowo-chat-current'));
+        self::assertNull($page->attr('data-nowo-chat-archived'));
+        self::assertSame('1', $this->client->request(Request::METHOD_GET, '/chat/?archived=1')->filter('[data-nowo-chat-page-mode]')->attr('data-nowo-chat-archived'));
 
         // The thread offers the composer; the GET changes nothing (REQ-SEC-005): the page script marks it read
         // through the CSRF-protected API, with the URL, message id and header token the page carries.
@@ -77,6 +83,7 @@ final class ChatPageTest extends DatabaseTestCase
         self::assertSame([$dm->getId() => 1], $this->get(ChatMessageRepository::class)->countUnreadByConversation((int) $ana->getId(), [(int) $dm->getId()]));
         $page = $crawler->filter('[data-testid="chat-page"]');
         self::assertSame('/chat/api/conversations/' . $dm->getUuid() . '/read', $page->attr('data-nowo-chat-read-url'));
+        self::assertSame((string) $dm->getUuid(), $page->attr('data-nowo-chat-current'), 'page mode opens this conversation');
         $this->client->request(Request::METHOD_POST, (string) $page->attr('data-nowo-chat-read-url'), server: ['HTTP_X_CSRF_TOKEN' => (string) $page->attr('data-nowo-chat-read-csrf'), 'CONTENT_TYPE' => 'application/json'], content: '{"messageId":' . $page->attr('data-nowo-chat-read-id') . '}');
         self::assertLessThan(300, $this->client->getResponse()->getStatusCode());
         self::assertSame([], $this->get(ChatMessageRepository::class)->countUnreadByConversation((int) $ana->getId(), [(int) $dm->getId()]));

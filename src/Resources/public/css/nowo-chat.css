@@ -1972,6 +1972,105 @@
   }
 }
 
+/* Page mode (1.13): the dock's list and one conversation rendered inside the full-page chat by the dock script (the
+   server-rendered list and thread above stay the page without JavaScript). Height: --nowo-chat-page-height. */
+.nowo-chat-page.is-page-mode {
+  display: block;
+  min-height: 0;
+}
+.nowo-chat-page.is-page-mode > :not(.nowo-chat-pagemode) {
+  display: none;
+}
+.nowo-chat.has-page-mode .nowo-chat-dock,
+.nowo-chat.has-page-mode .nowo-chat-edge {
+  display: none;
+}
+.nowo-chat-pagemode {
+  --nowo-chat-muted: color-mix(in srgb, var(--nowo-chat-text) 68%, transparent);
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  height: var(--nowo-chat-page-height, max(28rem, calc(100dvh - 14rem)));
+  color: var(--nowo-chat-text);
+  font-size: var(--nowo-chat-font-size);
+}
+.nowo-chat-pagemode__list,
+.nowo-chat-pagemode__thread {
+  /* Positioned: the screen-reader-only parts inside the scrollers never widen the page. */
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+.nowo-chat-pagemode .nowo-chat-panel,
+.nowo-chat-pagemode .nowo-chat-window {
+  flex: 1;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
+  border-radius: var(--nowo-chat-radius-window);
+  box-shadow: none;
+}
+.nowo-chat-pagemode .nowo-chat-panel__body {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+.nowo-chat-pagemode__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 8px;
+  font-family: var(--nowo-chat-font-display, inherit);
+  font-size: 1rem;
+  font-weight: 600;
+}
+.nowo-chat-pagemode .nowo-chat-panel__tuck,
+.nowo-chat-pagemode .nowo-chat-panel__close,
+.nowo-chat-pagemode .nowo-chat-window__popout,
+.nowo-chat-pagemode .nowo-chat-window [data-part="minimise"],
+.nowo-chat-pagemode .nowo-chat-window [data-part="close"] {
+  display: none;
+}
+.nowo-chat-pagemode .nowo-chat-window__identity {
+  cursor: default;
+}
+.nowo-chat-pagemode .nowo-chat-window__identity:hover {
+  background: none;
+}
+.nowo-chat-pagemode .nowo-chat-row.is-current {
+  background: var(--nowo-chat-surface-muted);
+  box-shadow: inset 3px 0 0 var(--nowo-chat-accent);
+}
+.nowo-chat-pagemode:not(.has-thread) .nowo-chat-pagemode__thread {
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
+  border-radius: var(--nowo-chat-radius-window);
+  background: var(--nowo-chat-surface);
+}
+.nowo-chat-pagemode__empty {
+  margin: 0;
+  padding: 16px;
+  color: var(--nowo-chat-muted);
+}
+/* Phones: one column — the list, or the conversation with its back button (same breakpoint as the dock). */
+@media (max-width: 768px) {
+  .nowo-chat-pagemode {
+    grid-template-columns: minmax(0, 1fr);
+    height: var(--nowo-chat-page-height, max(24rem, calc(100dvh - 9rem)));
+  }
+  .nowo-chat-pagemode.has-thread .nowo-chat-pagemode__list,
+  .nowo-chat-pagemode:not(.has-thread) .nowo-chat-pagemode__thread {
+    display: none;
+  }
+  .nowo-chat-pagemode .nowo-chat-window .nowo-chat-window__back {
+    display: grid;
+  }
+}
+
 /* @mentions (1.7): chips in messages, the highlighted message that mentions the viewer and the composer list. */
 .nowo-chat-mention {
   padding: 0 4px;

@@ -11,6 +11,10 @@
  # nowo_chat_page_script (the nowo-chat.js tag; empty it when the host loads the chat script itself).
  # Opening a conversation never changes state on GET: with JavaScript, nowo-chat.js marks it read through the
  # CSRF-protected `POST …/read` API (the `data-nowo-chat-read-*` attributes); without it, sending a message does.
+ # Page mode (1.13): the element marked data-nowo-chat-page-mode (data-nowo-chat-current = the open conversation,
+ # data-nowo-chat-archived = the "Closed" filter) is where the dock script renders the dock's list and one conversation
+ # — status, search, filters, new conversation, close / reopen and every thread feature — hiding the server-rendered
+ # list and thread below, which stay the page without JavaScript. Keep that element (and its attributes) in an override.
  #}
 {% extends layout ?? nowo_ui_layout.admin %}
 {% trans_default_domain 'NowoChatKitBundle' %}
@@ -49,7 +53,7 @@
 
 {% block nowo_ui_content %}
     {% set _b = nowo_ui_bundle %}
-    <div class="{{ nowo_ui_class('section', _b) }} nowo-chat-page{{ current ? ' has-current' }}" data-testid="chat-page" data-nowo-ui-region="section"{{ nowo_ui_attrs('section', _b) }}{% if read ?? null %} data-nowo-chat-read-url="{{ read.url }}" data-nowo-chat-read-id="{{ read.messageId }}" data-nowo-chat-read-csrf="{{ read.csrf }}"{% endif %}>
+    <div class="{{ nowo_ui_class('section', _b) }} nowo-chat-page{{ current ? ' has-current' }}" data-testid="chat-page" data-nowo-ui-region="section" data-nowo-chat-page-mode{% if current %} data-nowo-chat-current="{{ current.uuid }}"{% endif %}{% if archived ?? false %} data-nowo-chat-archived="1"{% endif %}{{ nowo_ui_attrs('section', _b) }}{% if read ?? null %} data-nowo-chat-read-url="{{ read.url }}" data-nowo-chat-read-id="{{ read.messageId }}" data-nowo-chat-read-csrf="{{ read.csrf }}"{% endif %}>
         {% block nowo_chat_page_list %}
             <nav class="nowo-chat-page__list" aria-label="{{ 'chat.launcher'|trans }}">
                 {% block nowo_chat_page_status %}

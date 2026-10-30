@@ -115,15 +115,46 @@ test.describe('chat kit demo', () => {
     await expect(input).toHaveValue('Thanks, on it.');
   });
 
-  test('the full-page chat works without the dock', async ({ page }) => {
+  test('the full-page chat offers the dock options in page mode (1.13)', async ({ page }) => {
+    await signIn(page, 'alice');
+    await page.goto('/chat/');
+    const app = page.getByTestId('nowo-chat-page-mode');
+    await expect(app).toBeVisible();
+    // The floating dock stays away while the page shows the chat.
+    await expect(page.locator('.nowo-chat-dock')).toBeHidden();
+    await expect(app.locator('.nowo-chat-me')).toBeVisible();
+    await expect(app.locator('.nowo-chat-chip[data-filter="archived"]')).toBeVisible();
+    await expect(app.locator('.nowo-chat-search').first()).toBeVisible();
+    await expect(app.locator('.nowo-chat-pagemode__empty')).toHaveText('Pick a conversation.');
+    await app.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/);
+    const thread = app.locator('.nowo-chat-window[role="region"]');
+    await expect(thread.locator('.nowo-chat-window__title')).toHaveText('Bob Lee');
+    await expect(thread.locator('[data-part="format-toggle"]')).toBeVisible();
+    const text = `Hello from the page ${Date.now()}`;
+    await thread.locator('.nowo-chat-composer__input').fill(text);
+    await thread.locator('.nowo-chat-composer__input').press('Enter');
+    await expect(thread.locator('.nowo-chat-bubble', { hasText: text })).toBeVisible();
+    // Back returns to the list alone.
+    await page.goBack();
+    await expect(page).toHaveURL(/\/chat\/$/);
+    await expect(app.locator('.nowo-chat-pagemode__empty')).toBeVisible();
+    // REQ-UI-003: the page renders in the UiKit host layout (nowo_ui_kit.layouts.admin) with the UiKit page header.
+    await expect(page.locator('main[data-nowo-ui-bundle="NowoChatKitBundle"] [data-nowo-ui-region="header"] h1')).toHaveText('Messages');
+    await expect(page.locator('nav.demo-navbar')).toBeVisible();
+  });
+});
+
+test.describe('chat kit demo without JavaScript', () => {
+  test.use({ javaScriptEnabled: false });
+
+  test('the full-page chat works without JavaScript', async ({ page }) => {
     await signIn(page, 'alice');
     await page.goto('/chat/');
     await page.locator('.nowo-chat-page__row', { hasText: 'Bob Lee' }).click();
     await expect(page.locator('.nowo-chat-page__header h2')).toHaveText('Bob Lee');
     await expect(page.locator('.nowo-chat-page__composer textarea')).toBeVisible();
-    // REQ-UI-003: the page renders in the UiKit host layout (nowo_ui_kit.layouts.admin) with the UiKit page header.
     await expect(page.locator('main[data-nowo-ui-bundle="NowoChatKitBundle"] [data-nowo-ui-region="header"] h1')).toHaveText('Messages');
     await expect(page.locator('.nowo-chat-page__composer button[type="submit"]')).toHaveClass(/nowo-ui-btn--primary/);
-    await expect(page.locator('nav.demo-navbar')).toBeVisible();
   });
 });

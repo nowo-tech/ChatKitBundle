@@ -18,6 +18,33 @@ import type { ChatConfig, ChatMessage, ChatPrefs, Contact, ConversationSummary, 
 
 type Filter = 'all' | 'unread' | 'channel' | 'support' | 'archived';
 
+/** Options of a dock (1.13). */
+export interface ChatDockOptions {
+  /**
+   * Page mode: the full-page chat element (`[data-nowo-chat-page-mode]` of page.html.twig). The dock's list and one
+   * conversation are rendered inline in its two columns instead of floating; null / omitted = the floating dock.
+   */
+  page?: HTMLElement | null;
+}
+
+/** Page mode (1.13): the full-page chat element, its two columns and the conversation shown. */
+interface PageMode {
+  /** The page element (`[data-nowo-chat-page-mode]`); its server-rendered children are hidden while mounted. */
+  element: HTMLElement;
+  /** The page-mode container appended to it (list column + thread column). */
+  app: HTMLElement;
+  thread: HTMLElement;
+  /** "Pick a conversation." placeholder of the thread column. */
+  empty: HTMLElement;
+  /** Server-rendered children hidden by page mode (shown again on destroy()). */
+  hidden: HTMLElement[];
+  /** Uuid of the conversation shown, or null. */
+  active: string | null;
+}
+
+/** History state key of the page mode: the conversation of each history entry ("" = none). */
+const PAGE_STATE_KEY = 'nowoChatPage';
+
 const MOBILE_QUERY = '(max-width: 768px)';
 const WINDOW_WIDTH = 336;
 const MINIMISED_WIDTH = 232;
@@ -92,14 +119,17 @@ export class ChatDock implements ThreadHost {
   private readonly edge: HTMLButtonElement;
   private readonly edgeBadge: HTMLElement;
   private readonly mobileQuery: MediaQueryList;
+  /** 1.13: page mode (the full-page chat), or null for the floating dock. */
+  private readonly page: PageMode | null;
 
   /**
    * Builds the dock markup from the templates and binds its events (call start() to load and connect).
    *
    * @param root Dock root holding the `<template>` elements; the dock is appended to it.
    * @param config Dock configuration rendered by Twig.
+   * @param options Page mode (1.13): `{ page }` renders the list and the conversation inside the full-page chat.
    */
-  constructor(root: HTMLElement, config: ChatConfig) {
+  constructor(root: HTMLElement, config: ChatConfig, options: ChatDockOptions = {}) {
     this.root = root;
     this.config = config;
     this.templates = new Templates(root);
@@ -135,6 +165,7 @@ export class ChatDock implements ThreadHost {
     (this.dock.querySelector('[data-part="panel-body"]') ?? this.panel).before(this.toast);
     this.activity = new ActivityTracker(config.userUuid, this.abort.signal);
     this.statusMenu = this.buildStatusMenu();
+    this.page = options.page === undefined || options.page === null ? null : this.attachPage(options.page);
     this.bind();
     this.store.subscribe((event) => this.onSync(event));
   }
@@ -160,6 +191,114 @@ export class ChatDock implements ThreadHost {
     // In the panel's flow under its header (the panel clips anything outside it).
     (trigger.parentElement ?? this.panel).after(popover);
     return new StatusMenu(this, trigger, popover, (status) => (this.config.status = status), this.abort.signal);
+  }
+
+  /**
+   * Page mode (1.13): moves the list panel into the left column of the full-page chat, keeps one conversation in the
+   * right column and hides the server-rendered list and thread (they stay the fallback without JavaScript). The
+   * floating dock and its edge tab stay hidden while the page is mounted: one chat on the page, never two.
+   *
+   * @param element The full-page chat element (`[data-nowo-chat-page-mode]`).
+   * @returns The page-mode state.
+   */
+  private attachPage(element: HTMLElement): PageMode {
+    const i18n = this.config.i18n;
+    const list = h('div', { class: 'nowo-chat-pagemode__list' });
+    const thread = h('div', { class: 'nowo-chat-pagemode__thread' });
+    const app = h('div', { class: 'nowo-chat-pagemode', 'data-testid': 'nowo-chat-page-mode' }, list, thread);
+    const empty = h('p', { class: 'nowo-chat-pagemode__empty', text: t(i18n, 'page_select') });
+    thread.append(empty);
+    // The panel keeps its header (status, new message), search, filters, list and people picker; the launcher, the
+    // tuck and close buttons belong to the floating dock.
+    const title = h('h2', { class: 'nowo-chat-pagemode__title', text: t(i18n, 'launcher') });
+    this.launcher.before(title);
+    this.launcher.hidden = true;
+    this.panel.classList.add('is-open', 'nowo-chat-panel--page');
+    list.append(this.panel);
+    const hidden = [...element.children].filter((child): child is HTMLElement => child instanceof HTMLElement && !child.hidden);
+    hidden.forEach((child) => (child.hidden = true));
+    element.classList.add('is-page-mode');
+    element.append(app);
+    this.root.classList.add('has-page-mode');
+    this.dock.hidden = true;
+    this.edge.hidden = true;
+    const current = element.dataset.nowoChatCurrent ?? '';
+    if (element.dataset.nowoChatArchived === '1') {
+      this.setFilter('archived');
+    }
+    // Every history entry of the page knows its conversation: Back / Forward show it again (popstate).
+    window.history.replaceState({ ...(window.history.state as object | null), [PAGE_STATE_KEY]: current }, '');
+    return { element, app, thread, empty, hidden, active: current === '' ? null : current };
+  }
+
+  /**
+   * Address of the full-page chat for a conversation (null: the list), with `?archived=1` under the "Closed" filter.
+   *
+   * @param uuid Conversation uuid, or null.
+   * @returns The URL path (and query).
+   */
+  private pageUrl(uuid: string | null): string {
+    const path = this.config.endpoints.page.replace('__uuid__', uuid === null ? '' : encodeURIComponent(uuid));
+    return this.filter === 'archived' ? `${path}?archived=1` : path;
+  }
+
+  /**
+   * Page mode: shows a conversation (or none) and records it in the browser history.
+   *
+   * @param uuid Conversation uuid, or null for the list alone.
+   * @param history "push" adds a history entry, "replace" rewrites the current one, "none" leaves it (popstate).
+   */
+  private selectPage(uuid: string | null, history: 'push' | 'replace' | 'none'): void {
+    const page = this.page as PageMode;
+    page.active = uuid;
+    if (history !== 'none') {
+      const url = this.pageUrl(uuid);
+      const state = { ...(window.history.state as object | null), [PAGE_STATE_KEY]: uuid ?? '' };
+      if (history === 'replace' || `${window.location.pathname}${window.location.search}` === url) {
+        window.history.replaceState(state, '', url);
+      } else {
+        window.history.pushState(state, '', url);
+      }
+    }
+    this.renderList();
+  }
+
+  /**
+   * Page mode, Back / Forward: shows the conversation of the history entry.
+   *
+   * @param event The popstate event.
+   */
+  private onPopState(event: PopStateEvent): void {
+    const uuid = (event.state as Record<string, unknown> | null)?.[PAGE_STATE_KEY];
+    if (typeof uuid !== 'string') {
+      return;
+    }
+    this.selectPage(uuid === '' ? null : uuid, 'none');
+    this.applyState();
+  }
+
+  /** Page mode: the conversation (or the placeholder) in the right column; one column on phones (`has-thread`). */
+  private layoutPage(): void {
+    const page = this.page as PageMode;
+    const view = page.active === null ? undefined : this.windows.get(page.active);
+    const shown = view?.element ?? page.empty;
+    // A conversation on its way (deep link before the list loads): "Loading", not "Pick a conversation".
+    page.empty.textContent = t(this.config.i18n, page.active === null ? 'page_select' : 'loading');
+    if (page.thread.firstElementChild !== shown) {
+      page.thread.replaceChildren(shown);
+    }
+    page.app.classList.toggle('has-thread', view !== undefined);
+  }
+
+  /**
+   * Page mode: a new conversation view is a region of the page, not a floating dialog (no minimise / close / pop-out).
+   *
+   * @param view The view just created.
+   */
+  private decoratePageView(view: ThreadView): void {
+    view.element.setAttribute('role', 'region');
+    view.element.classList.add('nowo-chat-window--page');
+    part(view.element, 'identity').removeAttribute('aria-expanded');
   }
 
   /**
@@ -206,6 +345,10 @@ export class ChatDock implements ThreadHost {
     }
     this.applyState();
     await this.refreshList();
+    if (this.filter === 'archived') {
+      // Page mode, `/chat/?archived=1`: the "Closed" filter is on from the start.
+      await this.loadArchived();
+    }
     this.openFromUrl();
     this.schedulePoll();
     this.realtime = new ChatRealtime(
@@ -292,6 +435,13 @@ export class ChatDock implements ThreadHost {
     window.clearTimeout(this.toastTimer);
     this.dock.remove();
     this.edge.remove();
+    if (this.page !== null) {
+      // The server-rendered page comes back (a host that unmounts without leaving the page).
+      this.page.app.remove();
+      this.page.hidden.forEach((child) => (child.hidden = false));
+      this.page.element.classList.remove('is-page-mode');
+      this.root.classList.remove('has-page-mode');
+    }
   }
 
   /**
@@ -384,6 +534,10 @@ export class ChatDock implements ThreadHost {
    * @param minimised True to minimise, false to expand.
    */
   minimise(uuid: string, minimised: boolean): void {
+    if (this.page !== null) {
+      // Page mode: the conversation is part of the page, it does not fold.
+      return;
+    }
     if (this.isMobile()) {
       this.mobileActive = minimised ? null : uuid;
       this.applyState();
@@ -404,6 +558,10 @@ export class ChatDock implements ThreadHost {
    * @param uuid Conversation uuid.
    */
   close(uuid: string): void {
+    if (this.page !== null) {
+      this.closePage(uuid);
+      return;
+    }
     if (this.isMobile()) {
       this.mobileActive = null;
       this.applyState();
@@ -426,6 +584,26 @@ export class ChatDock implements ThreadHost {
   }
 
   /**
+   * Page mode: back to the list alone (the phone layout's back button, a closed or unreachable conversation); focus
+   * goes to that conversation's row, else to the search, when the conversation had it.
+   *
+   * @param uuid Conversation uuid.
+   */
+  private closePage(uuid: string): void {
+    const page = this.page as PageMode;
+    if (page.active !== uuid) {
+      return;
+    }
+    const hadFocus = this.windows.get(uuid)?.element.contains(document.activeElement) === true;
+    this.selectPage(null, 'push');
+    this.applyState();
+    if (hadFocus) {
+      const row = this.listEl.querySelector<HTMLElement>(`[data-uuid="${CSS.escape(uuid)}"]`);
+      (row ?? this.searchInput).focus({ preventScroll: true });
+    }
+  }
+
+  /**
    * Opens another conversation in place of a window (a support draft replaced by the ticket it continues). The
    * server moved the draft's messages into the ticket: both cached threads are dropped, an open ticket window
    * reloads its messages, the draft row leaves the list and the list is fetched again.
@@ -439,12 +617,13 @@ export class ChatDock implements ThreadHost {
     this.conversations.delete(from);
     void this.windows.get(summary.uuid)?.reload();
     void this.refreshList();
-    if (!this.isMobile()) {
+    if (this.page === null && !this.isMobile()) {
       this.store.update((state) => {
         state.tabs = state.tabs.filter((item) => item.uuid !== from);
       });
     }
-    void this.open(summary);
+    // Page mode: the draft's address is gone, the ticket takes its history entry.
+    void this.open(summary, true, true);
   }
 
   /**
@@ -496,20 +675,26 @@ export class ChatDock implements ThreadHost {
    *
    * @param summary Conversation to open (merged into the known summary).
    * @param focus Whether to focus the composer of the window.
+   * @param replace Page mode: rewrite the current history entry instead of adding one.
    */
-  async open(summary: ConversationSummary, focus = true): Promise<void> {
+  async open(summary: ConversationSummary, focus = true, replace = false): Promise<void> {
     this.conversations.set(summary.uuid, { ...this.conversations.get(summary.uuid), ...summary });
     // Opening a conversation (list, link, push) brings a tucked dock back.
     this.setTucked(false, false);
-    if (!this.windows.has(summary.uuid)) {
-      this.entering.add(summary.uuid);
-    }
-    if (this.isMobile()) {
-      this.mobileActive = summary.uuid;
+    if (this.page !== null) {
+      // Page mode: the conversation takes the right column and the address (`/chat/{uuid}`).
+      this.selectPage(summary.uuid, replace ? 'replace' : 'push');
     } else {
-      this.store.update((state) => {
-        state.tabs = [{ uuid: summary.uuid, minimised: false }, ...state.tabs.filter((item) => item.uuid !== summary.uuid)];
-      });
+      if (!this.windows.has(summary.uuid)) {
+        this.entering.add(summary.uuid);
+      }
+      if (this.isMobile()) {
+        this.mobileActive = summary.uuid;
+      } else {
+        this.store.update((state) => {
+          state.tabs = [{ uuid: summary.uuid, minimised: false }, ...state.tabs.filter((item) => item.uuid !== summary.uuid)];
+        });
+      }
     }
     this.closePicker();
     this.applyState();
@@ -525,28 +710,31 @@ export class ChatDock implements ThreadHost {
   private bind(): void {
     const signal = this.abort.signal;
     this.launcher.addEventListener('click', () => this.toggleList());
-    part(this.dock, 'close-panel').addEventListener('click', () => {
+    part(this.panel, 'close-panel').addEventListener('click', () => {
       this.toggleList(false);
       this.launcher.focus();
     });
     this.compose.addEventListener('click', () => this.openPicker());
-    part(this.dock, 'tuck').addEventListener('click', () => this.setTucked(true));
+    part(this.panel, 'tuck').addEventListener('click', () => this.setTucked(true));
     this.edge.addEventListener('click', () => this.setTucked(false));
-    part(this.dock, 'picker-back').addEventListener('click', () => {
+    part(this.panel, 'picker-back').addEventListener('click', () => {
       this.closePicker();
       this.compose.focus();
     });
     this.filters.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach((chip) => {
       chip.addEventListener('click', () => {
-        this.filter = (chip.dataset.filter ?? 'all') as Filter;
-        this.filters.querySelectorAll('[data-filter]').forEach((element) => element.setAttribute('aria-pressed', element === chip ? 'true' : 'false'));
+        this.setFilter((chip.dataset.filter ?? 'all') as Filter);
         if (this.filter === 'archived') {
           void this.loadArchived();
+        }
+        if (this.page !== null) {
+          // Page mode: the address follows the "Closed" filter (`?archived=1`) without a new history entry.
+          this.selectPage(this.page.active, 'replace');
         }
         this.renderList();
       });
     });
-    this.dock.querySelector('[data-part="archive-read"]')?.addEventListener('click', () => void this.archiveRead());
+    this.panel.querySelector('[data-part="archive-read"]')?.addEventListener('click', () => void this.archiveRead());
     this.searchInput.addEventListener('input', () => {
       this.query = this.searchInput.value.trim().toLowerCase();
       this.renderList();
@@ -564,7 +752,7 @@ export class ChatDock implements ThreadHost {
       if (this.mode === 'picker') {
         this.closePicker();
         this.compose.focus();
-      } else {
+      } else if (this.page === null) {
         this.toggleList(false);
         this.launcher.focus();
       }
@@ -645,8 +833,9 @@ export class ChatDock implements ThreadHost {
       },
       { signal },
     );
-    // Alt+↑ / Alt+↓ move between open windows; "/" (outside a text field) focuses the search.
-    this.root.addEventListener('keydown', (event) => {
+    // Alt+↑ / Alt+↓ move between open windows; "/" (outside a text field) focuses the search. Page mode: the panel
+    // and the conversation live in the page, outside the root.
+    const onKey = (event: KeyboardEvent): void => {
       if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
         const views = [...this.windows.values()].filter((view) => !view.element.hidden);
         if (views.length === 0) {
@@ -660,12 +849,17 @@ export class ChatDock implements ThreadHost {
       const target = event.target as HTMLElement;
       if (event.key === '/' && !(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) && this.panel.contains(target)) {
         event.preventDefault();
-        if (!this.store.get().listOpen) {
+        if (this.page === null && !this.store.get().listOpen) {
           this.toggleList(true);
         }
         this.searchInput.focus();
       }
-    }, { signal });
+    };
+    this.root.addEventListener('keydown', onKey, { signal });
+    if (this.page !== null) {
+      this.page.app.addEventListener('keydown', onKey, { signal });
+      window.addEventListener('popstate', (event) => this.onPopState(event), { signal });
+    }
     window.addEventListener('resize', () => this.layout(), { signal });
     this.trackBottomBars(signal);
     // Mobile keyboard: size the full-screen conversation to the visible area so the composer stays above it.
@@ -715,6 +909,16 @@ export class ChatDock implements ThreadHost {
   }
 
   /**
+   * Picks a list filter and marks its chip pressed.
+   *
+   * @param filter The filter.
+   */
+  private setFilter(filter: Filter): void {
+    this.filter = filter;
+    this.filters.querySelectorAll('[data-filter]').forEach((element) => element.setAttribute('aria-pressed', element.getAttribute('data-filter') === filter ? 'true' : 'false'));
+  }
+
+  /**
    * Shows or hides the "+N" menu of windows that do not fit.
    *
    * @param open True to show it.
@@ -754,10 +958,10 @@ export class ChatDock implements ThreadHost {
     window.history.replaceState(window.history.state, '', url.toString());
     const known = this.conversations.get(uuid);
     if (known !== undefined) {
-      void this.open(known);
+      void this.open(known, true, true);
       return;
     }
-    void this.api.conversation(uuid).then((summary) => this.open(summary)).catch(() => undefined);
+    void this.api.conversation(uuid).then((summary) => this.open(summary, true, true)).catch(() => undefined);
   }
 
   /**
@@ -885,7 +1089,8 @@ export class ChatDock implements ThreadHost {
       if (!prefs.buzz || dnd) {
         return;
       }
-      if ((view === undefined || view.isMinimised) && summary !== undefined && prefs.buzzOpenWindow !== false) {
+      // Page mode never switches the conversation the user is reading on its own.
+      if (this.page === null && (view === undefined || view.isMinimised) && summary !== undefined && prefs.buzzOpenWindow !== false) {
         void this.open(summary, false);
       }
       window.setTimeout(() => this.windows.get(uuid)?.shake(), 120);
@@ -894,7 +1099,7 @@ export class ChatDock implements ThreadHost {
       }
       return;
     }
-    if (!dnd && prefs.openOnMessage === true && view === undefined && summary !== undefined) {
+    if (!dnd && this.page === null && prefs.openOnMessage === true && view === undefined && summary !== undefined) {
       void this.open(summary, false);
     }
     const inFront = !background && view !== undefined && !view.isMinimised;
@@ -999,6 +1204,10 @@ export class ChatDock implements ThreadHost {
    * @param force True to open, false to close; toggles when omitted.
    */
   private toggleList(force?: boolean): void {
+    if (this.page !== null) {
+      // Page mode: the list is always shown.
+      return;
+    }
     const open = force ?? !this.store.get().listOpen;
     this.store.update((state) => {
       state.listOpen = open;
@@ -1021,7 +1230,7 @@ export class ChatDock implements ThreadHost {
    * @param moveFocus Whether to move focus (false when a conversation is being opened, which focuses its window).
    */
   setTucked(tucked: boolean, moveFocus = true): void {
-    if (this.store.get().tucked === tucked) {
+    if (this.page !== null || this.store.get().tucked === tucked) {
       return;
     }
     this.store.update((state) => {
@@ -1076,15 +1285,20 @@ export class ChatDock implements ThreadHost {
   private applyState(): void {
     const state = this.store.get();
     const mobile = this.isMobile();
+    const page = this.page;
     this.root.classList.toggle('is-mobile', mobile);
-    this.root.classList.toggle('is-tucked', state.tucked);
-    this.dock.inert = state.tucked;
-    this.edge.hidden = !state.tucked;
-    this.panel.classList.toggle('is-open', state.listOpen);
-    this.launcher.setAttribute('aria-expanded', state.listOpen ? 'true' : 'false');
-    this.launcherChevron.replaceChildren(this.templates.icon(state.listOpen ? 'chevronDown' : 'chevronUp', 16));
+    if (page === null) {
+      // Page mode leaves the shared layout of the floating dock (other tabs, other pages) untouched.
+      this.root.classList.toggle('is-tucked', state.tucked);
+      this.dock.inert = state.tucked;
+      this.edge.hidden = !state.tucked;
+      this.panel.classList.toggle('is-open', state.listOpen);
+      this.launcher.setAttribute('aria-expanded', state.listOpen ? 'true' : 'false');
+      this.launcherChevron.replaceChildren(this.templates.icon(state.listOpen ? 'chevronDown' : 'chevronUp', 16));
+    }
 
-    const wanted = mobile ? (this.mobileActive !== null ? [{ uuid: this.mobileActive, minimised: false }] : []) : state.tabs;
+    const single = page === null ? this.mobileActive : page.active;
+    const wanted = page !== null || mobile ? (single !== null ? [{ uuid: single, minimised: false }] : []) : state.tabs;
     const wantedIds = new Set(wanted.map((tab) => tab.uuid));
     const created: ThreadView[] = [];
     for (const [uuid, view] of this.windows) {
@@ -1119,9 +1333,12 @@ export class ChatDock implements ThreadHost {
         void view.load();
       }
       view.setMinimised(tab.minimised);
+      if (page !== null && created.includes(view)) {
+        this.decoratePageView(view);
+      }
     }
     this.cache.prune([...wantedIds]);
-    this.root.classList.toggle('has-mobile-thread', mobile && this.mobileActive !== null);
+    this.root.classList.toggle('has-mobile-thread', page === null && mobile && this.mobileActive !== null);
     this.layout();
     // New windows are attached now: show their latest messages.
     created.forEach((view) => view.scrollToLatest());
@@ -1130,6 +1347,10 @@ export class ChatDock implements ThreadHost {
 
   /** Order windows right-to-left next to the panel; whatever does not fit goes to the "+N" menu. */
   private layout(): void {
+    if (this.page !== null) {
+      this.layoutPage();
+      return;
+    }
     if (this.isMobile()) {
       for (const view of this.windows.values()) {
         view.element.hidden = false;
@@ -1298,6 +1519,12 @@ export class ChatDock implements ThreadHost {
         const row = part<HTMLButtonElement>(item, 'row');
         row.classList.toggle('is-unread', summary.unread > 0);
         row.classList.toggle('is-typing', this.listTyping.has(summary.uuid));
+        row.dataset.uuid = summary.uuid;
+        if (this.page !== null && this.page.active === summary.uuid) {
+          // Page mode: the conversation shown on the right.
+          row.classList.add('is-current');
+          row.setAttribute('aria-current', 'true');
+        }
         part(item, 'avatar').replaceWith(this.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline, summary.kind === 'direct' ? summary.peerStatus : undefined));
         const title = text(item, 'title', summary.title);
         if (summary.kind === 'direct') {

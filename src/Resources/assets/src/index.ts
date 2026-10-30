@@ -2,32 +2,52 @@
  * Nowo Chat Kit — browser entry point. The IIFE build (`nowo-chat.js`) mounts the dock on every
  * `[data-nowo-chat-config]` element rendered by `@NowoChatKitBundle/dock.html.twig`, after first paint, and again
  * after Turbo page swaps — except roots marked `data-nowo-chat-manual`, which the host mounts itself. Applications with their own bundler can import `ChatDock` / `mount` from the source.
+ *
+ * Page mode (1.13): on the full-page chat (`[data-nowo-chat-page-mode]`, page.html.twig) mount() renders the dock's
+ * list and one conversation inside the page instead of floating — automatically, or with `mount(root, { page })`.
  */
-import { ChatDock } from './dock';
+import { ChatDock, type ChatDockOptions } from './dock';
 import { markPageRead } from './page';
 import type { ChatConfig } from './types';
 
 export { ChatDock } from './dock';
+export type { ChatDockOptions } from './dock';
 export { markPageRead } from './page';
 export { PREFS_EVENT, saveChatPreference } from './prefs';
 export { playSound, SOUND_NAMES } from './sounds';
 export type { ChatConfig, ChatPrefs, ChatStatus, OwnStatus, SoundName } from './types';
 
 /** Package version of the browser bundle. */
-export const VERSION = '1.10.0';
+export const VERSION = '1.13.0';
 
 /** Prefix of every CSS custom property (theme token) of the dock. */
 export const CSS_TOKEN_PREFIX = '--nowo-chat-';
 
 const mounted = new WeakMap<HTMLElement, ChatDock>();
 
+/** The full-page chat element page mode renders into (page.html.twig, 1.13). */
+export const PAGE_SELECTOR = '[data-nowo-chat-page-mode]';
+
 /**
- * Mounts the dock on one root (idempotent); returns null when the root has no valid configuration.
+ * The full-page chat element of the document, when the page is the chat page.
+ *
+ * @param scope Where to look.
+ * @returns The element, or null on every other page.
+ */
+export function findChatPage(scope: ParentNode = document): HTMLElement | null {
+  return scope.querySelector<HTMLElement>(PAGE_SELECTOR);
+}
+
+/**
+ * Mounts the dock on one root (idempotent); returns null when the root has no valid configuration. On the full-page
+ * chat the dock starts in page mode (1.13): its list and one conversation fill the page, the floating dock hides.
  *
  * @param root Element carrying the JSON `data-nowo-chat-config`.
+ * @param options `page`: the full-page chat element for page mode; omitted = found in the document
+ *   (`[data-nowo-chat-page-mode]`); null = always the floating dock.
  * @returns The dock of that root, or null when the configuration is missing or invalid.
  */
-export function mount(root: HTMLElement): ChatDock | null {
+export function mount(root: HTMLElement, options: ChatDockOptions = {}): ChatDock | null {
   const existing = mounted.get(root);
   if (existing !== undefined) {
     return existing;
@@ -38,10 +58,22 @@ export function mount(root: HTMLElement): ChatDock | null {
   } catch {
     return null;
   }
-  const dock = new ChatDock(root, config);
+  const dock = new ChatDock(root, config, { page: options.page === undefined ? findChatPage(root.ownerDocument) : options.page });
   mounted.set(root, dock);
   void dock.start();
   return dock;
+}
+
+/**
+ * Mounts the dock of a root in page mode on a full-page chat element (1.13) — the explicit form of mount() for hosts
+ * that render the page element themselves.
+ *
+ * @param root Element carrying the JSON `data-nowo-chat-config`.
+ * @param page The full-page chat element (two columns: list, conversation).
+ * @returns The dock, or null when the configuration is missing or invalid.
+ */
+export function mountPage(root: HTMLElement, page: HTMLElement): ChatDock | null {
+  return mount(root, { page });
 }
 
 /**

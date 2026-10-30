@@ -3,17 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const start = vi.fn();
 const destroy = vi.fn();
 const created: HTMLElement[] = [];
+const pages: (HTMLElement | null | undefined)[] = [];
 vi.mock('../src/dock', () => ({
   ChatDock: class {
-    constructor(root: HTMLElement) {
+    constructor(root: HTMLElement, _config: unknown, options: { page?: HTMLElement | null }) {
       created.push(root);
+      pages.push(options.page);
     }
     start = start;
     destroy = destroy;
   },
 }));
 
-const { AUTO_ROOT_SELECTOR, CSS_TOKEN_PREFIX, VERSION, autoStart, mount, mountAll, unmount } = await import('../src/index');
+const { AUTO_ROOT_SELECTOR, CSS_TOKEN_PREFIX, PAGE_SELECTOR, VERSION, autoStart, findChatPage, mount, mountAll, mountPage, unmount } = await import('../src/index');
 
 function root(config: string): HTMLElement {
   const element = document.createElement('div');
@@ -26,6 +28,7 @@ describe('nowo-chat entry', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     created.length = 0;
+    pages.length = 0;
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -52,6 +55,24 @@ describe('nowo-chat entry', () => {
     expect(destroy).toHaveBeenCalledTimes(1);
     unmount(element);
     expect(destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts page mode on the full-page chat, found in the document or given', () => {
+    expect(PAGE_SELECTOR).toBe('[data-nowo-chat-page-mode]');
+    expect(findChatPage()).toBeNull();
+    mount(root('{}'));
+    expect(pages).toEqual([null]);
+
+    const page = document.createElement('div');
+    page.dataset.nowoChatPageMode = '';
+    document.body.append(page);
+    expect(findChatPage()).toBe(page);
+    mount(root('{}'));
+    // A host may keep the floating dock on that page (page: null) or point at its own element.
+    mount(root('{}'), { page: null });
+    const own = document.createElement('section');
+    expect(mountPage(root('{}'), own)).not.toBeNull();
+    expect(pages).toEqual([null, page, null, own]);
   });
 
   it('mounts every root when the browser is idle, or after a short delay', () => {
