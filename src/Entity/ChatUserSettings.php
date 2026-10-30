@@ -65,8 +65,8 @@ class ChatUserSettings
 
     public const int AUTO_REPLY_MAX = 500;
 
-    /** "Clear after" choices of a status: never, 30 minutes, 1 hour, 4 hours, end of today, end of this week. */
-    public const array CLEAR_AFTER = ['never', '30m', '1h', '4h', 'today', 'week'];
+    /** "Clear after" choices of a status: never, 30 minutes, 1 hour, 2 hours, 4 hours, end of today, end of this week. */
+    public const array CLEAR_AFTER = ['never', '30m', '1h', '2h', '4h', 'today', 'week'];
 
     /**
      * Keys `applyPreference()` accepts (the JSON settings endpoint): preference key => kind (`sound`, `bool`,
@@ -693,6 +693,7 @@ class ChatUserSettings
             'never' => null,
             '30m'   => $now->modify('+30 minutes'),
             '1h'    => $now->modify('+1 hour'),
+            '2h'    => $now->modify('+2 hours'),
             '4h'    => $now->modify('+4 hours'),
             'today' => $now->setTime(23, 59, 59),
             'week'  => $now->modify('sunday this week')->setTime(23, 59, 59),

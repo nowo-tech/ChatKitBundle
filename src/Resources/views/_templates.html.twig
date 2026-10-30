@@ -97,13 +97,21 @@
             </div>
             {{ form_start(nowo_chat_status_form) }}
                 <p class="nowo-chat-status-form__title">{{ 'chat.status_custom'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</p>
-                {# 1.10.1: one click fills the emoji, the text and when it clears, and saves. #}
-                <div class="nowo-chat-status-presets" role="group" aria-label="{{ 'chat.status_presets'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}">
-                    {% for nowo_chat_preset in [['🍕', 'lunch', '1h'], ['📅', 'meeting', '1h'], ['🏠', 'home', 'today'], ['🤒', 'sick', 'today'], ['🌴', 'holiday', 'week']] %}
-                        {% set nowo_chat_label = ('chat.status_preset_' ~ nowo_chat_preset[1])|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
-                        <button type="button" class="nowo-chat-status-preset" data-preset-emoji="{{ nowo_chat_preset[0] }}" data-preset-text="{{ nowo_chat_label }}" data-preset-clear-after="{{ nowo_chat_preset[2] }}"><span aria-hidden="true">{{ nowo_chat_preset[0] }}</span> {{ nowo_chat_label }}</button>
-                    {% endfor %}
-                </div>
+                {# 1.10.1: one click fills the emoji, the text and when it clears, and saves. 1.12: the suggestions come from
+                   the `status_presets` option (`quick`: these buttons; `more`: the "More statuses" drop-down). #}
+                {% if nowo_chat_status_form.vars.status_presets is not empty %}
+                    <div class="nowo-chat-status-presets" role="group" aria-label="{{ 'chat.status_presets'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}">
+                        {% for nowo_chat_preset in nowo_chat_status_form.vars.status_presets %}
+                            <button type="button" class="nowo-chat-status-preset" data-preset-emoji="{{ nowo_chat_preset.emoji }}" data-preset-text="{{ nowo_chat_preset.text }}" data-preset-clear-after="{{ nowo_chat_preset.clear_after }}"><span aria-hidden="true">{{ nowo_chat_preset.emoji }}</span> {{ nowo_chat_preset.text }}</button>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if nowo_chat_status_form.moreStatus is defined %}
+                    <div class="nowo-chat-status-form__row nowo-chat-status-form__more-row">
+                        {{ form_label(nowo_chat_status_form.moreStatus) }}
+                        {{ form_widget(nowo_chat_status_form.moreStatus) }}
+                    </div>
+                {% endif %}
                 <div class="nowo-chat-status-form__row">
                     {% set nowo_chat_label = 'chat.status_emoji'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
                     {{ form_widget(nowo_chat_status_form.emoji, {translation_domain: false, attr: nowo_chat_status_form.emoji.vars.attr|merge({placeholder: '🙂', 'aria-label': nowo_chat_label, title: nowo_chat_label})}) }}

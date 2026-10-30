@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.12.0](#to-1120)
 - [To 1.11.3](#to-1113)
 - [To 1.11.2](#to-1112)
 - [To 1.11.1](#to-1111)
@@ -33,6 +34,22 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.12.0
+
+From **1.11.3**: `composer update nowo-tech/chat-kit-bundle`, then `php bin/console assets:install` (new script and
+stylesheet). No schema change.
+
+- The status menu has a **More statuses** drop-down and the suggestions come from the new `status_presets` option (see
+  [CONFIGURATION](CONFIGURATION.md)). To change them, set `quick` and / or `more` in your profile (a list you set
+  replaces the default one; `more: []` hides the drop-down); labels are translation keys of the `NowoChatKitBundle`
+  domain (add your own keys to that domain) or plain texts.
+- If you redefined `nowo_chat_template_status_menu`, render the suggestion buttons from
+  `nowo_chat_status_form.vars.status_presets` (`emoji`, `text`, `clear_after`) and add the drop-down
+  (`{{ form_label(nowo_chat_status_form.moreStatus) }}{{ form_widget(nowo_chat_status_form.moreStatus) }}` when
+  `nowo_chat_status_form.moreStatus is defined`); otherwise the unrendered field ends up at the end of the form.
+- `clearAfter` accepts `2h` (2 hours) too; a host that validates the API payload itself should allow it.
+- Tests that counted the children of `ChatDockStatusType` get `moreStatus` first.
 
 ## To 1.11.3
 

@@ -22,6 +22,9 @@ const ACTIVITY_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touc
 /** Tabs write the shared activity time at most this often. */
 const WRITE_EVERY_MS = 15_000;
 
+/** Keys that move the choice of a closed drop-down without the user committing to it (1.12). */
+const BROWSE_KEYS: readonly string[] = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'];
+
 /**
  * The user's own status as it stands now: an expired one is back to available, without text.
  *
@@ -188,14 +191,17 @@ export class StatusMenu {
     });
     // 1.10.1: suggested statuses (emoji, text, when it clears) save in one click; the emoji button opens the chat's emoji
     // picker inside the menu (never clipped by it).
-    popover.querySelectorAll<HTMLButtonElement>('[data-preset-emoji]').forEach((preset) => {
+    popover.querySelectorAll<HTMLButtonElement>('button[data-preset-emoji]').forEach((preset) => {
       preset.addEventListener('click', () => {
-        this.emojiInput.value = preset.dataset.presetEmoji ?? '';
-        this.textInput.value = preset.dataset.presetText ?? '';
-        this.clearAfter.value = preset.dataset.presetClearAfter ?? 'never';
+        this.fillPreset(preset);
         void this.save({});
       });
     });
+    // 1.12: the "More statuses" drop-down works like the buttons.
+    const more = popover.querySelector<HTMLSelectElement>('[data-part="status-more"]');
+    if (more !== null) {
+      this.bindMore(more);
+    }
     const pick = popover.querySelector<HTMLButtonElement>('[data-part="status-emoji-pick"]');
     const holder = popover.querySelector<HTMLElement>('[data-part="status-emoji-panel"]');
     if (pick !== null && holder !== null) {
@@ -300,6 +306,54 @@ export class StatusMenu {
   apply(status: OwnStatus): void {
     this.status = status;
     this.paint();
+  }
+
+  /**
+   * Fills the custom status form from a suggestion (a button or an option of the drop-down).
+   *
+   * @param source Element with `data-preset-emoji`, `data-preset-text` and `data-preset-clear-after`.
+   */
+  private fillPreset(source: HTMLElement): void {
+    this.emojiInput.value = source.dataset.presetEmoji ?? '';
+    this.textInput.value = source.dataset.presetText ?? '';
+    this.clearAfter.value = source.dataset.presetClearAfter ?? 'never';
+  }
+
+  /**
+   * The "More statuses" drop-down (1.12): picking an option fills the form and saves, like a suggestion button. Browsing a
+   * closed drop-down with the keyboard (arrows, Home, End, Page keys) only fills the form; Enter then saves.
+   *
+   * @param more The drop-down.
+   */
+  private bindMore(more: HTMLSelectElement): void {
+    let browsing = false;
+    const commit = (): void => {
+      void this.save({}).finally(() => {
+        more.value = '';
+      });
+    };
+    more.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        if (more.value !== '') {
+          commit();
+        }
+        return;
+      }
+      browsing = BROWSE_KEYS.includes(event.key);
+    });
+    more.addEventListener('change', () => {
+      const option = more.options[more.selectedIndex];
+      const keyboard = browsing;
+      browsing = false;
+      if (option === undefined || more.value === '') {
+        return;
+      }
+      this.fillPreset(option);
+      if (!keyboard) {
+        commit();
+      }
+    });
   }
 
   /**

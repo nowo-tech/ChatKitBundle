@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.12.0] - 2026-10-30](#1120---2026-10-30)
 - [[1.11.3] - 2026-10-30](#1113---2026-10-30)
 - [[1.11.2] - 2026-10-29](#1112---2026-10-29)
 - [[1.11.1] - 2026-10-29](#1111---2026-10-29)
@@ -34,6 +35,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.12.0] - 2026-10-30
+
+### Added
+
+- Status menu: a **More statuses** drop-down (a native `<select>` with option groups, labelled) under the one-click
+  suggestions. *Work*: focusing 🎧 (2 hours), in a call 📞, presenting 🎤, reviewing 🔍, commuting 🚆 (1 hour), working
+  remotely 💻, at the office 🏢, in training 📚, on support duty 🛟 (today), on a business trip ✈️ (this week).
+  *Personal*: coffee break ☕, back soon ⏳ (30 minutes), doctor's appointment 🩺 (2 hours), offline for the day 🌙,
+  sick 🤒 (today), on holiday 🌴, parental leave 🍼 (this week). Picking an option fills the emoji, the text and when it
+  clears and saves it, like a suggestion button; browsing the closed drop-down with the arrow keys only fills the form
+  and Enter saves. Strings in the 7 locales.
+- Option `status_presets` (per profile): `quick` (the one-click buttons) and `more` (the drop-down's groups: `label`,
+  `statuses`), each status `emoji`, `label` (translation key of the `NowoChatKitBundle` domain, or a text) and
+  `clear_after`. A list you set replaces the default one; `more: []` hides the drop-down. `ChatDockStatusType` takes
+  it as the `status_presets` option (view var `status_presets`, child `moreStatus`, `data-part="status-more"`).
+- "Clear after" choice **2 hours** (`clearAfter: 2h`).
+
+### Changed
+
+- The suggestion buttons of `nowo_chat_template_status_menu` render from `nowo_chat_status_form.vars.status_presets`
+  instead of a list in the template.
 
 ## [1.11.3] - 2026-10-30
 

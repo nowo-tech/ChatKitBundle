@@ -2893,6 +2893,42 @@ a.nowo-chat-ref:focus-visible {
   flex: none;
 }
 
+/* 1.12: the "More statuses" drop-down under the suggestions (grouped options; native, so the keyboard just works). */
+.nowo-chat-status-form__more-row > label {
+  color: var(--nowo-chat-muted);
+  font-size: 0.8125rem;
+}
+
+.nowo-chat-status-form .nowo-chat-status-form__more {
+  box-sizing: border-box;
+  width: 100%;
+  border-color: var(--nowo-chat-border);
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+  cursor: pointer;
+}
+
+.nowo-chat-status-form__more:hover,
+.nowo-chat-status-form__more:focus-visible {
+  border-color: var(--nowo-chat-accent);
+  outline: none;
+}
+
+.nowo-chat-status-form__more optgroup,
+.nowo-chat-status-form__more option {
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+}
+
+.nowo-chat-status-form__more optgroup {
+  font-style: normal;
+  font-weight: 600;
+}
+
+.nowo-chat-status-form__more option {
+  font-weight: 400;
+}
+
 .nowo-chat-status-form__picker:empty {
   display: none;
 }

@@ -102,6 +102,8 @@ nowo_chat_kit:
 | `profiles.<name>.auto_reply_interval_hours` | int ≥ 1 | `4` | At most one automatic reply per conversation and person in this many hours (1.11). |
 | `profiles.<name>.max_pins` | int ≥ 1 | `20` | Pinned messages per conversation (1.10). |
 | `profiles.<name>.auto_away_minutes` | int ≥ 0 | `10` | Minutes without keyboard or pointer input (in every tab) before an available user shows as away. `0`: never. |
+| `profiles.<name>.status_presets.quick` | list | lunch, meeting, home, sick, holiday | One-click suggestions of the status menu (1.12): `emoji`, `label` (translation key of the `NowoChatKitBundle` domain, or a text), `clear_after` (`never`, `30m`, `1h`, `2h`, `4h`, `today`, `week`; default `never`). A list you set replaces the default one. |
+| `profiles.<name>.status_presets.more` | list | *Work* and *Personal* groups | Groups of the **More statuses** drop-down (1.12): `label` and `statuses` (like `quick`). `[]` hides the drop-down. Defaults: `Configuration::DEFAULT_STATUS_PRESETS`. |
 | `profiles.<name>.support.ticket_prefix` | string | `SUP-` | Prefix of the readable ticket number (`SUP-000123`). |
 | `profiles.<name>.support.ticket_digits` | int 1–12 | `6` | Digits of the ticket number (zero-padded). |
 | `profiles.<name>.support.resume_after_days` | int ≥ 1 | `7` | Opening support when the last ticket has had no message for this many days (or is resolved) asks "continue it or open a new one?". |
@@ -129,7 +131,7 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
 key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `doctrine.table_prefix`,
-`reactions`, `icon_set`, `icons`, `presence_ttl`, `auto_away_minutes`, `max_pins`, `auto_reply_interval_hours`, `limits`, `digest`, `support`, and `support.<key>` for each support key).
+`reactions`, `icon_set`, `icons`, `presence_ttl`, `auto_away_minutes`, `status_presets`, `max_pins`, `auto_reply_interval_hours`, `limits`, `digest`, `support`, and `support.<key>` for each support key).
 
 ## Timeouts
 
