@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Form;
 
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
+use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\FormKitBundle\Attribute\FormKitConfig;
+use Nowo\FormKitBundle\Form\FormOptionsTrait;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
@@ -22,8 +25,12 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  *
  * @extends AbstractType<ChatUserSettings>
  */
+#[FormKitConfig(NowoChatKitBundle::FORM_KIT_PROFILE)]
 final class ChatPreferencesType extends AbstractType
 {
+    use FormKitFieldTrait;
+    use FormOptionsTrait;
+
     /**
      * Adds the sounds, the volume, the toggles and the send key.
      *
@@ -37,7 +44,7 @@ final class ChatPreferencesType extends AbstractType
             $sounds['chat.settings_sound_' . $sound] = $sound;
         }
         foreach (['message' => 'chat.settings_sound_message', 'mention' => 'chat.settings_sound_mention', 'buzz' => 'chat.settings_sound_buzz_event', 'support' => 'chat.settings_sound_support'] as $event => $label) {
-            $builder->add('sound' . ucfirst($event), ChoiceType::class, [
+            $this->addKitField($builder, 'sound' . ucfirst($event), ChoiceType::class, [
                 'label'       => $label,
                 'choices'     => $sounds,
                 'placeholder' => false,
@@ -46,26 +53,25 @@ final class ChatPreferencesType extends AbstractType
                 'attr'        => ['data-nowo-chat-sound-select' => $event],
             ]);
         }
-        $builder
-            ->add('volume', RangeType::class, [
-                'label'  => 'chat.settings_volume',
-                'attr'   => ['min' => 0, 'max' => 100, 'step' => 5],
-                'getter' => static fn (ChatUserSettings $settings): int => $settings->getVolume(),
-                'setter' => static fn (ChatUserSettings $settings, mixed $volume) => $settings->setVolume(max(0, min(100, (int) $volume))),
-            ])
-            ->add('soundBackgroundOnly', CheckboxType::class, ['label' => 'chat.settings_background_only', 'required' => false])
-            ->add('buzzEnabled', CheckboxType::class, ['label' => 'chat.settings_buzz', 'help' => 'chat.settings_buzz_help', 'required' => false])
-            ->add('buzzOpenWindow', CheckboxType::class, ['label' => 'chat.settings_buzz_open', 'help' => 'chat.settings_buzz_open_help', 'required' => false])
-            ->add('openOnMessage', CheckboxType::class, ['label' => 'chat.settings_open_on_message', 'help' => 'chat.settings_open_on_message_help', 'required' => false])
-            ->add('sendKey', ChoiceType::class, [
-                'label'    => 'chat.settings_send_key',
-                'expanded' => true,
-                'choices'  => ['chat.settings_send_key_enter' => 'enter', 'chat.settings_send_key_ctrl_enter' => 'ctrl_enter'],
-            ])
-            ->add('pushEnabled', CheckboxType::class, ['label' => 'chat.settings_push', 'help' => 'chat.settings_push_help', 'required' => false])
-            ->add('pushPreview', CheckboxType::class, ['label' => 'chat.settings_push_preview', 'help' => 'chat.settings_push_preview_help', 'required' => false])
-            ->add('presenceVisible', CheckboxType::class, ['label' => 'chat.settings_presence', 'help' => 'chat.settings_presence_help', 'required' => false])
-            ->add('emailDigest', CheckboxType::class, ['label' => 'chat.settings_email_digest', 'help' => 'chat.settings_email_digest_help', 'required' => false]);
+        $this->addKitField($builder, 'volume', RangeType::class, [
+            'label'  => 'chat.settings_volume',
+            'attr'   => ['min' => 0, 'max' => 100, 'step' => 5],
+            'getter' => static fn (ChatUserSettings $settings): int => $settings->getVolume(),
+            'setter' => static fn (ChatUserSettings $settings, mixed $volume) => $settings->setVolume(max(0, min(100, (int) $volume))),
+        ]);
+        $this->addKitField($builder, 'soundBackgroundOnly', CheckboxType::class, ['label' => 'chat.settings_background_only', 'required' => false]);
+        $this->addKitField($builder, 'buzzEnabled', CheckboxType::class, ['label' => 'chat.settings_buzz', 'help' => 'chat.settings_buzz_help', 'required' => false]);
+        $this->addKitField($builder, 'buzzOpenWindow', CheckboxType::class, ['label' => 'chat.settings_buzz_open', 'help' => 'chat.settings_buzz_open_help', 'required' => false]);
+        $this->addKitField($builder, 'openOnMessage', CheckboxType::class, ['label' => 'chat.settings_open_on_message', 'help' => 'chat.settings_open_on_message_help', 'required' => false]);
+        $this->addKitField($builder, 'sendKey', ChoiceType::class, [
+            'label'    => 'chat.settings_send_key',
+            'expanded' => true,
+            'choices'  => ['chat.settings_send_key_enter' => 'enter', 'chat.settings_send_key_ctrl_enter' => 'ctrl_enter'],
+        ]);
+        $this->addKitField($builder, 'pushEnabled', CheckboxType::class, ['label' => 'chat.settings_push', 'help' => 'chat.settings_push_help', 'required' => false]);
+        $this->addKitField($builder, 'pushPreview', CheckboxType::class, ['label' => 'chat.settings_push_preview', 'help' => 'chat.settings_push_preview_help', 'required' => false]);
+        $this->addKitField($builder, 'presenceVisible', CheckboxType::class, ['label' => 'chat.settings_presence', 'help' => 'chat.settings_presence_help', 'required' => false]);
+        $this->addKitField($builder, 'emailDigest', CheckboxType::class, ['label' => 'chat.settings_email_digest', 'help' => 'chat.settings_email_digest_help', 'required' => false]);
     }
 
     /**

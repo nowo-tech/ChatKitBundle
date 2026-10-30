@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Form;
 
 use Nowo\ChatKitBundle\Controller\ChatApiController;
+use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\FormKitBundle\Attribute\FormKitConfig;
+use Nowo\FormKitBundle\Form\FormOptionsTrait;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\Form\FormBuilderInterface;
@@ -17,8 +20,12 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  *
  * @extends AbstractType<array{body?: string|null}|null>
  */
+#[FormKitConfig(NowoChatKitBundle::FORM_KIT_PROFILE)]
 final class ChatDockComposerType extends AbstractType
 {
+    use FormKitFieldTrait;
+    use FormOptionsTrait;
+
     /**
      * Adds the message body textarea (`data-part="input"`, one row that grows with the text).
      *
@@ -27,7 +34,7 @@ final class ChatDockComposerType extends AbstractType
      */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder->add('body', TextareaType::class, [
+        $this->addKitField($builder, 'body', TextareaType::class, [
             'label'    => false,
             'required' => false,
             'attr'     => ['class' => 'nowo-chat-composer__input', 'data-part' => 'input', 'rows' => 1],

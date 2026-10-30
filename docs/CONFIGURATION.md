@@ -10,6 +10,7 @@
 - [Rate limits](#rate-limits)
 - [Container parameters](#container-parameters)
 - [Timeouts](#timeouts)
+- [FormKit profile](#formkit-profile)
 
 ## Root key
 
@@ -159,3 +160,30 @@ are used). Raise them together. A failed or timed-out publish is logged and neve
 catch up by polling. Set HTTP / SMTP timeouts in your `ChatPushSenderInterface` / `ChatDigestSenderInterface`
 implementations (Messenger workers). See also [USAGE — Timeouts](USAGE.md#timeouts) and
 [DEMO-FRANKENPHP — Timeouts](DEMO-FRANKENPHP.md#timeouts).
+
+## FormKit profile
+
+Every chat form type (`ChatPageMessageType`, `ChatDockSearchType`, `ChatDockComposerType`, `ChatDockEditType`,
+`ChatDockStatusType`, `ChatPreferencesType`) is a FormKit Type (`#[FormKitConfig('chat_kit')]`, REQ-TWIG-005 rule 11).
+Its field defaults come from the FormKit profile **`nowo_form_kit.profiles.chat_kit`**, which the bundle prepends unless
+you define it:
+
+```yaml
+# config/packages/nowo_form_kit.yaml — define the profile to override the bundle default (nothing is prepended then)
+nowo_form_kit:
+    profiles:
+        chat_kit:
+            alias: chat_kit
+            translation_domain: NowoChatKitBundle
+            auto_help: false
+            auto_placeholder: false
+            defaults:
+                attr: {}
+                row_attr: {}
+            field_types: {}   # e.g. textarea: { attr: { class: my-input } }
+```
+
+- No framework classes by default (REQ-UI-003): the UiKit form theme paints the fields. Options a type sets itself (the dock `nowo-chat-*` classes, `data-part` hooks, explicit labels) win over the profile.
+- `ChatDockStatusType` labels arrive translated in the dock locale, so its fields keep `translation_domain: false`.
+- The profile does not change your `nowo_form_kit.default_profile`.
+

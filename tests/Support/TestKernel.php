@@ -22,6 +22,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestReferenceProvider;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCountingMiddleware;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Nowo\FormKitBundle\NowoFormKitBundle;
 use Nowo\UiKitBundle\NowoUiKitBundle;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
@@ -84,6 +85,7 @@ final class TestKernel extends Kernel
         yield new DoctrineBundle();
         yield new UXIconsBundle();
         yield new NowoUiKitBundle();
+        yield new NowoFormKitBundle();
         yield new NowoChatKitBundle();
     }
 

@@ -6,6 +6,9 @@ namespace Nowo\ChatKitBundle\Form;
 
 use Nowo\ChatKitBundle\Controller\ChatPageController;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\FormKitBundle\Attribute\FormKitConfig;
+use Nowo\FormKitBundle\Form\FormOptionsTrait;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\Form\FormBuilderInterface;
@@ -17,8 +20,12 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  *
  * @extends AbstractType<array{body?: string|null}|null>
  */
+#[FormKitConfig(NowoChatKitBundle::FORM_KIT_PROFILE)]
 final class ChatPageMessageType extends AbstractType
 {
+    use FormKitFieldTrait;
+    use FormOptionsTrait;
+
     /**
      * Adds the message body textarea (translated placeholder, `maxlength` from the `max_length` option).
      *
@@ -27,7 +34,7 @@ final class ChatPageMessageType extends AbstractType
      */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder->add('body', TextareaType::class, [
+        $this->addKitField($builder, 'body', TextareaType::class, [
             'label'      => 'chat.composer_placeholder',
             'label_attr' => ['class' => 'nowo-chat-sr-only'],
             'attr'       => [

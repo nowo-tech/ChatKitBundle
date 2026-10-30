@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Form;
 
 use Nowo\ChatKitBundle\Controller\ChatApiController;
+use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\FormKitBundle\Attribute\FormKitConfig;
+use Nowo\FormKitBundle\Form\FormOptionsTrait;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\SearchType;
 use Symfony\Component\Form\FormBuilderInterface;
@@ -18,8 +21,12 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  *
  * @extends AbstractType<array{query?: string|null, people?: string|null}|null>
  */
+#[FormKitConfig(NowoChatKitBundle::FORM_KIT_PROFILE)]
 final class ChatDockSearchType extends AbstractType
 {
+    use FormKitFieldTrait;
+    use FormOptionsTrait;
+
     /**
      * Adds the conversation search and the people search.
      *
@@ -28,17 +35,16 @@ final class ChatDockSearchType extends AbstractType
      */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder
-            ->add('query', SearchType::class, [
-                'label'    => false,
-                'required' => false,
-                'attr'     => ['class' => 'nowo-chat-search', 'data-part' => 'search', 'autocomplete' => 'off'],
-            ])
-            ->add('people', SearchType::class, [
-                'label'    => false,
-                'required' => false,
-                'attr'     => ['class' => 'nowo-chat-search', 'data-part' => 'picker-input', 'autocomplete' => 'off'],
-            ]);
+        $this->addKitField($builder, 'query', SearchType::class, [
+            'label'    => false,
+            'required' => false,
+            'attr'     => ['class' => 'nowo-chat-search', 'data-part' => 'search', 'autocomplete' => 'off'],
+        ]);
+        $this->addKitField($builder, 'people', SearchType::class, [
+            'label'    => false,
+            'required' => false,
+            'attr'     => ['class' => 'nowo-chat-search', 'data-part' => 'picker-input', 'autocomplete' => 'off'],
+        ]);
     }
 
     /**

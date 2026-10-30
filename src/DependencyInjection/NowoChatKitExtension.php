@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\DependencyInjection;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatReferenceProviderInterface;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -14,6 +15,7 @@ use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 
+use function array_key_exists;
 use function is_array;
 use function sprintf;
 
@@ -48,6 +50,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $config  = (new Processor())->processConfiguration(new Configuration(), $this->prependableConfigs($container));
         $profile = $config['profiles'][$config['default_profile']];
         $this->prependDoctrine($container, $config['default_profile'], $profile['user_class']);
+        $this->prependFormKitProfile($container);
 
         if (!$container->hasExtension('framework')) {
             return;
@@ -75,6 +78,51 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                     ],
                 ],
             ],
+        ]);
+    }
+
+    /**
+     * Default FormKit profile of the bundle forms: translation domain, no auto help / placeholder convention keys.
+     * REQ-UI-003: no framework classes here — the UiKit form theme paints inputs through its theme slots; the dock
+     * classes a type sets itself (`nowo-chat-*`, `data-part`) stay on the types.
+     *
+     * @return array<string, mixed>
+     */
+    public static function formKitProfile(): array
+    {
+        return [
+            'alias'              => NowoChatKitBundle::FORM_KIT_PROFILE,
+            'translation_domain' => NowoChatKitBundle::TRANSLATION_DOMAIN,
+            'auto_help'          => false,
+            'auto_placeholder'   => false,
+            'defaults'           => [
+                'attr'     => [],
+                'row_attr' => [],
+            ],
+            'field_types' => [],
+        ];
+    }
+
+    /**
+     * Registers the FormKit profile {@see NowoChatKitBundle::FORM_KIT_PROFILE} used by every bundle form type
+     * (#[FormKitConfig]). A host overrides it by defining `nowo_form_kit.profiles.chat_kit` itself (nothing is
+     * prepended then). Does not change the host `default_profile`.
+     */
+    private function prependFormKitProfile(ContainerBuilder $container): void
+    {
+        if (!$container->hasExtension('nowo_form_kit')) {
+            return;
+        }
+
+        foreach ($container->getExtensionConfig('nowo_form_kit') as $config) {
+            $profiles = $config['profiles'] ?? null;
+            if (is_array($profiles) && array_key_exists(NowoChatKitBundle::FORM_KIT_PROFILE, $profiles)) {
+                return;
+            }
+        }
+
+        $container->prependExtensionConfig('nowo_form_kit', [
+            'profiles' => [NowoChatKitBundle::FORM_KIT_PROFILE => self::formKitProfile()],
         ]);
     }
 
