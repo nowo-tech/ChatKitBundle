@@ -36,8 +36,9 @@ test.describe('feature screenshots', () => {
     await page.getByLabel('Password').fill('password');
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.goto('/chat/');
-    await page.locator('.nowo-chat-page__row', { hasText: 'Bob Lee' }).click();
-    await expect(page.locator('.nowo-chat-page__header h2')).toHaveText('Bob Lee');
+    // 1.13 page mode: the dock's list and the conversation inside the page.
+    await page.locator('.nowo-chat-pagemode .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    await expect(page.locator('.nowo-chat-pagemode .nowo-chat-window__title')).toHaveText('Bob Lee');
     await page.waitForTimeout(400);
     await page.screenshot({ path: resolve(outDir, 'page.png') });
   });

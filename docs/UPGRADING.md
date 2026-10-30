@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.13.0](#to-1130)
 - [To 1.12.0](#to-1120)
 - [To 1.11.3](#to-1113)
 - [To 1.11.2](#to-1112)
@@ -34,6 +35,38 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.13.0
+
+From **1.12.0**: `composer update nowo-tech/chat-kit-bundle`, then `php bin/console assets:install` (new script and
+stylesheet). No configuration or schema change.
+
+The full-page chat now runs in **page mode**: the dock's list panel and one conversation, inline in the page, with every
+option of the dock. What a host has to check:
+
+- **The dock must be on the chat page.** Page mode is the dock script mounted on the dock root (`dock.html.twig`, which
+  carries the configuration and the `<template>` markup). Include the dock in the layout the page renders in, as for
+  every signed-in page; without it the page stays the server-rendered one (it keeps working, without the dock options).
+- **IIFE hosts** (the bundle's `nowo-chat.js`): nothing to do; the automatic start finds the page and mounts in page mode.
+- **Hosts that mount the dock themselves** (`data-nowo-chat-manual`, a Stimulus controller importing the TypeScript
+  source): `mount(root)` starts page mode by itself when the document holds `[data-nowo-chat-page-mode]`, so an existing
+  `connect() { mount(this.element) }` / `disconnect() { unmount(this.element) }` keeps working. To be explicit, call
+  `mountPage(root, page)` or `mount(root, { page })` (page = `findChatPage()` or your own element); pass
+  `{ page: null }` to keep the floating dock on that page. `markPageRead()` can stay: page mode marks the conversation
+  read itself, and the page's read attributes are consumed once.
+- **Overrides of `page.html.twig`** (`web_ui.templates.page` extending `@!NowoChatKitBundle/page.html.twig`): keep the
+  element that carries `data-nowo-chat-page-mode` (and its `data-nowo-chat-current` / `data-nowo-chat-archived`), i.e.
+  do not redefine `nowo_ui_content` without `{{ parent() }}`. Overrides of `nowo_chat_page_list` / `nowo_chat_page_thread`
+  only change the page without JavaScript now (page mode hides them); restyle the page mode through the dock templates
+  (`_templates.html.twig`) and the `--nowo-chat-*` tokens instead. A wrapper around `parent()` (e.g. one that attached a
+  Markdown toolbar to `.nowo-chat-page__composer textarea`) is harmless but only affects the no-JS form; the dock
+  composer has its own formatting toolbar.
+- **Styles**: the page-mode height is `--nowo-chat-page-height` (default `max(28rem, 100dvh - 14rem)`); set it on
+  `.nowo-chat-pagemode` to fit your layout's header and footer.
+- **End-to-end tests** that clicked `.nowo-chat-page__row` or read `.nowo-chat-page__header` / the composer form with
+  JavaScript on: use the page-mode markup (`[data-testid="nowo-chat-page-mode"]`, `.nowo-chat-pagemode .nowo-chat-row`,
+  `.nowo-chat-window[role="region"]`), or run them with JavaScript disabled to test the fallback. The floating dock is
+  hidden on the chat page (`.nowo-chat-dock` is not visible there).
 
 ## To 1.12.0
 

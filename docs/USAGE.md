@@ -240,8 +240,36 @@ through the CSRF-protected `POST /api/conversations/{uuid}/read` (the page carri
 header token in `data-nowo-chat-read-*` attributes); without JavaScript, sending a message from the page marks the
 conversation read up to that message.
 
-To change one part, point `web_ui.templates.page` at a template that extends `@!NowoChatKitBundle/page.html.twig`
-and overrides `nowo_chat_page_list` or `nowo_chat_page_thread`. Theme the page and the dock once with UiKit: the
+### Page mode (1.13)
+
+With JavaScript the page is the dock in **page mode**: the dock's list panel in the left column and one conversation in
+the right column, with every option of the dock — your status (suggestions, **More statuses**), search, the filters
+(All, Unread, Projects, Support, Closed, "Close all read"), new conversation, close / reopen, and the whole thread
+(formatting toolbar and help, quick replies, emoji, @mentions, #references, edit / delete, reactions, pins, read
+receipts, typing, the support assistant, buzz). The server-rendered list and thread above are hidden and stay the page
+without JavaScript. The floating dock hides while the page is mounted.
+
+- `/chat/{uuid}` opens that conversation; picking another one updates the address (`history.pushState`), Back / Forward
+  show the previous one; `/chat/?archived=1` starts on **Closed**.
+- Phones (≤ 768px): one column, the list or the conversation with a back button.
+- Page mode needs the dock on the page: include `dock.html.twig` in the layout (as on every signed-in page). The
+  bundle's `nowo-chat.js` starts it automatically. A host that mounts the dock itself keeps calling `mount(root)` (it
+  detects `[data-nowo-chat-page-mode]`), or is explicit:
+
+```ts
+import { findChatPage, mount, mountPage, unmount } from '../vendor/nowo-tech/chat-kit-bundle/src/Resources/assets/src/index';
+
+const page = findChatPage();                       // [data-nowo-chat-page-mode] or null
+page === null ? mount(root) : mountPage(root, page); // same as mount(root)
+mount(root, { page: null });                       // keep the floating dock on the chat page
+unmount(root);                                     // the server-rendered page comes back
+```
+
+- Height: `--nowo-chat-page-height` (default `max(28rem, 100dvh - 14rem)`).
+
+To change one part of the page without JavaScript, point `web_ui.templates.page` at a template that extends
+`@!NowoChatKitBundle/page.html.twig` and overrides `nowo_chat_page_list` or `nowo_chat_page_thread` (page mode is built
+from the dock templates, `_templates.html.twig`). Keep the content element with `data-nowo-chat-page-mode`. Theme the page and the dock once with UiKit: the
 `--nowo-chat-*` tokens default to the `--nowo-ui-*` tokens. With the route prefix `/chat`, the list lives at `/chat/` (Symfony redirects `/chat` there).
 
 ## Events
@@ -496,7 +524,8 @@ The dock is translated in the request's locale (markup and script strings alike)
 ## Front end: IIFE or your bundler
 
 - **IIFE** (default): `dock.html.twig` loads `js/nowo-chat.js`, which exposes `window.NowoChat` (`mount`, `unmount`,
-  `mountAll`) and starts on `DOMContentLoaded` / `turbo:load`.
+  `mountAll`, `mountPage`, `findChatPage`) and starts on `DOMContentLoaded` / `turbo:load` — in page mode on the
+  full-page chat (1.13).
 - **Your bundler**: empty the `nowo_chat_assets` block and import the TypeScript source:
 
 ```ts

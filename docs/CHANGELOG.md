@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.13.0] - 2026-10-30](#1130---2026-10-30)
 - [[1.12.0] - 2026-10-30](#1120---2026-10-30)
 - [[1.11.3] - 2026-10-30](#1113---2026-10-30)
 - [[1.11.2] - 2026-10-29](#1112---2026-10-29)
@@ -35,6 +36,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.13.0] - 2026-10-30
+
+### Added
+
+- **Page mode of the dock**: the full-page chat (`/chat/`, `/chat/{uuid}`) offers everything the floating dock offers.
+  When the dock script mounts on a page that holds the full-page chat, it renders the dock's list panel in the page's
+  left column and one conversation in the right column — the same components and state as the dock, not a second
+  implementation: your status (with the suggestions and the **More statuses** drop-down), search, the filters (All,
+  Unread, Projects, Support, Closed, "Close all read"), new conversation (people picker, channels, support), close /
+  reopen with Undo, and every thread feature (formatting toolbar and help, quick replies, emoji, @mentions, #references,
+  edit / delete your own messages, reactions, pin and the pinned bar, read receipts, typing, link previews, the support
+  ticket assistant, buzz, resolve). The floating dock (launcher, windows, edge tab) stays hidden while the page is
+  mounted; its layout in other tabs and pages is left as it was.
+- Deep links and history: `/chat/{uuid}` opens that conversation; picking another one updates the address with
+  `history.pushState` (Back / Forward show the previous one again); `/chat/?archived=1` starts on the **Closed** filter
+  and the address follows that filter (`history.replaceState`). `?chat=<uuid>` links and a support draft continued as a
+  ticket rewrite the current entry instead of adding one. A new message or a buzz never switches the conversation the
+  page shows (`openOnMessage` / `buzzOpenWindow` apply to the floating dock only).
+- Phones (≤ 768px): one column — the list, or the conversation with the window's back button; going back puts focus on
+  the conversation's row (else the search).
+- `page.html.twig` marks its content element `data-nowo-chat-page-mode` (with `data-nowo-chat-current="<uuid>"` and
+  `data-nowo-chat-archived="1"`). The server-rendered list, thread and composer form stay as they are: they are the page
+  without JavaScript, hidden once page mode mounts (and shown again on `unmount()`).
+- JavaScript API: `mount(root)` starts page mode by itself when the document holds `[data-nowo-chat-page-mode]`;
+  `mount(root, { page: element })` points at another element, `mount(root, { page: null })` keeps the floating dock;
+  `mountPage(root, page)`, `findChatPage()`, `PAGE_SELECTOR` and the `ChatDockOptions` type are exported, and
+  `new ChatDock(root, config, { page })` takes the same option.
+- CSS: `.nowo-chat-pagemode` (`__list`, `__thread`, `__title`, `__empty`, `has-thread`), `.nowo-chat-panel--page`,
+  `.nowo-chat-window--page`, `.nowo-chat-row.is-current`, `.nowo-chat-page.is-page-mode`, `.nowo-chat.has-page-mode`;
+  token `--nowo-chat-page-height` (default `max(28rem, 100dvh - 14rem)`; `max(24rem, 100dvh - 9rem)` on phones).
+
+### Changed
+
+- In page mode the conversation is a `role="region"` labelled with its name (not a dialog): no minimise, close or "open
+  in a page" buttons, and its header button carries no `aria-expanded`. Rows of the list carry `data-uuid`; the row of
+  the conversation shown has `aria-current="true"`.
+- `VERSION` of the browser bundle reads `1.13.0` (it had stayed at `1.10.0`).
+
+### Tests
+
+- Vitest `page-mode.test.ts` (mount, deep link, history, Back / Forward, Closed filter from the address, search,
+  filters, people picker, status menu, close / reopen, phone back button, unknown conversation, `?chat=` and support
+  ticket replacement, no automatic switching, unmount); `index.test.ts` covers the page detection and `mountPage()`.
+  PHPUnit checks the page-mode attributes; the demo e2e covers page mode and, with JavaScript disabled, the
+  server-rendered page.
 
 ## [1.12.0] - 2026-10-30
 
