@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.13.1] - 2026-10-30](#1131---2026-10-30)
 - [[1.13.0] - 2026-10-30](#1130---2026-10-30)
 - [[1.12.0] - 2026-10-30](#1120---2026-10-30)
 - [[1.11.3] - 2026-10-30](#1113---2026-10-30)
@@ -36,6 +37,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.13.1] - 2026-10-30
+
+### Fixed
+
+- **Status menu height:** opening the status menu (or picking a status) no longer makes the chat list grow or shrink:
+  the menu takes the list's height in the dock, and fills the column in page mode and on phones.
 
 ## [1.13.0] - 2026-10-30
 

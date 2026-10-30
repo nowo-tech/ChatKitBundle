@@ -2935,6 +2935,19 @@ a.nowo-chat-ref:focus-visible {
   overscroll-behavior: contain;
 }
 
+/* 1.13.1: the open status menu keeps the list's height (the dock never grows or shrinks when you pick a status): it
+   takes the body's height in the dock, and fills the column in page mode and on phones. */
+.nowo-chat-panel.is-open > .nowo-chat-status-menu {
+  box-sizing: border-box;
+  height: min(520px, 100dvh - 140px - var(--nowo-chat-lift, 0px));
+  max-height: none;
+}
+.nowo-chat-pagemode .nowo-chat-panel.is-open > .nowo-chat-status-menu,
+.nowo-chat.is-mobile .nowo-chat-panel.is-open > .nowo-chat-status-menu {
+  flex: 1 1 auto;
+  height: auto;
+}
+
 .nowo-chat-status-form__row {
   flex-wrap: wrap;
 }

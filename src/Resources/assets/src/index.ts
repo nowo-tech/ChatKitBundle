@@ -18,7 +18,7 @@ export { playSound, SOUND_NAMES } from './sounds';
 export type { ChatConfig, ChatPrefs, ChatStatus, OwnStatus, SoundName } from './types';
 
 /** Package version of the browser bundle. */
-export const VERSION = '1.13.0';
+export const VERSION = '1.13.1';
 
 /** Prefix of every CSS custom property (theme token) of the dock. */
 export const CSS_TOKEN_PREFIX = '--nowo-chat-';
