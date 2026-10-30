@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.11.3] - 2026-10-30](#1113---2026-10-30)
 - [[1.11.2] - 2026-10-29](#1112---2026-10-29)
 - [[1.11.1] - 2026-10-29](#1111---2026-10-29)
 - [[1.11.0] - 2026-10-29](#1110---2026-10-29)
@@ -33,6 +34,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.11.3] - 2026-10-30
+
+### Fixed
+
+- Status menu: choosing an emoji in the picker closed the menu, so a custom status could not be finished (the clicked
+  emoji leaves the DOM before the click reaches the document, and the outside-click check took it for a click outside).
+  The check now reads the event's path.
 
 ## [1.11.2] - 2026-10-29
 

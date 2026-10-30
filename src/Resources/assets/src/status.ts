@@ -240,8 +240,10 @@ export class StatusMenu {
     document.addEventListener(
       'click',
       (event) => {
-        const target = event.target as Node;
-        if (this.isOpen && !popover.contains(target) && !trigger.contains(target)) {
+        // 1.11.3: the event's path, not `contains()`: a click that removes its own target (an emoji of the picker) is
+        // no longer inside the menu by the time it reaches the document, and closed the menu mid-edit.
+        const path = event.composedPath();
+        if (this.isOpen && !path.includes(popover) && !path.includes(trigger)) {
           this.close(false);
         }
       },
