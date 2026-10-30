@@ -69,7 +69,9 @@ final class TestKernel extends Kernel
         private readonly array $chatKitConfig = [],
         private readonly bool $hostControllersRoutesOnly = false,
     ) {
-        parent::__construct('test', false);
+        // Own environment for the routing.controllers-only host: its container class must not collide with the
+        // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir).
+        parent::__construct($hostControllersRoutesOnly ? 'test_controllers' : 'test', false);
     }
 
     public function registerBundles(): iterable
