@@ -39,6 +39,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Forms are FormKit Types (REQ-TWIG-005 rule 11):** `nowo-tech/form-kit-bundle` (`^2.16`) is now a required dependency. `ChatPageMessageType`, `ChatDockSearchType`, `ChatDockComposerType`, `ChatDockEditType`, `ChatDockStatusType` and `ChatPreferencesType` carry `#[FormKitConfig('chat_kit')]` + `FormOptionsTrait` and add their fields through FormKit, themed by the FormKit profile `nowo_form_kit.profiles.chat_kit` the bundle prepends (translation domain `NowoChatKitBundle`, no auto help / placeholder keys, no framework classes: the UiKit form theme paints the fields). Host override: define `nowo_form_kit.profiles.chat_kit` yourself. Field classes / `data-part` hooks the dock script relies on are unchanged.
+
 ## [1.13.2] - 2026-10-30
 
 Bundle routes are opt-in again: controllers are no longer autoconfigured, so a host's routing.controllers import does not expose them (REQ-SF-004 rule 7). See [UPGRADING](UPGRADING.md#to-1132).

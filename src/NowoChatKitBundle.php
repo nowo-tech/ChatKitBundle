@@ -22,6 +22,12 @@ use Symfony\Component\HttpKernel\Bundle\Bundle;
  */
 final class NowoChatKitBundle extends Bundle
 {
+    /** FormKit profile (nowo_form_kit.profiles.chat_kit) used by every bundle form type (REQ-TWIG-005 rule 11). */
+    public const FORM_KIT_PROFILE = 'chat_kit';
+
+    /** Translation domain of the bundle. */
+    public const TRANSLATION_DOMAIN = 'NowoChatKitBundle';
+
     /**
      * Registers the bundle compiler passes (realtime transport selection and Twig template paths).
      *

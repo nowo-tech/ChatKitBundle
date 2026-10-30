@@ -412,6 +412,11 @@ upstream changes yourself (check `UPGRADING.md` on every upgrade). Prefer the sm
 
 ### Forms
 
+All chat forms are **FormKit Types** (`#[FormKitConfig('chat_kit')]` + `FormOptionsTrait`): `nowo-tech/form-kit-bundle`
+is a required dependency, `NowoFormKitBundle` must be registered, and the field classes / translation domain come from
+the `nowo_form_kit.profiles.chat_kit` profile ([CONFIGURATION](CONFIGURATION.md#formkit-profile)), not from a
+`form_themes` entry.
+
 The full-page composer is a Symfony Form (`ChatPageMessageType`, CSRF token id `nowo_chat_page`) rendered with
 `form_start` / the `{% for child in form %}{% if not child.rendered %}{{ form_row(child) }}…` loop / `form_end`; overrides
 of `page.html.twig` must keep that pattern and never reintroduce hand-written form tags or inputs.

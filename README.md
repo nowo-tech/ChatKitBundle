@@ -56,6 +56,7 @@ With **Symfony Flex**, the recipe registers the bundle and creates `config/packa
 ```php
 // config/bundles.php
 return [
+    Nowo\FormKitBundle\NowoFormKitBundle::class => ['all' => true], // required dependency: forms are FormKit Types
     Nowo\ChatKitBundle\NowoChatKitBundle::class => ['all' => true],
 ];
 ```

@@ -8,8 +8,8 @@ use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Form\ChatDockStatusType;
 use Nowo\ChatKitBundle\Form\ChatPreferencesType;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Nowo\ChatKitBundle\Tests\Support\FormKitTestSupport;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Form\Forms;
 
 /**
  * The host-renderable chat preferences form (bound to ChatUserSettings) and the dock's custom-status fields.
@@ -19,7 +19,7 @@ final class ChatPreferencesTypeTest extends TestCase
     public function testSubmitsEveryPreference(): void
     {
         $settings = new ChatUserSettings(new TestUser('Ana', 'ana@example.test'));
-        $form     = Forms::createFormFactory()->create(ChatPreferencesType::class, $settings);
+        $form     = FormKitTestSupport::formFactory()->create(ChatPreferencesType::class, $settings);
 
         self::assertSame('nowo_chat_preferences', $form->getName());
         self::assertSame('pop', $form->get('soundMessage')->getData());
@@ -51,7 +51,7 @@ final class ChatPreferencesTypeTest extends TestCase
 
     public function testDockStatusFields(): void
     {
-        $form = Forms::createFormFactory()->create(ChatDockStatusType::class);
+        $form = FormKitTestSupport::formFactory()->create(ChatDockStatusType::class);
 
         self::assertSame('nowo_chat_status', $form->getName());
         self::assertSame(['moreStatus', 'emoji', 'text', 'clearAfter', 'autoReplyEnabled', 'autoReplyText', 'autoReplyWhen', 'autoReplyFrom', 'autoReplyUntil', 'autoReplyMentions'], array_keys($form->all()));
@@ -62,7 +62,7 @@ final class ChatPreferencesTypeTest extends TestCase
 
     public function testDockStatusSuggestions(): void
     {
-        $view = Forms::createFormFactory()->create(ChatDockStatusType::class)->createView();
+        $view = FormKitTestSupport::formFactory()->create(ChatDockStatusType::class)->createView();
 
         self::assertSame(['emoji' => '🍕', 'text' => 'chat.status_preset_lunch', 'clear_after' => '1h'], $view->vars['status_presets'][0]);
         self::assertCount(5, $view->vars['status_presets']);
@@ -78,7 +78,7 @@ final class ChatPreferencesTypeTest extends TestCase
 
     public function testDockStatusSuggestionsFromTheOption(): void
     {
-        $form = Forms::createFormFactory()->create(ChatDockStatusType::class, null, ['status_presets' => [
+        $form = FormKitTestSupport::formFactory()->create(ChatDockStatusType::class, null, ['status_presets' => [
             'quick' => [['emoji' => '🚀', 'label' => 'Launching', 'clear_after' => '4h']],
             'more'  => [],
         ]]);

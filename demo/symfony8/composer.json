@@ -10,6 +10,7 @@
         "doctrine/doctrine-bundle": "^3.2",
         "doctrine/orm": "^3.4",
         "nowo-tech/chat-kit-bundle": "@dev",
+        "nowo-tech/form-kit-bundle": "^2.16",
         "pentatrion/vite-bundle": "^8.2",
         "symfony/asset": "^8.1",
         "symfony/console": "^8.1",

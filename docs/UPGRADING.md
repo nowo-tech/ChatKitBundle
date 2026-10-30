@@ -37,6 +37,9 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+- **New required dependency `nowo-tech/form-kit-bundle` (`^2.16`, REQ-TWIG-005 rule 11):** register `Nowo\FormKitBundle\NowoFormKitBundle::class => ['all' => true]` in `config/bundles.php` (Symfony Flex does it on `composer update`). The chat form types get their field options from FormKit; without the FormKit bundle registered they fail with an uninitialized `FormOptionsMerger`.
+- **Form theme through the FormKit profile:** field classes and translation domain of the chat forms come from `nowo_form_kit.profiles.chat_kit` (prepended by the bundle; see [CONFIGURATION](CONFIGURATION.md#formkit-profile)). The rendered markup is unchanged; to add field classes or change the domain, define the `chat_kit` profile in `config/packages/nowo_form_kit.yaml` instead of overriding the types.
+
 ## To 1.13.2
 
 From **1.13.1**:

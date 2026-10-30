@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Form;
 
+use Nowo\FormKitBundle\Attribute\FormKitConfig;
+use Nowo\FormKitBundle\Form\FormOptionsTrait;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\HiddenType;
 use Symfony\Component\Form\Extension\Core\Type\PasswordType;
@@ -21,30 +23,32 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  *
  * @extends AbstractType<null>
  */
+#[FormKitConfig('chat_kit')]
 final class LoginType extends AbstractType
 {
+    use FormOptionsTrait;
+
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder
-            ->add('_username', TextType::class, [
+        $this->addWithDefaults($builder, '_username', TextType::class, [
                 'label' => 'demo.login.username',
                 'data' => $options['last_username'],
                 'attr' => [
                     'autocomplete' => 'username',
                 ],
-            ])
-            ->add('_password', PasswordType::class, [
+            ]);
+        $this->addWithDefaults($builder, '_password', PasswordType::class, [
                 'label' => 'demo.login.password',
                 'data' => 'password',
                 'always_empty' => false,
                 'attr' => [
                     'autocomplete' => 'current-password',
                 ],
-            ])
-            ->add('_target_path', HiddenType::class, [
+            ]);
+        $this->addWithDefaults($builder, '_target_path', HiddenType::class, [
                 'data' => $options['target_path'],
-            ])
-            ->add('submit', SubmitType::class, [
+            ]);
+        $this->addWithDefaults($builder, 'submit', SubmitType::class, [
                 'label' => 'demo.login.submit',
                 'attr' => [
                     'class' => 'btn btn-primary',
@@ -55,6 +59,7 @@ final class LoginType extends AbstractType
     public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults([
+            'translation_domain' => 'messages',
             'csrf_protection' => true,
             'csrf_field_name' => '_csrf_token',
             'csrf_token_id' => 'authenticate',
