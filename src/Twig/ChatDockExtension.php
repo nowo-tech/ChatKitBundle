@@ -64,6 +64,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param bool $supportEmojis Decorative emojis of the support assistant (`support.emojis`)
      * @param int $autoAwayMinutes Minutes without input before the dock reports the user idle (away); 0 = never
      * @param ClockInterface $clock Clock for the user's own status (expiry)
+     * @param array<string, mixed> $statusPresets Suggested custom statuses (`status_presets`, 1.12: `quick` and `more`)
      */
     public function __construct(
         private readonly Security $security,
@@ -86,6 +87,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly bool $supportEmojis = true,
         private readonly int $autoAwayMinutes = 10,
         private readonly ClockInterface $clock = new Clock(),
+        private readonly array $statusPresets = Configuration::DEFAULT_STATUS_PRESETS,
     ) {
     }
 
@@ -116,7 +118,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
 
     /**
      * Fresh Form views of the dock markup (a view renders once): `search` (children `query` and `people`),
-     * `composer` and `edit` (child `body` each), `status` (children `emoji`, `text` and `clearAfter`, 1.10).
+     * `composer` and `edit` (child `body` each), `status` (children `emoji`, `text` and `clearAfter`, 1.10; `moreStatus`
+     * and the view var `status_presets`, 1.12).
      *
      * @return array{search: FormView, composer: FormView, edit: FormView, status: FormView} The Form views
      */
@@ -126,7 +129,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'search'   => $this->forms->create(ChatDockSearchType::class)->createView(),
             'composer' => $this->forms->create(ChatDockComposerType::class)->createView(),
             'edit'     => $this->forms->create(ChatDockEditType::class)->createView(),
-            'status'   => $this->forms->create(ChatDockStatusType::class, null, ['locale' => $this->requestStack->getMainRequest()?->getLocale()])->createView(),
+            'status'   => $this->forms->create(ChatDockStatusType::class, null, ['locale' => $this->requestStack->getMainRequest()?->getLocale(), 'status_presets' => $this->statusPresets])->createView(),
         ];
     }
 

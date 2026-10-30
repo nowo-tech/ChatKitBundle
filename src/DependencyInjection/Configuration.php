@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\DependencyInjection;
 
+use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
@@ -70,6 +71,52 @@ final class Configuration implements ConfigurationInterface
         'list'        => 'tabler:list',
         'help'        => 'tabler:help',
         'auto'        => 'tabler:clock-play',
+    ];
+
+    /**
+     * 1.12: the suggested custom statuses of the status menu. `quick`: one-click buttons; `more`: the "More statuses"
+     * drop-down, in groups. Labels are translation keys of the NowoChatKitBundle domain (a plain text works too);
+     * `clear_after` is one of ChatUserSettings::CLEAR_AFTER.
+     *
+     * @var array{quick: list<array{emoji: string, label: string, clear_after: string}>, more: list<array{label: string, statuses: list<array{emoji: string, label: string, clear_after: string}>}>}
+     */
+    public const array DEFAULT_STATUS_PRESETS = [
+        'quick' => [
+            ['emoji' => '🍕', 'label' => 'chat.status_preset_lunch', 'clear_after' => '1h'],
+            ['emoji' => '📅', 'label' => 'chat.status_preset_meeting', 'clear_after' => '1h'],
+            ['emoji' => '🏠', 'label' => 'chat.status_preset_home', 'clear_after' => 'today'],
+            ['emoji' => '🤒', 'label' => 'chat.status_preset_sick', 'clear_after' => 'today'],
+            ['emoji' => '🌴', 'label' => 'chat.status_preset_holiday', 'clear_after' => 'week'],
+        ],
+        'more' => [
+            [
+                'label'    => 'chat.status_group_work',
+                'statuses' => [
+                    ['emoji' => '🎧', 'label' => 'chat.status_preset_focus', 'clear_after' => '2h'],
+                    ['emoji' => '📞', 'label' => 'chat.status_preset_call', 'clear_after' => '1h'],
+                    ['emoji' => '🎤', 'label' => 'chat.status_preset_presenting', 'clear_after' => '1h'],
+                    ['emoji' => '🔍', 'label' => 'chat.status_preset_reviewing', 'clear_after' => '1h'],
+                    ['emoji' => '🚆', 'label' => 'chat.status_preset_commuting', 'clear_after' => '1h'],
+                    ['emoji' => '💻', 'label' => 'chat.status_preset_remote', 'clear_after' => 'today'],
+                    ['emoji' => '🏢', 'label' => 'chat.status_preset_office', 'clear_after' => 'today'],
+                    ['emoji' => '📚', 'label' => 'chat.status_preset_training', 'clear_after' => 'today'],
+                    ['emoji' => '🛟', 'label' => 'chat.status_preset_support', 'clear_after' => 'today'],
+                    ['emoji' => '✈️', 'label' => 'chat.status_preset_trip', 'clear_after' => 'week'],
+                ],
+            ],
+            [
+                'label'    => 'chat.status_group_personal',
+                'statuses' => [
+                    ['emoji' => '☕', 'label' => 'chat.status_preset_coffee', 'clear_after' => '30m'],
+                    ['emoji' => '⏳', 'label' => 'chat.status_preset_back_soon', 'clear_after' => '30m'],
+                    ['emoji' => '🩺', 'label' => 'chat.status_preset_doctor', 'clear_after' => '2h'],
+                    ['emoji' => '🌙', 'label' => 'chat.status_preset_offline', 'clear_after' => 'today'],
+                    ['emoji' => '🤒', 'label' => 'chat.status_preset_sick', 'clear_after' => 'today'],
+                    ['emoji' => '🌴', 'label' => 'chat.status_preset_holiday', 'clear_after' => 'week'],
+                    ['emoji' => '🍼', 'label' => 'chat.status_preset_parental', 'clear_after' => 'week'],
+                ],
+            ],
+        ],
     ];
 
     /** Support ticket topics offered by default (labels and replies in the bundle catalogue). */
@@ -233,6 +280,7 @@ final class Configuration implements ConfigurationInterface
                                 ->defaultValue(10)
                                 ->min(0)
                             ->end()
+                            ->append($this->statusPresetsNode())
                             ->append($this->supportNode())
                             ->arrayNode('limits')
                                 ->addDefaultsIfNotSet()
@@ -262,6 +310,51 @@ final class Configuration implements ConfigurationInterface
             ->end();
 
         return $treeBuilder;
+    }
+
+    /**
+     * `status_presets` (1.12): the suggested custom statuses — `quick` buttons and the `more` drop-down (groups).
+     */
+    private function statusPresetsNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('status_presets'))->getRootNode();
+        $node
+            ->info('Suggested custom statuses of the status menu: "quick" one-click buttons and the "more" drop-down (groups). A list you set replaces the default one.')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->arrayNode('quick')
+                    ->info('One-click buttons: emoji, label (translation key of the NowoChatKitBundle domain, or a text) and clear_after.')
+                    ->arrayPrototype()
+                        ->children()
+                            ->scalarNode('emoji')->isRequired()->cannotBeEmpty()->end()
+                            ->scalarNode('label')->isRequired()->cannotBeEmpty()->end()
+                            ->enumNode('clear_after')->values(ChatUserSettings::CLEAR_AFTER)->defaultValue('never')->end()
+                        ->end()
+                    ->end()
+                    ->defaultValue(self::DEFAULT_STATUS_PRESETS['quick'])
+                ->end()
+                ->arrayNode('more')
+                    ->info('Groups of the "More statuses" drop-down: label (translation key or text) and statuses (like "quick"). An empty list hides the drop-down.')
+                    ->arrayPrototype()
+                        ->children()
+                            ->scalarNode('label')->isRequired()->cannotBeEmpty()->end()
+                            ->arrayNode('statuses')
+                                ->requiresAtLeastOneElement()
+                                ->arrayPrototype()
+                                    ->children()
+                                        ->scalarNode('emoji')->isRequired()->cannotBeEmpty()->end()
+                                        ->scalarNode('label')->isRequired()->cannotBeEmpty()->end()
+                                        ->enumNode('clear_after')->values(ChatUserSettings::CLEAR_AFTER)->defaultValue('never')->end()
+                                    ->end()
+                                ->end()
+                            ->end()
+                        ->end()
+                    ->end()
+                    ->defaultValue(self::DEFAULT_STATUS_PRESETS['more'])
+                ->end()
+            ->end();
+
+        return $node;
     }
 
     /**

@@ -417,7 +417,7 @@ export class ChatApi {
   /**
    * Sets the user's own status.
    *
-   * @param status The status, with its optional text / emoji and when it clears (never, 30m, 1h, 4h, today, week).
+   * @param status The status, with its optional text / emoji and when it clears (never, 30m, 1h, 2h, 4h, today, week).
    * @returns The stored status.
    */
   async setStatus(status: { status: ChatStatus; text?: string | null; emoji?: string | null; clearAfter?: string }): Promise<OwnStatus> {

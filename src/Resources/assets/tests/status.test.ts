@@ -168,6 +168,77 @@ describe('chat status', () => {
     holder.querySelector('.nowo-chat-emoji')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   });
 
+  it('fills and saves a status of the "More statuses" drop-down; keyboard browsing only fills it (1.12)', async () => {
+    const { trigger, popover, setStatus } = menu();
+    setStatus.mockResolvedValue(own());
+    trigger.click();
+    const more = popover.querySelector<HTMLSelectElement>('[data-part="status-more"]') as HTMLSelectElement;
+    const field = (name: string) => popover.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-part="${name}"]`)?.value;
+    const change = () => more.dispatchEvent(new Event('change'));
+    const key = (name: string) => more.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+    expect(more.labels?.[0]?.textContent?.trim()).not.toBe('');
+    expect(more.querySelectorAll('optgroup')).toHaveLength(2);
+    expect(more.value).toBe('');
+
+    // A pick (pointer): fills the form like a suggestion button and saves.
+    more.value = '1-0';
+    const coffee = more.options[more.selectedIndex] as HTMLOptionElement;
+    change();
+    await flush();
+    expect(setStatus).toHaveBeenLastCalledWith({ status: 'available', text: coffee.dataset.presetText, emoji: '☕', clearAfter: '30m' });
+    expect(more.value).toBe('');
+
+    // Browsing with the arrows fills only; Enter saves.
+    setStatus.mockClear();
+    key('ArrowDown');
+    more.value = '0-0';
+    change();
+    await flush();
+    expect(setStatus).not.toHaveBeenCalled();
+    expect(field('status-emoji')).toBe('🎧');
+    expect(field('status-clear-after')).toBe('2h');
+    key('Enter');
+    await flush();
+    expect(setStatus).toHaveBeenCalledTimes(1);
+    expect(more.value).toBe('');
+
+    // Enter or a change on the placeholder, or no option at all, does nothing.
+    setStatus.mockClear();
+    key('Enter');
+    change();
+    more.selectedIndex = -1;
+    change();
+    await flush();
+    expect(setStatus).not.toHaveBeenCalled();
+
+    // Any other key does not count as browsing.
+    key('Tab');
+    more.value = '0-1';
+    change();
+    await flush();
+    expect(setStatus).toHaveBeenLastCalledWith(expect.objectContaining({ emoji: '📞', clearAfter: '1h' }));
+  });
+
+  it('works without the drop-down, and an option without data clears the form fields (1.12)', () => {
+    const popover = templates().clone('status-menu');
+    popover.querySelector('[data-part="status-more"]')?.closest('div')?.remove();
+    const host = { config: { i18n, status: own() } as unknown as ChatConfig, api: { setStatus: vi.fn() } as unknown as ChatApi };
+    expect(() => new StatusMenu(host, document.createElement('button'), popover, vi.fn(), new AbortController().signal)).not.toThrow();
+
+    const { popover: full } = menu();
+    const more = full.querySelector<HTMLSelectElement>('[data-part="status-more"]') as HTMLSelectElement;
+    const bare = document.createElement('option');
+    bare.value = 'bare';
+    more.append(bare);
+    (full.querySelector<HTMLInputElement>('[data-part="status-emoji"]') as HTMLInputElement).value = '🎧';
+    more.dispatchEvent(new KeyboardEvent('keydown', { key: 'End' }));
+    more.value = 'bare';
+    more.dispatchEvent(new Event('change'));
+    expect(full.querySelector<HTMLInputElement>('[data-part="status-emoji"]')?.value).toBe('');
+    expect(full.querySelector<HTMLInputElement>('[data-part="status-text"]')?.value).toBe('');
+    expect(full.querySelector<HTMLSelectElement>('[data-part="status-clear-after"]')?.value).toBe('never');
+  });
+
   it('keeps the menu open when an emoji of the picker is chosen, then saves the custom status (1.11.3)', async () => {
     const { instance, trigger, popover, setStatus, options } = menu(own({ status: 'busy' }));
     setStatus.mockResolvedValue(own({ status: 'busy', text: 'Writing', emoji: '😀' }));

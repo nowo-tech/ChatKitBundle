@@ -577,10 +577,32 @@ Each user picks a status **from the chat itself** — the avatar button at the t
 | `invisible` | offline (no dot, no custom text) | the user keeps seeing everyone |
 
 Plus an optional custom status — an emoji (at most 16 characters, no letters or digits) and a text (at most 80) — and
-when it all clears: never, 30 minutes, 1 hour, 4 hours, end of today, end of this week (`clearAfter`: `never`, `30m`,
-`1h`, `4h`, `today`, `week`; then back to available, without text). `POST /api/status`
+when it all clears: never, 30 minutes, 1 hour, 2 hours, 4 hours, end of today, end of this week (`clearAfter`: `never`,
+`30m`, `1h`, `2h`, `4h`, `today`, `week`; then back to available, without text). `POST /api/status`
 `{status, text?, emoji?, clearAfter?}` stores it (`422 invalid_status` otherwise) and publishes it live: the user's
 direct contacts get a `status` event (what others see), the user's other tabs a `my_status` event.
+
+Suggested statuses (1.12): the menu shows a few one-click buttons (lunch, meeting, working from home, sick, on holiday)
+and a **More statuses** drop-down grouped by *Work* (focusing, in a call, presenting, reviewing, commuting, working
+remotely, at the office, in training, on support duty, on a business trip) and *Personal* (coffee break, back soon,
+doctor's appointment, offline for the day, sick, on holiday, parental leave). Picking one fills the emoji, the text and
+when it clears, and saves it. Both lists come from the `status_presets` option (see
+[CONFIGURATION](CONFIGURATION.md)): set `quick` and / or `more` to replace them, or `more: []` to hide the drop-down.
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            status_presets:
+                quick:
+                    - { emoji: '🍕', label: 'chat.status_preset_lunch', clear_after: '1h' }
+                    - { emoji: '🚀', label: 'app.status.deploying', clear_after: '2h' } # your key, NowoChatKitBundle domain
+                more:
+                    - label: 'app.status.group_ops'
+                      statuses:
+                          - { emoji: '🛟', label: 'chat.status_preset_support', clear_after: 'today' }
+                          - { emoji: '🧯', label: 'Firefighting', clear_after: '4h' } # a plain text works too
+```
 
 Where it shows: the dot on the avatar of a direct conversation (list, window header, people picker), the label and the
 custom status in the window subtitle and after the name in the list, the dot and text in the @mention list

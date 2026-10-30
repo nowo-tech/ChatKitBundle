@@ -48,6 +48,12 @@ apply to it. `{{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual:
 `data-nowo-chat-manual`: the automatic start of `nowo-chat.js` skips it, for a dock the host mounts itself (see
 [USAGE — Front end](USAGE.md#front-end-iife-or-your-bundler)).
 
+The status menu (`nowo_chat_template_status_menu`, 1.12) renders its suggestions from data, not from a list in the
+template: the one-click buttons loop over `nowo_chat_status_form.vars.status_presets` (`emoji`, `text`, `clear_after`)
+and the **More statuses** drop-down is the `moreStatus` child of the status form (grouped options carrying
+`data-preset-emoji` / `data-preset-text` / `data-preset-clear-after`). Change the statuses with the `status_presets`
+option ([CONFIGURATION](CONFIGURATION.md)); override the block only to change the markup.
+
 ## Per-page overrides
 
 `nowo_chat_kit.profiles.<profile>.web_ui.templates.page`: a host template that

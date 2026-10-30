@@ -44,6 +44,7 @@ final class ConfigurationTest extends TestCase
             'auto_reply_interval_hours' => 4,
             'max_pins'                  => 20,
             'auto_away_minutes'         => 10,
+            'status_presets'            => Configuration::DEFAULT_STATUS_PRESETS,
             'support'                   => [
                 'ticket_prefix'      => 'SUP-',
                 'ticket_digits'      => 6,
@@ -112,6 +113,19 @@ final class ConfigurationTest extends TestCase
         $config = $this->process([['profiles' => ['default' => ['web_ui' => ['layout_template' => 'layouts/chat.html.twig']]]]]);
         self::assertSame('layouts/chat.html.twig', $config['profiles']['default']['web_ui']['layout_template']);
         self::assertNull($config['profiles']['default']['page_layout']);
+    }
+
+    public function testStatusPresetsCanBeReplacedAndAreValidated(): void
+    {
+        $config = $this->process([['profiles' => ['default' => ['status_presets' => [
+            'quick' => [['emoji' => '🚀', 'label' => 'Launching']],
+            'more'  => [],
+        ]]]]]);
+
+        self::assertSame(['quick' => [['emoji' => '🚀', 'label' => 'Launching', 'clear_after' => 'never']], 'more' => []], $config['profiles']['default']['status_presets']);
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->process([['profiles' => ['default' => ['status_presets' => ['quick' => [['emoji' => '🚀', 'label' => 'x', 'clear_after' => 'fortnight']]]]]]]);
     }
 
     public function testUnknownDefaultProfileIsRejected(): void

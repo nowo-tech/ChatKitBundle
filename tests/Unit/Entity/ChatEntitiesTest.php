@@ -388,6 +388,7 @@ final class ChatEntitiesTest extends TestCase
         self::assertNull(ChatUserSettings::statusExpiry('never', $now));
         self::assertSame('2026-10-29 10:30:00', ChatUserSettings::statusExpiry('30m', $now)?->format('Y-m-d H:i:s'));
         self::assertSame('2026-10-29 11:00:00', ChatUserSettings::statusExpiry('1h', $now)?->format('Y-m-d H:i:s'));
+        self::assertSame('2026-10-29 12:00:00', ChatUserSettings::statusExpiry('2h', $now)?->format('Y-m-d H:i:s'));
         self::assertSame('2026-10-29 14:00:00', ChatUserSettings::statusExpiry('4h', $now)?->format('Y-m-d H:i:s'));
         self::assertSame('2026-10-29 23:59:59', ChatUserSettings::statusExpiry('today', $now)?->format('Y-m-d H:i:s'));
         self::assertSame('2026-11-01 23:59:59', ChatUserSettings::statusExpiry('week', $now)?->format('Y-m-d H:i:s'), 'Thursday → Sunday');

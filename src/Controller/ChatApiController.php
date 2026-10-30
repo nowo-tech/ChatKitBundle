@@ -846,7 +846,7 @@ final class ChatApiController extends AbstractController
      * push) or invisible (offline to everyone), an optional custom text (at most 80 characters) and emoji, and when it
      * clears itself. Direct contacts get the change live (an invisible user is offline to them, without text).
      *
-     * @param Request $request JSON body `{status, text?, emoji?, clearAfter?}` (`clearAfter`: never, 30m, 1h, 4h, today, week)
+     * @param Request $request JSON body `{status, text?, emoji?, clearAfter?}` (`clearAfter`: never, 30m, 1h, 2h, 4h, today, week)
      *
      * @return JsonResponse `{status: {status, text, emoji, expiresAt}}`
      */
