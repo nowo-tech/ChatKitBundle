@@ -168,6 +168,25 @@ describe('chat status', () => {
     holder.querySelector('.nowo-chat-emoji')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   });
 
+  it('keeps the menu open when an emoji of the picker is chosen, then saves the custom status (1.11.3)', async () => {
+    const { instance, trigger, popover, setStatus, options } = menu(own({ status: 'busy' }));
+    setStatus.mockResolvedValue(own({ status: 'busy', text: 'Writing', emoji: '😀' }));
+    trigger.click();
+    expect(instance.isOpen).toBe(true);
+    const pick = popover.querySelector<HTMLButtonElement>('[data-part="status-emoji-pick"]') as HTMLButtonElement;
+    const holder = popover.querySelector<HTMLElement>('[data-part="status-emoji-panel"]') as HTMLElement;
+    pick.click();
+    holder.querySelector<HTMLButtonElement>('.nowo-chat-emoji__item')?.click();
+    expect(instance.isOpen).toBe(true);
+    (popover.querySelector('[data-part="status-text"]') as HTMLInputElement).value = 'Writing';
+    popover.querySelector<HTMLFormElement>('[data-part="status-form"]')?.requestSubmit();
+    await flush();
+    expect(setStatus).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'busy', text: 'Writing' }));
+    expect(options.find((o) => o.dataset.status === 'busy')?.getAttribute('aria-checked')).toBe('true');
+    document.body.click();
+    expect(instance.isOpen).toBe(false);
+  });
+
   it('sets the automatic reply from the status menu (1.11)', async () => {
     const saveAutoReply = vi.fn();
     const trigger = document.createElement('button');
