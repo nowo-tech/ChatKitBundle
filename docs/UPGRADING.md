@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.14.1](#to-1141)
 - [To 1.14.0](#to-1140)
 - [To 1.13.2](#to-1132)
 - [To 1.13.0](#to-1130)
@@ -37,6 +38,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.14.1
+
+From **1.14.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 `nowo-tech/form-kit-bundle` is now required at `^2.17` (was `^2.16`); update both packages together:
 
