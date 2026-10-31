@@ -23,7 +23,6 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 #[FormKitConfig(NowoChatKitBundle::FORM_KIT_PROFILE)]
 final class ChatDockEditType extends AbstractType
 {
-    use FormKitFieldTrait;
     use FormOptionsTrait;
 
     /**
@@ -34,7 +33,7 @@ final class ChatDockEditType extends AbstractType
      */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $this->addKitField($builder, 'body', TextareaType::class, [
+        $this->addWithDefaults($builder, 'body', TextareaType::class, [
             'label'    => false,
             'required' => false,
             'attr'     => ['class' => 'nowo-chat-edit__input', 'data-part' => 'input', 'rows' => 2],

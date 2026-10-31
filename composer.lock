@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "0f1976681a9901868754d5818b1a68e4",
+    "content-hash": "97830b58b4ab750ca8d035e334e48f3a",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -931,20 +931,20 @@
         },
         {
             "name": "nowo-tech/form-kit-bundle",
-            "version": "v2.16.0",
+            "version": "v2.17.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/FormKitBundle.git",
-                "reference": "0e9a4c9b41661dbd622e03b9b2a227da82f2b194"
+                "reference": "dbee72ff64fbc452da5865637815d26d6c223019"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/FormKitBundle/zipball/0e9a4c9b41661dbd622e03b9b2a227da82f2b194",
-                "reference": "0e9a4c9b41661dbd622e03b9b2a227da82f2b194",
+                "url": "https://api.github.com/repos/nowo-tech/FormKitBundle/zipball/dbee72ff64fbc452da5865637815d26d6c223019",
+                "reference": "dbee72ff64fbc452da5865637815d26d6c223019",
                 "shasum": ""
             },
             "require": {
-                "doctrine/collections": "^2.2",
+                "doctrine/collections": "^2.2 || ^3.0",
                 "php": ">=8.2 <8.6",
                 "symfony/asset": "^7.4 || ^8.0",
                 "symfony/config": "^7.4 || ^8.0",
@@ -961,7 +961,7 @@
                 "friendsofphp/php-cs-fixer": "^3.95.11",
                 "igor-php/igor-php": "^0.10.0",
                 "nowo-tech/phpstan-frankenphp": "^1.0",
-                "nowo-tech/ui-kit-bundle": "^2.5.3",
+                "nowo-tech/ui-kit-bundle": "^2.15",
                 "phpstan/extension-installer": "^1.2",
                 "phpstan/phpstan": "^2.0",
                 "phpstan/phpstan-phpunit": "^2.0",
@@ -977,8 +977,11 @@
             "suggest": {
                 "a2lix/translation-form-bundle": "For the optional \"translations\" type in FormTypeMap (^3.2 on PHP 8.2/Symfony 7.4, ^4.0 on PHP 8.4+/Symfony 7.4|8)",
                 "friendsofsymfony/ckeditor-bundle": "For addCKEditorField() / addCKEditorFieldType() (CKEditor 4 in forms)",
+                "nowo-tech/altcha-type-bundle": "For addAltcha() / addAltchaField() / addAltchaFieldType() (ALTCHA proof-of-work captcha)",
+                "nowo-tech/barcode-input-bundle": "For addBarcode() / addBarcodeField() / addBarcodeFieldType() (barcode / QR input with camera scanner)",
                 "nowo-tech/ckeditor5-editor-bundle": "For addCkeditor5Editor() / addCkeditor5EditorField() / addCkeditor5EditorFieldType() (CKEditor 5)",
                 "nowo-tech/icon-selector-bundle": "For addIconSelector() / addIconSelectorField() / addIconSelectorFieldType()",
+                "nowo-tech/milkdown-editor-bundle": "For addMilkdownEditor() / addMilkdownEditorField() / addMilkdownEditorFieldType() (Milkdown Markdown editor)",
                 "nowo-tech/otp-input-bundle": "For addOtp() / addOtpField() / addOtpFieldType()",
                 "nowo-tech/password-strength-bundle": "For addPasswordStrength() / addPasswordStrengthField() / addPasswordStrengthFieldType()",
                 "nowo-tech/password-toggle-bundle": "For addPasswordToggle() / addPasswordToggleField() / addPasswordToggleFieldType()",
@@ -987,7 +990,7 @@
                 "nowo-tech/slide-to-confirm-bundle": "For addSlideToConfirm() / addSlideToConfirmField() / addSlideToConfirmFieldType()",
                 "nowo-tech/tag-input-bundle": "For addTagInput() / addTagInputField() / addTagInputFieldType()",
                 "nowo-tech/tiptap-editor-bundle": "For addTiptapEditor() / addTiptapEditorField() / addTiptapEditorFieldType()",
-                "nowo-tech/ui-kit-bundle": "^2.5.3: locale tabs (locale_tabs option, TranslatableMapType, _locale_tabs include) render through the UiKit locale_tabs partial (WAI-ARIA tabs, no-JS fieldsets, keyboard, browser validation, Live Component safe); without it FormKit keeps its neutral markup",
+                "nowo-tech/ui-kit-bundle": "^2.15.0: addDateRange() / addDateRangeField() / addDateRangeFieldType() (date range filter field); ^2.5.3: locale tabs (locale_tabs option, TranslatableMapType, _locale_tabs include) render through the UiKit locale_tabs partial (WAI-ARIA tabs, no-JS fieldsets, keyboard, browser validation, Live Component safe); without it FormKit keeps its neutral markup",
                 "symfony/security-csrf": "Required by CsrfOnlyType / HiddenFieldsCsrfType / CsrfOnlyFormFactory / csrf_action_form(): without the form CSRF extension they throw (fail closed)",
                 "symfony/ux-autocomplete": "Entity autocomplete fields; use addAutocompleteField() / addAutocompleteFieldType() with your autocomplete FormType FQCN",
                 "symfony/ux-cropperjs": "For addCropper() / addCropperField() / addCropperFieldType() (image crop widget)",
@@ -1041,7 +1044,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-30T07:27:21+00:00"
+            "time": "2026-10-30T21:58:40+00:00"
         },
         {
             "name": "nowo-tech/ui-kit-bundle",

@@ -23,7 +23,6 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 #[FormKitConfig(NowoChatKitBundle::FORM_KIT_PROFILE)]
 final class ChatPageMessageType extends AbstractType
 {
-    use FormKitFieldTrait;
     use FormOptionsTrait;
 
     /**
@@ -34,7 +33,7 @@ final class ChatPageMessageType extends AbstractType
      */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $this->addKitField($builder, 'body', TextareaType::class, [
+        $this->addWithDefaults($builder, 'body', TextareaType::class, [
             'label'      => 'chat.composer_placeholder',
             'label_attr' => ['class' => 'nowo-chat-sr-only'],
             'attr'       => [
