@@ -45,7 +45,6 @@ use function is_string;
 #[FormKitConfig(NowoChatKitBundle::FORM_KIT_PROFILE)]
 final class ChatDockStatusType extends AbstractType
 {
-    use FormKitFieldTrait;
     use FormOptionsTrait;
 
     /**
@@ -238,7 +237,7 @@ final class ChatDockStatusType extends AbstractType
      */
     private function addStatusField(FormBuilderInterface $builder, string $name, string $type, array $options): void
     {
-        $this->addKitField($builder, $name, $type, ['translation_domain' => false] + $options);
+        $this->addWithDefaults($builder, $name, $type, ['translation_domain' => false] + $options);
     }
 
     private function trans(string $key, ?string $locale): string

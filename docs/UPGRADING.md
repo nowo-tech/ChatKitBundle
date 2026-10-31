@@ -38,6 +38,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+`nowo-tech/form-kit-bundle` is now required at `^2.17` (was `^2.16`); update both packages together:
+
+```bash
+composer update nowo-tech/chat-kit-bundle nowo-tech/form-kit-bundle
+```
+
+No configuration or template change: the rendered forms are the same. `FormKitFieldTrait` (an internal helper of the bundle form types) is removed; it was never part of the public API.
+
 ## To 1.14.0
 
 From **1.13.2**:

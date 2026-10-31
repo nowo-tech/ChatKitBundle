@@ -24,7 +24,6 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
 #[FormKitConfig(NowoChatKitBundle::FORM_KIT_PROFILE)]
 final class ChatDockSearchType extends AbstractType
 {
-    use FormKitFieldTrait;
     use FormOptionsTrait;
 
     /**
@@ -35,12 +34,12 @@ final class ChatDockSearchType extends AbstractType
      */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $this->addKitField($builder, 'query', SearchType::class, [
+        $this->addWithDefaults($builder, 'query', SearchType::class, [
             'label'    => false,
             'required' => false,
             'attr'     => ['class' => 'nowo-chat-search', 'data-part' => 'search', 'autocomplete' => 'off'],
         ]);
-        $this->addKitField($builder, 'people', SearchType::class, [
+        $this->addWithDefaults($builder, 'people', SearchType::class, [
             'label'    => false,
             'required' => false,
             'attr'     => ['class' => 'nowo-chat-search', 'data-part' => 'picker-input', 'autocomplete' => 'off'],
