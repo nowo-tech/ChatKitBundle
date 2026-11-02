@@ -79,8 +79,11 @@ final class NowoChatKitExtensionTableNamesTest extends TestCase
         self::assertSame('c' . str_repeat('x', 37) . 'message', $container->getParameter('nowo_chat_kit.doctrine.table.message'));
     }
 
-    public function testEnvPlaceholdersAreLeftToTheListener(): void
+    public function testEnvPlaceholdersAreRejected(): void
     {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('do not support %env()%');
+
         $bag         = new EnvPlaceholderParameterBag();
         $container   = new ContainerBuilder($bag);
         $placeholder = $bag->get('env(CHAT_TABLE_PREFIX)');
@@ -93,8 +96,6 @@ final class NowoChatKitExtensionTableNamesTest extends TestCase
         } finally {
             BaseNode::resetPlaceholders();
         }
-
-        self::assertSame($placeholder . 'nowo_chat_message', $container->getParameter('nowo_chat_kit.doctrine.table.message'));
     }
 
     public function testListenerRejectsResolvedEnvValues(): void

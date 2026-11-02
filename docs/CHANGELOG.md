@@ -55,8 +55,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - `doctrine.table_prefix` / `doctrine.table_name_prefix` must match `/^[a-z][a-z0-9_]*\z/` (a leading digit or
-  underscore is rejected) and may not make a generated name longer than 63 characters; checked at compile time and,
-  for `%env()%` values, when the listener is built.
+  underscore is rejected) and may not make a generated name longer than 63 characters; checked at compile time;
+  `%env()%` is rejected for both options (table names are part of the schema).
 - A non-default profile that sets a `doctrine.*` value different from the default profile's now fails the container
   build: the table names are global and that value was silently ignored.
 

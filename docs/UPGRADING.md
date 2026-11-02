@@ -48,7 +48,7 @@ meaning and is prepended to the result (`table_name_prefix: chat_` + `table_pref
 **Validation (both options):** a prefix must match `/^[a-z][a-z0-9_]*\z/` (lowercase letter first, then lowercase
 letters, digits and `_`; `table_prefix` may stay empty), and `table_prefix` + `table_name_prefix` may not make any
 table, index, unique or PostgreSQL sequence name longer than 63 characters (at most 38 characters together). The
-container build fails otherwise; `%env()%` values are checked when the listener is built. `doctrine` options are
+container build fails otherwise, and also on a `%env()%` value (not supported: the names are part of the schema). `doctrine` options are
 global: a non-default profile that sets a different `doctrine.*` value now fails the container build instead of being
 silently ignored (repeating the default profile's value is allowed).
 

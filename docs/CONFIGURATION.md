@@ -160,9 +160,7 @@ Rules (REQ-ORM-002):
 
 - Both options match `/^[a-z][a-z0-9_]*\z/` (`table_prefix` may be empty). Together they may not make any table,
   index, unique or PostgreSQL sequence name longer than 63 characters, i.e. at most 38 characters for
-  `table_prefix` + `table_name_prefix`. Literal values are checked when the container is built; `%env()%` values when
-  the listener is built (give the env var a default with an `env(NAME)` parameter, the config tree validates that
-  default).
+  `table_prefix` + `table_name_prefix`. Both are checked when the container is built. `%env()%` is **not supported** for either option (the table names are part of the schema, and every published table-name parameter must come from a validated literal): the container build fails.
 - The table names are **global**: only the default profile's `doctrine` options apply. Another profile may repeat
   them; a different value fails the container build.
 
