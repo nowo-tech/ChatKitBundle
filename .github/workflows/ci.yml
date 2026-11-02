@@ -93,6 +93,9 @@ jobs:
           # (MercureChatRealtime tests are skipped; the null transport is used).
           composer remove --dev symfony/mercure --no-update
 
+      - name: Override Composer platform PHP (composer.json pins the minimum PHP for the lock)
+        run: composer config platform.php "${{ matrix.php }}.99"
+
       - name: Install dependencies with Symfony ${{ matrix.symfony }}
         run: |
           chmod +x .scripts/retry.sh
