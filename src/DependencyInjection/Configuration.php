@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\DependencyInjection;
 
+use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
@@ -192,12 +193,20 @@ final class Configuration implements ConfigurationInterface
                             ->arrayNode('doctrine')
                                 ->addDefaultsIfNotSet()
                                 ->children()
+                                    ->scalarNode('table_name_prefix')
+                                        ->info('Replaces the "nowo_chat_" part of every table, index and unique-constraint name of the bundle (e.g. "chat_" gives chat_message and idx_chat_message_created).')
+                                        ->defaultValue(TablePrefixListener::DEFAULT_TABLE_NAME_PREFIX)
+                                        ->validate()
+                                            ->ifTrue(static fn (mixed $prefix): bool => !is_string($prefix) || preg_match(TablePrefixListener::PREFIX_PATTERN, $prefix) !== 1)
+                                            ->thenInvalid('table_name_prefix must start with a lowercase letter and contain only lowercase letters, digits and underscores.')
+                                        ->end()
+                                    ->end()
                                     ->scalarNode('table_prefix')
-                                        ->info('Prepended to every table, index and unique constraint of the bundle (e.g. "app_" gives app_nowo_chat_message). Empty: none.')
+                                        ->info('Prepended to every table, index and unique-constraint name after table_name_prefix is applied (e.g. "app_" gives app_nowo_chat_message and app_idx_nowo_chat_message_created). Empty: none.')
                                         ->defaultValue('')
                                         ->validate()
-                                            ->ifTrue(static fn (mixed $prefix): bool => !is_string($prefix) || preg_match('/^[a-z0-9_]*$/', $prefix) !== 1)
-                                            ->thenInvalid('table_prefix may only contain lowercase letters, digits and underscores.')
+                                            ->ifTrue(static fn (mixed $prefix): bool => !is_string($prefix) || ($prefix !== '' && preg_match(TablePrefixListener::PREFIX_PATTERN, $prefix) !== 1))
+                                            ->thenInvalid('table_prefix must be empty or start with a lowercase letter and contain only lowercase letters, digits and underscores.')
                                         ->end()
                                     ->end()
                                 ->end()

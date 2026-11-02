@@ -91,7 +91,8 @@ nowo_chat_kit:
 | `profiles.<name>.digest.delay_minutes` | int ≥ 1 | `15` | How long a message stays unread before it counts. |
 | `profiles.<name>.digest.interval_minutes` | int ≥ 1 | `60` | At most one email per user in this window. |
 | `profiles.<name>.push_preview` | bool | `false` | Put the first 140 characters of the message in the Web Push body (lock screens). Off: a generic "New message". |
-| `profiles.<name>.doctrine.table_prefix` | string | `''` | Prepended to every bundle table, index and unique constraint (lowercase letters, digits, `_`). `app_` gives `app_nowo_chat_conversation`, `app_nowo_chat_message`, … Generate a migration after changing it. |
+| `profiles.<name>.doctrine.table_name_prefix` | string | `nowo_chat_` | Replaces the `nowo_chat_` part of every bundle table, index and unique-constraint name (non-empty; lowercase letters, digits, `_`). `chat_` gives `chat_conversation`, `chat_message`, `idx_chat_message_created`, `uniq_chat_message_uuid`, …; the Doctrine-generated `IDX_*` / `FK_*` names follow the new table names. See [Table names](#table-names). |
+| `profiles.<name>.doctrine.table_prefix` | string | `''` | Prepended to every bundle table, index and unique-constraint name **after** `table_name_prefix` is applied (lowercase letters, digits, `_`). `app_` gives `app_nowo_chat_conversation`, `app_idx_nowo_chat_message_created`, … Generate a migration after changing it. |
 | `profiles.<name>.web_ui.layout_template` | ?string | `null` | Layout the full-page chat extends (REQ-UI-003); `null` = `nowo_ui_kit.layouts.admin`. It must render the UiKit canonical blocks. |
 | `profiles.<name>.web_ui.templates.page` | string | `@NowoChatKitBundle/page.html.twig` | Template of the full-page chat (a host template extending `@!NowoChatKitBundle/page.html.twig` and overriding one block). |
 | `profiles.<name>.page_layout` | ?string | `null` | **Deprecated** (use `web_ui.layout_template`): a 1.x layout with the `title`, `stylesheets`, `javascripts` and `body` blocks; while it is the only layout set, the page keeps its 1.x template. |
@@ -128,10 +129,60 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 | `limits.buzz_interval_seconds` | `nowo_chat_buzz` (per conversation) | 15 |
 | `limits.buzz_per_minute` | `nowo_chat_buzz_global` | 10 |
 
+## Table names
+
+The bundle maps its tables as `nowo_chat_<name>`. Two options change that, applied in this order:
+
+1. `doctrine.table_name_prefix` replaces the `nowo_chat_` part of each table, index and unique-constraint name.
+2. `doctrine.table_prefix` is prepended to the result.
+
+| `table_name_prefix` | `table_prefix` | Message table | Created-at index | UUID unique |
+|---|---|---|---|---|
+| `nowo_chat_` (default) | `''` (default) | `nowo_chat_message` | `idx_nowo_chat_message_created` | `uniq_nowo_chat_message_uuid` |
+| `chat_` | `''` | `chat_message` | `idx_chat_message_created` | `uniq_chat_message_uuid` |
+| `nowo_chat_` | `app_` | `app_nowo_chat_message` | `app_idx_nowo_chat_message_created` | `app_uniq_nowo_chat_message_uuid` |
+| `chat_` | `app_` | `app_chat_message` | `app_idx_chat_message_created` | `app_uniq_chat_message_uuid` |
+
+The tables are `conversation`, `message`, `message_mention`, `participant`, `quick_reply`, `reaction` and
+`user_settings`. Doctrine derives the `IDX_*` / `FK_*` names of the foreign keys from the table name, so they change
+with it. Changing either option on an existing database needs a migration; [UPGRADING](UPGRADING.md#unreleased) has the
+rename statements.
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            doctrine:
+                table_name_prefix: chat_
+```
+
+Rules (REQ-ORM-002):
+
+- Both options match `/^[a-z][a-z0-9_]*\z/` (`table_prefix` may be empty). Together they may not make any table,
+  index, unique or PostgreSQL sequence name longer than 63 characters, i.e. at most 38 characters for
+  `table_prefix` + `table_name_prefix`. Both are checked when the container is built. `%env()%` is **not supported** for either option (the table names are part of the schema, and every published table-name parameter must come from a validated literal): the container build fails.
+- The table names are **global**: only the default profile's `doctrine` options apply. Another profile may repeat
+  them; a different value fails the container build.
+
+Container parameters with the resolved physical names, for host SQL (GDPR erasers, reports):
+
+| Parameter | Default value | With `table_name_prefix: chat_` |
+|---|---|---|
+| `nowo_chat_kit.doctrine.table.conversation` | `nowo_chat_conversation` | `chat_conversation` |
+| `nowo_chat_kit.doctrine.table.message` | `nowo_chat_message` | `chat_message` |
+| `nowo_chat_kit.doctrine.table.message_mention` | `nowo_chat_message_mention` | `chat_message_mention` |
+| `nowo_chat_kit.doctrine.table.participant` | `nowo_chat_participant` | `chat_participant` |
+| `nowo_chat_kit.doctrine.table.quick_reply` | `nowo_chat_quick_reply` | `chat_quick_reply` |
+| `nowo_chat_kit.doctrine.table.reaction` | `nowo_chat_reaction` | `chat_reaction` |
+| `nowo_chat_kit.doctrine.table.user_settings` | `nowo_chat_user_settings` | `chat_user_settings` |
+| `nowo_chat_kit.doctrine.tables` | map of the keys above to the names | |
+
+Inside the bundle every query takes the names from the Doctrine metadata, never from literals.
+
 ## Container parameters
 
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
-key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `doctrine.table_prefix`,
+key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `doctrine.table_prefix`, `doctrine.table_name_prefix`, `doctrine.tables`, `doctrine.table.<key>`,
 `reactions`, `icon_set`, `icons`, `presence_ttl`, `auto_away_minutes`, `status_presets`, `max_pins`, `auto_reply_interval_hours`, `limits`, `digest`, `support`, and `support.<key>` for each support key).
 
 ## Timeouts
