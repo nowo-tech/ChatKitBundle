@@ -80,7 +80,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 - **FR-CFG-002** — The extension exposes `nowo_chat_kit.*` parameters and prepends Doctrine `resolve_target_entities` (from `user_class`), the rate limiters, the `nowo_chat_kit` asset package and Messenger signing.
 - **FR-DI-001** — Services are autowired; every optional contract has a null default the application can alias.
 - **FR-DI-002** — The realtime transport is Mercure when a hub exists, otherwise the null transport (polling).
-- **FR-ORM-001** — `TablePrefixListener` replaces the `nowo_chat_` part of the bundle's table, index and unique-constraint names with `doctrine.table_name_prefix` (default `nowo_chat_`: names unchanged), then prepends `doctrine.table_prefix` (bundle entities only).
+- **FR-ORM-001** — `TablePrefixListener` replaces the `nowo_chat_` part of the bundle's table, index and unique-constraint names with `doctrine.table_name_prefix` (default `nowo_chat_`: names unchanged), then prepends `doctrine.table_prefix` (bundle entities only). Both match `/^[a-z][a-z0-9_]*\z/` and keep every generated name within 63 characters; only the default profile's `doctrine` options apply (a different value on another profile fails the build). The resolved names are published as `nowo_chat_kit.doctrine.tables` / `nowo_chat_kit.doctrine.table.<key>`, and native SQL reads them from the metadata.
 - **FR-ROUTE-001** — One attribute-route loader (`Resources/config/routes.php`) imported with a prefix.
 
 ### Domain model and persistence
