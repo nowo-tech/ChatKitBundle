@@ -7,11 +7,15 @@ namespace Nowo\ChatKitBundle\Doctrine;
 use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\ORM\Event\LoadClassMetadataEventArgs;
 use Doctrine\ORM\Events;
+use InvalidArgumentException;
 
+use function max;
+use function preg_match;
+use function sprintf;
 use function str_starts_with;
 use function strlen;
 use function strpos;
-use function substr_replace;
+use function substr;
 
 /**
  * Applies the configurable naming of the bundle's own tables, indexes and unique constraints (REQ-ORM-002).
@@ -27,6 +31,32 @@ final readonly class TablePrefixListener
     /** The name prefix every table, index and unique constraint of the bundle is mapped with. */
     public const string DEFAULT_TABLE_NAME_PREFIX = 'nowo_chat_';
 
+    /**
+     * Short key => mapped (default) name of every bundle table; the extension publishes the resolved names as the
+     * `nowo_chat_kit.doctrine.tables` map and one `nowo_chat_kit.doctrine.table.<key>` parameter per table.
+     */
+    public const array TABLES = [
+        'conversation'    => 'nowo_chat_conversation',
+        'message'         => 'nowo_chat_message',
+        'message_mention' => 'nowo_chat_message_mention',
+        'participant'     => 'nowo_chat_participant',
+        'quick_reply'     => 'nowo_chat_quick_reply',
+        'reaction'        => 'nowo_chat_reaction',
+        'user_settings'   => 'nowo_chat_user_settings',
+    ];
+
+    /** Longest identifier PostgreSQL keeps (MySQL allows 64): every generated name must fit. */
+    public const int MAX_IDENTIFIER_LENGTH = 63;
+
+    /** Allowed prefix: lowercase letter first, then lowercase letters, digits and underscores (no trailing newline). */
+    public const string PREFIX_PATTERN = '/^[a-z][a-z0-9_]*\z/';
+
+    /** Longest mapped name once `DEFAULT_TABLE_NAME_PREFIX` is removed: uniq_nowo_chat_conversation_channel without `nowo_chat_`. */
+    private const int LONGEST_NAME_REST = 25;
+
+    /** Longest named index without `DEFAULT_TABLE_NAME_PREFIX` (only `table_prefix` lengthens it): every named index contains `nowo_chat_`. */
+    private const int LONGEST_FIXED_NAME = 0;
+
     private const string NAMESPACE = 'Nowo\\ChatKitBundle\\Entity\\';
 
     /**
@@ -39,6 +69,30 @@ final readonly class TablePrefixListener
         private string $prefix = '',
         private string $tableNamePrefix = self::DEFAULT_TABLE_NAME_PREFIX,
     ) {
+        self::validate($this->prefix, $this->tableNamePrefix);
+    }
+
+    /**
+     * Rejects prefixes that are not lowercase identifiers or that make a generated name longer than 63 characters.
+     * Run by the extension for literal values and by the constructor for resolved `%env()%` values.
+     *
+     * @param string $tablePrefix Optional prefix prepended to every name (empty for none)
+     * @param string $tableNamePrefix Replacement of `DEFAULT_TABLE_NAME_PREFIX`
+     *
+     * @throws InvalidArgumentException when a prefix is malformed or a name would be too long
+     */
+    public static function validate(string $tablePrefix, string $tableNamePrefix): void
+    {
+        if (preg_match(self::PREFIX_PATTERN, $tableNamePrefix) !== 1) {
+            throw new InvalidArgumentException(sprintf('Invalid doctrine.table_name_prefix "%s": use a lowercase letter, then lowercase letters, digits and underscores.', $tableNamePrefix));
+        }
+        if ($tablePrefix !== '' && preg_match(self::PREFIX_PATTERN, $tablePrefix) !== 1) {
+            throw new InvalidArgumentException(sprintf('Invalid doctrine.table_prefix "%s": use a lowercase letter, then lowercase letters, digits and underscores (or empty).', $tablePrefix));
+        }
+        $longest = max(strlen($tablePrefix) + strlen($tableNamePrefix) + self::LONGEST_NAME_REST, strlen($tablePrefix) + self::LONGEST_FIXED_NAME);
+        if ($longest > self::MAX_IDENTIFIER_LENGTH) {
+            throw new InvalidArgumentException(sprintf('doctrine.table_prefix "%s" + doctrine.table_name_prefix "%s" make a table, index or sequence name of %d characters; the limit is %d.', $tablePrefix, $tableNamePrefix, $longest, self::MAX_IDENTIFIER_LENGTH));
+        }
     }
 
     /**
@@ -77,11 +131,24 @@ final readonly class TablePrefixListener
      */
     private function rename(string $name): string
     {
+        return self::physicalName($name, $this->prefix, $this->tableNamePrefix);
+    }
+
+    /**
+     * Physical name of a mapped table, index or unique-constraint name under the given prefixes (also used for
+     * `%env()%` placeholders, which stay intact because only the mapped name is cut).
+     *
+     * @param string $name Name as mapped on the entity (e.g. `nowo_chat_message`)
+     * @param string $tablePrefix Optional prefix prepended to the result
+     * @param string $tableNamePrefix Replacement of `nowo_chat_`
+     */
+    public static function physicalName(string $name, string $tablePrefix, string $tableNamePrefix): string
+    {
         $position = strpos($name, self::DEFAULT_TABLE_NAME_PREFIX);
         if ($position !== false) {
-            $name = substr_replace($name, $this->tableNamePrefix, $position, strlen(self::DEFAULT_TABLE_NAME_PREFIX));
+            $name = substr($name, 0, $position) . $tableNamePrefix . substr($name, $position + strlen(self::DEFAULT_TABLE_NAME_PREFIX));
         }
 
-        return $this->prefix . $name;
+        return $tablePrefix . $name;
     }
 }

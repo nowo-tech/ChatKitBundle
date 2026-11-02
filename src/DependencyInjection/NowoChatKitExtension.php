@@ -6,8 +6,10 @@ namespace Nowo\ChatKitBundle\DependencyInjection;
 
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatReferenceProviderInterface;
+use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -156,6 +158,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         }
         $container->setParameter(Configuration::ALIAS . '.doctrine.table_prefix', $profile['doctrine']['table_prefix']);
         $container->setParameter(Configuration::ALIAS . '.doctrine.table_name_prefix', $profile['doctrine']['table_name_prefix']);
+        $this->registerTableNames($container, $configs, $config['default_profile'], $profile['doctrine']);
         foreach ($profile['support'] as $key => $value) {
             $container->setParameter(Configuration::ALIAS . '.support.' . $key, $value);
         }
@@ -222,5 +225,50 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     public function getAlias(): string
     {
         return Configuration::ALIAS;
+    }
+
+    /**
+     * REQ-ORM-002: validates the table naming of the active profile and publishes the physical table names
+     * (`nowo_chat_kit.doctrine.tables` and `nowo_chat_kit.doctrine.table.<key>`) for host SQL such as GDPR erasers.
+     * The names are global: a non-default profile may only repeat the default profile's `doctrine` values.
+     *
+     * @param array<array<string, mixed>> $configs Raw `nowo_chat_kit` configs
+     * @param string $defaultProfile Name of the active profile
+     * @param array{table_name_prefix: string, table_prefix: string} $doctrine Processed `doctrine` options of the active profile
+     */
+    private function registerTableNames(ContainerBuilder $container, array $configs, string $defaultProfile, array $doctrine): void
+    {
+        foreach ($configs as $raw) {
+            $profiles = $raw['profiles'] ?? null;
+            foreach (is_array($profiles) ? $profiles : [] as $name => $profile) {
+                $options = is_array($profile) ? ($profile['doctrine'] ?? null) : null;
+                if ($name === $defaultProfile || !is_array($options)) {
+                    continue;
+                }
+                foreach ($options as $key => $value) {
+                    if (($doctrine[$key] ?? null) !== $value) {
+                        throw new InvalidConfigurationException(sprintf('nowo_chat_kit.profiles.%s.doctrine.%s is ignored: table names are global and come from the default profile "%s". Remove it or repeat the default profile\'s value.', (string) $name, (string) $key, $defaultProfile));
+                    }
+                }
+            }
+        }
+
+        $tablePrefix     = $doctrine['table_prefix'];
+        $tableNamePrefix = $doctrine['table_name_prefix'];
+        // %env()% values are checked by the listener once resolved.
+        if ($container->resolveEnvPlaceholders($tablePrefix) === $tablePrefix && $container->resolveEnvPlaceholders($tableNamePrefix) === $tableNamePrefix) {
+            try {
+                TablePrefixListener::validate($tablePrefix, $tableNamePrefix);
+            } catch (InvalidArgumentException $exception) {
+                throw new InvalidConfigurationException($exception->getMessage(), 0, $exception);
+            }
+        }
+
+        $tables = [];
+        foreach (TablePrefixListener::TABLES as $key => $mapped) {
+            $tables[$key] = TablePrefixListener::physicalName($mapped, $tablePrefix, $tableNamePrefix);
+            $container->setParameter(Configuration::ALIAS . '.doctrine.table.' . $key, $tables[$key]);
+        }
+        $container->setParameter(Configuration::ALIAS . '.doctrine.tables', $tables);
     }
 }

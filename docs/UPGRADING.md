@@ -45,12 +45,31 @@ foreign-key name stays byte-identical, so no migration is needed. The existing `
 meaning and is prepended to the result (`table_name_prefix: chat_` + `table_prefix: app_` gives `app_chat_message`,
 `app_idx_chat_message_created`).
 
+**Validation (both options):** a prefix must match `/^[a-z][a-z0-9_]*\z/` (lowercase letter first, then lowercase
+letters, digits and `_`; `table_prefix` may stay empty), and `table_prefix` + `table_name_prefix` may not make any
+table, index, unique or PostgreSQL sequence name longer than 63 characters (at most 38 characters together). The
+container build fails otherwise; `%env()%` values are checked when the listener is built. `doctrine` options are
+global: a non-default profile that sets a different `doctrine.*` value now fails the container build instead of being
+silently ignored (repeating the default profile's value is allowed).
+
 **Switching an existing database to another `table_name_prefix`** renames the tables, the named indexes and unique
 constraints, and the Doctrine-generated `IDX_*` / `FK_*` names (Doctrine derives them from the table name). Run the
 statements below in a migration (they were checked against MySQL 8.0 and PostgreSQL 17: the renamed schema matches a
 fresh schema created with the new prefix). They switch from `nowo_chat_` to `chat_` with no `table_prefix`; `user` is
 your user table. For another prefix, replace `chat_` and take the new `IDX_*` / `FK_*` names from
 `php bin/console doctrine:schema:update --dump-sql` on an empty database.
+
+Before you run it:
+
+- **Check that no table of the host already uses one of the new names** (`chat_message`, …): `RENAME TABLE` fails on a
+  clash, and a later `doctrine:schema:update` would otherwise mix both.
+- **Take a backup and plan downtime.** On MySQL / MariaDB DDL is **not transactional**: every statement commits on its
+  own, so a failure half-way leaves a partly renamed schema. Put the application in maintenance mode and stop the
+  Messenger workers (digest, push) for the window; keep `FOREIGN_KEY_CHECKS=1`. In a Doctrine migration declare
+  `isTransactional(): false` on MySQL. Deploy the `table_name_prefix` change **together with** the migration: the
+  old code reads the old names, the new code the new ones.
+- On **PostgreSQL** DDL is transactional: run the whole block in one transaction (a Doctrine migration does that by
+  default), so it applies completely or not at all.
 
 MySQL 8 / MariaDB ≥ 10.5.2 (foreign keys cannot be renamed, so they are dropped and re-created):
 

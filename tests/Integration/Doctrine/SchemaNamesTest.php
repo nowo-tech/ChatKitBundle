@@ -7,15 +7,20 @@ namespace Nowo\ChatKitBundle\Tests\Integration\Doctrine;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Tools\SchemaTool;
+use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
 use PHPUnit\Framework\TestCase;
 
 use function array_filter;
+use function array_keys;
 use function array_values;
 use function assert;
 use function implode;
 use function ksort;
+use function max;
+use function str_repeat;
 use function str_starts_with;
+use function strlen;
 
 /**
  * Golden schema names (REQ-ORM-002): with the default `doctrine.table_name_prefix` every table, index, unique and
@@ -36,6 +41,26 @@ final class SchemaNamesTest extends TestCase
     public function testTableNamePrefixReachesEveryDerivedName(): void
     {
         self::assertSame(self::CHAT_NAMES, $this->schemaNames(['table_name_prefix' => 'chat_']));
+    }
+
+    public function testTableMapMatchesTheMappedTables(): void
+    {
+        self::assertSame(array_keys(self::DEFAULT_NAMES), array_values(TablePrefixListener::TABLES));
+    }
+
+    public function testLongestAllowedPrefixKeepsEveryNameWithinTheIdentifierLimit(): void
+    {
+        $prefix = 'c' . str_repeat('x', 37);
+        TablePrefixListener::validate('', $prefix);
+
+        $longest = 0;
+        foreach ($this->schemaNames(['table_name_prefix' => $prefix]) as $table => $names) {
+            $longest = max($longest, strlen($table . '_id_seq'));
+            foreach ([...array_keys($names['indexes']), ...array_keys($names['unique']), ...array_keys($names['fk'])] as $name) {
+                $longest = max($longest, strlen($name));
+            }
+        }
+        self::assertSame(TablePrefixListener::MAX_IDENTIFIER_LENGTH, $longest, 'the budget is exact: one more character would overflow');
     }
 
     public function testTablePrefixIsPrependedAfterTheNamePrefix(): void

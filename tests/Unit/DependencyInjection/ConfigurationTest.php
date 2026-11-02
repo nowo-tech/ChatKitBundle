@@ -90,6 +90,8 @@ final class ConfigurationTest extends TestCase
         yield 'uppercase table_name_prefix' => [['table_name_prefix' => 'Chat_']];
         yield 'non-string table_name_prefix' => [['table_name_prefix' => 1]];
         yield 'dash in table_prefix' => [['table_prefix' => 'app-']];
+        yield 'non-string table_prefix' => [['table_prefix' => 1]];
+        yield 'trailing newline' => [['table_name_prefix' => "chat_\n"]];
     }
 
     /**

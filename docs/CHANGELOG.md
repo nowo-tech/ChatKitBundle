@@ -48,6 +48,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   `uniq_chat_message_uuid`), so a host can name the tables after its own conventions. With the default every table,
   index, unique and foreign-key name is byte-identical to 1.14 (golden schema test). `doctrine.table_prefix` keeps
   prepending to the result. Rename SQL for MySQL / MariaDB and PostgreSQL in [UPGRADING](UPGRADING.md#unreleased).
+- Container parameters with the physical table names for host SQL (GDPR erasers, reports):
+  `nowo_chat_kit.doctrine.tables` (key => name) and `nowo_chat_kit.doctrine.table.<key>` for `conversation`,
+  `message`, `message_mention`, `participant`, `quick_reply`, `reaction` and `user_settings`.
+
+### Changed
+
+- `doctrine.table_prefix` / `doctrine.table_name_prefix` must match `/^[a-z][a-z0-9_]*\z/` (a leading digit or
+  underscore is rejected) and may not make a generated name longer than 63 characters; checked at compile time and,
+  for `%env()%` values, when the listener is built.
+- A non-default profile that sets a `doctrine.*` value different from the default profile's now fails the container
+  build: the table names are global and that value was silently ignored.
+
+### Fixed
+
+- The unread counters (chat list, chat page, support inbox, digest) read the configured table names: the native query
+  had `nowo_chat_message` / `nowo_chat_participant` written in, so it failed (or read stale tables) with any
+  `doctrine.table_prefix`.
 
 ## [1.14.1] - 2026-10-31
 

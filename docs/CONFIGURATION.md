@@ -156,10 +156,35 @@ nowo_chat_kit:
                 table_name_prefix: chat_
 ```
 
+Rules (REQ-ORM-002):
+
+- Both options match `/^[a-z][a-z0-9_]*\z/` (`table_prefix` may be empty). Together they may not make any table,
+  index, unique or PostgreSQL sequence name longer than 63 characters, i.e. at most 38 characters for
+  `table_prefix` + `table_name_prefix`. Literal values are checked when the container is built; `%env()%` values when
+  the listener is built (give the env var a default with an `env(NAME)` parameter, the config tree validates that
+  default).
+- The table names are **global**: only the default profile's `doctrine` options apply. Another profile may repeat
+  them; a different value fails the container build.
+
+Container parameters with the resolved physical names, for host SQL (GDPR erasers, reports):
+
+| Parameter | Default value | With `table_name_prefix: chat_` |
+|---|---|---|
+| `nowo_chat_kit.doctrine.table.conversation` | `nowo_chat_conversation` | `chat_conversation` |
+| `nowo_chat_kit.doctrine.table.message` | `nowo_chat_message` | `chat_message` |
+| `nowo_chat_kit.doctrine.table.message_mention` | `nowo_chat_message_mention` | `chat_message_mention` |
+| `nowo_chat_kit.doctrine.table.participant` | `nowo_chat_participant` | `chat_participant` |
+| `nowo_chat_kit.doctrine.table.quick_reply` | `nowo_chat_quick_reply` | `chat_quick_reply` |
+| `nowo_chat_kit.doctrine.table.reaction` | `nowo_chat_reaction` | `chat_reaction` |
+| `nowo_chat_kit.doctrine.table.user_settings` | `nowo_chat_user_settings` | `chat_user_settings` |
+| `nowo_chat_kit.doctrine.tables` | map of the keys above to the names | |
+
+Inside the bundle every query takes the names from the Doctrine metadata, never from literals.
+
 ## Container parameters
 
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
-key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `doctrine.table_prefix`, `doctrine.table_name_prefix`,
+key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `doctrine.table_prefix`, `doctrine.table_name_prefix`, `doctrine.tables`, `doctrine.table.<key>`,
 `reactions`, `icon_set`, `icons`, `presence_ttl`, `auto_away_minutes`, `status_presets`, `max_pins`, `auto_reply_interval_hours`, `limits`, `digest`, `support`, and `support.<key>` for each support key).
 
 ## Timeouts
