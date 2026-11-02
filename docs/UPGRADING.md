@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.15.0](#to-1150)
 - [To 1.14.1](#to-1141)
 - [To 1.14.0](#to-1140)
 - [To 1.13.2](#to-1132)
@@ -38,6 +39,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.15.0
+
+From **1.14.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 New option `profiles.<name>.doctrine.table_name_prefix` (default `nowo_chat_`): it **replaces** the `nowo_chat_` part
 of every table, index and unique-constraint name. With the default nothing changes: every table, index, unique and
