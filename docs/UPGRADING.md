@@ -39,6 +39,180 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+New option `profiles.<name>.doctrine.table_name_prefix` (default `nowo_chat_`): it **replaces** the `nowo_chat_` part
+of every table, index and unique-constraint name. With the default nothing changes: every table, index, unique and
+foreign-key name stays byte-identical, so no migration is needed. The existing `doctrine.table_prefix` keeps its
+meaning and is prepended to the result (`table_name_prefix: chat_` + `table_prefix: app_` gives `app_chat_message`,
+`app_idx_chat_message_created`).
+
+**Switching an existing database to another `table_name_prefix`** renames the tables, the named indexes and unique
+constraints, and the Doctrine-generated `IDX_*` / `FK_*` names (Doctrine derives them from the table name). Run the
+statements below in a migration (they were checked against MySQL 8.0 and PostgreSQL 17: the renamed schema matches a
+fresh schema created with the new prefix). They switch from `nowo_chat_` to `chat_` with no `table_prefix`; `user` is
+your user table. For another prefix, replace `chat_` and take the new `IDX_*` / `FK_*` names from
+`php bin/console doctrine:schema:update --dump-sql` on an empty database.
+
+MySQL 8 / MariaDB ≥ 10.5.2 (foreign keys cannot be renamed, so they are dropped and re-created):
+
+```sql
+RENAME TABLE
+    nowo_chat_conversation TO chat_conversation,
+    nowo_chat_message TO chat_message,
+    nowo_chat_message_mention TO chat_message_mention,
+    nowo_chat_participant TO chat_participant,
+    nowo_chat_quick_reply TO chat_quick_reply,
+    nowo_chat_reaction TO chat_reaction,
+    nowo_chat_user_settings TO chat_user_settings;
+ALTER TABLE chat_conversation
+    DROP FOREIGN KEY FK_D7385CFF59EC7D60,
+    DROP FOREIGN KEY FK_D7385CFF6713A32B,
+    DROP FOREIGN KEY FK_D7385CFFCA8AEAC6;
+ALTER TABLE chat_message
+    DROP FOREIGN KEY FK_A40D82CC59662AC1,
+    DROP FOREIGN KEY FK_A40D82CC9AC0396,
+    DROP FOREIGN KEY FK_A40D82CCC76F1F52,
+    DROP FOREIGN KEY FK_A40D82CCF675F31B;
+ALTER TABLE chat_message_mention
+    DROP FOREIGN KEY FK_9DF33B9B537A1329,
+    DROP FOREIGN KEY FK_9DF33B9BA76ED395;
+ALTER TABLE chat_participant
+    DROP FOREIGN KEY FK_9FE7FEB9AC0396,
+    DROP FOREIGN KEY FK_9FE7FEBA76ED395;
+ALTER TABLE chat_quick_reply
+    DROP FOREIGN KEY FK_7B6D659EA76ED395;
+ALTER TABLE chat_reaction
+    DROP FOREIGN KEY FK_F6AD5573537A1329,
+    DROP FOREIGN KEY FK_F6AD5573A76ED395;
+ALTER TABLE chat_user_settings
+    DROP FOREIGN KEY FK_F14147EEA76ED395;
+ALTER TABLE chat_conversation
+    RENAME INDEX IDX_D7385CFF6713A32B TO IDX_74654F686713A32B,
+    RENAME INDEX IDX_D7385CFFCA8AEAC6 TO IDX_74654F68CA8AEAC6,
+    RENAME INDEX idx_nowo_chat_conversation_activity TO idx_chat_conversation_activity,
+    RENAME INDEX idx_nowo_chat_conversation_assignee TO idx_chat_conversation_assignee,
+    RENAME INDEX idx_nowo_chat_conversation_support TO idx_chat_conversation_support,
+    RENAME INDEX uniq_nowo_chat_conversation_channel TO uniq_chat_conversation_channel,
+    RENAME INDEX uniq_nowo_chat_conversation_direct TO uniq_chat_conversation_direct,
+    RENAME INDEX uniq_nowo_chat_conversation_ticket TO uniq_chat_conversation_ticket,
+    RENAME INDEX uniq_nowo_chat_conversation_uuid TO uniq_chat_conversation_uuid;
+ALTER TABLE chat_message
+    RENAME INDEX IDX_A40D82CC59662AC1 TO IDX_FAB3FC1659662AC1,
+    RENAME INDEX IDX_A40D82CC9AC0396 TO IDX_FAB3FC169AC0396,
+    RENAME INDEX IDX_A40D82CCC76F1F52 TO IDX_FAB3FC16C76F1F52,
+    RENAME INDEX IDX_A40D82CCF675F31B TO IDX_FAB3FC16F675F31B,
+    RENAME INDEX idx_nowo_chat_message_created TO idx_chat_message_created,
+    RENAME INDEX idx_nowo_chat_message_unread TO idx_chat_message_unread,
+    RENAME INDEX uniq_nowo_chat_message_uuid TO uniq_chat_message_uuid;
+ALTER TABLE chat_message_mention
+    RENAME INDEX IDX_9DF33B9B537A1329 TO IDX_119AF996537A1329,
+    RENAME INDEX IDX_9DF33B9BA76ED395 TO IDX_119AF996A76ED395,
+    RENAME INDEX idx_nowo_chat_mention_user TO idx_chat_mention_user,
+    RENAME INDEX uniq_nowo_chat_mention TO uniq_chat_mention;
+ALTER TABLE chat_participant
+    RENAME INDEX IDX_9FE7FEB9AC0396 TO IDX_E8ED9C899AC0396,
+    RENAME INDEX idx_nowo_chat_participant_user TO idx_chat_participant_user,
+    RENAME INDEX uniq_nowo_chat_participant TO uniq_chat_participant;
+ALTER TABLE chat_quick_reply
+    RENAME INDEX idx_nowo_chat_quick_reply_user TO idx_chat_quick_reply_user;
+ALTER TABLE chat_reaction
+    RENAME INDEX IDX_F6AD5573537A1329 TO IDX_90F5D0C7537A1329,
+    RENAME INDEX IDX_F6AD5573A76ED395 TO IDX_90F5D0C7A76ED395,
+    RENAME INDEX uniq_nowo_chat_reaction TO uniq_chat_reaction;
+ALTER TABLE chat_user_settings
+    RENAME INDEX uniq_nowo_chat_user_settings_user TO uniq_chat_user_settings_user;
+ALTER TABLE chat_conversation
+    ADD CONSTRAINT FK_74654F6859EC7D60 FOREIGN KEY (assignee_id) REFERENCES user (id) ON DELETE SET NULL,
+    ADD CONSTRAINT FK_74654F686713A32B FOREIGN KEY (resolved_by_id) REFERENCES user (id) ON DELETE SET NULL,
+    ADD CONSTRAINT FK_74654F68CA8AEAC6 FOREIGN KEY (support_owner_id) REFERENCES user (id) ON DELETE CASCADE;
+ALTER TABLE chat_message
+    ADD CONSTRAINT FK_FAB3FC1659662AC1 FOREIGN KEY (pinned_by_id) REFERENCES user (id) ON DELETE SET NULL,
+    ADD CONSTRAINT FK_FAB3FC169AC0396 FOREIGN KEY (conversation_id) REFERENCES chat_conversation (id) ON DELETE CASCADE,
+    ADD CONSTRAINT FK_FAB3FC16C76F1F52 FOREIGN KEY (deleted_by_id) REFERENCES user (id) ON DELETE SET NULL,
+    ADD CONSTRAINT FK_FAB3FC16F675F31B FOREIGN KEY (author_id) REFERENCES user (id) ON DELETE SET NULL;
+ALTER TABLE chat_message_mention
+    ADD CONSTRAINT FK_119AF996537A1329 FOREIGN KEY (message_id) REFERENCES chat_message (id) ON DELETE CASCADE,
+    ADD CONSTRAINT FK_119AF996A76ED395 FOREIGN KEY (user_id) REFERENCES user (id) ON DELETE CASCADE;
+ALTER TABLE chat_participant
+    ADD CONSTRAINT FK_E8ED9C899AC0396 FOREIGN KEY (conversation_id) REFERENCES chat_conversation (id) ON DELETE CASCADE,
+    ADD CONSTRAINT FK_E8ED9C89A76ED395 FOREIGN KEY (user_id) REFERENCES user (id) ON DELETE CASCADE;
+ALTER TABLE chat_quick_reply
+    ADD CONSTRAINT FK_9A7E86FCA76ED395 FOREIGN KEY (user_id) REFERENCES user (id) ON DELETE CASCADE;
+ALTER TABLE chat_reaction
+    ADD CONSTRAINT FK_90F5D0C7537A1329 FOREIGN KEY (message_id) REFERENCES chat_message (id) ON DELETE CASCADE,
+    ADD CONSTRAINT FK_90F5D0C7A76ED395 FOREIGN KEY (user_id) REFERENCES user (id) ON DELETE CASCADE;
+ALTER TABLE chat_user_settings
+    ADD CONSTRAINT FK_9F891C1AA76ED395 FOREIGN KEY (user_id) REFERENCES user (id) ON DELETE CASCADE;
+```
+
+PostgreSQL (the identity sequences and primary keys are renamed too so the names match a fresh install):
+
+```sql
+ALTER TABLE nowo_chat_conversation RENAME TO chat_conversation;
+ALTER SEQUENCE nowo_chat_conversation_id_seq RENAME TO chat_conversation_id_seq;
+ALTER INDEX nowo_chat_conversation_pkey RENAME TO chat_conversation_pkey;
+ALTER TABLE nowo_chat_message RENAME TO chat_message;
+ALTER SEQUENCE nowo_chat_message_id_seq RENAME TO chat_message_id_seq;
+ALTER INDEX nowo_chat_message_pkey RENAME TO chat_message_pkey;
+ALTER TABLE nowo_chat_message_mention RENAME TO chat_message_mention;
+ALTER SEQUENCE nowo_chat_message_mention_id_seq RENAME TO chat_message_mention_id_seq;
+ALTER INDEX nowo_chat_message_mention_pkey RENAME TO chat_message_mention_pkey;
+ALTER TABLE nowo_chat_participant RENAME TO chat_participant;
+ALTER SEQUENCE nowo_chat_participant_id_seq RENAME TO chat_participant_id_seq;
+ALTER INDEX nowo_chat_participant_pkey RENAME TO chat_participant_pkey;
+ALTER TABLE nowo_chat_quick_reply RENAME TO chat_quick_reply;
+ALTER SEQUENCE nowo_chat_quick_reply_id_seq RENAME TO chat_quick_reply_id_seq;
+ALTER INDEX nowo_chat_quick_reply_pkey RENAME TO chat_quick_reply_pkey;
+ALTER TABLE nowo_chat_reaction RENAME TO chat_reaction;
+ALTER SEQUENCE nowo_chat_reaction_id_seq RENAME TO chat_reaction_id_seq;
+ALTER INDEX nowo_chat_reaction_pkey RENAME TO chat_reaction_pkey;
+ALTER TABLE nowo_chat_user_settings RENAME TO chat_user_settings;
+ALTER SEQUENCE nowo_chat_user_settings_id_seq RENAME TO chat_user_settings_id_seq;
+ALTER INDEX nowo_chat_user_settings_pkey RENAME TO chat_user_settings_pkey;
+ALTER INDEX IDX_D7385CFF6713A32B RENAME TO IDX_74654F686713A32B;
+ALTER INDEX IDX_D7385CFFCA8AEAC6 RENAME TO IDX_74654F68CA8AEAC6;
+ALTER INDEX idx_nowo_chat_conversation_activity RENAME TO idx_chat_conversation_activity;
+ALTER INDEX idx_nowo_chat_conversation_assignee RENAME TO idx_chat_conversation_assignee;
+ALTER INDEX idx_nowo_chat_conversation_support RENAME TO idx_chat_conversation_support;
+ALTER INDEX uniq_nowo_chat_conversation_channel RENAME TO uniq_chat_conversation_channel;
+ALTER INDEX uniq_nowo_chat_conversation_direct RENAME TO uniq_chat_conversation_direct;
+ALTER INDEX uniq_nowo_chat_conversation_ticket RENAME TO uniq_chat_conversation_ticket;
+ALTER INDEX uniq_nowo_chat_conversation_uuid RENAME TO uniq_chat_conversation_uuid;
+ALTER INDEX IDX_A40D82CC59662AC1 RENAME TO IDX_FAB3FC1659662AC1;
+ALTER INDEX IDX_A40D82CC9AC0396 RENAME TO IDX_FAB3FC169AC0396;
+ALTER INDEX IDX_A40D82CCC76F1F52 RENAME TO IDX_FAB3FC16C76F1F52;
+ALTER INDEX IDX_A40D82CCF675F31B RENAME TO IDX_FAB3FC16F675F31B;
+ALTER INDEX idx_nowo_chat_message_created RENAME TO idx_chat_message_created;
+ALTER INDEX idx_nowo_chat_message_unread RENAME TO idx_chat_message_unread;
+ALTER INDEX uniq_nowo_chat_message_uuid RENAME TO uniq_chat_message_uuid;
+ALTER INDEX IDX_9DF33B9B537A1329 RENAME TO IDX_119AF996537A1329;
+ALTER INDEX IDX_9DF33B9BA76ED395 RENAME TO IDX_119AF996A76ED395;
+ALTER INDEX idx_nowo_chat_mention_user RENAME TO idx_chat_mention_user;
+ALTER INDEX uniq_nowo_chat_mention RENAME TO uniq_chat_mention;
+ALTER INDEX IDX_9FE7FEB9AC0396 RENAME TO IDX_E8ED9C899AC0396;
+ALTER INDEX idx_nowo_chat_participant_user RENAME TO idx_chat_participant_user;
+ALTER INDEX uniq_nowo_chat_participant RENAME TO uniq_chat_participant;
+ALTER INDEX idx_nowo_chat_quick_reply_user RENAME TO idx_chat_quick_reply_user;
+ALTER INDEX IDX_F6AD5573537A1329 RENAME TO IDX_90F5D0C7537A1329;
+ALTER INDEX IDX_F6AD5573A76ED395 RENAME TO IDX_90F5D0C7A76ED395;
+ALTER INDEX uniq_nowo_chat_reaction RENAME TO uniq_chat_reaction;
+ALTER INDEX uniq_nowo_chat_user_settings_user RENAME TO uniq_chat_user_settings_user;
+ALTER TABLE chat_conversation RENAME CONSTRAINT FK_D7385CFF59EC7D60 TO FK_74654F6859EC7D60;
+ALTER TABLE chat_conversation RENAME CONSTRAINT FK_D7385CFF6713A32B TO FK_74654F686713A32B;
+ALTER TABLE chat_conversation RENAME CONSTRAINT FK_D7385CFFCA8AEAC6 TO FK_74654F68CA8AEAC6;
+ALTER TABLE chat_message RENAME CONSTRAINT FK_A40D82CC59662AC1 TO FK_FAB3FC1659662AC1;
+ALTER TABLE chat_message RENAME CONSTRAINT FK_A40D82CC9AC0396 TO FK_FAB3FC169AC0396;
+ALTER TABLE chat_message RENAME CONSTRAINT FK_A40D82CCC76F1F52 TO FK_FAB3FC16C76F1F52;
+ALTER TABLE chat_message RENAME CONSTRAINT FK_A40D82CCF675F31B TO FK_FAB3FC16F675F31B;
+ALTER TABLE chat_message_mention RENAME CONSTRAINT FK_9DF33B9B537A1329 TO FK_119AF996537A1329;
+ALTER TABLE chat_message_mention RENAME CONSTRAINT FK_9DF33B9BA76ED395 TO FK_119AF996A76ED395;
+ALTER TABLE chat_participant RENAME CONSTRAINT FK_9FE7FEB9AC0396 TO FK_E8ED9C899AC0396;
+ALTER TABLE chat_participant RENAME CONSTRAINT FK_9FE7FEBA76ED395 TO FK_E8ED9C89A76ED395;
+ALTER TABLE chat_quick_reply RENAME CONSTRAINT FK_7B6D659EA76ED395 TO FK_9A7E86FCA76ED395;
+ALTER TABLE chat_reaction RENAME CONSTRAINT FK_F6AD5573537A1329 TO FK_90F5D0C7537A1329;
+ALTER TABLE chat_reaction RENAME CONSTRAINT FK_F6AD5573A76ED395 TO FK_90F5D0C7A76ED395;
+ALTER TABLE chat_user_settings RENAME CONSTRAINT FK_F14147EEA76ED395 TO FK_9F891C1AA76ED395;
+```
+
 ## To 1.14.1
 
 From **1.14.0**:

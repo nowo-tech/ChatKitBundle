@@ -41,6 +41,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `profiles.<name>.doctrine.table_name_prefix` (default `nowo_chat_`) replaces the `nowo_chat_` part of every table,
+  index and unique-constraint name (`chat_` gives `chat_message`, `idx_chat_message_created`,
+  `uniq_chat_message_uuid`), so a host can name the tables after its own conventions. With the default every table,
+  index, unique and foreign-key name is byte-identical to 1.14 (golden schema test). `doctrine.table_prefix` keeps
+  prepending to the result. Rename SQL for MySQL / MariaDB and PostgreSQL in [UPGRADING](UPGRADING.md#unreleased).
+
 ## [1.14.1] - 2026-10-31
 
 Requires FormKit ^2.17; local label:false workaround removed (forms render identically). See [UPGRADING](UPGRADING.md#to-1141).

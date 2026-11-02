@@ -65,9 +65,11 @@ return static function (ContainerConfigurator $container): void {
     $services->load('Nowo\\ChatKitBundle\\Repository\\', '../../Repository/')
         ->tag('doctrine.repository_service');
 
-    // REQ-ORM-002: bundle tables, indexes and unique constraints get `doctrine.table_prefix`.
+    // REQ-ORM-002: bundle tables, indexes and unique constraints follow `doctrine.table_name_prefix` and
+    // `doctrine.table_prefix`.
     $services->get(TablePrefixListener::class)
-        ->arg('$prefix', param('nowo_chat_kit.doctrine.table_prefix'));
+        ->arg('$prefix', param('nowo_chat_kit.doctrine.table_prefix'))
+        ->arg('$tableNamePrefix', param('nowo_chat_kit.doctrine.table_name_prefix'));
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);
     $services->alias(ChatLinkPreviewProviderInterface::class, NullLinkPreviewProvider::class);

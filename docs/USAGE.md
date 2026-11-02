@@ -811,4 +811,4 @@ authors and reactions in batch (no per-row queries).
 | Translation domain | `NowoChatKitBundle` (REQ-I18N-003) |
 | Route names | `nowo_chat_api_*` |
 | CSS classes / tokens | `.nowo-chat-*` / `--nowo-chat-*` |
-| Tables | `nowo_chat_*` |
+| Tables | `nowo_chat_*` (`doctrine.table_name_prefix` replaces `nowo_chat_`) |

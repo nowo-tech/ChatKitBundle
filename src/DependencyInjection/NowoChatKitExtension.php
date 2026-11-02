@@ -155,6 +155,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
             $container->setParameter(Configuration::ALIAS . '.digest.' . $key, $value);
         }
         $container->setParameter(Configuration::ALIAS . '.doctrine.table_prefix', $profile['doctrine']['table_prefix']);
+        $container->setParameter(Configuration::ALIAS . '.doctrine.table_name_prefix', $profile['doctrine']['table_name_prefix']);
         foreach ($profile['support'] as $key => $value) {
             $container->setParameter(Configuration::ALIAS . '.support.' . $key, $value);
         }
