@@ -43,6 +43,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security
+
+- **Privacy: erasure removes the user from @mentions (DATA-CHAT-MENTION-ERASE).** `ChatPersonalData::erase()` left the user's `nowo_chat_message_mention` rows, which tied the erased account to other people's messages, and the mention itself (`@[Name](publicId)` in the body, `<span data-mention="publicId">@Name</span>` in the HTML) kept the user's name and public id. Erasure now deletes the user's mention rows and the rows of the messages the user wrote, and rewrites every mention of the user to a plain `@…` without marking the message as edited. Messages that were erased before this release keep their mentions; run the erasure again for those users to scrub them.
+
 ## [1.15.1] - 2026-11-03
 
 Mercure subscriber tokens with symfony/mercure 0.9

@@ -744,7 +744,8 @@ The bundle makes no outbound HTTP call or subprocess itself:
 - `nowo:chat:purge` — retention.
 - `ChatPersonalData::export($user)` — own messages and settings (not other people's messages).
 - `ChatPersonalData::erase($user)` — authored messages become tombstones without author or text; reactions, read cursors,
-  settings and the user's own support thread are deleted.
+  settings, mention rows and the user's own support threads are deleted; @mentions of the user in other people's
+  messages become a plain `@…` (no name, no public id).
 
 Wire them into your GDPR export / erasure flow.
 

@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
@@ -137,5 +138,43 @@ final class ChatPrivacyTest extends DatabaseTestCase
         self::assertCount(1, $this->em->getRepository(ChatConversation::class)->findAll());
 
         $data->erase($luis);
+    }
+
+    public function testEraseRemovesTheUserFromMentions(): void
+    {
+        $chat = $this->get(ChatService::class);
+        $data = $this->get(ChatPersonalData::class);
+        $ana  = $this->user('Ana');
+        $luis = $this->user('Luis');
+        $eve  = $this->user('Eve');
+        $id   = $ana->getChatPublicId();
+        $dm   = $chat->openDirect($ana, $luis);
+        // Luis mentions Ana (Ana is erased) ...
+        $about = $chat->send($luis, $dm, 'ping @[Ana](' . $id . ') please');
+        self::assertStringContainsString('data-mention="' . $id . '"', $about->getBodyHtml());
+        // ... and Ana mentions Luis in a message that becomes a tombstone.
+        $chat->send($ana, $dm, 'hello @[Luis](' . $luis->getChatPublicId() . ')');
+        // A mention of someone else stays as it is.
+        $other = $chat->openDirect($luis, $eve);
+        $kept  = $chat->send($luis, $other, 'hi @[Eve](' . $eve->getChatPublicId() . ')');
+        self::assertCount(3, $this->em->getRepository(ChatMessageMention::class)->findAll());
+
+        $data->erase($ana);
+        $this->em->clear();
+
+        $scrubbed = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $about->getUuid()]);
+        self::assertNotNull($scrubbed);
+        self::assertSame('ping @… please', $scrubbed->getBody());
+        self::assertStringNotContainsString($id, $scrubbed->getBodyHtml());
+        self::assertStringNotContainsString('Ana', $scrubbed->getBodyHtml());
+        self::assertStringContainsString('<span class="nowo-chat-mention">@…</span>', $scrubbed->getBodyHtml());
+        self::assertNull($scrubbed->getEditedAt(), 'not shown as an edit');
+
+        $mentions = $this->em->getRepository(ChatMessageMention::class)->findAll();
+        self::assertCount(1, $mentions, 'only the mention of Eve is left');
+        self::assertSame($eve->getId(), $mentions[0]->getUser()->getId());
+        $untouched = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $kept->getUuid()]);
+        self::assertNotNull($untouched);
+        self::assertSame($kept->getBodyHtml(), $untouched->getBodyHtml());
     }
 }

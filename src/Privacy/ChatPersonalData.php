@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Privacy;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
@@ -17,13 +18,17 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 
+use function preg_quote;
+use function preg_replace;
+
 use const DATE_ATOM;
 
 /**
  * Personal data hooks for the application's export / erasure flows (GDPR). Export: the user's own messages
  * and chat settings (other people's messages are not the user's personal data). Erasure: authored messages
  * become tombstones with no author and no text (the thread keeps its shape for the others), reactions, read
- * cursors, settings and the user's own support tickets are deleted.
+ * cursors, settings, mention rows and the user's own support tickets are deleted, and @mentions of the user in
+ * other people's messages lose the user's name and public id.
  */
 final readonly class ChatPersonalData
 {
@@ -115,13 +120,17 @@ final readonly class ChatPersonalData
 
     /**
      * Erases the user's chat data: authored messages become author-less, text-less tombstones; reactions,
-     * read cursors, settings and the user's own support tickets (with their messages) are deleted.
+     * read cursors, settings and the user's own support tickets (with their messages) are deleted. The user's
+     * mention rows go too, and every @mention of the user in other people's messages becomes a plain `@…`
+     * (no name, no public id), so nothing links the erased account to those messages.
      *
      * @param ChatUserInterface $user The user whose data is erased
      */
     public function erase(ChatUserInterface $user): void
     {
         $qb = $this->entityManager->createQueryBuilder(...);
+
+        $this->eraseMentions($user);
 
         $qb()->update(ChatMessage::class, 'm')
             ->set('m.body', ':empty')->set('m.bodyHtml', ':empty')
@@ -144,6 +153,49 @@ final readonly class ChatPersonalData
             $qb()->delete(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->execute();
             $qb()->delete(ChatParticipant::class, 'p')->where('p.conversation = :c')->setParameter('c', $support)->getQuery()->execute();
             $qb()->delete(ChatConversation::class, 'c')->where('c.id = :id')->setParameter('id', $support->getId())->getQuery()->execute();
+        }
+    }
+
+    /**
+     * Removes the user from @mentions: their name and public id leave the body and HTML of every message that
+     * mentions them, and their mention rows (and the rows of the messages they wrote, which become tombstones) are
+     * deleted. Runs before the tombstone update, while the authored messages still carry the author.
+     *
+     * @param ChatUserInterface $user The user whose data is erased
+     */
+    private function eraseMentions(ChatUserInterface $user): void
+    {
+        $id   = preg_quote($user->getChatPublicId(), '~');
+        $text = '~@\\[[^\\[\\]\\n]{1,80}\\]\\(' . $id . '\\)~u';
+        $html = '~<span class="nowo-chat-mention" data-mention="' . $id . '">@[^<]*</span>~u';
+
+        /** @var list<ChatMessage> $messages */
+        $messages = $this->entityManager->createQueryBuilder()
+            ->select('m')->from(ChatMessage::class, 'm')
+            ->innerJoin(ChatMessageMention::class, 'n', 'WITH', 'n.message = m')
+            ->where('n.user = :user')
+            ->setParameter('user', $user)
+            ->getQuery()->getResult();
+        foreach ($messages as $message) {
+            $this->entityManager->createQueryBuilder()->update(ChatMessage::class, 'm')
+                ->set('m.body', ':body')->set('m.bodyHtml', ':html')
+                ->where('m.id = :id')
+                ->setParameter('body', (string) preg_replace($text, '@…', $message->getBody()))
+                ->setParameter('html', (string) preg_replace($html, '<span class="nowo-chat-mention">@…</span>', $message->getBodyHtml()))
+                ->setParameter('id', $message->getId())
+                ->getQuery()->execute();
+        }
+
+        $this->entityManager->createQueryBuilder()->delete(ChatMessageMention::class, 'n')
+            ->where('n.user = :user')
+            ->setParameter('user', $user)->getQuery()->execute();
+        $authored = $this->entityManager->createQueryBuilder()
+            ->select('m.id')->from(ChatMessage::class, 'm')->where('m.author = :user')
+            ->setParameter('user', $user)->getQuery()->getSingleColumnResult();
+        if ($authored !== []) {
+            $this->entityManager->createQueryBuilder()->delete(ChatMessageMention::class, 'n')
+                ->where('IDENTITY(n.message) IN (:ids)')
+                ->setParameter('ids', $authored)->getQuery()->execute();
         }
     }
 }
