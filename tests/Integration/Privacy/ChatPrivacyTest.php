@@ -8,19 +8,27 @@ use DateTimeImmutable;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
+use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
+use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Support\ChatSupportTickets;
+use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Psr\Log\AbstractLogger;
 use RuntimeException;
 use Stringable;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Console\Tester\CommandTester;
+
+use const JSON_THROW_ON_ERROR;
+use const JSON_UNESCAPED_UNICODE;
 
 /**
  * Retention purge, personal data export and erasure.
@@ -137,5 +145,109 @@ final class ChatPrivacyTest extends DatabaseTestCase
         self::assertCount(1, $this->em->getRepository(ChatConversation::class)->findAll());
 
         $data->erase($luis);
+    }
+
+    public function testEraseRemovesTheUserFromMentions(): void
+    {
+        $chat = $this->get(ChatService::class);
+        $data = $this->get(ChatPersonalData::class);
+        $ana  = $this->user('Ana');
+        $luis = $this->user('Luis');
+        $eve  = $this->user('Eve');
+        $id   = $ana->getChatPublicId();
+        $dm   = $chat->openDirect($ana, $luis);
+        // Luis mentions Ana (Ana is erased) ...
+        $about = $chat->send($luis, $dm, 'ping @[Ana](' . $id . ') please');
+        // DP-L1: a token inside inline code is literal text in the HTML.
+        $code = $chat->send($luis, $dm, 'see @[Ana](' . $id . ') and `@[Ana](' . $id . ')`');
+        self::assertStringContainsString('<code>@[Ana](' . $id . ')</code>', $code->getBodyHtml());
+        self::assertStringContainsString('data-mention="' . $id . '"', $about->getBodyHtml());
+        // ... and Ana mentions Luis in a message that becomes a tombstone.
+        $chat->send($ana, $dm, 'hello @[Luis](' . $luis->getChatPublicId() . ')');
+        // A mention of someone else stays as it is.
+        $other = $chat->openDirect($luis, $eve);
+        $kept  = $chat->send($luis, $other, 'hi @[Eve](' . $eve->getChatPublicId() . ')');
+        self::assertCount(4, $this->em->getRepository(ChatMessageMention::class)->findAll());
+        $realtime            = $this->get(RecordingRealtime::class);
+        $realtime->published = [];
+
+        $data->erase($ana);
+        $this->em->clear();
+
+        $scrubbed = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $about->getUuid()]);
+        self::assertNotNull($scrubbed);
+        self::assertSame('ping @… please', $scrubbed->getBody());
+        self::assertStringNotContainsString($id, $scrubbed->getBodyHtml());
+        self::assertStringNotContainsString('Ana', $scrubbed->getBodyHtml());
+        self::assertSame('<p>ping @… please</p>', $scrubbed->getBodyHtml());
+        self::assertNull($scrubbed->getEditedAt(), 'not shown as an edit');
+        $inCode = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $code->getUuid()]);
+        self::assertNotNull($inCode);
+        self::assertSame('see @… and `@…`', $inCode->getBody());
+        self::assertStringContainsString('<code>@…</code>', $inCode->getBodyHtml());
+        self::assertStringNotContainsString($id, $inCode->getBodyHtml());
+        self::assertStringNotContainsString('Ana', $inCode->getBodyHtml());
+
+        // Open clients get the rewritten messages (DP-I2).
+        $updated = array_values(array_filter($realtime->published, static fn (array $event): bool => $event['payload']['type'] === 'message_updated'));
+        self::assertSame([$about->getUuid(), $code->getUuid()], array_map(static fn (array $event): mixed => $event['payload']['message']['uuid'] ?? null, $updated));
+        self::assertStringNotContainsString($id, json_encode(array_column($updated, 'payload'), JSON_THROW_ON_ERROR), 'no name or id in the payloads');
+
+        $mentions = $this->em->getRepository(ChatMessageMention::class)->findAll();
+        self::assertCount(1, $mentions, 'only the mention of Eve is left');
+        self::assertSame($eve->getId(), $mentions[0]->getUser()->getId());
+        $untouched = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $kept->getUuid()]);
+        self::assertNotNull($untouched);
+        self::assertSame($kept->getBodyHtml(), $untouched->getBodyHtml());
+    }
+
+    public function testEraseClearsPointersAndBotNames(): void
+    {
+        $chat    = $this->get(ChatService::class);
+        $tickets = $this->get(ChatSupportTickets::class);
+        $data    = $this->get(ChatPersonalData::class);
+        $agent   = $this->user('Agent Ana');
+        $bob     = $this->user('Bob');
+        $ticket  = $tickets->open($bob);
+        $tickets->chooseTopic($bob, $ticket, 'billing');
+        self::assertTrue($tickets->assign($agent, $ticket, $agent));
+        self::assertTrue($tickets->changeStatus($agent, $ticket, SupportStatus::Resolved, true));
+        $dm     = $chat->openDirect($agent, $bob);
+        $pinned = $chat->send($bob, $dm, 'pin me');
+        $chat->pin($agent, $pinned, true);
+        $removed = $chat->send($bob, $dm, 'remove me');
+        $removed->delete($agent);
+        $this->em->flush();
+        self::assertTrue($removed->isModerated());
+
+        $data->erase($agent);
+        $this->em->clear();
+
+        // DP-L2: no pointer to the erased account is left; the ticket goes back to the queue.
+        $ticket = $this->em->getRepository(ChatConversation::class)->findOneBy(['uuid' => $ticket->getUuid()]);
+        self::assertNotNull($ticket);
+        self::assertNull($ticket->getAssignee());
+        self::assertNull($ticket->getResolvedBy());
+        self::assertSame(SupportStatus::Resolved, $ticket->getSupportStatus());
+        $pinned = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $pinned->getUuid()]);
+        self::assertNotNull($pinned);
+        self::assertNull($pinned->getPinnedBy());
+        self::assertNotNull($pinned->getPinnedAt(), 'the message stays pinned');
+        $removed = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $removed->getUuid()]);
+        self::assertNotNull($removed);
+        self::assertNull($removed->getDeletedBy());
+        self::assertTrue($removed->isDeleted());
+
+        // DP-L3: the bot lines in Bob's ticket no longer name the agent.
+        $bot  = $this->em->getRepository(ChatMessage::class)->findBy(['conversation' => $ticket, 'kind' => ChatMessage::KIND_BOT]);
+        $meta = json_encode(array_map(static fn (ChatMessage $message): ?array => $message->getMeta(), $bot), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        self::assertStringNotContainsString('Agent Ana', $meta);
+        self::assertStringContainsString('"name":"…"', $meta, 'assigned');
+        self::assertStringContainsString('"by":"…"', $meta, 'status_resolved');
+
+        // Without the optional notifier and for a nameless account, the erasure still runs.
+        $bare = new ChatPersonalData($this->em, $this->get(ChatUserSettingsRepository::class), $this->get(ChatConversationRepository::class));
+        $bare->erase($this->user(''));
+        self::assertCount(0, $this->em->getRepository(ChatMessageMention::class)->findAll());
     }
 }

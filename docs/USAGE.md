@@ -744,7 +744,14 @@ The bundle makes no outbound HTTP call or subprocess itself:
 - `nowo:chat:purge` — retention.
 - `ChatPersonalData::export($user)` — own messages and settings (not other people's messages).
 - `ChatPersonalData::erase($user)` — authored messages become tombstones without author or text; reactions, read cursors,
-  settings and the user's own support thread are deleted.
+  settings, mention rows and the user's own support threads are deleted; @mentions of the user in other people's
+  messages become a plain `@…` (no name, no public id, HTML rendered again, `message_updated` to open clients); the
+  pinned-by, deleted-by, assignee and resolved-by pointers to the user become null (an assigned ticket returns to the
+  queue); support bot lines in other people's tickets show `…` instead of the user's name.
+  - Call `erase()` **before** you anonymize the account: bot lines are matched on the current display name.
+  - The rewrites are bulk DQL updates, which fire no Doctrine lifecycle events. If the host keeps its own copies of
+    message text (search index, exports, analytics), re-index the conversations of the erased user.
+  - Realtime updates and Web Push notifications or e-mail digests already delivered cannot be recalled.
 
 Wire them into your GDPR export / erasure flow.
 
