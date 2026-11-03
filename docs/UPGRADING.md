@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.15.1](#to-1151)
 - [To 1.15.0](#to-1150)
 - [To 1.14.1](#to-1141)
 - [To 1.14.0](#to-1140)
@@ -39,6 +40,19 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.15.1
+
+From **1.15.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+- **symfony/mercure 0.8+ (0.9 included):** subscriber tokens work again. The bundle's JS client still uses the Legacy
+  hub protocol (`?topic=` / `?authorization=`). With the V1 protocol, the default since symfony/mercure 0.8, the token
+  factory requires `iss`, `aud`, `sub` and `client_id`; if they are not configured, `/realtime` answers 500. Keep the
+  hub on the Legacy protocol, or configure those claims.
 
 ## To 1.15.0
 

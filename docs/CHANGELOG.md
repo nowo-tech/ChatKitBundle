@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.15.1] - 2026-11-03](#1151---2026-11-03)
 - [[1.15.0] - 2026-11-03](#1150---2026-11-03)
 - [[1.14.1] - 2026-10-31](#1141---2026-10-31)
 - [[1.14.0] - 2026-10-30](#1140---2026-10-30)
@@ -42,9 +43,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-11-03
+
+Mercure subscriber tokens with symfony/mercure 0.9
+
 ### Fixed
 
-- **Mercure subscriber tokens with symfony/mercure 0.9.** `MercureChatRealtime::subscriberToken()` now passes a subscribe `Grant` to `TokenFactoryInterface::create()` when symfony/mercure 0.9 is installed (its new `create(Grant[] $grants, array $additionalClaims)` signature) and keeps the 0.6 `create($subscribe, $publish, $claims)` call otherwise. Before, a 0.9 install received the topics as grants and lost the `exp` claim.
+- **Mercure subscriber tokens with symfony/mercure 0.9.** `MercureChatRealtime::subscriberToken()` now passes a subscribe `Grant` to `TokenFactoryInterface::create()` when symfony/mercure 0.9 is installed (its new `create(Grant[] $grants, array $additionalClaims)` signature) and keeps the 0.6 `create($subscribe, $publish, $claims)` call otherwise. Before, the old call threw on symfony/mercure 0.8+ and no subscriber token was issued (no token was ever issued without `exp`). Only the Legacy hub protocol is supported; see UPGRADING.
 
 ### Changed
 
@@ -705,7 +710,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.15.1...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
