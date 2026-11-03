@@ -23,10 +23,14 @@ use Psr\Log\AbstractLogger;
 use Stringable;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Mercure\HubInterface;
+use Symfony\Component\Mercure\Jwt\Grant;
 use Symfony\Component\Mercure\Jwt\TokenFactoryInterface;
 use Symfony\Component\Mercure\Jwt\TokenProviderInterface;
 use Symfony\Component\Mercure\ProtocolVersion;
 use Symfony\Component\Mercure\Update;
+
+use const JSON_THROW_ON_ERROR;
+use const JSON_UNESCAPED_SLASHES;
 
 final class RealtimeAdaptersTest extends TestCase
 {
@@ -116,16 +120,41 @@ final class RealtimeAdaptersTest extends TestCase
         self::assertTrue($hub->updates[0]->isPrivate());
         self::assertSame('{"type":"message"}', $hub->updates[0]->getData());
 
+        $expires = new DateTimeImmutable('@2000000000');
+
+        // symfony/mercure >= 0.9 (the installed version): create(Grant[] $grants, array $additionalClaims).
         $hub->factory = new class implements TokenFactoryInterface {
-            public function create(?array $subscribe = [], ?array $publish = [], array $additionalClaims = []): string
+            /**
+             * @param array<Grant> $grants
+             * @param array<string, mixed> $additionalClaims
+             */
+            public function create(array $grants = [], array $additionalClaims = []): string
+            {
+                $exp   = $additionalClaims['exp'] ?? null;
+                $parts = [];
+                foreach ($grants as $grant) {
+                    $parts[] = implode('+', $grant->actions) . ':' . json_encode($grant->topics, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+                }
+
+                return implode(';', $parts) . '|' . ($exp instanceof DateTimeImmutable ? $exp->getTimestamp() : '');
+            }
+        };
+        self::assertSame('subscribe:["/a","/b"]|2000000000', $realtime->subscriberToken(['/a', '/b'], $expires));
+
+        // symfony/mercure 0.6: create(?array $subscribe, ?array $publish, array $additionalClaims).
+        $legacy       = new MercureChatRealtime($hub, false);
+        $hub->factory = new class implements TokenFactoryInterface {
+            /**
+             * @param array<string, mixed> $additionalClaims
+             */
+            public function create(mixed $subscribe = [], mixed $publish = [], array $additionalClaims = []): string
             {
                 $exp = $additionalClaims['exp'] ?? null;
 
-                return implode(',', (array) $subscribe) . '|' . ($exp instanceof DateTimeImmutable ? $exp->getTimestamp() : '');
+                return json_encode([$subscribe, $publish], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . '|' . ($exp instanceof DateTimeImmutable ? $exp->getTimestamp() : '');
             }
         };
-        $expires = new DateTimeImmutable('@2000000000');
-        self::assertSame('/a|2000000000', $realtime->subscriberToken(['/a'], $expires));
+        self::assertSame('[["/a"],[]]|2000000000', $legacy->subscriberToken(['/a'], $expires));
     }
 
     public function testPublisherFansOutToUniqueTopicsAndSwallowsHubErrors(): void

@@ -8,7 +8,11 @@ use DateTimeImmutable;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Mercure\HubInterface;
+use Symfony\Component\Mercure\Jwt\Grant;
+use Symfony\Component\Mercure\Jwt\TokenFactoryInterface;
 use Symfony\Component\Mercure\Update;
+
+use function class_exists;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -21,9 +25,12 @@ final readonly class MercureChatRealtime implements ChatRealtimeInterface
      * Builds the transport on top of the default Mercure hub.
      *
      * @param HubInterface $hub The Mercure hub
+     * @param bool|null $grantTokens Whether the token factory takes Grant objects (symfony/mercure >= 0.9);
+     *                               null detects it from the installed library
      */
     public function __construct(
         private HubInterface $hub,
+        private ?bool $grantTokens = null,
     ) {
     }
 
@@ -70,6 +77,18 @@ final readonly class MercureChatRealtime implements ChatRealtimeInterface
      */
     public function subscriberToken(array $topics, DateTimeImmutable $expiresAt): ?string
     {
-        return $this->hub->getFactory()?->create($topics, [], ['exp' => $expiresAt]);
+        $factory = $this->hub->getFactory();
+        if (!$factory instanceof TokenFactoryInterface) {
+            return null;
+        }
+
+        if ($this->grantTokens ?? class_exists(Grant::class)) {
+            // symfony/mercure >= 0.9: create(Grant[] $grants, array $additionalClaims).
+            return $factory->create([new Grant([Grant::ACTION_SUBSCRIBE], $topics)], ['exp' => $expiresAt]);
+        }
+
+        // symfony/mercure 0.6: create(?array $subscribe, ?array $publish, array $additionalClaims).
+        // @phpstan-ignore arguments.count, argument.type
+        return $factory->create($topics, [], ['exp' => $expiresAt]);
     }
 }
