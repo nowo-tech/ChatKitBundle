@@ -42,6 +42,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Mercure subscriber tokens with symfony/mercure 0.9.** `MercureChatRealtime::subscriberToken()` now passes a subscribe `Grant` to `TokenFactoryInterface::create()` when symfony/mercure 0.9 is installed (its new `create(Grant[] $grants, array $additionalClaims)` signature) and keeps the 0.6 `create($subscribe, $publish, $claims)` call otherwise. Before, a 0.9 install received the topics as grants and lost the `exp` claim.
+
+### Changed
+
+- **Development:** symfony/mercure dev constraint widened to `^0.6 || ^0.9`; the test double implements the 0.9 `HubInterface` methods.
+
 ## [1.15.0] - 2026-11-03
 
 replaceable table-name prefix (doctrine.table_name_prefix), stricter prefix validation
