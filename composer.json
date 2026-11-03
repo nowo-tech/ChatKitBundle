@@ -81,7 +81,7 @@
         "symfony/mercure": "^0.6 || ^0.9",
         "symfony/messenger": "^7.4 || ^8.0",
         "symfony/yaml": "^7.4 || ^8.0",
-        "vincentlanglet/twig-cs-fixer": "^3.0"
+        "vincentlanglet/twig-cs-fixer": "^3.0 || ^4.0"
     },
     "suggest": {
         "symfony/mercure-bundle": "Realtime delivery of messages, presence, typing and read receipts (default ChatRealtimeInterface)",

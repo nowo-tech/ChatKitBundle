@@ -10,6 +10,7 @@ use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 
 /**
@@ -103,10 +104,14 @@ class ChatMessageRepository extends ServiceEntityRepository
         if ($conversationIds === []) {
             return [];
         }
-        $rows = $this->getEntityManager()->getConnection()->fetchAllAssociative(
+        // Physical names come from the metadata: doctrine.table_name_prefix / table_prefix rename them (REQ-ORM-002).
+        $em           = $this->getEntityManager();
+        $messages     = $em->getClassMetadata(ChatMessage::class)->getTableName();
+        $participants = $em->getClassMetadata(ChatParticipant::class)->getTableName();
+        $rows         = $em->getConnection()->fetchAllAssociative(
             'SELECT m.conversation_id AS cid, COUNT(m.id) AS n
-               FROM nowo_chat_message m
-          LEFT JOIN nowo_chat_participant p ON p.conversation_id = m.conversation_id AND p.user_id = :user
+               FROM ' . $messages . ' m
+          LEFT JOIN ' . $participants . ' p ON p.conversation_id = m.conversation_id AND p.user_id = :user
               WHERE m.conversation_id IN (:ids)
                 AND m.deleted_at IS NULL
                 AND (m.author_id IS NULL OR m.author_id <> :user)

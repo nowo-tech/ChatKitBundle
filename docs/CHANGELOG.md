@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.15.0] - 2026-11-03](#1150---2026-11-03)
 - [[1.14.1] - 2026-10-31](#1141---2026-10-31)
 - [[1.14.0] - 2026-10-30](#1140---2026-10-30)
 - [[1.13.2] - 2026-10-30](#1132---2026-10-30)
@@ -40,6 +41,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.15.0] - 2026-11-03
+
+replaceable table-name prefix (doctrine.table_name_prefix), stricter prefix validation
+
+### Added
+
+- `profiles.<name>.doctrine.table_name_prefix` (default `nowo_chat_`) replaces the `nowo_chat_` part of every table,
+  index and unique-constraint name (`chat_` gives `chat_message`, `idx_chat_message_created`,
+  `uniq_chat_message_uuid`), so a host can name the tables after its own conventions. With the default every table,
+  index, unique and foreign-key name is byte-identical to 1.14 (golden schema test). `doctrine.table_prefix` keeps
+  prepending to the result. Rename SQL for MySQL / MariaDB and PostgreSQL in [UPGRADING](UPGRADING.md#unreleased).
+- Container parameters with the physical table names for host SQL (GDPR erasers, reports):
+  `nowo_chat_kit.doctrine.tables` (key => name) and `nowo_chat_kit.doctrine.table.<key>` for `conversation`,
+  `message`, `message_mention`, `participant`, `quick_reply`, `reaction` and `user_settings`.
+
+### Changed
+
+- `doctrine.table_prefix` / `doctrine.table_name_prefix` must match `/^[a-z][a-z0-9_]*\z/` (a leading digit or
+  underscore is rejected) and may not make a generated name longer than 63 characters; checked at compile time;
+  `%env()%` is rejected for both options (table names are part of the schema).
+- A non-default profile that sets a `doctrine.*` value different from the default profile's now fails the container
+  build: the table names are global and that value was silently ignored.
+
+### Fixed
+
+- The unread counters (chat list, chat page, support inbox, digest) read the configured table names: the native query
+  had `nowo_chat_message` / `nowo_chat_participant` written in, so it failed (or read stale tables) with any
+  `doctrine.table_prefix`.
 
 ## [1.14.1] - 2026-10-31
 
@@ -667,7 +697,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.14.1...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.15.0...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Unit\DependencyInjection;
 
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Config\Definition\ArrayNode;
 use Symfony\Component\Config\Definition\BaseNode;
@@ -32,7 +33,7 @@ final class ConfigurationTest extends TestCase
             'push_url'                  => '/?chat={uuid}',
             'push_icon'                 => null,
             'push_preview'              => false,
-            'doctrine'                  => ['table_prefix' => ''],
+            'doctrine'                  => ['table_name_prefix' => 'nowo_chat_', 'table_prefix' => ''],
             'digest'                    => ['enabled' => false, 'delay_minutes' => 15, 'interval_minutes' => 60],
             'web_ui'                    => ['layout_template' => null, 'templates' => ['page' => '@NowoChatKitBundle/page.html.twig']],
             'page_layout'               => null,
@@ -71,6 +72,37 @@ final class ConfigurationTest extends TestCase
         $config = $this->process([['default_profile' => 'member']]);
 
         self::assertSame(['member'], array_keys($config['profiles']));
+    }
+
+    public function testTableNamePrefixReplacesTheDefaultAndKeepsTheOptionalPrepend(): void
+    {
+        $config = $this->process([['profiles' => ['default' => ['doctrine' => ['table_name_prefix' => 'chat_', 'table_prefix' => 'app_']]]]]);
+
+        self::assertSame(['table_name_prefix' => 'chat_', 'table_prefix' => 'app_'], $config['profiles']['default']['doctrine']);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function invalidDoctrinePrefixes(): iterable
+    {
+        yield 'empty table_name_prefix' => [['table_name_prefix' => '']];
+        yield 'uppercase table_name_prefix' => [['table_name_prefix' => 'Chat_']];
+        yield 'non-string table_name_prefix' => [['table_name_prefix' => 1]];
+        yield 'dash in table_prefix' => [['table_prefix' => 'app-']];
+        yield 'non-string table_prefix' => [['table_prefix' => 1]];
+        yield 'trailing newline' => [['table_name_prefix' => "chat_\n"]];
+    }
+
+    /**
+     * @param array<string, mixed> $doctrine
+     */
+    #[DataProvider('invalidDoctrinePrefixes')]
+    public function testInvalidDoctrinePrefixesAreRejected(array $doctrine): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+
+        $this->process([['profiles' => ['default' => ['doctrine' => $doctrine]]]]);
     }
 
     public function testRetentionBelowThirtyDaysIsRejected(): void
