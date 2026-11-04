@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.15.3](#to-1153)
 - [To 1.15.2](#to-1152)
 - [To 1.15.1](#to-1151)
 - [To 1.15.0](#to-1150)
@@ -60,7 +61,7 @@ php bin/console assets:install public
 - Overridden templates need no change. The pictures are added by `nowo-chat.js` inside the existing avatar slots.
   Custom CSS on `.nowo-chat-avatar` should keep `position: relative` (the picture is absolutely positioned).
 
-### To 1.15.3
+## To 1.15.3
 
 From **1.15.2**:
 

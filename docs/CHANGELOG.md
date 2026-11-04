@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.15.3] - 2026-11-04](#1153---2026-11-04)
 - [[1.15.2] - 2026-11-03](#1152---2026-11-03)
 - [[1.15.1] - 2026-11-03](#1151---2026-11-03)
 - [[1.15.0] - 2026-11-03](#1150---2026-11-03)
@@ -54,6 +55,8 @@ Planned as **1.16.0** (minor): profile pictures.
   - **URL policy** (`AvatarUrlPolicy`, repeated in the browser before `src` is set): `https://host[:port]` without user info, or a same-origin path with a single leading `/`. Everything else is dropped: other schemes (`http:`, `javascript:`, `data:` including images, `blob:`), `//host`, IPv6 literals, ports outside 1–65535 or with a leading zero (`:0`, `:00443`), invalid UTF-8 (which JSON could not encode), backslashes, quotes, backtick, `<`, `>`, whitespace and control characters (a trailing line feed included), and more than 2048 UTF-8 bytes. PHP and Vitest run one shared table (`assets/tests/fixtures/avatar-urls.json`).
   - **Markup:** `<img class="nowo-chat-avatar__image" alt="" loading="lazy" decoding="async" referrerpolicy="same-origin" width height>` inside the existing `aria-hidden` bubble (which gets `has-image`), with the initials underneath. Without a URL the markup is byte-identical to 1.15. A failed image is removed through an event listener (no inline handler), and its URL is not requested again during the page's lifetime; nothing is stored.
   - The demo resolves pictures for Alice and Bob and a broken URL for Carol. The demo e2e checks the pictures, the fallback and axe (`image-alt`, `role-img-alt`, `color-contrast`).
+
+## [1.15.3] - 2026-11-04
 
 ### Fixed
 
@@ -737,7 +740,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.15.2...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.15.3...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
