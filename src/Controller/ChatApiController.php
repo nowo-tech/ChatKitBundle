@@ -156,11 +156,12 @@ final class ChatApiController extends AbstractController
         $presence = $this->presence->statusOf(array_values($peers));
         // 1.16: the pictures of every row (peers, and requesters for an agent) in one resolver call.
         $isAgent = $this->access->isSupportAgent($user);
-        $this->presenter->primeAvatars(array_map(function (ChatConversation $conversation) use ($user, $peers, $isAgent): ?ChatUserInterface {
-            $peerId = $conversation->peerIdOf($user);
-
-            return $this->presenter->avatarPerson($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $isAgent);
-        }, $list));
+        $people  = [];
+        foreach ($list as $conversation) {
+            $peerId   = $conversation->peerIdOf($user);
+            $people[] = $this->presenter->avatarPerson($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $isAgent);
+        }
+        $this->presenter->primeAvatars($people);
 
         $rows = [];
         foreach ($list as $conversation) {
