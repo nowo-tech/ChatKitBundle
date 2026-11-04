@@ -410,9 +410,9 @@ final class AvatarUrlResolver implements ChatAvatarUrlResolverInterface
 - **Which URLs.** `https://host[:port]` URLs without user info, or same-origin paths that start with a single `/`.
   Anything else becomes `null`, with a `debug` log line that names the user, never the URL: `http:`, `javascript:`,
   `data:` (images included), `blob:` and other schemes, `//host`, relative paths without a leading `/`, IPv6 literal
-  hosts, ports outside 1–65535, backslashes, quotes (`"`, `'`, backtick), `<`, `>`, whitespace or control characters (a
-  trailing line feed included) and more than 2048 UTF-8 bytes. The browser runs the same check before it sets `src`.
-  Never return a URL a user typed: every viewer's browser fetches it.
+  hosts, ports outside 1–65535 or with a leading zero, invalid UTF-8, backslashes, quotes (`"`, `'`, backtick), `<`,
+  `>`, whitespace or control characters (a trailing line feed included) and more than 2048 UTF-8 bytes. The browser
+  runs the same check before it sets `src`. Never return a URL a user typed: every viewer's browser fetches it.
 - **Stable, access-checked URLs.** URLs travel in realtime events (`message`, `message_updated`) and stay in the dock
   while the page is open. Return a stable URL that your application checks when the browser fetches it (for example a
   route that redirects to a short-lived signed link, sent with `Cache-Control: private, max-age=…` shorter than the

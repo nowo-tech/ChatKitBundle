@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared table of the profile picture URL policy (1.16): AvatarUrlPolicyTest (PHP) and avatar.test.ts (client) both run it. An entry is a literal `url`, or `prefix` + `repeat` x `count` + `suffix`.",
+  "_comment": "Shared table of the profile picture URL policy (1.16): AvatarUrlPolicyTest (PHP) and avatar.test.ts (client) both run it. An entry is a literal `url`, or `prefix` + `repeat` x `count` + `suffix`. Ports: 1-65535 without leading zeros. Invalid UTF-8 cannot be written in JSON: AvatarUrlPolicyTest covers it on its own.",
   "accepted": [
     {
       "name": "https",
@@ -16,6 +16,10 @@
     {
       "name": "https highest port",
       "url": "https://cdn.example.com:65535/a.webp"
+    },
+    {
+      "name": "https lowest port",
+      "url": "https://cdn.example.com:1/a.webp"
     },
     {
       "name": "https host only",
@@ -149,6 +153,22 @@
     {
       "name": "port zero",
       "url": "https://cdn.example.com:0/a.webp"
+    },
+    {
+      "name": "zero-padded port",
+      "url": "https://cdn.example.com:00443/a.webp"
+    },
+    {
+      "name": "leading-zero port",
+      "url": "https://cdn.example.com:0443/a.webp"
+    },
+    {
+      "name": "double-zero port",
+      "url": "https://cdn.example.com:00/a.webp"
+    },
+    {
+      "name": "leading-zero port 1",
+      "url": "https://cdn.example.com:01/a.webp"
     },
     {
       "name": "port too high",

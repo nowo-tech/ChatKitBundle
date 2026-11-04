@@ -13,7 +13,7 @@ const MAX_LENGTH = 2048;
 const FORBIDDEN = /[\u0000-\u0020\u007f\\"'`<>]/;
 
 /** A same-origin path (one leading slash) or https with a host of non-reserved characters and an optional port. */
-const SHAPE = /^(?:\/(?![/\\])|https:\/\/[^/?#@[\]:]+(?::([0-9]{1,5}))?(?=[/?#]|$))/i;
+const SHAPE = /^(?:\/(?![/\\])|https:\/\/[^/?#@[\]:]+(?::([1-9][0-9]{0,4}))?(?=[/?#]|$))/i;
 
 /** URLs that failed to load on this page. */
 const failed = new Set<string>();
@@ -21,8 +21,8 @@ const failed = new Set<string>();
 /**
  * Whether a URL may become an avatar `src`, the same rule as the server's AvatarUrlPolicy: `https://host[:port]`
  * without user info, or a same-origin path starting with exactly one `/`. No other scheme (`http:`, `javascript:`,
- * `data:`, `blob:`…), no `//host`, no IPv6 literal, no port outside 1–65535, no backslash, quote, backtick, `<`, `>`,
- * whitespace or control character, at most 2048 UTF-8 bytes.
+ * `data:`, `blob:`…), no `//host`, no IPv6 literal, no port outside 1–65535 or with a leading zero, no backslash,
+ * quote, backtick, `<`, `>`, whitespace or control character, at most 2048 UTF-8 bytes.
  *
  * @param url The URL from the API.
  * @returns True when it may be used.
@@ -36,7 +36,7 @@ export function isSafeAvatarUrl(url: string | null | undefined): url is string {
     return false;
   }
   const port = match[1];
-  return port === undefined || (Number(port) >= 1 && Number(port) <= 65535);
+  return port === undefined || Number(port) <= 65535;
 }
 
 /**

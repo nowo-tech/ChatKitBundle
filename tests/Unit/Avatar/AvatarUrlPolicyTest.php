@@ -58,6 +58,24 @@ final class AvatarUrlPolicyTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{string}>
+     */
+    public static function invalidUtf8(): iterable
+    {
+        yield 'broken two-byte sequence' => ["/files/\xC3\x28.webp"];
+        yield 'lone continuation byte' => ["https://cdn.example.com/a\x80.webp"];
+        yield 'overlong encoding' => ["/files/\xC0\xAF.webp"];
+        yield 'latin-1 byte' => ["/files/caf\xE9.webp"];
+    }
+
+    /** EE-L1: JSON cannot encode invalid UTF-8, so such a URL would turn the whole response into a 500. */
+    #[DataProvider('invalidUtf8')]
+    public function testInvalidUtf8GivesNull(string $url): void
+    {
+        self::assertNull(AvatarUrlPolicy::sanitize($url));
+    }
+
+    /**
      * @return array<string, string|null> name => URL
      */
     private static function table(string $section): array

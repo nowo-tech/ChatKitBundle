@@ -214,6 +214,52 @@ final class ChatAvatarsApiTest extends DatabaseTestCase
         self::assertNull($this->getJson('/chat/api/conversations/' . $dm->getUuid() . '/messages')['messages'][0]['authorAvatarUrl']);
     }
 
+    public function testAUrlThatIsNotUtf8IsDroppedAndNothingBreaks(): void
+    {
+        $chat = $this->get(ChatService::class);
+        $ana  = $this->user('Ana');
+        $luis = $this->user('Luis');
+        $dm   = $chat->openDirect($ana, $luis);
+        $chat->send($luis, $dm, 'hello');
+        $this->resolver->urls = [
+            $luis->getChatPublicId() => "/files/\xC3\x28.webp",
+            $ana->getChatPublicId()  => "https://cdn.example.com/caf\xE9.webp",
+        ];
+        $config = $this->login($ana);
+        self::assertNull($config['me']['avatarUrl']);
+
+        // EE-L1: the list answers 200 (JsonResponse would throw on invalid UTF-8) with a null picture.
+        $list = $this->getJson('/chat/api/conversations');
+        self::assertNull($list['conversations'][0]['avatarUrl']);
+
+        // The realtime event of a send is still published (and the response is 201).
+        $realtime            = $this->get(RecordingRealtime::class);
+        $realtime->published = [];
+        $sent                = $this->send('/chat/api/conversations/' . $dm->getUuid() . '/messages', (string) $config['csrf'], ['body' => 'still here']);
+        self::assertSame(201, $this->client->getResponse()->getStatusCode());
+        self::assertNull($sent['message']['authorAvatarUrl']);
+        $events = array_values(array_filter($realtime->published, static fn (array $event): bool => $event['payload']['type'] === 'message'));
+        self::assertCount(1, $events);
+        self::assertNull($events[0]['payload']['message']['authorAvatarUrl']);
+    }
+
+    public function testPinningMakesOneCall(): void
+    {
+        $chat = $this->get(ChatService::class);
+        $ana  = $this->user('Ana');
+        $luis = $this->user('Luis');
+        $dm   = $chat->openDirect($ana, $luis);
+        $old  = $chat->send($luis, $dm, 'pinned earlier');
+        $chat->pin($luis, $old, true);
+        $new                  = $chat->send($luis, $dm, 'pin me');
+        $this->resolver->urls = [$ana->getChatPublicId() => '/files/ana/s128', $luis->getChatPublicId() => '/files/luis/s128'];
+        $config               = $this->login($ana);
+
+        // EE-I1: the pin line (by Ana), the message and the pinned bar share one call.
+        $pins = $this->counted(fn (): array => $this->send('/chat/api/conversations/' . $dm->getUuid() . '/messages/' . $new->getUuid() . '/pin', (string) $config['csrf'], []), [$ana, $luis]);
+        self::assertSame(['/files/luis/s128', '/files/luis/s128'], array_column($pins['pins'], 'authorAvatarUrl'));
+    }
+
     /**
      * Runs one request with a fresh memo and asserts it asked the resolver once for exactly these people (none: no call).
      *

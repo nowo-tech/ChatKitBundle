@@ -228,6 +228,12 @@ final class ChatApiController extends AbstractController
         $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
         assert($message instanceof ChatMessage);
         $this->deny(!$this->access->canPin($message->getConversation(), $user), 'pin_forbidden', Response::HTTP_FORBIDDEN);
+        // 1.16: one resolver call for the pin line (by the user), the message and the pinned bar returned below.
+        $this->presenter->primeAvatars([
+            $user,
+            $message->getAuthor(),
+            ...array_map(static fn (ChatMessage $pinned): ?ChatUserInterface => $pinned->getAuthor(), $this->messages->findPinned($message->getConversation())),
+        ]);
         try {
             $this->chat->pin($user, $message, $request->isMethod('POST'));
         } catch (InvalidArgumentException $exception) {
