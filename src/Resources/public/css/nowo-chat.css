@@ -83,6 +83,13 @@
   color: var(--nowo-chat-text);
 }
 
+/* 1.17: a modal overlay is open (`dock.overlay: hide`, nowo:overlay-open / html[data-nowo-overlay]): the floating dock,
+   its windows and the edge tab disappear without any layout change, so nothing jumps when they come back. `inert`
+   mode only sets the attribute (and `inert`), keeping the dock painted. */
+.nowo-chat[data-overlay='hidden'] {
+  visibility: hidden;
+}
+
 .nowo-chat-dock {
   display: flex;
   flex-direction: row-reverse;

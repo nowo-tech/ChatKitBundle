@@ -64,6 +64,10 @@ export class ChatDock implements ThreadHost {
   private readonly drafts: DraftStore;
   /** Removes every document / window listener on destroy(). */
   private readonly abort = new AbortController();
+  /** 1.17: the floating dock is suppressed while a modal overlay is open (`dock.overlay`). */
+  private overlaySuppressed = false;
+  /** 1.17: the root's `inert` was set by the overlay suppression (an `inert` the host wrote is never lifted). */
+  private rootInertOwned = false;
   /** One tab per browser owns the heartbeat and the list polling (Web Locks; every tab when unsupported). */
   private leader = typeof navigator === 'undefined' || !('locks' in navigator);
   private presenceTimer: number | null = null;
@@ -422,6 +426,109 @@ export class ChatDock implements ThreadHost {
       body.disconnect();
     });
     watch();
+  }
+
+  /**
+   * 1.17, the modal overlay contract shared with UiKit 2.28 (`nowo:overlay-open` / `nowo:overlay-close` on `document`,
+   * `detail.depth` after the change; `html[data-nowo-overlay]` while one is open) and, with `dock.watchAriaModal`, any
+   * modal `<dialog>` or visible `[aria-modal="true"]` element outside the dock. While an overlay is open the floating dock
+   * hides (`hide`: `data-overlay="hidden"`, `visibility: hidden`, inert) or only stops answering (`inert`). Page mode is
+   * never suppressed, and the stored layout (tuck, open windows) is never touched. No UiKit code is needed at runtime.
+   *
+   * @param signal Stops the listeners and the observer when the dock is destroyed.
+   */
+  private trackOverlays(signal: AbortSignal): void {
+    const mode = this.config.dock?.overlay ?? 'hide';
+    if (this.page !== null || mode === 'none') {
+      return;
+    }
+    const marker = (): boolean => {
+      const depth = document.documentElement.getAttribute('data-nowo-overlay');
+      return depth !== null && depth !== '' && depth !== '0';
+    };
+    let fromEvents = marker();
+    let fromWatch = false;
+    const apply = (): void => this.setOverlaySuppressed(fromEvents || fromWatch, mode);
+    const onEvent = (event: Event): void => {
+      const depth = (event as CustomEvent<{ depth?: unknown } | null>).detail?.depth;
+      fromEvents = typeof depth === 'number' ? depth > 0 : event.type === 'nowo:overlay-open' || marker();
+      apply();
+    };
+    document.addEventListener('nowo:overlay-open', onEvent, { signal });
+    document.addEventListener('nowo:overlay-close', onEvent, { signal });
+    if (this.config.dock?.watchAriaModal === true) {
+      // One scan per animation frame, however many mutations arrive in it.
+      let frame = 0;
+      let scheduled = false;
+      const scan = (): void => {
+        scheduled = false;
+        fromWatch = this.modalOutside();
+        apply();
+      };
+      const observer = new MutationObserver(() => {
+        if (!scheduled) {
+          scheduled = true;
+          frame = window.requestAnimationFrame(scan);
+        }
+      });
+      observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open', 'aria-modal', 'hidden', 'inert', 'class'] });
+      signal.addEventListener('abort', () => {
+        observer.disconnect();
+        window.cancelAnimationFrame(frame);
+      });
+      fromWatch = this.modalOutside();
+    }
+    signal.addEventListener('abort', () => this.setOverlaySuppressed(false, mode));
+    apply();
+  }
+
+  /** A modal `<dialog>` or a shown `[aria-modal="true"]` element outside the dock root (1.17 watcher). */
+  private modalOutside(): boolean {
+    return [...document.querySelectorAll<HTMLElement>('dialog[open], [aria-modal="true"]')].some((element) => {
+      if (this.root.contains(element) || element.hidden || element.closest('[hidden], [inert]') !== null) {
+        return false;
+      }
+      if (element instanceof HTMLDialogElement && element.getAttribute('aria-modal') !== 'true') {
+        try {
+          if (!element.matches(':modal')) {
+            return false;
+          }
+        } catch {
+          // No :modal support: an open dialog without aria-modal="true" counts as non-modal.
+          return false;
+        }
+      }
+      return typeof element.checkVisibility !== 'function' || element.checkVisibility();
+    });
+  }
+
+  /** Applies or lifts the overlay suppression on the root (marker, `inert`) and the dock. */
+  private setOverlaySuppressed(suppressed: boolean, mode: 'hide' | 'inert'): void {
+    if (suppressed === this.overlaySuppressed) {
+      return;
+    }
+    this.overlaySuppressed = suppressed;
+    if (suppressed) {
+      this.root.setAttribute('data-overlay', mode === 'inert' ? 'inert' : 'hidden');
+      if (!this.root.hasAttribute('inert')) {
+        this.root.setAttribute('inert', '');
+        this.rootInertOwned = true;
+      }
+    } else {
+      this.root.removeAttribute('data-overlay');
+      if (this.rootInertOwned) {
+        this.root.removeAttribute('inert');
+        this.rootInertOwned = false;
+      }
+    }
+    this.syncInert();
+  }
+
+  /** The dock answers nothing while tucked or while an overlay suppresses it (the two are independent). */
+  private syncInert(): void {
+    if (this.page === null) {
+      this.dock.inert = this.store.get().tucked || this.overlaySuppressed;
+    }
   }
 
   /** Stop everything (page swap): connection, timers and listeners. */
@@ -862,6 +969,7 @@ export class ChatDock implements ThreadHost {
     }
     window.addEventListener('resize', () => this.layout(), { signal });
     this.trackBottomBars(signal);
+    this.trackOverlays(signal);
     // Mobile keyboard: size the full-screen conversation to the visible area so the composer stays above it.
     window.visualViewport?.addEventListener(
       'resize',
@@ -1290,7 +1398,7 @@ export class ChatDock implements ThreadHost {
     if (page === null) {
       // Page mode leaves the shared layout of the floating dock (other tabs, other pages) untouched.
       this.root.classList.toggle('is-tucked', state.tucked);
-      this.dock.inert = state.tucked;
+      this.syncInert();
       this.edge.hidden = !state.tucked;
       this.panel.classList.toggle('is-open', state.listOpen);
       this.launcher.setAttribute('aria-expanded', state.listOpen ? 'true' : 'false');

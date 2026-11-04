@@ -210,6 +210,9 @@ export type RealtimeEvent =
   | { type: 'list' }
   | { type: 'pins'; conversationUuid: string };
 
+/** 1.17: `hide` (invisible and inert), `inert` (painted, inert) or `none` (1.16 behaviour). */
+export type DockOverlayMode = 'hide' | 'inert' | 'none';
+
 export interface ChatConfig {
   userUuid: string;
   csrf: string;
@@ -285,6 +288,11 @@ export interface ChatConfig {
   linkPreviews: boolean;
   /** The application registers reference providers: `/` commands and the `#` picker are offered. */
   references?: boolean;
+  /**
+   * 1.17: what the floating dock does while the page shows a modal overlay (`dock` config; absent before 1.17 = `hide`
+   * without the watcher). Driven by the `nowo:overlay-open` / `nowo:overlay-close` events and `html[data-nowo-overlay]`.
+   */
+  dock?: { overlay?: DockOverlayMode; watchAriaModal?: boolean };
   i18n: Record<string, string>;
 }
 

@@ -61,6 +61,7 @@ final class ChatApiTest extends DatabaseTestCase
         self::assertSame(['sound' => 'pop', 'sounds' => ['message' => 'pop', 'mention' => 'chime', 'buzz' => 'buzz', 'support' => 'ding'], 'volume' => 80, 'backgroundOnly' => false, 'buzz' => true, 'buzzOpenWindow' => true, 'openOnMessage' => false, 'sendKey' => 'enter', 'pushPreview' => true, 'presence' => true, 'push' => false, 'emailDigest' => true], $config['prefs']);
         self::assertSame(['status' => 'available', 'text' => null, 'emoji' => null, 'expiresAt' => null], $config['status']);
         self::assertSame(10, $config['autoAwayMinutes']);
+        self::assertSame(['overlay' => 'hide', 'watchAriaModal' => false], $config['dock']);
         $csrf = $config['csrf'];
 
         // Contacts: the policy hides the stranger.

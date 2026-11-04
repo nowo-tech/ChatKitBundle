@@ -385,4 +385,11 @@ describe('ChatDock page mode', () => {
     await flush();
     expect(q('.nowo-chat-pagemode__thread .nowo-chat-window').dataset.uuid).toBe('ticket');
   });
+
+  it('is never suppressed by a modal overlay (1.17)', () => {
+    const { root } = mountPage([]);
+    document.dispatchEvent(new CustomEvent('nowo:overlay-open', { detail: { depth: 1 } }));
+    expect(root.hasAttribute('data-overlay')).toBe(false);
+    expect(root.hasAttribute('inert')).toBe(false);
+  });
 });

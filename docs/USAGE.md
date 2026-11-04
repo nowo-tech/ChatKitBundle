@@ -579,13 +579,56 @@ conversation from a link, the list or a push notification shows the dock again. 
 
 ### Stacking with drawers and modals
 
-The dock is fixed at `z-index: var(--nowo-chat-z-index, 60)`. Native `<dialog>` modals (top layer) always cover it. A
-drawer or overlay that lives inside a lower stacking context (for example a main column with its own `z-index`) is
-painted under the dock: lower the dock while it is open, e.g.
+The dock's layer is public API (stable for 1.x):
+
+| Token | Default | Place |
+| --- | --- | --- |
+| `--nowo-chat-z-index` | `60` | Above the UiKit shell (sidebar 30, header 40, header menus 50), below the page-edge tabs (`--nowo-ui-edge-tab-z`, 74) and every overlay (UiKit side panel backdrop `--nowo-ui-side-panel-z` 1040, drawer 1041, modal 1050, toasts 1100) |
+
+Native `<dialog>` modals opened with `showModal()` live in the browser's top layer: they always cover the dock and the
+browser makes it inert. Drawers and overlays that are not top layer are what the overlay contract is for.
+
+**Overlay contract (1.17).** While a modal overlay is open the floating dock steps aside, according to
+`dock.overlay` ([CONFIGURATION](CONFIGURATION.md)):
+
+| `dock.overlay` | Root while an overlay is open | Effect |
+| --- | --- | --- |
+| `hide` (default) | `data-overlay="hidden"`, `inert` | `visibility: hidden` (launcher, list, windows, edge tab): out of sight and out of the accessibility tree, no layout change |
+| `inert` | `data-overlay="inert"`, `inert` | Still painted, takes no click or focus |
+| `none` | — | 1.16 behaviour |
+
+The dock listens to two `CustomEvent`s on `document` and one attribute; it does not need UiKit at runtime:
+
+- `nowo:overlay-open` / `nowo:overlay-close`, `detail: {depth, kind, owner}`, where `depth` is the number of open
+  overlays **after** the change (`depth > 0` = suppressed). UiKit 2.28 emits them for its dialogs and overlay side
+  panels, and `window.NowoUiOverlay.acquire()` lets host drawers do the same. Without a `depth` the dock reads the
+  attribute below.
+- `html[data-nowo-overlay="<depth>"]` while an overlay is open: read when the dock starts (an overlay opened before it).
+
+Any script can speak the contract:
+
+```js
+document.documentElement.dataset.nowoOverlay = '1';
+document.dispatchEvent(new CustomEvent('nowo:overlay-open', { detail: { depth: 1, kind: 'drawer', owner: drawer } }));
+// … on close
+delete document.documentElement.dataset.nowoOverlay;
+document.dispatchEvent(new CustomEvent('nowo:overlay-close', { detail: { depth: 0, kind: 'drawer', owner: drawer } }));
+```
+
+For overlays that announce nothing, `dock.watch_aria_modal: true` also suppresses the dock while a modal `<dialog>`
+(`:modal`, or `aria-modal="true"`) or a shown `[aria-modal="true"]` element is open **outside** the dock (one
+`MutationObserver` on the body, one scan per animation frame; off by default for its cost on busy pages).
+
+Rules: the full-page chat (page mode) is never suppressed; tucking stays independent (the dock is inert while tucked
+**or** suppressed, and closing an overlay never un-tucks it); nothing is written to the shared layout or sent to the
+other tabs; an `inert` your layout wrote on the root is never lifted; unread counts keep updating and show again on
+close. A `[data-nowo-chat-open]` link clicked inside a modal opens the conversation, which shows when the modal closes.
+
+Without the events (ChatKit ≤ 1.16, or overlays that emit nothing and no watcher), lower or hide the dock yourself:
 
 ```css
-body:has(.my-drawer.is-open) .nowo-chat {
-  z-index: 1;
+html:has(.my-drawer.is-open) .nowo-chat {
+  visibility: hidden; /* or: --nowo-chat-z-index: 1; */
 }
 ```
 

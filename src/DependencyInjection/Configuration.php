@@ -36,6 +36,9 @@ final class Configuration implements ConfigurationInterface
     /** Default template of the full-page chat (`web_ui.templates.page`). */
     public const string PAGE_TEMPLATE = '@NowoChatKitBundle/page.html.twig';
 
+    /** 1.17: dock reactions to a modal overlay (`dock.overlay`). */
+    public const array DOCK_OVERLAY_MODES = ['hide', 'inert', 'none'];
+
     /** Dock icon → Symfony UX Icons name (Tabler set), used with `icon_set: ux_icon`. */
     public const array DEFAULT_ICONS = [
         'chat'        => 'tabler:message-circle',
@@ -288,6 +291,21 @@ final class Configuration implements ConfigurationInterface
                                 ->info('Minutes without keyboard or pointer input (in every tab) before an available user shows as away. 0 = never.')
                                 ->defaultValue(10)
                                 ->min(0)
+                            ->end()
+                            ->arrayNode('dock')
+                                ->info('1.17: how the floating dock reacts while the page shows a modal overlay (nowo:overlay-open / -close events, html[data-nowo-overlay]).')
+                                ->addDefaultsIfNotSet()
+                                ->children()
+                                    ->enumNode('overlay')
+                                        ->info('hide: invisible and inert; inert: painted but inert; none: 1.16 behaviour.')
+                                        ->values(self::DOCK_OVERLAY_MODES)
+                                        ->defaultValue('hide')
+                                    ->end()
+                                    ->booleanNode('watch_aria_modal')
+                                        ->info('Also suppress the dock while a modal <dialog> or a visible [aria-modal="true"] element is open outside it (MutationObserver).')
+                                        ->defaultFalse()
+                                    ->end()
+                                ->end()
                             ->end()
                             ->append($this->statusPresetsNode())
                             ->append($this->supportNode())

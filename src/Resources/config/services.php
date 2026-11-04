@@ -129,7 +129,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$pageLayout', param('nowo_chat_kit.page_layout'))
         ->arg('$supportEmojis', param('nowo_chat_kit.support.emojis'))
         ->arg('$autoAwayMinutes', param('nowo_chat_kit.auto_away_minutes'))
-        ->arg('$statusPresets', param('nowo_chat_kit.status_presets'));
+        ->arg('$statusPresets', param('nowo_chat_kit.status_presets'))
+        ->arg('$dock', param('nowo_chat_kit.dock'));
     $services->get(ChatPurgeCommand::class)
         ->arg('$retentionDays', param('nowo_chat_kit.retention_days'));
 };

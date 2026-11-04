@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.17.0 (dock and modal overlays)](#to-1170-dock-and-modal-overlays)
 - [To 1.16.1](#to-1161)
 - [To 1.16.0 (profile pictures)](#to-1160-profile-pictures)
 - [To 1.15.3](#to-1153)
@@ -44,6 +45,34 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.17.0 (dock and modal overlays)
+
+From **1.16.x**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+- No schema change, no route change, no PHP signature change.
+- **New default behaviour, only with overlays that announce themselves:** while a modal overlay is open the floating
+  dock hides (`dock.overlay: hide`). It reacts to the `nowo:overlay-open` / `nowo:overlay-close` events and to
+  `html[data-nowo-overlay]`, which UiKit 2.28 (dialogs, overlay side panels, `window.NowoUiOverlay`) and any host script
+  can emit. Nothing emitted them before, so a page without such overlays behaves exactly as 1.16.
+- Hosts that hid the dock with their own CSS (e.g. `html:has(.my-drawer.is-open) .nowo-chat { visibility: hidden; }` or
+  a lower `--nowo-chat-z-index`) may keep it or drop it once their drawers emit the events (or call
+  `NowoUiOverlay.acquire()`); both give the same result.
+- To keep 1.16 behaviour: `dock: { overlay: none }` in the profile. To keep the dock painted but out of reach:
+  `overlay: inert`. For overlays that emit nothing: `watch_aria_modal: true`.
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            dock:
+                overlay: hide            # hide | inert | none
+                watch_aria_modal: false
+```
 
 ## To 1.16.1
 

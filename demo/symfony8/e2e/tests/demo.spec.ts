@@ -116,6 +116,34 @@ test.describe('chat kit demo', () => {
     await expect(input).toHaveValue('Thanks, on it.');
   });
 
+  test('the dock steps aside while a modal overlay is open (1.17)', async ({ page }) => {
+    await signIn(page, 'alice');
+    const dock = page.locator('.nowo-chat[data-testid="chat-dock"]');
+    const launcher = page.locator('.nowo-chat-launcher');
+    await expect(launcher).toBeVisible();
+    const signal = (type: 'open' | 'close', depth: number) =>
+      page.evaluate(
+        ([kind, value]) => {
+          if (value > 0) {
+            document.documentElement.dataset.nowoOverlay = String(value);
+          } else {
+            delete document.documentElement.dataset.nowoOverlay;
+          }
+          document.dispatchEvent(new CustomEvent(`nowo:overlay-${kind}`, { detail: { depth: value, kind: 'drawer', owner: document.body } }));
+        },
+        [type, depth] as const,
+      );
+    await signal('open', 1);
+    await expect(dock).toHaveAttribute('data-overlay', 'hidden');
+    await expect(launcher).toBeHidden();
+    expect(await dock.evaluate((element) => (element as HTMLElement).inert)).toBe(true);
+    await signal('close', 0);
+    await expect(dock).not.toHaveAttribute('data-overlay', /.+/);
+    await expect(launcher).toBeVisible();
+    await launcher.click();
+    await expect(page.locator('.nowo-chat-panel')).toHaveClass(/is-open/);
+  });
+
   test('the full-page chat offers the dock options in page mode (1.13)', async ({ page }) => {
     await signIn(page, 'alice');
     await page.goto('/chat/');
