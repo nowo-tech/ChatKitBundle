@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.15.3](#to-1153)
 - [To 1.15.2](#to-1152)
 - [To 1.15.1](#to-1151)
 - [To 1.15.0](#to-1150)
@@ -41,6 +42,8 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.15.3
 
 From **1.15.2**:
 
