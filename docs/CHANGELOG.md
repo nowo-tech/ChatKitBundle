@@ -46,6 +46,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Status menu on iOS Safari** (found by symfony-beacon on iPhone): `.nowo-chat-status-menu` adds a `100dvh`
+  `max-height` after its `100vh` fallback, so the menu fits the visible viewport.
+
 ## [1.16.0] - 2026-11-04
 
 Minor release: profile pictures.
