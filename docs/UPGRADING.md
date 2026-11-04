@@ -5,6 +5,8 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.16.0](#to-1160)
+  - [To 1.16.0 (profile pictures)](#to-1160-profile-pictures)
 - [To 1.15.3](#to-1153)
 - [To 1.15.2](#to-1152)
 - [To 1.15.1](#to-1151)
@@ -43,7 +45,9 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
-### To 1.16.0 (profile pictures)
+## To 1.16.0 (profile pictures)
+
+From **1.15.3**:
 
 ```bash
 composer update nowo-tech/chat-kit-bundle
