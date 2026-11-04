@@ -5,7 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
-- [To 1.17.0 (dock and modal overlays)](#to-1170-dock-and-modal-overlays)
+- [To 1.17.0](#to-1170)
 - [To 1.16.1](#to-1161)
 - [To 1.16.0 (profile pictures)](#to-1160-profile-pictures)
 - [To 1.15.3](#to-1153)
@@ -46,7 +46,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
-## To 1.17.0 (dock and modal overlays)
+## To 1.17.0
 
 From **1.16.x**:
 
