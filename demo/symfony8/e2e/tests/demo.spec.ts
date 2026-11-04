@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { test, expect, type Page } from '@playwright/test';
 
 /**
@@ -142,6 +143,55 @@ test.describe('chat kit demo', () => {
     // REQ-UI-003: the page renders in the UiKit host layout (nowo_ui_kit.layouts.admin) with the UiKit page header.
     await expect(page.locator('main[data-nowo-ui-bundle="NowoChatKitBundle"] [data-nowo-ui-region="header"] h1')).toHaveText('Messages');
     await expect(page.locator('nav.demo-navbar')).toBeVisible();
+  });
+});
+
+test.describe('chat kit demo on a phone', () => {
+  test.use({ viewport: { width: 375, height: 667 }, isMobile: true, hasTouch: true });
+
+  test('the folded launcher keeps its accessible name (axe button-name, 1.15.3)', async ({ page }) => {
+    await signIn(page, 'alice');
+    await expect(page.locator('.nowo-chat.is-mobile')).toHaveCount(1);
+    const launcher = page.locator('.nowo-chat-launcher');
+    await expect(launcher).toBeVisible();
+    await expect(page.locator('.nowo-chat-panel')).not.toHaveClass(/is-open/);
+    // Named by its translated label, which is hidden visually only; the icon is decorative.
+    await expect(page.getByRole('button', { name: 'Messaging' })).toBeVisible();
+    await expect(launcher.locator('.nowo-chat-launcher__icon')).toHaveAttribute('aria-hidden', 'true');
+    // Same look as before: a round button around the 40px icon (padding and border only), the label takes no room.
+    const size = await launcher.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const icon = (element.querySelector('.nowo-chat-launcher__icon') as HTMLElement).getBoundingClientRect();
+      const box = element.getBoundingClientRect();
+      const frame = (side: 'Left' | 'Right' | 'Top' | 'Bottom'): number => parseFloat(style.getPropertyValue(`padding-${side.toLowerCase()}`)) + parseFloat(style.getPropertyValue(`border-${side.toLowerCase()}-width`));
+      return { width: box.width, height: box.height, icon: icon.width, iconHeight: icon.height, around: icon.width + frame('Left') + frame('Right'), aroundY: icon.height + frame('Top') + frame('Bottom') };
+    });
+    expect(size.icon).toBe(40);
+    expect(size.iconHeight).toBe(40);
+    expect(size.width).toBe(size.around);
+    expect(size.height).toBe(size.aroundY);
+    expect(size.width).toBe(size.height);
+    const label = await launcher.locator('.nowo-chat-launcher__label').boundingBox();
+    expect(label?.width ?? 0).toBeLessThanOrEqual(1);
+    expect(label?.height ?? 0).toBeLessThanOrEqual(1);
+
+    const results = await new AxeBuilder({ page })
+      .include('.nowo-chat-launcher')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+    expect(results.violations.map((violation) => `${violation.id}: ${violation.help}`)).toEqual([]);
+    expect(results.passes.map((pass) => pass.id)).toContain('button-name');
+
+    // With no unread badge (its text would name the button), the label alone names it.
+    await page.addStyleTag({ content: '.nowo-chat-launcher .nowo-chat-badge { display: none; }' });
+    await expect(page.getByRole('button', { name: 'Messaging', exact: true })).toBeVisible();
+    const alone = await new AxeBuilder({ page }).include('.nowo-chat-launcher').withRules(['button-name']).analyze();
+    expect(alone.violations).toEqual([]);
+
+    // The 1.15.2 rule (label display: none) is what axe flagged: the check catches it.
+    await page.addStyleTag({ content: '.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__label { display: none; }' });
+    const before = await new AxeBuilder({ page }).include('.nowo-chat-launcher').withRules(['button-name']).analyze();
+    expect(before.violations.map((violation) => violation.id)).toEqual(['button-name']);
   });
 });
 

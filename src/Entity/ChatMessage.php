@@ -53,9 +53,11 @@ class ChatMessage
     private DateTimeImmutable $createdAt;
 
     /**
-     * Bot messages only: how to render the body (`domain` of the key, `params`, optional `topic` key).
+     * Bot messages: how to render the body (`domain` of the key, `params`, optional `topic` key); pin lines: the
+     * pinned `message`; any deleted message: `moderated` (1.15.3) when someone other than the author removed it, so
+     * the state survives the deleter's erasure or account deletion (the moderator is never stored here).
      *
-     * @var array{domain?: string|null, params?: array<string, string>, topic?: string|null, message?: string}|null
+     * @var array{domain?: string|null, params?: array<string, string>, topic?: string|null, message?: string, moderated?: bool}|null
      */
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $meta = null;
@@ -269,9 +271,10 @@ class ChatMessage
     }
 
     /**
-     * Bot messages only: rendering data (`domain`, `params`, `topic`).
+     * Stored data: bot rendering data (`domain`, `params`, `topic`), a pin line's `message`, a deleted message's
+     * `moderated` flag.
      *
-     * @return array{domain?: string|null, params?: array<string, string>, topic?: string|null}|null The data; null for other kinds
+     * @return array{domain?: string|null, params?: array<string, string>, topic?: string|null, message?: string, moderated?: bool}|null The data; null when none
      */
     public function getMeta(): ?array
     {
@@ -465,15 +468,26 @@ class ChatMessage
         $this->deletedBy = $by;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->deletedAt = $at ?? new DateTimeImmutable();
+        if (!$this->isAuthoredBy($by)) {
+            // 1.15.3: a moderated removal stays one when the deleted-by pointer is later nulled (erasure, account deletion).
+            // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+            $this->meta = [...$this->meta ?? [], 'moderated' => true];
+        }
     }
 
     /**
-     * True when a moderator (not the author) removed it ("Removed by a moderator").
+     * True when a moderator (not the author) removed it ("Removed by a moderator"). It stays true after the
+     * moderator's deleted-by pointer is nulled (erasure, account deletion): `meta.moderated` keeps the state.
      *
      * @return bool True for a moderated deletion
      */
     public function isModerated(): bool
     {
-        return $this->isDeleted() && $this->deletedBy instanceof ChatUserInterface && !$this->isAuthoredBy($this->deletedBy);
+        if (!$this->isDeleted()) {
+            return false;
+        }
+
+        return ($this->meta['moderated'] ?? false) === true
+            || ($this->deletedBy instanceof ChatUserInterface && !$this->isAuthoredBy($this->deletedBy));
     }
 }

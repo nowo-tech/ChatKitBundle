@@ -641,7 +641,7 @@ export class ChatDock implements ThreadHost {
     const summary = this.conversations.get(uuid);
     if (summary !== undefined && last !== undefined) {
       summary.lastMessageAt = last.createdAt;
-      summary.lastMessage = { preview: plain(last.html).slice(0, 90), deleted: last.deleted, buzz: last.kind === 'buzz', pin: last.kind === 'pin', mine: last.mine, authorName: last.authorName };
+      summary.lastMessage = { preview: plain(last.html).slice(0, 90), deleted: last.deleted, moderated: last.moderated, buzz: last.kind === 'buzz', pin: last.kind === 'pin', mine: last.mine, authorName: last.authorName };
       const view = this.windows.get(uuid);
       if (view !== undefined && view.isMinimised) {
         summary.unread += fresh.filter((message) => !message.mine).length;
@@ -1472,7 +1472,7 @@ export class ChatDock implements ThreadHost {
       return t(i18n, 'buzz_sent', { name: last.mine ? t(i18n, 'you') : last.authorName ?? summary.title });
     }
     if (last.deleted) {
-      return t(i18n, 'deleted_message');
+      return t(i18n, last.moderated === true ? 'moderated_message' : 'deleted_message');
     }
     const author = last.mine
       ? `${t(i18n, 'you')}: `

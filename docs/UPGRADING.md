@@ -42,6 +42,26 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+From **1.15.2**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+php bin/console assets:install public
+```
+
+- No schema change and no configuration change. Re-publish the assets (`nowo-chat.css`) if you copy them instead of
+  symlinking them.
+- **Launcher on phones:** hosts that worked around the missing accessible name of the folded launcher (an override
+  that keeps `.nowo-chat-launcher__label` in the accessibility tree, or an `aria-label` on the button) can drop it.
+  If you override the template, keep the `.nowo-chat-launcher__label` text and add `aria-hidden="true"` to
+  `.nowo-chat-launcher__icon`.
+- **Moderated removals:** `ChatMessage::getMeta()` can now hold `moderated: true` on a deleted message of any kind (it
+  was only filled for bot and pin lines). Code that treats a non-null `meta` as "bot message" should check
+  `isBot()` instead. Removals made before this release keep their state only while the moderator's `deletedBy`
+  pointer exists; `ChatPersonalData::erase()` stores the flag for them before nulling it, but deleting the moderator's
+  user row directly (`onDelete: SET NULL`) does not. Run `erase()` for a moderator before deleting the row.
+- The conversation payload's `lastMessage` has a new `moderated` boolean (additive).
+
 ## To 1.15.2
 
 From **1.15.1**:

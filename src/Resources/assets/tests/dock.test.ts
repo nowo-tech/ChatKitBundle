@@ -54,7 +54,7 @@ const { ChatDock } = await import('../src/dock');
 
 const i18n: Record<string, string> = {
   launcher: 'Messaging', loading: 'Loading', empty_title: 'Nothing yet', empty_body: 'Start one', no_results: 'No matches', start_chat: 'Start',
-  you: 'You', buzz_sent: '%name% buzzed', deleted_message: 'Deleted', typing_many: 'Several typing', typing_one: '%name% typing',
+  you: 'You', buzz_sent: '%name% buzzed', deleted_message: 'Deleted', moderated_message: 'Removed by a moderator', typing_many: 'Several typing', typing_one: '%name% typing',
   support_title: 'Administrators', support_hint: 'Help', channel: 'Channel', people_group: 'Groups', people_project: 'Projects',
   people_search: 'People', via_group: 'Group · %name%', via_project: 'Project · %name%', no_people: 'Nobody', more_tabs: '+%count%',
   filter_support: 'Support', unread: '%count% unread',
@@ -135,6 +135,7 @@ describe('ChatDock', () => {
       summary('b', { kind: 'channel', title: '#Acme', lastMessage: { preview: 'x', deleted: false, mine: false, authorName: 'Ana' } }),
       summary('c', { kind: 'support', title: 'Administrators', lastMessage: { preview: '', deleted: false, buzz: true, mine: true, authorName: null } }),
       summary('d', { lastMessage: { preview: '', deleted: true, mine: false, authorName: null } }),
+      summary('m', { lastMessage: { preview: '', deleted: true, moderated: true, mine: false, authorName: 'Ana' } }),
       summary('e', { lastMessage: { preview: 'mio', deleted: false, mine: true, authorName: 'Me' } }),
       summary('f', { kind: 'support', lastMessage: { preview: '', deleted: false, buzz: true, mine: false, authorName: null } }),
       summary('empty', { lastMessage: null }),
@@ -147,11 +148,13 @@ describe('ChatDock', () => {
     expect(q('.nowo-chat-launcher__label').textContent).toBe('Messaging');
     expect(q('.nowo-chat-launcher .nowo-chat-badge [aria-hidden]').textContent).toBe('99+');
     expect(q('.nowo-chat-launcher .nowo-chat-badge .nowo-chat-sr-only').textContent).toBe('120 unread');
-    expect(all('.nowo-chat-list .nowo-chat-row')).toHaveLength(7);
+    expect(all('.nowo-chat-list .nowo-chat-row')).toHaveLength(8);
     expect(q('.nowo-chat-list').textContent).toContain('Ana: x');
     expect(q('.nowo-chat-list').textContent).toContain('You buzzed');
     expect(q('.nowo-chat-list').textContent).toContain('T f buzzed');
     expect(q('.nowo-chat-list').textContent).toContain('Deleted');
+    // 1.15.3 (DP-L4): a moderator's removal reads as such in the list, not as the author's deletion.
+    expect(q('.nowo-chat-list').textContent).toContain('Removed by a moderator');
     expect(q('.nowo-chat-list').textContent).toContain('You: mio');
     expect(q('.nowo-chat-row__tag').textContent).toBe('Support');
 
@@ -656,6 +659,11 @@ describe('ChatDock', () => {
     dock.messagesChanged('zz', [], false, []);
     dock.messagesChanged('a', [message({ html: '<p>cache</p>' })], false, []);
     expect(q('.nowo-chat-list').textContent).toContain('cache');
+    dock.messagesChanged('a', [message({ html: '', deleted: true, moderated: true })], false, []);
+    expect(q('.nowo-chat-list').textContent).toContain('Removed by a moderator');
+    dock.messagesChanged('a', [message({ html: '', deleted: true })], false, []);
+    expect(q('.nowo-chat-list').textContent).toContain('Deleted');
+    expect(q('.nowo-chat-list').textContent).not.toContain('Removed by a moderator');
     await dock.open(summary('a'));
     dock.minimise('a', true);
     dock.messagesChanged('a', [message()], false, [message(), message({ mine: true })]);
