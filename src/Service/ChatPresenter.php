@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Service;
 
 use DateTimeImmutable;
+use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
@@ -36,6 +37,7 @@ final readonly class ChatPresenter
      * @param ChatSupportTopics $topics Topic labels of support tickets and bot messages
      * @param ChatSupportPolicy $policy Readable ticket numbers and the read-only rule
      * @param ChatReferences|null $references Fills #reference cards for the viewer; null leaves the slots empty
+     * @param ChatAvatars|null $avatars 1.16: profile picture URLs of the request; null gives null everywhere
      */
     public function __construct(
         private ChatMarkdownRenderer $markdown,
@@ -43,7 +45,52 @@ final readonly class ChatPresenter
         private ChatSupportTopics $topics,
         private ChatSupportPolicy $policy,
         private ?ChatReferences $references = null,
+        private ?ChatAvatars $avatars = null,
     ) {
+    }
+
+    /**
+     * 1.16: resolves the profile pictures of a response's people in one resolver call. Callers pass only people the
+     * viewer may see (after the access filters); the shapes built afterwards read the memo.
+     *
+     * @param iterable<ChatUserInterface|null> $users The people of the response
+     */
+    public function primeAvatars(iterable $users): void
+    {
+        $this->avatars?->prime($users);
+    }
+
+    /**
+     * 1.16: the profile picture URL of a person shown in a response (contacts, members, the dock's `me`).
+     *
+     * @param ChatUserInterface|null $user The person; null gives null
+     *
+     * @return string|null The URL, or null for the initials
+     */
+    public function avatarUrl(?ChatUserInterface $user): ?string
+    {
+        return $this->avatars?->urlOf($user);
+    }
+
+    /**
+     * 1.16: whose picture a conversation summary shows: the peer of a direct thread, the requester of a support thread
+     * seen by an agent; nobody for a channel or the requester's own support thread.
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $viewer The user the summary is built for
+     * @param ChatUserInterface|null $peer The direct peer; null otherwise or when gone
+     * @param bool $viewerIsAgent Whether the viewer is a support agent
+     *
+     * @return ChatUserInterface|null The person, or null for no picture
+     */
+    public function avatarPerson(ChatConversation $conversation, ChatUserInterface $viewer, ?ChatUserInterface $peer, bool $viewerIsAgent): ?ChatUserInterface
+    {
+        if ($conversation->isDirect()) {
+            return $peer;
+        }
+        $owner = $conversation->isSupport() ? $conversation->getSupportOwner() : null;
+
+        return $viewerIsAgent && $owner instanceof ChatUserInterface && $owner->getId() !== $viewer->getId() ? $owner : null;
     }
 
     /**
@@ -86,11 +133,13 @@ final readonly class ChatPresenter
         };
 
         return [
-            'uuid'           => $conversation->getUuid(),
-            'kind'           => $conversation->getKind()->value,
-            'title'          => $title,
-            'subtitle'       => $subtitle,
-            'initials'       => $initials,
+            'uuid'     => $conversation->getUuid(),
+            'kind'     => $conversation->getKind()->value,
+            'title'    => $title,
+            'subtitle' => $subtitle,
+            'initials' => $initials,
+            // 1.16: the picture of the person the bubble shows (sanitised; null: the initials).
+            'avatarUrl'      => $this->avatarUrl($this->avatarPerson($conversation, $viewer, $peer, $viewerIsAgent)),
             'peerUuid'       => $peer?->getChatPublicId(),
             'channelKey'     => $conversation->getChannelKey(),
             'supportStatus'  => $conversation->getSupportStatus()?->value,
@@ -147,19 +196,20 @@ final readonly class ChatPresenter
             : $this->references->fill($message->getBodyHtml(), $message->getBody(), $viewer);
 
         return [
-            'id'             => $message->getId(),
-            'uuid'           => $message->getUuid(),
-            'authorUuid'     => $author?->getChatPublicId(),
-            'authorName'     => $bot ? $this->trans('chat.support_bot') : ($author?->getChatDisplayName() ?? $this->trans('chat.deleted_user')),
-            'authorInitials' => $bot ? '★' : ($author?->getChatInitials() ?? '?'),
-            'mine'           => $viewer instanceof ChatUserInterface && $message->isAuthoredBy($viewer),
-            'kind'           => $message->getKind(),
-            'html'           => $bot ? $this->botHtml($message) : $filled['html'],
-            'createdAt'      => $message->getCreatedAt()->format(DATE_ATOM),
-            'edited'         => $message->isEdited(),
-            'deleted'        => $message->isDeleted(),
-            'moderated'      => $message->isModerated(),
-            'reactions'      => $reactions,
+            'id'              => $message->getId(),
+            'uuid'            => $message->getUuid(),
+            'authorUuid'      => $author?->getChatPublicId(),
+            'authorName'      => $bot ? $this->trans('chat.support_bot') : ($author?->getChatDisplayName() ?? $this->trans('chat.deleted_user')),
+            'authorInitials'  => $bot ? '★' : ($author?->getChatInitials() ?? '?'),
+            'authorAvatarUrl' => $bot ? null : $this->avatarUrl($author),
+            'mine'            => $viewer instanceof ChatUserInterface && $message->isAuthoredBy($viewer),
+            'kind'            => $message->getKind(),
+            'html'            => $bot ? $this->botHtml($message) : $filled['html'],
+            'createdAt'       => $message->getCreatedAt()->format(DATE_ATOM),
+            'edited'          => $message->isEdited(),
+            'deleted'         => $message->isDeleted(),
+            'moderated'       => $message->isModerated(),
+            'reactions'       => $reactions,
             // Members the message mentions (from its stored tokens, no query) and whether the viewer is one of them.
             'mentions'   => $mentions,
             'mentionsMe' => $viewer instanceof ChatUserInterface && isset($ids[$viewer->getChatPublicId()]),

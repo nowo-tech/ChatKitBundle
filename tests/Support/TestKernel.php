@@ -6,12 +6,14 @@ namespace Nowo\ChatKitBundle\Tests\Support;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
+use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\Tests\Support\Chat\CountingAvatarResolver;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingPushSender;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestAccessPolicy;
@@ -147,7 +149,7 @@ final class TestKernel extends Kernel
         ));
 
         $services = $container->services()->defaults()->autowire()->public();
-        foreach ([TestDirectory::class, TestAccessPolicy::class, TestChannelProvider::class, RecordingRealtime::class, RecordingPushSender::class, TestLinkPreviewProvider::class] as $class) {
+        foreach ([TestDirectory::class, TestAccessPolicy::class, TestChannelProvider::class, RecordingRealtime::class, RecordingPushSender::class, TestLinkPreviewProvider::class, CountingAvatarResolver::class] as $class) {
             $services->set($class);
         }
         // #references: one provider, autoconfigured through the interface's tag.
@@ -161,6 +163,8 @@ final class TestKernel extends Kernel
         $services->alias(ChatRealtimeInterface::class, RecordingRealtime::class);
         $services->alias(ChatPushSenderInterface::class, RecordingPushSender::class);
         $services->alias(ChatLinkPreviewProviderInterface::class, TestLinkPreviewProvider::class);
+        // 1.16: records the picture batches; answers nothing (like the null default) until a test fills `urls`.
+        $services->alias(ChatAvatarUrlResolverInterface::class, CountingAvatarResolver::class);
         $services->alias(self::ASSET_PACKAGES_ALIAS, 'assets.packages');
         $services->alias(self::ENTITY_MANAGER_ALIAS, 'doctrine.orm.entity_manager');
         $services->set(self::TRANSLATOR_COLLECTOR, DataCollectorTranslator::class)->decorate('translator')->args([service('.inner')]);

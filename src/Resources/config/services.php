@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
+use Nowo\ChatKitBundle\Avatar\NullChatAvatarUrlResolver;
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
+use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
@@ -54,6 +56,7 @@ return static function (ContainerConfigurator $container): void {
             '../../Digest/SendChatDigestMessage.php',
             '../../Http/ChatApiException.php',
             '../../Realtime/ChatTopics.php',
+            '../../Avatar/AvatarUrlPolicy.php',
         ]);
     // REQ-SF-004 rule 7: controllers are NOT autoconfigured. On Symfony >= 7.3 autoconfiguration tags every #[Route]
     // class with routing.controller, and the host's default `routing.controllers` import would then register the chat
@@ -75,6 +78,8 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatLinkPreviewProviderInterface::class, NullLinkPreviewProvider::class);
     $services->alias(ChatDigestSenderInterface::class, NullChatDigestSender::class);
     $services->alias(ChatSupportTopicProviderInterface::class, ConfiguredSupportTopicProvider::class);
+    // 1.16: profile pictures; the application aliases the interface to its own resolver.
+    $services->alias(ChatAvatarUrlResolverInterface::class, NullChatAvatarUrlResolver::class);
     $services->set(NullChatRealtime::class);
     if (interface_exists(HubInterface::class)) {
         $services->alias(ChatRealtimeInterface::class, MercureChatRealtime::class);

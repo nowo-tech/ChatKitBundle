@@ -42,6 +42,26 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+### To 1.16.0 (profile pictures)
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+php bin/console assets:install public
+```
+
+- Nothing changes until you alias `Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface` (see
+  [USAGE.md](USAGE.md#profile-pictures)). With the default resolver every payload gains `null` fields (`avatarUrl`,
+  `authorAvatarUrl`, `me.avatarUrl`) and nothing else changes.
+- Return stable, access-checked URLs (`https:` or a same-origin `/path`). A pre-signed URL travels in Mercure events
+  and stays in the page, so it is not supported. Allow the picture origins in your `img-src` CSP.
+- Rejected values (`http:`, `data:`, relative paths without a leading `/`, protocol-relative `//cdn…` URLs from an asset
+  package, IPv6-literal hosts, quotes, more than 2048 bytes …) silently fall back to the initials.
+- A resolver must not run a query per user: `urlsFor()` gets every person of a response at once.
+- Overridden templates need no change. The pictures are added by `nowo-chat.js` inside the existing avatar slots.
+  Custom CSS on `.nowo-chat-avatar` should keep `position: relative` (the picture is absolutely positioned).
+
+### To 1.15.3
+
 From **1.15.2**:
 
 ```bash

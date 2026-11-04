@@ -498,7 +498,7 @@ export class ThreadView {
     if (summary.canPin !== undefined) {
       this.canPin = summary.canPin;
     }
-    part(this.element, 'avatar').replaceChildren(this.host.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline, summary.kind === 'direct' ? status : undefined));
+    part(this.element, 'avatar').replaceChildren(this.host.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline, summary.kind === 'direct' ? status : undefined, summary.avatarUrl));
     this.applySendKey();
     this.applyContext(summary);
     // A buzz is a person-to-person nudge: direct conversations only.
@@ -1248,7 +1248,7 @@ export class ThreadView {
     }
     if (this.messages.length === 0 && this.pending.length === 0) {
       const empty = this.host.templates.clone('thread-empty');
-      part(empty, 'avatar').replaceWith(this.host.templates.avatar(this.summary.initials, this.summary.kind));
+      part(empty, 'avatar').replaceWith(this.host.templates.avatar(this.summary.initials, this.summary.kind, 'md', false, undefined, this.summary.avatarUrl));
       text(empty, 'title', this.summary.title);
       text(empty, 'hint', this.summary.kind === 'support' ? t(i18n, 'support_hint') : t(i18n, 'start_chat'));
       fragment.append(empty);
@@ -1375,7 +1375,7 @@ export class ThreadView {
     if (message.mine) {
       avatarSlot.remove();
     } else if (groupStart) {
-      avatarSlot.replaceWith(templates.avatar(message.authorInitials, 'direct', 'sm'));
+      avatarSlot.replaceWith(templates.avatar(message.authorInitials, 'direct', 'sm', false, undefined, message.authorAvatarUrl));
     } else {
       avatarSlot.replaceWith(h('span', { class: 'nowo-chat-avatar-spacer' }));
     }

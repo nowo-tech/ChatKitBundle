@@ -116,6 +116,8 @@ final class ChatPageController extends AbstractController
         $last         = end($page);
         // The page's #references for this reader in one resolve() per type.
         $this->references?->prime($user, $page);
+        // 1.16: the list's and the page's pictures in one resolver call (context() primes them before presenting).
+        $context = $this->context($user, $conversation, false, $page);
 
         return $this->render($this->template(), [
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $page),
@@ -126,7 +128,7 @@ final class ChatPageController extends AbstractController
             ] : null,
             'can_send' => $this->isGranted(ChatVoter::SEND, $conversation),
             'composer' => $this->composer($uuid)->createView(),
-        ] + $this->context($user, $conversation));
+        ] + $context);
     }
 
     /**
@@ -186,9 +188,11 @@ final class ChatPageController extends AbstractController
     }
 
     /**
+     * @param list<ChatMessage> $page Messages of the open conversation (their authors' pictures are primed with the list's)
+     *
      * @return array<string, mixed>
      */
-    private function context(ChatUserInterface $user, ?ChatConversation $current, bool $archived = false): array
+    private function context(ChatUserInterface $user, ?ChatConversation $current, bool $archived = false, array $page = []): array
     {
         $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
         $list        = array_values(array_filter(
@@ -204,16 +208,19 @@ final class ChatPageController extends AbstractController
                 $closed[$id] = true;
             }
         }
-        $list   = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => $conversation === $current || isset($closed[(int) $conversation->getId()]) === $archived));
-        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
-        $latest = $this->messages->findLatestByConversationIds($ids);
-        $rows   = [];
+        $list    = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => $conversation === $current || isset($closed[(int) $conversation->getId()]) === $archived));
+        $ids     = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $unread  = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $latest  = $this->messages->findLatestByConversationIds($ids);
+        $list    = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => !$conversation->isDirect() || isset($latest[(int) $conversation->getId()]) || $conversation === $current));
+        $isAgent = $this->access->isSupportAgent($user);
+        $this->presenter->primeAvatars([
+            ...array_map(fn (ChatConversation $conversation): ?ChatUserInterface => $this->presenter->avatarPerson($conversation, $user, $this->access->directPeer($conversation, $user), $isAgent), $current instanceof ChatConversation ? [...$list, $current] : $list),
+            ...array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $page),
+        ]);
+        $rows = [];
         foreach ($list as $conversation) {
             $id = (int) $conversation->getId();
-            if ($conversation->isDirect() && !isset($latest[$id]) && $conversation !== $current) {
-                continue;
-            }
             // The open conversation is being read: the page script moves the cursor once it loads.
             $rows[] = $this->summary($conversation, $user, $conversation === $current ? 0 : $unread[$id] ?? 0, $latest[$id] ?? null);
         }

@@ -187,7 +187,7 @@ export class ChatDock implements ThreadHost {
     } catch {
       return null;
     }
-    trigger.querySelector('[data-part="me-avatar"]')?.replaceChildren(this.templates.avatar(this.config.me?.initials ?? '', 'direct', 'sm'));
+    trigger.querySelector('[data-part="me-avatar"]')?.replaceChildren(this.templates.avatar(this.config.me?.initials ?? '', 'direct', 'sm', false, undefined, this.config.me?.avatarUrl));
     // In the panel's flow under its header (the panel clips anything outside it).
     (trigger.parentElement ?? this.panel).after(popover);
     return new StatusMenu(this, trigger, popover, (status) => (this.config.status = status), this.abort.signal);
@@ -1388,7 +1388,7 @@ export class ChatDock implements ThreadHost {
       ...hidden.map((uuid) => {
         const summary = this.conversations.get(uuid) as ConversationSummary;
         const item = this.templates.clone('overflow-item');
-        part(item, 'avatar').replaceWith(this.templates.avatar(summary.initials, summary.kind, 'sm'));
+        part(item, 'avatar').replaceWith(this.templates.avatar(summary.initials, summary.kind, 'sm', false, undefined, summary.avatarUrl));
         text(item, 'title', summary.title);
         part(item, 'row').addEventListener('click', () => {
           this.toggleOverflow(false);
@@ -1525,7 +1525,7 @@ export class ChatDock implements ThreadHost {
           row.classList.add('is-current');
           row.setAttribute('aria-current', 'true');
         }
-        part(item, 'avatar').replaceWith(this.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline, summary.kind === 'direct' ? summary.peerStatus : undefined));
+        part(item, 'avatar').replaceWith(this.templates.avatar(summary.initials, summary.kind, 'md', summary.peerOnline, summary.kind === 'direct' ? summary.peerStatus : undefined, summary.avatarUrl));
         const title = text(item, 'title', summary.title);
         if (summary.kind === 'direct') {
           this.decoratePeer(row, title, summary);
@@ -1754,7 +1754,7 @@ export class ChatDock implements ThreadHost {
       sections.push(
         this.section(
           t(i18n, 'people_recent'),
-          recent.map((summary) => this.pickerRow(summary.title, summary.subtitle, this.templates.avatar(summary.initials, 'direct', 'md', summary.peerOnline, summary.peerStatus), async () => this.open(summary))),
+          recent.map((summary) => this.pickerRow(summary.title, summary.subtitle, this.templates.avatar(summary.initials, 'direct', 'md', summary.peerOnline, summary.peerStatus, summary.avatarUrl), async () => this.open(summary))),
         ),
       );
     }
@@ -1770,7 +1770,7 @@ export class ChatDock implements ThreadHost {
             .map((contact) => {
               const viaKey = `via_${source}`;
               const subtitle = contact.via !== '' && viaKey in i18n ? t(i18n, viaKey, { name: contact.via }) : contact.email ?? contact.via;
-              return this.pickerRow(contact.name, subtitle, this.templates.avatar(contact.initials), async () => this.open(await this.api.openDirect(contact.uuid)));
+              return this.pickerRow(contact.name, subtitle, this.templates.avatar(contact.initials, 'direct', 'md', false, undefined, contact.avatarUrl), async () => this.open(await this.api.openDirect(contact.uuid)));
             }),
         ),
       );

@@ -1,0 +1,266 @@
+{
+  "_comment": "Shared table of the profile picture URL policy (1.16): AvatarUrlPolicyTest (PHP) and avatar.test.ts (client) both run it. An entry is a literal `url`, or `prefix` + `repeat` x `count` + `suffix`.",
+  "accepted": [
+    {
+      "name": "https",
+      "url": "https://cdn.example.com/a/b.webp?v=2#x"
+    },
+    {
+      "name": "https upper-case scheme",
+      "url": "HTTPS://cdn.example.com/a.webp"
+    },
+    {
+      "name": "https with port",
+      "url": "https://cdn.example.com:8443/a.webp"
+    },
+    {
+      "name": "https highest port",
+      "url": "https://cdn.example.com:65535/a.webp"
+    },
+    {
+      "name": "https host only",
+      "url": "https://cdn.example.com"
+    },
+    {
+      "name": "https query right after the host",
+      "url": "https://cdn.example.com?v=1"
+    },
+    {
+      "name": "same-origin path",
+      "url": "/files/0b7c/s128"
+    },
+    {
+      "name": "root",
+      "url": "/"
+    },
+    {
+      "name": "at sign in the path",
+      "url": "/files/a@b.webp"
+    },
+    {
+      "name": "percent-encoded",
+      "url": "/files/%2F%2Fevil/a.webp"
+    },
+    {
+      "name": "IDN host",
+      "url": "https://bücher.example/a.webp"
+    },
+    {
+      "name": "longest path (2048 bytes)",
+      "prefix": "/",
+      "repeat": "a",
+      "count": 2047,
+      "suffix": ""
+    }
+  ],
+  "rejected": [
+    {
+      "name": "null",
+      "url": null
+    },
+    {
+      "name": "empty",
+      "url": ""
+    },
+    {
+      "name": "http",
+      "url": "http://cdn.example.com/a.webp"
+    },
+    {
+      "name": "javascript",
+      "url": "javascript:alert(1)"
+    },
+    {
+      "name": "javascript upper-case",
+      "url": "JavaScript:alert(1)"
+    },
+    {
+      "name": "vbscript",
+      "url": "vbscript:msgbox(1)"
+    },
+    {
+      "name": "data image",
+      "url": "data:image/png;base64,iVBORw0KGgo="
+    },
+    {
+      "name": "data svg",
+      "url": "data:image/svg+xml,<svg onload=alert(1)>"
+    },
+    {
+      "name": "blob",
+      "url": "blob:https://example.com/0b7c"
+    },
+    {
+      "name": "file",
+      "url": "file:///etc/passwd"
+    },
+    {
+      "name": "ftp",
+      "url": "ftp://example.com/a.webp"
+    },
+    {
+      "name": "protocol-relative",
+      "url": "//evil.example/a.webp"
+    },
+    {
+      "name": "slash backslash",
+      "url": "/\\evil.example/a.webp"
+    },
+    {
+      "name": "backslash inside",
+      "url": "/files\\a.webp"
+    },
+    {
+      "name": "https backslash",
+      "url": "https:\\\\cdn.example.com/a.webp"
+    },
+    {
+      "name": "user info",
+      "url": "https://good@evil.example/a.webp"
+    },
+    {
+      "name": "user and password",
+      "url": "https://user:pass@cdn.example.com/a.webp"
+    },
+    {
+      "name": "empty user info",
+      "url": "https://@cdn.example.com/a.webp"
+    },
+    {
+      "name": "no host",
+      "url": "https:///a.webp"
+    },
+    {
+      "name": "scheme only",
+      "url": "https://"
+    },
+    {
+      "name": "single slash https",
+      "url": "https:/cdn.example.com/a.webp"
+    },
+    {
+      "name": "IPv6 literal",
+      "url": "https://[::1]/a.webp"
+    },
+    {
+      "name": "IPv6 literal with port",
+      "url": "https://[2001:db8::1]:443/a.webp"
+    },
+    {
+      "name": "port zero",
+      "url": "https://cdn.example.com:0/a.webp"
+    },
+    {
+      "name": "port too high",
+      "url": "https://cdn.example.com:65536/a.webp"
+    },
+    {
+      "name": "six-digit port",
+      "url": "https://cdn.example.com:123456/a.webp"
+    },
+    {
+      "name": "letters in the port",
+      "url": "https://cdn.example.com:abc/a.webp"
+    },
+    {
+      "name": "empty port",
+      "url": "https://cdn.example.com:/a.webp"
+    },
+    {
+      "name": "relative path",
+      "url": "files/a.webp"
+    },
+    {
+      "name": "dot relative",
+      "url": "./a.webp"
+    },
+    {
+      "name": "space",
+      "url": "/files/a b.webp"
+    },
+    {
+      "name": "leading space",
+      "url": " /files/a.webp"
+    },
+    {
+      "name": "tab",
+      "url": "/files/a\t.webp"
+    },
+    {
+      "name": "trailing line feed",
+      "url": "/files/a/s64\n"
+    },
+    {
+      "name": "trailing line feed https",
+      "url": "https://cdn.example.com/a\n"
+    },
+    {
+      "name": "CRLF",
+      "url": "/a\r\n"
+    },
+    {
+      "name": "inner line feed",
+      "url": "/\n/evil"
+    },
+    {
+      "name": "nul",
+      "url": "/files/a\u0000.webp"
+    },
+    {
+      "name": "del",
+      "url": "/files/a.webp"
+    },
+    {
+      "name": "double quote",
+      "url": "/a\"/onerror=\"alert(1)"
+    },
+    {
+      "name": "single quote",
+      "url": "/a'b.webp"
+    },
+    {
+      "name": "backtick",
+      "url": "/a`b.webp"
+    },
+    {
+      "name": "less than",
+      "url": "/a<b.webp"
+    },
+    {
+      "name": "greater than",
+      "url": "/a>b.webp"
+    },
+    {
+      "name": "NBSP lead",
+      "url": " /files/a.webp"
+    },
+    {
+      "name": "path over 2048 bytes",
+      "prefix": "/",
+      "repeat": "a",
+      "count": 2048,
+      "suffix": ""
+    },
+    {
+      "name": "https over 2048 bytes",
+      "prefix": "https://cdn.example.com/",
+      "repeat": "a",
+      "count": 2048,
+      "suffix": ""
+    },
+    {
+      "name": "2048 bytes plus a line feed",
+      "prefix": "/",
+      "repeat": "a",
+      "count": 2047,
+      "suffix": "\n"
+    },
+    {
+      "name": "over 2048 UTF-8 bytes in 1025 characters",
+      "prefix": "/",
+      "repeat": "é",
+      "count": 1024,
+      "suffix": ""
+    }
+  ]
+}

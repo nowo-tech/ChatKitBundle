@@ -98,6 +98,12 @@ dependencies current. Security fixes are released as patch versions of the suppo
   `members()` consistent; call `ChatRecipients::forget()` when revoking access to a known conversation for an immediate
   effect.
 - **Link previews:** resolve only your own routes, authorize per viewer, never fetch remote URLs.
+- **Profile pictures (1.16):** `ChatAvatarUrlResolverInterface` must return stable URLs that your application checks when
+  the browser fetches them. They travel in Mercure events and stay in the page, so a URL that carries a bearer
+  signature (a pre-signed storage link) is unsupported: anyone who sees the payload can use it until it expires, and the
+  dock shows initials once it does. The bundle emits only `https://` URLs without user info and same-origin `/` paths
+  (`AvatarUrlPolicy`), resolves people after its access filters, and sets `referrerpolicy="same-origin"`. Allow the
+  picture origins in your `img-src` CSP.
 - **Digest and push senders:** escape `ChatDigestItem` fields in email templates; keep VAPID keys secret; set HTTP / SMTP
   timeouts.
 - **Browser:** a Content-Security-Policy on pages with the dock is recommended (the bundle needs no inline script; its

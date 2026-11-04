@@ -13,3 +13,5 @@ services:
     Nowo\ChatKitBundle\Contract\ChatDirectoryInterface: '@App\Chat\DemoChatDirectory'
     Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface: '@App\Chat\DemoChatAccessPolicy'
     Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface: '@App\Chat\DemoChannelProvider'
+    # ChatKit 1.16: profile pictures (Alice and Bob; Carol's is broken on purpose to show the fallback).
+    Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface: '@App\Chat\DemoAvatarUrlResolver'

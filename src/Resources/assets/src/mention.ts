@@ -4,6 +4,7 @@
  * picked names become tokens `@[Name](publicId)` (encodeMentions); the server keeps a token only for a member who
  * may read the conversation and renders it as a chip (ChatMentions, ChatMarkdownRenderer).
  */
+import { attachAvatarImage } from './avatar';
 import { h } from './dom';
 import { t } from './format';
 import { customStatus, statusDot } from './status';
@@ -238,10 +239,13 @@ export class MentionAutocomplete {
     this.items = members;
     this.list.replaceChildren(
       ...members.map((member, index) => {
+        const initials = h('span', { class: 'nowo-chat-mention-option__initials', 'aria-hidden': 'true', text: member.initials });
+        // 1.16: the member's picture over the initials (24px).
+        attachAvatarImage(initials, member.avatarUrl, 24);
         const option = h(
           'li',
           { class: 'nowo-chat-mention-option', role: 'option', id: `${this.list.id}-${index}`, 'aria-selected': 'false' },
-          h('span', { class: 'nowo-chat-mention-option__initials', 'aria-hidden': 'true', text: member.initials }),
+          initials,
           h('span', { class: 'nowo-chat-mention-option__name', text: member.name }),
         );
         // 1.10: the member's status dot and custom status (as this viewer may see them).
