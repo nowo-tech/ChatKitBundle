@@ -92,6 +92,10 @@ jobs:
           # symfony/mercure (dev only) does not allow symfony/web-link 8.x yet: test 8.2 without it
           # (MercureChatRealtime tests are skipped; the null transport is used).
           composer remove --dev symfony/mercure --no-update
+          # symfony/event-dispatcher-contracts v3.8.0 was tagged without ListenerIntrospectionInterface, which
+          # symfony/event-dispatcher 8.2.x-dev already uses ("Interface ... ListenerIntrospectionInterface not found").
+          # Take the contracts from main, aliased into the ^3 range, until a release ships the interface.
+          composer require --dev --no-update "symfony/event-dispatcher-contracts:dev-main as 3.8.99"
 
       - name: Override Composer platform PHP (composer.json pins the minimum PHP for the lock)
         run: composer config platform.php "${{ matrix.php }}.99"
