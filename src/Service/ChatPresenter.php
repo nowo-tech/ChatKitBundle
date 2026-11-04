@@ -113,6 +113,7 @@ final readonly class ChatPresenter
                 'buzz'       => $last->isBuzz(),
                 'pin'        => $last->isPinLine(),
                 'deleted'    => $last->isDeleted(),
+                'moderated'  => $last->isModerated(),
                 'mine'       => $last->isAuthoredBy($viewer),
                 'authorName' => $last->getAuthor()?->getChatDisplayName(),
             ] : null,

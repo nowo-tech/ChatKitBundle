@@ -152,6 +152,7 @@ final readonly class ChatPersonalData
         $qb = $this->entityManager->createQueryBuilder(...);
 
         $rewritten = $this->eraseMentions($user);
+        $this->keepModeratedState($user);
         foreach ([[ChatMessage::class, 'pinnedBy'], [ChatMessage::class, 'deletedBy'], [ChatConversation::class, 'assignee'], [ChatConversation::class, 'resolvedBy']] as [$entity, $field]) {
             $qb()->update($entity, 'x')->set('x.' . $field, ':none')->where('x.' . $field . ' = :user')
                 ->setParameter('none', null)->setParameter('user', $user)->getQuery()->execute();
@@ -231,6 +232,34 @@ final readonly class ChatPersonalData
         }
 
         return $rewritten;
+    }
+
+    /**
+     * Messages of other people the user removed (as a moderator) keep their moderated state once the deleted-by
+     * pointer is nulled: `meta.moderated = true` (DP-L4). It also covers removals made before 1.15.3, when the flag
+     * was not stored yet. Nothing about the moderator is kept.
+     *
+     * @param ChatUserInterface $user The user whose data is erased
+     */
+    private function keepModeratedState(ChatUserInterface $user): void
+    {
+        /** @var iterable<array{id: int, meta: array<string, mixed>|null}> $rows */
+        $rows = $this->entityManager->createQueryBuilder()
+            ->select('m.id', 'm.meta')->from(ChatMessage::class, 'm')
+            ->where('m.deletedBy = :user')->andWhere('m.author IS NULL OR m.author <> :user')
+            ->setParameter('user', $user)
+            ->getQuery()->toIterable([], AbstractQuery::HYDRATE_ARRAY);
+        foreach ($rows as $row) {
+            $meta = $row['meta'] ?? [];
+            if (($meta['moderated'] ?? false) === true) {
+                continue;
+            }
+            $meta['moderated'] = true;
+            $this->entityManager->createQueryBuilder()->update(ChatMessage::class, 'm')
+                ->set('m.meta', ':meta')->where('m.id = :id')
+                ->setParameter('meta', $meta, Types::JSON)->setParameter('id', $row['id'])
+                ->getQuery()->execute();
+        }
     }
 
     /**

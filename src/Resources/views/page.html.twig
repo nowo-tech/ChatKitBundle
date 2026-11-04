@@ -77,7 +77,7 @@
                         <li>
                             <a class="nowo-chat-page__row{{ current and current.uuid == conversation.uuid ? ' is-current' }}{{ conversation.unread > 0 ? ' is-unread' }}" href="{{ path('nowo_chat_page_conversation', {uuid: conversation.uuid}) }}"{% if current and current.uuid == conversation.uuid %} aria-current="page"{% endif %}>
                                 <span class="nowo-chat-page__row-title">{{ conversation.title }}</span>
-                                <span class="nowo-chat-page__row-preview">{{ conversation.lastMessage ? conversation.lastMessage.preview : conversation.subtitle }}</span>
+                                <span class="nowo-chat-page__row-preview">{{ conversation.lastMessage ? (conversation.lastMessage.deleted|default(false) ? ((conversation.lastMessage.moderated|default(false) ? 'chat.moderated_message' : 'chat.deleted_message')|trans) : conversation.lastMessage.preview) : conversation.subtitle }}</span>
                                 {% if conversation.unread > 0 %}<span class="nowo-chat-badge"><span aria-hidden="true">{{ conversation.unread }}</span><span class="nowo-chat-sr-only">{{ 'chat.unread'|trans({'%count%': conversation.unread}) }}</span></span>{% endif %}
                             </a>
                             {% set _action = _archived ? 'chat.reopen_conversation' : 'chat.close_conversation' %}

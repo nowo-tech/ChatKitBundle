@@ -144,6 +144,7 @@ final class ChatMentionsTest extends DatabaseTestCase
         $keys    = [TestChannelProvider::KEY];
 
         self::assertSame([$third->getId(), $second->getId(), $first->getId()], array_map(static fn (ChatMessageMention $m): ?int => $m->getMessage()->getId(), $repo->findForUser($luis, $keys, false, 10)));
+        self::assertGreaterThan(0, $repo->findForUser($luis, $keys, false, 1)[0]->getCreatedAt()->getTimestamp());
         self::assertSame(3, $repo->countForUser($luis, $keys, false));
         self::assertSame(2, $repo->countForUser($luis, [], false), 'a channel the user left no longer counts');
         self::assertSame(1, $repo->countForUser($luis, $keys, false, channelsOnly: true));

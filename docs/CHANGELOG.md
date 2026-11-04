@@ -44,6 +44,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Accessibility: the folded launcher on phones has an accessible name again (axe `button-name`, serious).** On a phone the closed dock shows only the round icon; the rule that hid `.nowo-chat-launcher__label` used `display: none`, which also removed the button's only text, so screen readers announced an unnamed button. The label is now hidden visually with the sr-only pattern (absolutely positioned, out of the flex flow), so the button keeps its name from the translated `chat.launcher` text and looks exactly as before (a 56 × 56 px round button). The launcher icon is marked `aria-hidden="true"`. The demo e2e runs axe on the folded launcher at 375 px.
+- **Moderation: a message removed by a moderator keeps reading as "Removed by a moderator" (audit DP-L4).** 1.15.2 nulls `deletedBy` when the moderator is erased (and `onDelete: SET NULL` does the same when the host deletes the moderator's user row), which turned the removal into an apparent self-deletion by the author ("This message was deleted"). `ChatMessage::delete()` now stores `meta.moderated = true` when the deleter is not the author, `isModerated()` honours it, and `ChatPersonalData::erase()` sets the flag on the user's earlier removals before it nulls the pointer. The flag never names the moderator and the original text stays gone. The state is shown in every shipped locale (`chat.moderated_message`) in the thread (server render and live updates, unchanged) and now also in the conversation list: the API `lastMessage` gains a `moderated` flag, the dock list and the full-page list show "Removed by a moderator" (or "This message was deleted") for a deleted last message. No schema change.
+
 ## [1.15.2] - 2026-11-03
 
 Erasure removes the user from mentions, pointers and support-bot messages

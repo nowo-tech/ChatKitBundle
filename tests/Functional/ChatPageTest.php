@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
+use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
@@ -131,5 +132,33 @@ final class ChatPageTest extends DatabaseTestCase
         self::assertSame('You can no longer message this person.', $crawler->filter('.nowo-chat-page__thread .nowo-chat-notice')->text());
         $this->client->request(Request::METHOD_POST, '/chat/' . $dm->getUuid(), ['nowo_chat_message' => ['_token' => $token, 'body' => 'x']]);
         self::assertStringContainsString('error=read_only', (string) $this->client->getResponse()->headers->get('Location'));
+    }
+
+    public function testRemovalsByAModeratorReadAsSuchInTheListAndTheThread(): void
+    {
+        $chat = $this->get(ChatService::class);
+        $ana  = $this->user('Ana');
+        $luis = $this->user('Luis');
+        $eve  = $this->user('Eve');
+        $dm   = $chat->openDirect($ana, $luis);
+        $own  = $chat->send($luis, $dm, 'deleted by Luis');
+        $chat->delete($luis, $own);
+        $spam = $chat->send($luis, $dm, 'spam');
+        $chat->delete($eve, $spam);
+        // The moderator's pointer goes away (erasure, or the host deleting the account): the state stays.
+        $this->em->createQueryBuilder()->update(ChatMessage::class, 'm')->set('m.deletedBy', ':none')
+            ->where('m.id = :id')->setParameter('none', null)->setParameter('id', $spam->getId())->getQuery()->execute();
+        $this->em->clear();
+
+        $this->client->loginUser($ana);
+        $crawler = $this->client->request(Request::METHOD_GET, '/chat/' . $dm->getUuid());
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+        self::assertSame('Removed by a moderator', $crawler->filter('.nowo-chat-page__row-preview')->text());
+        self::assertSame(
+            ['This message was deleted', 'Removed by a moderator'],
+            $crawler->filter('.nowo-chat-bubble--deleted')->each(static fn ($node): string => $node->text()),
+        );
+        self::assertStringNotContainsString('Eve', (string) $this->client->getResponse()->getContent(), 'the moderator is never named');
+        self::assertStringNotContainsString('spam', (string) $this->client->getResponse()->getContent());
     }
 }

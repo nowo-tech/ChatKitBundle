@@ -202,6 +202,15 @@ final class ChatEntitiesTest extends TestCase
         self::assertNotNull($moderated->getEditedAt());
         $moderated->delete($admin);
         self::assertTrue($moderated->isModerated());
+        self::assertSame(['moderated' => true], $moderated->getMeta(), 'only the flag, never the moderator');
+        self::assertNull($message->getMeta(), 'no flag on an own deletion');
+
+        // 1.15.3 (DP-L4): the state survives the deleted-by pointer being nulled (erasure, account deletion).
+        (new ReflectionProperty(ChatMessage::class, 'deletedBy'))->setValue($moderated, null);
+        self::assertNull($moderated->getDeletedBy());
+        self::assertTrue($moderated->isModerated());
+        (new ReflectionProperty(ChatMessage::class, 'deletedBy'))->setValue($message, null);
+        self::assertFalse($message->isModerated());
     }
 
     public function testParticipantReadCursorOnlyMovesForwardAndMute(): void

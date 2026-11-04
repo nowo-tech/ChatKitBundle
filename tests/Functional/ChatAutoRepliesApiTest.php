@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use DateTimeImmutable;
+use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
@@ -98,6 +99,17 @@ final class ChatAutoRepliesApiTest extends DatabaseTestCase
         $chat->send($this->fresh($bea), $this->fresh($other), 'hi');
         self::assertSame(0, $this->em->getRepository(ChatMessage::class)->count(['conversation' => $other->getId(), 'kind' => ChatMessage::KIND_AUTO]));
         self::assertSame('Back on **Monday**', $this->get(ChatPersonalData::class)->export($this->fresh($ana))['settings']['auto_reply']['text']);
+    }
+
+    public function testTheAuthorAndUnreachablePeopleNeverGetAutomaticReplies(): void
+    {
+        $chat     = $this->get(ChatService::class);
+        $ana      = $this->user('Ana');
+        $disabled = $this->user('Disabled Dan');
+        $channel  = $chat->openChannel($ana, $this->get(ChatAccess::class)->channel(TestChannelProvider::KEY) ?? self::fail('channel'));
+        $message  = $chat->send($ana, $channel, 'hello');
+
+        self::assertSame([], $this->get(ChatAutoReplier::class)->afterSend($message, [$ana, $disabled]));
     }
 
     public function testQuickReplies(): void

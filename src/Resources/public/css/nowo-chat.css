@@ -1099,7 +1099,20 @@
   padding: 8px;
   border-radius: var(--nowo-chat-radius-pill);
 }
-.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__label,
+/* The folded launcher on phones is the round icon alone: its label is hidden visually only (sr-only pattern), so
+ * the button keeps its accessible name (axe button-name). Out of the flex flow, it adds no gap or width. */
+.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__chevron,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__compose,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__tuck,

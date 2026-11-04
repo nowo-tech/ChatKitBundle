@@ -17,6 +17,7 @@ use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Support\ChatSupportTickets;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
@@ -249,5 +250,70 @@ final class ChatPrivacyTest extends DatabaseTestCase
         $bare = new ChatPersonalData($this->em, $this->get(ChatUserSettingsRepository::class), $this->get(ChatConversationRepository::class));
         $bare->erase($this->user(''));
         self::assertCount(0, $this->em->getRepository(ChatMessageMention::class)->findAll());
+    }
+
+    public function testEraseKeepsTheModeratedStateOfRemovalsByTheUser(): void
+    {
+        $chat  = $this->get(ChatService::class);
+        $data  = $this->get(ChatPersonalData::class);
+        $agent = $this->user('Agent Ana');
+        $bob   = $this->user('Bob');
+        $dm    = $chat->openDirect($agent, $bob);
+        // Removed by the agent in 1.15.3 (flag stored at deletion time).
+        $flagged = $chat->send($bob, $dm, 'flagged');
+        $chat->delete($agent, $flagged);
+        // Removed by the agent before 1.15.3: no flag stored yet, only the deleted-by pointer.
+        $legacy = $chat->send($bob, $dm, 'legacy');
+        $chat->delete($agent, $legacy);
+        $this->em->createQueryBuilder()->update(ChatMessage::class, 'm')->set('m.meta', ':none')
+            ->where('m.id = :id')->setParameter('none', null)->setParameter('id', $legacy->getId())->getQuery()->execute();
+        // Deleted by their own authors: never moderated.
+        $own = $chat->send($bob, $dm, 'mine');
+        $chat->delete($bob, $own);
+        $selfAgent = $chat->send($agent, $dm, 'agent own');
+        $chat->delete($agent, $selfAgent);
+        $this->em->clear();
+        $legacyRow = $this->em->getRepository(ChatMessage::class)->find($legacy->getId());
+        self::assertNotNull($legacyRow);
+        self::assertNull($legacyRow->getMeta());
+        self::assertTrue($legacyRow->isModerated(), 'the pointer still says so before the erasure');
+        $this->em->clear();
+
+        $agent = $this->em->getRepository($agent::class)->find($agent->getId());
+        self::assertNotNull($agent);
+        $data->erase($agent);
+        $this->em->clear();
+
+        $presenter = $this->get(ChatPresenter::class);
+        $bob       = $this->em->getRepository($bob::class)->find($bob->getId());
+        self::assertNotNull($bob);
+        foreach (['flagged' => $flagged, 'legacy' => $legacy] as $label => $message) {
+            $row = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $message->getUuid()]);
+            self::assertNotNull($row);
+            self::assertNull($row->getDeletedBy(), $label);
+            // DP-L4: still "Removed by a moderator", not the author's own deletion.
+            self::assertTrue($row->isModerated(), $label);
+            self::assertSame(['moderated' => true], $row->getMeta(), $label);
+            $payload = $presenter->message($row, $bob);
+            self::assertTrue($payload['deleted'], $label);
+            self::assertTrue($payload['moderated'], $label);
+            $json = json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+            self::assertStringNotContainsString('Agent Ana', $json, 'the moderator is never named');
+            self::assertStringNotContainsString($label, $json, 'the original text is gone');
+        }
+        foreach ([$own, $selfAgent] as $message) {
+            $row = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $message->getUuid()]);
+            self::assertNotNull($row);
+            self::assertTrue($row->isDeleted());
+            self::assertFalse($row->isModerated());
+            self::assertNull($row->getMeta());
+        }
+
+        // Erasing again changes nothing (the flag is already there).
+        $data->erase($agent);
+        $this->em->clear();
+        $row = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $flagged->getUuid()]);
+        self::assertNotNull($row);
+        self::assertSame(['moderated' => true], $row->getMeta());
     }
 }
