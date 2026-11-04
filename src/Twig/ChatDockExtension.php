@@ -67,6 +67,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param ClockInterface $clock Clock for the user's own status (expiry)
      * @param array<string, mixed> $statusPresets Suggested custom statuses (`status_presets`, 1.12: `quick` and `more`)
      * @param ChatAvatars|null $avatars 1.16: the user's own picture (`me.avatarUrl`); null gives null
+     * @param array{overlay?: string, watch_aria_modal?: bool} $dock 1.17: dock reaction to modal overlays (`dock`)
      */
     public function __construct(
         private readonly Security $security,
@@ -91,6 +92,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly ClockInterface $clock = new Clock(),
         private readonly array $statusPresets = Configuration::DEFAULT_STATUS_PRESETS,
         private readonly ?ChatAvatars $avatars = null,
+        private readonly array $dock = ['overlay' => 'hide', 'watch_aria_modal' => false],
     ) {
     }
 
@@ -213,7 +215,12 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'references' => $this->references?->isEnabled() ?? false,
             // Decorative emojis of the support assistant's own lines (greeting, "continue or new?").
             'supportEmojis' => $this->supportEmojis,
-            'i18n'          => $this->strings($locale),
+            // 1.17: what the floating dock does while the page shows a modal overlay.
+            'dock' => [
+                'overlay'        => $this->dock['overlay'] ?? 'hide',
+                'watchAriaModal' => $this->dock['watch_aria_modal'] ?? false,
+            ],
+            'i18n' => $this->strings($locale),
         ];
     }
 

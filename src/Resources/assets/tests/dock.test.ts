@@ -1225,4 +1225,136 @@ describe('ChatDock', () => {
       expect(playOnce).not.toHaveBeenCalled();
     });
   });
+
+  describe('modal overlays (1.17)', () => {
+    const overlay = (type: 'open' | 'close', depth: number | undefined): void => {
+      document.dispatchEvent(new CustomEvent(`nowo:overlay-${type}`, { detail: depth === undefined ? null : { depth, kind: 'drawer', owner: document.body } }));
+    };
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-nowo-overlay');
+    });
+
+    it('hides the dock while an overlay is open (default mode) and brings it back after the last one', async () => {
+      const { dock, root, q } = mount([summary('a')]);
+      await dock.start();
+      overlay('open', 1);
+      expect(root.getAttribute('data-overlay')).toBe('hidden');
+      expect(root.hasAttribute('inert')).toBe(true);
+      expect(q<HTMLElement>('.nowo-chat-dock').inert).toBe(true);
+      overlay('open', 2);
+      overlay('close', 1);
+      expect(root.getAttribute('data-overlay')).toBe('hidden');
+      overlay('close', 0);
+      expect(root.hasAttribute('data-overlay')).toBe(false);
+      expect(root.hasAttribute('inert')).toBe(false);
+      expect(q<HTMLElement>('.nowo-chat-dock').inert).toBe(false);
+    });
+
+    it('reads the html marker without a depth and at mount time', () => {
+      document.documentElement.setAttribute('data-nowo-overlay', '1');
+      const { root } = mount([]);
+      expect(root.getAttribute('data-overlay')).toBe('hidden');
+      document.documentElement.removeAttribute('data-nowo-overlay');
+      overlay('close', undefined);
+      expect(root.hasAttribute('data-overlay')).toBe(false);
+      overlay('open', undefined);
+      expect(root.getAttribute('data-overlay')).toBe('hidden');
+      document.documentElement.setAttribute('data-nowo-overlay', '0');
+      overlay('close', undefined);
+      expect(root.hasAttribute('data-overlay')).toBe(false);
+    });
+
+    it('only stops answering in inert mode and does nothing in none mode', () => {
+      const inert = mount([], { dock: { overlay: 'inert' } });
+      const none = mount([], { dock: { overlay: 'none' } });
+      overlay('open', 1);
+      expect(inert.root.getAttribute('data-overlay')).toBe('inert');
+      expect(inert.root.hasAttribute('inert')).toBe(true);
+      expect(none.root.hasAttribute('data-overlay')).toBe(false);
+      expect(none.root.hasAttribute('inert')).toBe(false);
+    });
+
+    it('keeps the tuck state independent of the overlay, both ways', async () => {
+      const { dock, root, q } = mount([summary('a')]);
+      await dock.start();
+      const panel = q<HTMLElement>('.nowo-chat-dock');
+      dock.setTucked(true);
+      overlay('open', 1);
+      overlay('close', 0);
+      expect(root.classList.contains('is-tucked')).toBe(true);
+      expect(panel.inert).toBe(true);
+      overlay('open', 1);
+      dock.setTucked(false);
+      expect(panel.inert).toBe(true);
+      overlay('close', 0);
+      expect(panel.inert).toBe(false);
+      expect(root.classList.contains('is-tucked')).toBe(false);
+    });
+
+    it('never lifts an inert the host set on the root', () => {
+      const { root } = mount([]);
+      root.setAttribute('inert', '');
+      overlay('open', 1);
+      overlay('close', 0);
+      expect(root.hasAttribute('inert')).toBe(true);
+    });
+
+    it('stops listening and clears its marker once destroyed', () => {
+      const { dock, root } = mount([]);
+      overlay('open', 1);
+      dock.destroy();
+      expect(root.hasAttribute('data-overlay')).toBe(false);
+      expect(root.hasAttribute('inert')).toBe(false);
+      overlay('open', 1);
+      expect(root.hasAttribute('data-overlay')).toBe(false);
+    });
+
+    it('watches modal elements outside the dock when watchAriaModal is on', async () => {
+      const { root } = mount([], { dock: { watchAriaModal: true } });
+      const inside = document.createElement('div');
+      inside.setAttribute('aria-modal', 'true');
+      root.append(inside);
+      const hidden = document.createElement('div');
+      hidden.setAttribute('aria-modal', 'true');
+      hidden.hidden = true;
+      const plain = document.createElement('dialog');
+      plain.setAttribute('open', '');
+      document.body.append(hidden, plain);
+      await flush();
+      expect(root.hasAttribute('data-overlay')).toBe(false);
+
+      const modal = document.createElement('div');
+      modal.setAttribute('aria-modal', 'true');
+      document.body.append(modal);
+      await flush();
+      expect(root.getAttribute('data-overlay')).toBe('hidden');
+      modal.hidden = true;
+      await flush();
+      expect(root.hasAttribute('data-overlay')).toBe(false);
+
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      dialog.setAttribute('open', '');
+      document.body.append(dialog);
+      await flush();
+      expect(root.getAttribute('data-overlay')).toBe('hidden');
+      dialog.remove();
+      await flush();
+      expect(root.hasAttribute('data-overlay')).toBe(false);
+    });
+
+    it('treats an open dialog as modal through :modal when the browser knows it', () => {
+      const { root, dock } = mount([], { dock: { watchAriaModal: true } });
+      const dialog = document.createElement('dialog');
+      dialog.setAttribute('open', '');
+      document.body.append(dialog);
+      const matches = vi.spyOn(dialog, 'matches').mockReturnValue(true);
+      expect((dock as unknown as { modalOutside(): boolean }).modalOutside()).toBe(true);
+      matches.mockImplementation(() => {
+        throw new SyntaxError(':modal');
+      });
+      expect((dock as unknown as { modalOutside(): boolean }).modalOutside()).toBe(false);
+      expect(root.hasAttribute('data-overlay')).toBe(false);
+    });
+  });
 });

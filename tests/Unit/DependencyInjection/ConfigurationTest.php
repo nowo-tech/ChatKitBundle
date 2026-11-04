@@ -45,6 +45,7 @@ final class ConfigurationTest extends TestCase
             'auto_reply_interval_hours' => 4,
             'max_pins'                  => 20,
             'auto_away_minutes'         => 10,
+            'dock'                      => ['overlay' => 'hide', 'watch_aria_modal' => false],
             'status_presets'            => Configuration::DEFAULT_STATUS_PRESETS,
             'support'                   => [
                 'ticket_prefix'      => 'SUP-',
@@ -65,6 +66,20 @@ final class ConfigurationTest extends TestCase
                 'buzz_per_minute'       => 10,
             ],
         ], $config['profiles']['default']);
+    }
+
+    public function testDockOverlayModesAndWatcher(): void
+    {
+        $config = $this->process([['profiles' => ['default' => ['dock' => ['overlay' => 'inert', 'watch_aria_modal' => true]]]]]);
+
+        self::assertSame(['overlay' => 'inert', 'watch_aria_modal' => true], $config['profiles']['default']['dock']);
+    }
+
+    public function testUnknownDockOverlayModeIsRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+
+        $this->process([['profiles' => ['default' => ['dock' => ['overlay' => 'visible']]]]]);
     }
 
     public function testOmittedProfilesFollowTheDefaultProfileName(): void

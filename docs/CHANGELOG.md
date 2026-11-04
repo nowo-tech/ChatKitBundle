@@ -47,6 +47,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **The dock steps aside while the page shows a modal overlay** (UiKit 2.28 overlay contract, requested by
+  symfony-beacon): per-profile `dock.overlay` — `hide` (default: the floating dock, its windows and the edge tab get
+  `visibility: hidden` and `inert`, root `data-overlay="hidden"`), `inert` (painted but inert, `data-overlay="inert"`) or
+  `none` (1.16 behaviour). It follows the `nowo:overlay-open` / `nowo:overlay-close` events on `document`
+  (`detail.depth` > 0 = an overlay is open) and `html[data-nowo-overlay]` (an overlay opened before the dock started).
+  No UiKit code is needed at runtime: any host script can emit the events.
+- `dock.watch_aria_modal` (default `false`): also step aside while a modal `<dialog>` (`:modal`, or `aria-modal="true"`)
+  or a shown `[aria-modal="true"]` element is open outside the dock (one `MutationObserver`, one scan per frame), for
+  overlays that do not emit the events.
+- The dock configuration JSON carries `dock: {overlay, watchAriaModal}`.
+
+### Changed
+
+- Tucking and an open overlay are independent: the dock is inert while tucked **or** suppressed; closing an overlay
+  never un-tucks it and nothing is written to the shared layout. Page mode (the full-page chat) is never suppressed.
+  An `inert` the host wrote on the root is never lifted.
+
+### Documentation
+
+- USAGE: "Stacking with drawers and modals" rewritten — `--nowo-chat-z-index` (60) is public API, with its place in
+  the UiKit layer scale (shell header 40 < dock 60 < page-edge tabs 74 < overlays 1040+; native `<dialog>` is top
+  layer); the overlay modes and the event contract; the `:has()` recipe kept for hosts without the events.
+
 ## [1.16.1] - 2026-11-04
 
 ### Fixed
