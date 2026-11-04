@@ -13,6 +13,7 @@
 - [Mentions](#mentions)
 - [References](#references)
 - [Link previews](#link-previews)
+- [Profile pictures](#profile-pictures)
 - [Email digest](#email-digest)
 - [Customising the markup](#customising-the-markup)
 - [Theme tokens](#theme-tokens)
@@ -96,6 +97,15 @@ public function previews(ChatUserInterface $viewer, array $urls): array; // url 
 ```
 
 See [Link previews](#link-previews).
+
+### `ChatAvatarUrlResolverInterface` (optional, 1.16)
+
+```php
+public function urlFor(ChatUserInterface $user, int $size): ?string;   // never called by the bundle
+public function urlsFor(array $users, int $size): array;               // public id => URL or null, one call per response
+```
+
+See [Profile pictures](#profile-pictures).
 
 ### `ChatReferenceProviderInterface` (optional, one per kind of item)
 
@@ -350,6 +360,73 @@ Messages that contain links to your application (absolute or root-relative URLs)
 `GET /api/link-previews?url[]=…` (at most 10 URLs per request, batched and cached per page) and your
 `ChatLinkPreviewProviderInterface` answers **for the viewer**: leave out any URL the viewer may not see, so a preview
 never leaks a title. The default provider returns nothing (no cards).
+
+## Profile pictures
+
+Since 1.16 the dock can show a picture over the initials of a person's bubble (list rows, the window header, the empty
+thread, message authors, the people picker, the @mention list and the user's own button). The default resolver returns
+nothing, so the bubbles keep their initials and every new field is `null`.
+
+Alias the interface to your resolver:
+
+```yaml
+# config/services.yaml
+Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface: '@App\Chat\AvatarUrlResolver'
+```
+
+```php
+final class AvatarUrlResolver implements ChatAvatarUrlResolverInterface
+{
+    public function __construct(private UrlGeneratorInterface $urls) {}
+
+    public function urlFor(ChatUserInterface $user, int $size): ?string
+    {
+        return $this->urlsFor([$user], $size)[$user->getChatPublicId()] ?? null;
+    }
+
+    public function urlsFor(array $users, int $size): array
+    {
+        $urls = [];
+        foreach ($users as $user) {
+            // Read what is already loaded on the user: no query per user.
+            $file = $user instanceof User ? $user->getAvatarFileUuid() : null;
+            $urls[$user->getChatPublicId()] = $file === null ? null : $this->urls->generate('file_download', [
+                'uuid' => $file, 'variant' => $size * 2 <= 64 ? 's64' : 's128',
+            ]);
+        }
+
+        return $urls;
+    }
+}
+```
+
+- **One call per response.** The bundle collects the people of a response after its access filters and calls
+  `urlsFor()` once (never `urlFor()`). The answers are kept for the request and reset between requests
+  (`kernel.reset`). `$size` is the largest CSS size in px of the response's bubbles: 56 in 1.16; accept any value
+  from 1 to 512. Return a URL or `null` per public id; missing keys mean `null` and unknown keys are ignored.
+- **Who is resolved.** The peer of a direct conversation, the requester of a support thread seen by an agent, message
+  authors, contacts, members and the viewer (`me`). Channels, the support bot, deleted or erased authors and the
+  requester's own support thread never get a picture. Presence, typing, read receipts and tickets carry no URL.
+- **Which URLs.** `https://host[:port]` URLs without user info, or same-origin paths that start with a single `/`.
+  Anything else becomes `null`, with a `debug` log line that names the user, never the URL: `http:`, `javascript:`,
+  `data:` (images included), `blob:` and other schemes, `//host`, relative paths without a leading `/`, IPv6 literal
+  hosts, ports outside 1–65535 or with a leading zero, invalid UTF-8, backslashes, quotes (`"`, `'`, backtick), `<`,
+  `>`, whitespace or control characters (a trailing line feed included) and more than 2048 UTF-8 bytes. The browser
+  runs the same check before it sets `src`. Never return a URL a user typed: every viewer's browser fetches it.
+- **Stable, access-checked URLs.** URLs travel in realtime events (`message`, `message_updated`) and stay in the dock
+  while the page is open. Return a stable URL that your application checks when the browser fetches it (for example a
+  route that redirects to a short-lived signed link, sent with `Cache-Control: private, max-age=…` shorter than the
+  signature), never a URL that carries a bearer signature. If an image fails (403, 404, expired), the bubble goes back
+  to the initials and that URL is not requested again until the page reloads; nothing is stored.
+- **Failures.** A resolver that throws gives `null` for the whole response and a `warning` log line; the chat keeps
+  working.
+- **Markup.** `<img class="nowo-chat-avatar__image" alt="" loading="lazy" decoding="async" referrerpolicy="same-origin"
+  width height>` inside the existing `aria-hidden` bubble, which gets `has-image`; the initials stay underneath. No
+  inline style or handler (the error fallback is an event listener in `nowo-chat.js`). Your `img-src` CSP must allow
+  the origins your URLs (and their redirects) point to.
+
+JSON fields: `avatarUrl` on conversation summaries (also in the support inbox and the page context), contacts and
+members; `authorAvatarUrl` on messages (also in realtime events); `me.avatarUrl` in the dock config.
 
 ## Email digest
 

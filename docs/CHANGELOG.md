@@ -45,6 +45,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Planned as **1.16.0** (minor): profile pictures.
+
+### Added
+
+- **Profile pictures (avatar URL hooks).** New optional contract `Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface` (`urlFor()`, `urlsFor()`), aliased by default to `NullChatAvatarUrlResolver` (no pictures, every bubble keeps its initials). Alias it to your resolver to show a picture over the initials in the dock list, the window header, the empty thread, message authors, the people picker, the @mention list and the user's own button.
+  - **One resolver call per response.** The internal `ChatAvatars` service (`kernel.reset`) collects the people of a response after the access filters (`canView`, `canOpenDirect`, `ChatRecipients::of()`, the agent checks) and calls `urlsFor()` once with size `56`. It never calls `urlFor()`. The result is kept for the request, so the realtime event and the response of a send share one call. A resolver that throws gives `null` everywhere, logs a `warning`, and the request continues.
+  - **New JSON fields (null by default):** `avatarUrl` on conversation summaries (direct peer; requester of a support thread seen by an agent), contacts, members and support inbox threads; `authorAvatarUrl` on messages, also in the realtime `message` / `message_updated` events; `me.avatarUrl` in the dock config. Presence, typing, read receipts, tickets and `lastMessage` are unchanged.
+  - **URL policy** (`AvatarUrlPolicy`, repeated in the browser before `src` is set): `https://host[:port]` without user info, or a same-origin path with a single leading `/`. Everything else is dropped: other schemes (`http:`, `javascript:`, `data:` including images, `blob:`), `//host`, IPv6 literals, ports outside 1–65535 or with a leading zero (`:0`, `:00443`), invalid UTF-8 (which JSON could not encode), backslashes, quotes, backtick, `<`, `>`, whitespace and control characters (a trailing line feed included), and more than 2048 UTF-8 bytes. PHP and Vitest run one shared table (`assets/tests/fixtures/avatar-urls.json`).
+  - **Markup:** `<img class="nowo-chat-avatar__image" alt="" loading="lazy" decoding="async" referrerpolicy="same-origin" width height>` inside the existing `aria-hidden` bubble (which gets `has-image`), with the initials underneath. Without a URL the markup is byte-identical to 1.15. A failed image is removed through an event listener (no inline handler), and its URL is not requested again during the page's lifetime; nothing is stored.
+  - The demo resolves pictures for Alice and Bob and a broken URL for Carol. The demo e2e checks the pictures, the fallback and axe (`image-alt`, `role-img-alt`, `color-contrast`).
+
 ## [1.15.3] - 2026-11-04
 
 ### Fixed

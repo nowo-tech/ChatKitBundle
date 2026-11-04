@@ -11,6 +11,8 @@ export interface ConversationSummary {
   title: string;
   subtitle: string;
   initials: string;
+  /** 1.16: picture of the person the bubble shows (direct peer, requester for an agent); null: the initials. */
+  avatarUrl?: string | null;
   peerUuid: string | null;
   channelKey: string | null;
   supportStatus: SupportStatus | null;
@@ -42,6 +44,8 @@ export interface ChatMessage {
   authorUuid: string | null;
   authorName: string;
   authorInitials: string;
+  /** 1.16: the author's picture; null: the initials. */
+  authorAvatarUrl?: string | null;
   mine: boolean;
   /** `pin` (1.10): "X pinned a message" line (`pinnedMessage` = its uuid). */
   kind: 'text' | 'buzz' | 'bot' | 'pin' | 'auto';
@@ -91,6 +95,8 @@ export interface MentionRef {
 /** A conversation member offered by the @mention list. */
 export interface Member extends MentionRef {
   initials: string;
+  /** 1.16: the member's picture; null: the initials. */
+  avatarUrl?: string | null;
   /** 1.10: the member's status as the viewer sees it, and their custom status. */
   status?: VisibleStatus;
   statusText?: string | null;
@@ -111,6 +117,8 @@ export interface Contact {
   name: string;
   email: string | null;
   initials: string;
+  /** 1.16: the contact's picture; null: the initials. */
+  avatarUrl?: string | null;
   /** Free-form source from the application's directory (`group`, `project`, `search` …). */
   source: string;
   via: string;
@@ -268,8 +276,8 @@ export interface ChatConfig {
   autoAwayMinutes?: number;
   /** 1.11: the automatic reply (status menu). */
   autoReply?: AutoReply;
-  /** 1.10: the user's own name and initials (status button). */
-  me?: { name: string; initials: string };
+  /** 1.10: the user's own name and initials (status button); 1.16: and picture. */
+  me?: { name: string; initials: string; avatarUrl?: string | null };
   isAgent: boolean;
   /** Decorative emojis of the support assistant's own lines (`support.emojis`; absent before 1.9.1 = shown). */
   supportEmojis?: boolean;

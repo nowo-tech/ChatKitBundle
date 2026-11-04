@@ -67,10 +67,12 @@ final readonly class ChatSupportInbox
             },
         ));
         $threads = array_slice($threads, 0, $limit);
-        $ids     = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $threads);
-        $unread  = $this->messages->countUnreadByConversation((int) $agent->getId(), $ids);
-        $latest  = $this->messages->findLatestByConversationIds($ids);
-        $counts  = $this->conversations->countTicketsByOwner(array_values(array_unique(array_map(
+        // 1.16: the requesters' pictures in one resolver call (only threads the agent sees).
+        $this->presenter->primeAvatars(array_map(fn (ChatConversation $conversation): ?ChatUserInterface => $this->presenter->avatarPerson($conversation, $agent, null, true), $threads));
+        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $threads);
+        $unread = $this->messages->countUnreadByConversation((int) $agent->getId(), $ids);
+        $latest = $this->messages->findLatestByConversationIds($ids);
+        $counts = $this->conversations->countTicketsByOwner(array_values(array_unique(array_map(
             static fn (ChatConversation $conversation): int => (int) $conversation->getSupportOwner()?->getId(),
             $threads,
         ))));

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Twig;
 
+use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Controller\ChatApiController;
@@ -65,6 +66,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param int $autoAwayMinutes Minutes without input before the dock reports the user idle (away); 0 = never
      * @param ClockInterface $clock Clock for the user's own status (expiry)
      * @param array<string, mixed> $statusPresets Suggested custom statuses (`status_presets`, 1.12: `quick` and `more`)
+     * @param ChatAvatars|null $avatars 1.16: the user's own picture (`me.avatarUrl`); null gives null
      */
     public function __construct(
         private readonly Security $security,
@@ -88,6 +90,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly int $autoAwayMinutes = 10,
         private readonly ClockInterface $clock = new Clock(),
         private readonly array $statusPresets = Configuration::DEFAULT_STATUS_PRESETS,
+        private readonly ?ChatAvatars $avatars = null,
     ) {
     }
 
@@ -154,7 +157,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
 
         return [
             'userUuid'          => $user->getChatPublicId(),
-            'me'                => ['name' => $user->getChatDisplayName(), 'initials' => $user->getChatInitials()],
+            'me'                => ['name' => $user->getChatDisplayName(), 'initials' => $user->getChatInitials(), 'avatarUrl' => $this->avatars?->urlOf($user)],
             'csrf'              => $this->csrf->getToken(ChatApiController::CSRF_ID)->getValue(),
             'locale'            => $locale,
             'contextChannel'    => $channel instanceof ChatChannel ? ['key' => $channel->key, 'label' => $channel->label] : null,

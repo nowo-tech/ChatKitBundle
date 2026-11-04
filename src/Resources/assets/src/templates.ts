@@ -3,6 +3,7 @@
  * application); the script clones them and fills their `data-part` hooks. Icons: `data-icon` spans get the
  * application's UX Icons (<template data-nowo-chat-icon>) or the built-in SVG, unless they already hold one.
  */
+import { attachAvatarImage } from './avatar';
 import { builtinIcon, h } from './dom';
 import type { VisibleStatus } from './types';
 
@@ -67,14 +68,16 @@ export class Templates {
    * @param size Avatar size.
    * @param online Adds the online dot.
    * @param status 1.10: the person's status (busy, away, dnd colour the dot; offline hides it); wins over `online`.
+   * @param imageUrl 1.16: the person's picture (people only), over the initials; without it the bubble is unchanged.
    * @returns The avatar element (aria-hidden).
    */
-  avatar(initials: string, kind: 'direct' | 'channel' | 'support' = 'direct', size: 'sm' | 'md' = 'md', online = false, status?: VisibleStatus): HTMLElement {
+  avatar(initials: string, kind: 'direct' | 'channel' | 'support' = 'direct', size: 'sm' | 'md' = 'md', online = false, status?: VisibleStatus, imageUrl?: string | null): HTMLElement {
     const shown = status === undefined ? online : status !== 'offline';
     const tone = status === undefined || status === 'offline' ? '' : ` is-status-${status}`;
     const element = h('span', { class: `nowo-chat-avatar nowo-chat-avatar--${kind} nowo-chat-avatar--${size}${shown ? ' is-online' : ''}${tone}`, 'aria-hidden': 'true' });
     if (kind === 'direct') {
       element.textContent = initials;
+      attachAvatarImage(element, imageUrl, size === 'sm' ? 28 : 40);
     } else {
       element.append(this.icon(kind === 'channel' ? 'hash' : 'lifebuoy', size === 'sm' ? 14 : 16));
     }

@@ -3382,3 +3382,20 @@ a.nowo-chat-ref:focus-visible {
   font: inherit;
   resize: vertical;
 }
+
+/* 1.16: profile pictures. The <img> covers the initials, which stay underneath (shown while it loads and after an
+ * error, when the script removes it). Sizes come from the bubble; the status dot (::after, or the mention option's dot
+ * element) is painted later, so it stays on top. */
+.nowo-chat-avatar__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  background: var(--nowo-chat-surface);
+}
+.nowo-chat-avatar.has-image,
+.nowo-chat-mention-option__initials.has-image {
+  color: transparent;
+}

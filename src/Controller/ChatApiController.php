@@ -154,6 +154,14 @@ final class ChatApiController extends AbstractController
         }
         $peers    = $this->access->usersByIds(array_values(array_unique($peerIds)));
         $presence = $this->presence->statusOf(array_values($peers));
+        // 1.16: the pictures of every row (peers, and requesters for an agent) in one resolver call.
+        $isAgent = $this->access->isSupportAgent($user);
+        $people  = [];
+        foreach ($list as $conversation) {
+            $peerId   = $conversation->peerIdOf($user);
+            $people[] = $this->presenter->avatarPerson($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $isAgent);
+        }
+        $this->presenter->primeAvatars($people);
 
         $rows = [];
         foreach ($list as $conversation) {
@@ -221,6 +229,12 @@ final class ChatApiController extends AbstractController
         $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
         assert($message instanceof ChatMessage);
         $this->deny(!$this->access->canPin($message->getConversation(), $user), 'pin_forbidden', Response::HTTP_FORBIDDEN);
+        // 1.16: one resolver call for the pin line (by the user), the message and the pinned bar returned below.
+        $this->presenter->primeAvatars([
+            $user,
+            $message->getAuthor(),
+            ...array_map(static fn (ChatMessage $pinned): ?ChatUserInterface => $pinned->getAuthor(), $this->messages->findPinned($message->getConversation())),
+        ]);
         try {
             $this->chat->pin($user, $message, $request->isMethod('POST'));
         } catch (InvalidArgumentException $exception) {
@@ -272,15 +286,17 @@ final class ChatApiController extends AbstractController
             $this->directory->contactsFor($user, $query === '' ? null : $query, self::CONTACTS_LIMIT),
             fn (ChatContact $contact): bool => $this->access->canOpenDirect($user, $contact->user),
         ));
+        $this->presenter->primeAvatars(array_map(static fn (ChatContact $contact): ChatUserInterface => $contact->user, $contacts));
 
         return $this->json([
-            'contacts' => array_map(static fn (ChatContact $contact): array => [
-                'uuid'     => $contact->user->getChatPublicId(),
-                'name'     => $contact->user->getChatDisplayName(),
-                'email'    => $contact->user->getChatEmail(),
-                'initials' => $contact->user->getChatInitials(),
-                'source'   => $contact->source,
-                'via'      => $contact->via,
+            'contacts' => array_map(fn (ChatContact $contact): array => [
+                'uuid'      => $contact->user->getChatPublicId(),
+                'name'      => $contact->user->getChatDisplayName(),
+                'email'     => $contact->user->getChatEmail(),
+                'initials'  => $contact->user->getChatInitials(),
+                'avatarUrl' => $this->presenter->avatarUrl($contact->user),
+                'source'    => $contact->source,
+                'via'       => $contact->via,
             ], $contacts),
         ]);
     }
@@ -388,6 +404,11 @@ final class ChatApiController extends AbstractController
         } catch (InvalidArgumentException $exception) {
             throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
         }
+        // 1.16: the summary's picture and the posted messages' authors in one resolver call.
+        $this->presenter->primeAvatars([
+            $this->presenter->avatarPerson($conversation, $user, null, $this->access->isSupportAgent($user)),
+            ...array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $posted),
+        ]);
 
         return $this->json([
             'conversation' => $this->present($conversation, $user),
@@ -569,6 +590,8 @@ final class ChatApiController extends AbstractController
         $reactions = $this->reactions->summaryFor(array_map(static fn (ChatMessage $message): int => (int) $message->getId(), $page));
         // The page's #references for this reader in one resolve() per type (no N+1).
         $this->references->prime($user, $page);
+        // 1.16: the page's authors in one resolver call.
+        $this->presenter->primeAvatars(array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $page));
 
         return $this->json([
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, $reactions[(int) $message->getId()] ?? []), $page),
@@ -608,15 +631,17 @@ final class ChatApiController extends AbstractController
         $members  = array_slice($members, 0, self::MEMBERS_LIMIT);
         $statuses = $this->presence->statusOf($members);
         $shows    = $this->showsPresence($user);
+        $this->presenter->primeAvatars($members);
 
         return $this->json([
-            'members' => array_map(static function (ChatUserInterface $member) use ($statuses, $shows): array {
+            'members' => array_map(function (ChatUserInterface $member) use ($statuses, $shows): array {
                 $status = ChatPresence::forViewer($statuses[$member->getChatPublicId()] ?? null, $shows);
 
                 return [
                     'uuid'        => $member->getChatPublicId(),
                     'name'        => $member->getChatDisplayName(),
                     'initials'    => $member->getChatInitials(),
+                    'avatarUrl'   => $this->presenter->avatarUrl($member),
                     'status'      => $status['status'],
                     'statusText'  => $status['text'],
                     'statusEmoji' => $status['emoji'],
@@ -1163,8 +1188,11 @@ final class ChatApiController extends AbstractController
      */
     private function pinsOf(ChatConversation $conversation, ChatUserInterface $user): array
     {
+        $pinned = $this->messages->findPinned($conversation);
+        $this->presenter->primeAvatars(array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $pinned));
+
         return [
-            'pins'   => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $this->messages->findPinned($conversation)),
+            'pins'   => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $pinned),
             'canPin' => $this->access->canPin($conversation, $user),
         ];
     }
