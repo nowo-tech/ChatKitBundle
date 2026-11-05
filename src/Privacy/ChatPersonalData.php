@@ -266,7 +266,7 @@ final readonly class ChatPersonalData
      */
     public function eraseMentions(ChatUserInterface $user, string $label = self::ERASED_MENTION): ChatMentionErasure
     {
-        self::assertLabel($label);
+        $this->assertLabel($label);
         $this->entityManager->beginTransaction();
         try {
             $erasure = $this->scrubMentions($user, $label);
@@ -289,7 +289,7 @@ final readonly class ChatPersonalData
      *
      * @throws InvalidArgumentException when it could
      */
-    private static function assertLabel(string $label): void
+    private function assertLabel(string $label): void
     {
         if (preg_match('//u', $label) !== 1) {
             throw new InvalidArgumentException('The erased-mention label is not valid UTF-8.');
@@ -323,7 +323,7 @@ final readonly class ChatPersonalData
                 $body = $message->getBody();
                 // A regex failure (invalid UTF-8) is null: never write "" over someone's message.
                 $scrubbed = preg_replace($token, $replace, $body);
-                if ($scrubbed === null || !self::addsNoMention($body, $scrubbed, $publicId)) {
+                if ($scrubbed === null || !$this->addsNoMention($body, $scrubbed, $publicId)) {
                     $rows[(int) $message->getId()] ??= false;
                 } elseif ($scrubbed !== $body) {
                     $message->redact($scrubbed, $this->markdown->render($scrubbed));
@@ -409,7 +409,7 @@ final readonly class ChatPersonalData
      * @param string $after The scrubbed body
      * @param string $publicId The erased user's public id
      */
-    private static function addsNoMention(string $before, string $after, string $publicId): bool
+    private function addsNoMention(string $before, string $after, string $publicId): bool
     {
         $tokens = static function (string $text): array {
             preg_match_all(ChatMentions::TOKEN, $text, $matches);
