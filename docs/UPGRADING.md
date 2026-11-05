@@ -59,9 +59,11 @@ From **1.17.x**: `composer update nowo-tech/chat-kit-bundle`. No schema change, 
   delete confirmation renders Cancel before Delete. Selectors on `data-part` are unchanged.
 - **Erasure:** `ChatPersonalData::erase()` now runs in one transaction (nested in yours, if any), flushes the entity
   manager when it rewrote a mention (pending changes of yours are written with it) and dispatches
-  `ChatMentionsErasedEvent`. Listen to it to re-index the rewritten messages and to report `skippedMessageIds` (text that
-  could not be rewritten safely; fix or delete those messages, then call `eraseMentions()` again). To scrub accounts
-  erased before 1.15.2, call `eraseMentions($user)`.
+  `ChatMentionsErasedEvent` (before the `message_updated` broadcast, which now only logs a failure). It returns the
+  `ChatMentionErasure` instead of `void`. Listen to the event to re-index the rewritten messages and to report
+  `skippedMessageIds` (text that could not be scanned; fix or delete those messages, then call `eraseMentions()` again);
+  do not log its `publicId`. Call it on a fresh (or flushed and cleared) entity manager, and clear it after a call that
+  threw. To scrub accounts erased before 1.15.2, call `eraseMentions($user)`.
 - **Host drawers:** replace hand-written `nowo:overlay-*` events with `window.NowoChat.acquireOverlay(drawer)` /
   `handle.release()` (or UiKit's `window.NowoUiOverlay.acquire()`), so a UiKit dialog opened over the drawer does not
   bring the dock back early ([USAGE](USAGE.md#stacking-with-drawers-and-modals)).

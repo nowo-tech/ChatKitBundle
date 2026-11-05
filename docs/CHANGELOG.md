@@ -54,11 +54,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   same design and naming as WikiBundle 1.17 `eraseMentions()`).** The mention part of `erase()` is public and hardened:
   candidates (a mention row of the user, or `](publicId)` in the body) are walked in batches of `ERASE_BATCH` (200)
   paged by id inside one transaction, each batch flushed and only the messages the lookup loaded detached; a message
-  whose text cannot be scanned (regex failure, invalid UTF-8) or whose rewrite would form a new mention is never
-  written but skipped and reported (it keeps its mention row); a label that could render as a mention is refused
-  (`InvalidArgumentException`). Returns `ChatMentionErasure` (countable; `messageIds`, `skippedMessageIds`). New
-  `ChatMentionsErasedEvent` (`publicId`, `messageIds`, `skippedMessageIds`) after the commit; `ChatMessage::redact()`
-  rewrites a body without marking it as edited; `ChatPersonalData::ERASED_MENTION` is public.
+  whose text cannot be scanned (regex failure, invalid UTF-8) is never written but skipped and reported (it keeps its
+  mention row); a mention the rewrite would form from the surrounding text becomes plain `@name` text, so a crafted
+  message cannot keep the erased public id (audit FT-L1); a label that could render as a mention (or starts with `-`)
+  is refused (`InvalidArgumentException`). Returns `ChatMentionErasure` (countable; `messageIds`,
+  `skippedMessageIds`). New `ChatMentionsErasedEvent` (`publicId`, `messageIds`, `skippedMessageIds`) after the commit
+  and before the `message_updated` broadcast, which runs in chunks of 200 and logs a failure instead of throwing
+  (audit FT-L2; new optional `logger` argument); `ChatMessage::redact()` rewrites a body without marking it as edited;
+  `ChatPersonalData::ERASED_MENTION` is public.
 - **`acquireOverlay(owner, {kind, inertShell})`** (`window.NowoChat.acquireOverlay`, requested by symfony-beacon for its
   `EdgeDrawer`): a host drawer or modal makes the floating dock step aside through the 1.17 `dock.overlay` contract with
   a handle (`release()`, idempotent). It uses UiKit's `window.NowoUiOverlay` registry when present (one depth for UiKit
@@ -73,9 +76,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   reply's own save is secondary now (`.nowo-chat-status-form__secondary`). The quick replies popover keeps its heading
   and *Add* button in view while the list scrolls. The inline delete confirmation puts Cancel first and the destructive
   Delete last. The menu keeps the panel's fixed height (1.13.1), so it never jumps.
-- `ChatPersonalData::erase()` runs in one transaction and dispatches `ChatMentionsErasedEvent`; it flushes the entity
-  manager when a mention was rewritten (the rewrite goes through the entities instead of one DQL update per message).
-- Dev lock: `nowo-tech/ui-kit-bundle` 2.29.0.
+- `ChatPersonalData::erase()` returns the `ChatMentionErasure` (was `void`), runs in one transaction and dispatches
+  `ChatMentionsErasedEvent`; it flushes the entity manager when a mention was rewritten (the rewrite goes through the
+  entities instead of one DQL update per message).
+- Dev lock: `nowo-tech/ui-kit-bundle` 2.29.0. Demo lock: ui-kit 2.29.0 and the Symfony 8.1 security release (audit FT-L3).
 
 ## [1.17.0] - 2026-11-04
 

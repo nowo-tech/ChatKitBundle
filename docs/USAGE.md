@@ -908,19 +908,30 @@ The bundle makes no outbound HTTP call or subprocess itself:
     manager, all inside **one transaction** (a failure rolls everything back). Only the messages the lookup loaded
     itself are detached; instances your code already held stay managed. A flush writes every pending change of the
     entity manager, yours included.
-  - **Never writes on a failure:** a message whose text cannot be scanned (invalid UTF-8, any regex failure) or whose
-    rewrite would form a mention that was not there (text built around the token, e.g. `@[x @[Ana](id)](other)`) is
-    skipped and reported, and keeps its mention row so a second run finds it again.
+  - **Never writes on a failure:** a message whose text cannot be scanned (invalid UTF-8, any regex failure) is skipped
+    and reported, and keeps its mention row so a second run finds it again.
+  - **The erased public id always goes:** a mention the rewrite would form from the text around the token (e.g.
+    `@[x @[Ana](id)](other)` → `@[x @…](other)`) becomes its plain `@name` text instead (`@x @…`), as `ChatMentions`
+    does for a non-member; a crafted message cannot block the erasure.
   - **A label that could render as a mention is refused** (`InvalidArgumentException`): empty, invalid UTF-8, `[`, `]`,
-    `(` or `)` anywhere, a handle character first, `@` followed by a handle character, or `@` last. `@…` (default) and
-    `«deleted user»` are fine.
+    `(` or `)` anywhere, a handle character or `-` first, `@` followed by a handle character, or `@` last. `@…` (default)
+    and `«deleted user»` are fine.
   - Returns `ChatMentionErasure` (countable: rewritten messages; `messageIds`, `skippedMessageIds`, `skipped()`,
-    `publicId`). Open clients get `message_updated` for the rewritten messages, and `ChatMentionsErasedEvent`
-    (`publicId`, `messageIds`, `skippedMessageIds`) is dispatched after the commit when a message was rewritten or
-    skipped (inside an outer transaction of yours it fires before your commit): refresh your copies of the listed
-    messages and report the skipped ones.
-  - `erase()` runs it with the default label and, since 1.18, runs entirely in one transaction and dispatches the same
-    event.
+    `publicId`). `ChatMentionsErasedEvent` (`publicId`, `messageIds`, `skippedMessageIds`) is dispatched after the
+    commit when a message was rewritten or skipped (inside an outer transaction of yours it fires before your commit):
+    refresh your copies of the listed messages and report the skipped ones. **Listeners must not log the `publicId`**
+    (it is the erased person's identifier): log counts or message ids. Then open clients get `message_updated` for the
+    rewritten messages, in chunks of `ERASE_BATCH`; a failed broadcast is logged (`logger`), never thrown, since the
+    erasure is already committed and clients catch up on their next load.
+  - `erase()` runs it with the default label and, since 1.18, runs entirely in one transaction, dispatches the same
+    event and returns the `ChatMentionErasure`.
+  - **Entity manager:** call `erase()` / `eraseMentions()` on a fresh entity manager, or one you flushed and cleared,
+    so no pending host change is written by the erasure's flush. After a call that threw (rolled back), `clear()` the
+    entity manager (or use a fresh one): instances it still holds may carry redacted text that the database no longer
+    has.
+  - **Not scrubbed:** other people's private quick replies (`ChatQuickReply`, a snippet may hold a pasted name or
+    token; they are the owner's text and are deleted only with the owner's own erasure), and Web Push notifications,
+    e-mail digests and realtime updates that were already delivered (they cannot be recalled).
 
 ChatKit has no eraser of its own in UserKit's personal-data chain (`nowo_user_kit.personal_data.eraser`): register a
 host eraser that calls `erase()` (or `eraseMentions()`) with the user, before the eraser that anonymizes the display
