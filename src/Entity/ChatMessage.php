@@ -411,6 +411,21 @@ class ChatMessage
     }
 
     /**
+     * Replaces the text and its render without stamping an edit (1.18: privacy erasure of mentions; the message is not
+     * shown as edited, since its author changed nothing).
+     *
+     * @param string $body New Markdown
+     * @param string $bodyHtml New sanitized HTML
+     */
+    public function redact(string $body, string $bodyHtml): void
+    {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->body = $body;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->bodyHtml = $bodyHtml;
+    }
+
+    /**
      * Whether the author may still edit or delete it (EDIT_WINDOW_SECONDS after creation).
      *
      * @param DateTimeImmutable $now Current time
