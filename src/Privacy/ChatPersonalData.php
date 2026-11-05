@@ -24,11 +24,13 @@ use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Service\ChatMentions;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Throwable;
 
+use function array_chunk;
 use function array_count_values;
 use function array_filter;
 use function array_key_last;
@@ -42,8 +44,8 @@ use function preg_match;
 use function preg_match_all;
 use function preg_quote;
 use function preg_replace;
+use function preg_replace_callback;
 use function sprintf;
-use function str_ends_with;
 use function str_replace;
 use function strtr;
 
@@ -67,10 +69,10 @@ final readonly class ChatPersonalData
 
     /**
      * An erased-mention label that could render as a mention, alone or with the text around the token (1.18): empty, a
-     * bracket or parenthesis anywhere, a handle character first, an `@` followed by a handle character or `[`, or an `@`
-     * last.
+     * bracket or parenthesis anywhere, a handle character or `-` first (audit FT-I3), an `@` followed by a handle character
+     * or `[`, or an `@` last.
      */
-    private const string MENTION_LIKE_LABEL = '/^$|[\[\]()]|^[a-zA-Z0-9_]|@[a-zA-Z0-9_]|@$/';
+    private const string MENTION_LIKE_LABEL = '/^$|[\[\]()]|^[a-zA-Z0-9_-]|@[a-zA-Z0-9_]|@$/';
 
     /**
      * Builds the personal data hooks from the entity manager and the chat repositories.
@@ -83,6 +85,7 @@ final readonly class ChatPersonalData
      * @param ChatReactionRepository|null $reactions Reactions sent with those updates; null sends none
      * @param ChatMarkdownRenderer $markdown Re-renders the HTML of the rewritten messages
      * @param EventDispatcherInterface|null $events Receives {@see ChatMentionsErasedEvent} (1.18); null dispatches none
+     * @param LoggerInterface|null $logger Logs a failed `message_updated` broadcast after the commit (1.18); null logs nothing
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -93,6 +96,7 @@ final readonly class ChatPersonalData
         private ?ChatReactionRepository $reactions = null,
         private ChatMarkdownRenderer $markdown = new ChatMarkdownRenderer(),
         private ?EventDispatcherInterface $events = null,
+        private ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -180,8 +184,10 @@ final readonly class ChatPersonalData
      * fire no Doctrine events: a host search index must re-index the rewritten messages (the event lists them).
      *
      * @param ChatUserInterface $user The user whose data is erased
+     *
+     * @return ChatMentionErasure What the mention part rewrote and skipped (1.18)
      */
-    public function erase(ChatUserInterface $user): void
+    public function erase(ChatUserInterface $user): ChatMentionErasure
     {
         $qb = $this->entityManager->createQueryBuilder(...);
 
@@ -231,8 +237,11 @@ final readonly class ChatPersonalData
             throw $exception;
         }
 
-        $this->publishRewritten($erasure->messageIds);
+        // Audit FT-L2: the event first (host re-index, skipped report), then the best-effort broadcast.
         $this->dispatchErased($erasure);
+        $this->publishRewritten($erasure->messageIds);
+
+        return $erasure;
     }
 
     /**
@@ -252,8 +261,10 @@ final readonly class ChatPersonalData
      * lookup loaded itself are released (detached), the instances the caller already held stay managed.
      *
      * A message is skipped (left untouched, reported in {@see ChatMentionErasure::$skippedMessageIds} and in the event)
-     * when its text cannot be scanned (invalid UTF-8 or another regex failure: nothing is ever written from a failed
-     * scan) or when the rewrite would produce a mention that was not there before (text built around the token).
+     * only when its text cannot be scanned (invalid UTF-8 or another regex failure: nothing is ever written from a failed
+     * scan). A mention the rewrite would form (text built around the token, `@[x @[Ana](id)](other)`) becomes plain
+     * `@name` text instead (audit FT-L1), so the erased public id always goes. The event is dispatched before the
+     * `message_updated` broadcast, which runs in chunks and only logs a failure (audit FT-L2).
      *
      * @param ChatUserInterface $user The user whose mentions are erased
      * @param string $label What each mention becomes; it must not be able to render as a mention, alone or with the text
@@ -276,8 +287,8 @@ final readonly class ChatPersonalData
 
             throw $exception;
         }
-        $this->publishRewritten($erasure->messageIds);
         $this->dispatchErased($erasure);
+        $this->publishRewritten($erasure->messageIds);
 
         return $erasure;
     }
@@ -323,7 +334,9 @@ final readonly class ChatPersonalData
                 $body = $message->getBody();
                 // A regex failure (invalid UTF-8) is null: never write "" over someone's message.
                 $scrubbed = preg_replace($token, $replace, $body);
-                if ($scrubbed === null || !$this->addsNoMention($body, $scrubbed, $publicId)) {
+                // Audit FT-L1: a mention the rewrite would form (text built around the token) becomes plain `@name`.
+                $scrubbed = $scrubbed === null ? null : $this->flattenNewMentions($body, $scrubbed, $publicId);
+                if ($scrubbed === null) {
                     $rows[(int) $message->getId()] ??= false;
                 } elseif ($scrubbed !== $body) {
                     $message->redact($scrubbed, $this->markdown->render($scrubbed));
@@ -402,28 +415,37 @@ final readonly class ChatPersonalData
     }
 
     /**
-     * Whether the scrubbed body holds no mention the original did not hold (text built around a token, such as
-     * `@[x @[Ana](id)](other)`, would otherwise turn into a new mention), and none of the erased user.
+     * Audit FT-L1: text built around the erased token (`@[x @[Ana](id)](other)`) forms a mention once the token is
+     * replaced (`@[x @…](other)`). Every mention the original did not hold, and any mention of the erased user, becomes
+     * its plain `@name` text (what `ChatMentions::resolve()` does for a non-member), until the body holds no such
+     * mention; each pass removes brackets, so it ends. The erased public id never survives a rewrite.
      *
      * @param string $before The original body
      * @param string $after The scrubbed body
      * @param string $publicId The erased user's public id
+     *
+     * @return string|null The safe body; null when a regex failed (never written)
      */
-    private function addsNoMention(string $before, string $after, string $publicId): bool
+    private function flattenNewMentions(string $before, string $after, string $publicId): ?string
     {
-        $tokens = static function (string $text): array {
-            preg_match_all(ChatMentions::TOKEN, $text, $matches);
+        preg_match_all(ChatMentions::TOKEN, $before, $matches);
+        $old = array_count_values($matches[0]);
+        do {
+            $left    = $old;
+            $changed = false;
+            $after   = preg_replace_callback(ChatMentions::TOKEN, static function (array $token) use (&$left, &$changed, $publicId): string {
+                if ($token[2] !== $publicId && ($left[$token[0]] ?? 0) > 0) {
+                    --$left[$token[0]];
 
-            return array_count_values($matches[0]);
-        };
-        $old = $tokens($before);
-        foreach ($tokens($after) as $mention => $count) {
-            if (str_ends_with($mention, '](' . $publicId . ')') || $count > ($old[$mention] ?? 0)) {
-                return false;
-            }
-        }
+                    return $token[0];
+                }
+                $changed = true;
 
-        return true;
+                return '@' . $token[1];
+            }, $after);
+        } while ($changed && $after !== null);
+
+        return $after;
     }
 
     /** Rolls the erasure back; a rollback that fails too never hides the cause. */
@@ -508,7 +530,9 @@ final readonly class ChatPersonalData
     }
 
     /**
-     * Sends `message_updated` for the rewritten messages that still exist, so open clients drop the old HTML.
+     * Sends `message_updated` for the rewritten messages that still exist, so open clients drop the old HTML. Runs after
+     * the commit: in chunks of {@see self::ERASE_BATCH} (audit FT-L2), and a failure is logged, never thrown (the
+     * erasure is committed; clients catch up on their next load).
      *
      * @param list<int> $ids Ids of the rewritten messages
      */
@@ -517,13 +541,19 @@ final readonly class ChatPersonalData
         if ($ids === [] || !$this->notifier instanceof ChatNotifier) {
             return;
         }
-        /** @var list<ChatMessage> $messages */
-        $messages = $this->entityManager->createQueryBuilder()
-            ->select('m')->from(ChatMessage::class, 'm')->where('m.id IN (:ids)')->setParameter('ids', $ids)
-            ->getQuery()->setHint(Query::HINT_REFRESH, true)->getResult();
-        $reactions = $this->reactions?->summaryFor($ids) ?? [];
-        foreach ($messages as $message) {
-            $this->notifier->messageUpdated($message, $reactions[(int) $message->getId()] ?? []);
+        foreach (array_chunk($ids, self::ERASE_BATCH) as $chunk) {
+            try {
+                /** @var list<ChatMessage> $messages */
+                $messages = $this->entityManager->createQueryBuilder()
+                    ->select('m')->from(ChatMessage::class, 'm')->where('m.id IN (:ids)')->setParameter('ids', $chunk)
+                    ->getQuery()->setHint(Query::HINT_REFRESH, true)->getResult();
+                $reactions = $this->reactions?->summaryFor($chunk) ?? [];
+                foreach ($messages as $message) {
+                    $this->notifier->messageUpdated($message, $reactions[(int) $message->getId()] ?? []);
+                }
+            } catch (Throwable $exception) {
+                $this->logger?->error('Chat mention erasure: message_updated could not be published for {count} message(s).', ['count' => count($chunk), 'exception' => $exception]);
+            }
         }
     }
 }
