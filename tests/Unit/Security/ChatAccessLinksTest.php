@@ -54,6 +54,17 @@ final class ChatAccessLinksTest extends TestCase
         self::assertFalse((new ChatAccess($unreachable, $provider, $this->createStub(ChatDirectoryInterface::class)))->canManageLinks($conversation, $user), 'cannot read it');
     }
 
+    public function testAChannelThatDisappearsIsDenied(): void
+    {
+        $provider = $this->createStub(ChatChannelProviderInterface::class);
+        $provider->method('find')->willReturnOnConsecutiveCalls(new ChatChannel('project:acme', 'Acme'), null);
+        $provider->method('canUse')->willReturn(true);
+        $policy = $this->createStub(ChatAccessPolicyInterface::class);
+        $policy->method('isReachable')->willReturn(true);
+
+        self::assertFalse((new ChatAccess($policy, $provider, $this->createStub(ChatDirectoryInterface::class)))->canManageLinks(ChatConversation::channel('project:acme'), $this->user('Ana', 3), false), 'an explicit deny, not a TypeError (audit FZ-I4)');
+    }
+
     public function testDirectAndSupport(): void
     {
         $ana    = $this->user('Ana', 3);

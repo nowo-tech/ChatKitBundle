@@ -17,6 +17,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 use function count;
 use function max;
+use function min;
 use function sprintf;
 
 /**
@@ -27,6 +28,9 @@ use function sprintf;
 #[AsCommand(name: 'nowo:chat:links:backfill', description: 'Index the links of existing chat messages for the Links panel')]
 final class ChatLinksBackfillCommand extends Command
 {
+    /** Largest `--batch` (one batch stays bounded in memory). */
+    public const int MAX_BATCH = 5000;
+
     /**
      * Builds the command.
      *
@@ -44,7 +48,7 @@ final class ChatLinksBackfillCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('batch', null, InputOption::VALUE_REQUIRED, 'Messages per batch', '500')
+        $this->addOption('batch', null, InputOption::VALUE_REQUIRED, 'Messages per batch (at most 5000)', '500')
             ->addOption('after-id', null, InputOption::VALUE_REQUIRED, 'Start after this message id (resume)', '0');
     }
 
@@ -56,7 +60,7 @@ final class ChatLinksBackfillCommand extends Command
 
             return Command::SUCCESS;
         }
-        $batch    = max(1, (int) $input->getOption('batch'));
+        $batch    = min(self::MAX_BATCH, max(1, (int) $input->getOption('batch')));
         $afterId  = max(0, (int) $input->getOption('after-id'));
         $messages = 0;
         $indexed  = 0;

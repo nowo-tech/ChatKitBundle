@@ -8,6 +8,9 @@ use InvalidArgumentException;
 use Nowo\ChatKitBundle\Link\ChatLinkUrls;
 
 use function count;
+use function html_entity_decode;
+use function str_contains;
+use function strip_tags;
 use function strlen;
 
 use const ENT_HTML5;
@@ -18,7 +21,7 @@ use const ENT_SUBSTITUTE;
  * Light Markdown for chat messages, safe by construction — the whole text is
  * HTML-escaped first, then a closed set of rules adds tags: fenced code blocks, inline code, **bold**,
  * *italic* / _italic_, ~~strike~~, bullet / numbered lists, line breaks, http(s) autolinks
- * (`rel="noopener nofollow ugc"`, new tab) and @mention tokens (`@[name](publicId)`, ChatMentions) as
+ * (`rel="noopener noreferrer nofollow ugc"`, new tab) and @mention tokens (`@[name](publicId)`, ChatMentions) as
  * `<span class="nowo-chat-mention" data-mention="publicId">@name</span>`, and #references (`#[Title](type:id)`,
  * ChatReferences) as an empty slot filled for each viewer at read time, and 1.19 link cards (`!link[Title](https://…)`,
  * ChatLinkUrls::card(); a card with a link that is not accepted stays plain text). No raw HTML, no images, no other URL
@@ -183,9 +186,19 @@ final class ChatMarkdownRenderer
 
         $links = [];
         // 1.19: link cards first (their `[Title](url)` part is not a Markdown link).
-        $text = (string) preg_replace_callback(ChatLinkUrls::CARD_TOKEN, function (array $m) use (&$links): string {
+        $text = (string) preg_replace_callback(ChatLinkUrls::CARD_TOKEN, function (array $m) use (&$links, $codes, $mentions): string {
+            if (str_contains($m[1], "\u{E000}R")) {
+                // A #reference keeps its slot (ChatReferences::fill() counts them): no card around it.
+                return $m[0];
+            }
+            // Audit FZ-I3: inline code or a mention inside a card title reads as its text, not as a placeholder.
+            $title = (string) preg_replace_callback(
+                '/\x{E000}([CM])(\d+)\x{E000}/u',
+                static fn (array $p): string => html_entity_decode(strip_tags(($p[1] === 'C' ? $codes : $mentions)[(int) $p[2]]), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                $m[1],
+            );
             try {
-                $links[] = $this->links->card($this->links->normalize($m[2]), $this->links->title($m[1]));
+                $links[] = $this->links->card($this->links->normalize($m[2]), $this->links->title($title));
             } catch (InvalidArgumentException) {
                 $links[] = self::escape($m[0]);
             }
@@ -230,7 +243,7 @@ final class ChatMarkdownRenderer
     {
         $external = !str_starts_with(strtolower($href), 'mailto:');
 
-        return '<a href="' . self::escape($href) . '"' . ($external ? ' rel="noopener nofollow ugc" target="_blank"' : ' rel="nofollow"') . '>' . self::escape($label) . '</a>';
+        return '<a href="' . self::escape($href) . '"' . ($external ? ' rel="noopener noreferrer nofollow ugc" target="_blank"' : ' rel="nofollow"') . '>' . self::escape($label) . '</a>';
     }
 
     private static function escape(string $text): string

@@ -33,6 +33,17 @@ final class ChatMarkdownRendererLinkCardTest extends TestCase
         self::assertStringContainsString('data-provider="intranet"', (new ChatMarkdownRenderer(new ChatLinkUrls(['intranet' => ['label' => 'Intranet', 'hosts' => ['intranet.example']]], true)))->render('!link[](http://intranet.example/)'));
     }
 
+    public function testCodeAndMentionsInATitleReadAsText(): void
+    {
+        $renderer = new ChatMarkdownRenderer();
+
+        self::assertStringContainsString('<span class="nowo-chat-linkcard__title">run make &lt;up&gt; now</span>', $renderer->render('!link[run `make <up>` now](https://example.com/)'));
+        self::assertStringContainsString('<span class="nowo-chat-linkcard__title">@Bob 1:1</span>', $renderer->render('!link[@[Bob](u-1) 1:1](https://teams.microsoft.com/l/x)'));
+        $reference = $renderer->render('!link[#[Task](task:1)](https://example.com/)');
+        self::assertStringNotContainsString('nowo-chat-linkcard', $reference, 'a #reference keeps its slot');
+        self::assertStringContainsString('nowo-chat-ref-slot', $reference);
+    }
+
     public function testPlainTextShowsTheTitle(): void
     {
         self::assertSame('Join Daily now', (new ChatMarkdownRenderer())->plainText('Join !link[Daily](https://teams.microsoft.com/l/x) now'));

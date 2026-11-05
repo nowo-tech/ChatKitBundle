@@ -18,7 +18,6 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Contracts\Service\ResetInterface;
 
 use function array_key_exists;
-use function assert;
 
 /**
  * The single place that decides reachability, on top of the application's policy and channel provider.
@@ -128,8 +127,10 @@ final class ChatAccess implements ResetInterface
             return true;
         }
         $channel = $this->channel((string) $conversation->getChannelKey());
-        // canView() above found the channel.
-        assert($channel instanceof ChatChannel);
+        if (!$channel instanceof ChatChannel) {
+            // The provider no longer knows it (it changed between the calls): deny.
+            return false;
+        }
         if ($this->policy instanceof ChatLinkPolicyInterface) {
             return $this->policy->canManageLinksInChannel($user, $channel);
         }
