@@ -2615,11 +2615,19 @@ a.nowo-chat-ref:focus-visible {
 .nowo-chat-status-menu__header {
   justify-content: space-between;
   border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+  background: color-mix(in srgb, var(--nowo-chat-mist) 35%, var(--nowo-chat-surface));
 }
 
+/* 1.20 (dialog rule v2): Clear stands apart on the left; Cancel, then Save (the one primary) on the right. */
 .nowo-chat-status-menu__footer {
+  flex-wrap: wrap;
   justify-content: flex-end;
   border-top: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+  background: color-mix(in srgb, var(--nowo-chat-mist) 25%, var(--nowo-chat-surface));
+}
+
+.nowo-chat-status-menu__footer > .nowo-chat-status-form__clear {
+  margin-inline-end: auto;
 }
 
 .nowo-chat-status-menu__body {
@@ -2737,6 +2745,7 @@ a.nowo-chat-ref:focus-visible {
 }
 
 .nowo-chat-status-form__clear,
+.nowo-chat-status-form__cancel,
 .nowo-chat-status-form__secondary,
 .nowo-chat-status-form__save {
   padding: 6px 12px;
@@ -3660,12 +3669,31 @@ a.nowo-chat-linkcard:focus-visible {
   outline-offset: 1px;
 }
 
-/* Link dialog (UiKit 2.29 anatomy): a modal <dialog> in the top layer, above the dock; header and footer never scroll. */
-.nowo-chat-linkdialog {
+/*
+ * 1.20, dialog rule v2 (UiKit 2.29 tokens): the two dialog sizes of every modal dialog the chat opens. The width is the
+ * size's (`--nowo-dialog-width-md|wide`, the host's when it declares them); the height is the content's, capped at the
+ * size's height token and never taller than the viewport minus 2rem. No dialog sets a width or height of its own; only
+ * the body scrolls, the header (title, ×) and the footer (Cancel, then the one primary) stay in view.
+ */
+.nowo-chat-dialog {
+  --nowo-chat-dialog-width: var(--nowo-dialog-width-md, min(40rem, calc(100vw - 2rem)));
+  --nowo-chat-dialog-height: var(--nowo-dialog-height-md, 36rem);
   box-sizing: border-box;
-  width: min(440px, calc(100vw - 32px));
-  max-height: min(560px, calc(100vh - 32px));
-  max-height: min(560px, calc(100dvh - 32px));
+  width: var(--nowo-chat-dialog-width);
+  max-width: calc(100vw - 2rem);
+  height: auto;
+  height: fit-content;
+  max-height: min(var(--nowo-chat-dialog-height), calc(100vh - 2rem));
+  max-height: min(var(--nowo-chat-dialog-height), calc(100dvh - 2rem));
+}
+.nowo-chat-dialog--wide {
+  --nowo-chat-dialog-width: var(--nowo-dialog-width-wide, min(56rem, calc(100vw - 2rem)));
+  --nowo-chat-dialog-height: var(--nowo-dialog-height-wide, 52rem);
+}
+
+/* Link dialog (UiKit 2.29 anatomy, medium): a modal <dialog> in the top layer, above the dock; header and footer never
+   scroll. */
+.nowo-chat-linkdialog {
   padding: 0;
   border: 1px solid var(--nowo-chat-border);
   border-radius: var(--nowo-chat-radius-window);
@@ -3699,6 +3727,7 @@ a.nowo-chat-linkcard:focus-visible {
 .nowo-chat-linkdialog__header {
   justify-content: space-between;
   border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+  background: color-mix(in srgb, var(--nowo-chat-mist) 35%, var(--nowo-chat-surface));
 }
 
 .nowo-chat-linkdialog__title {
@@ -3774,6 +3803,7 @@ a.nowo-chat-linkcard:focus-visible {
   flex-wrap: wrap;
   justify-content: flex-end;
   border-top: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+  background: color-mix(in srgb, var(--nowo-chat-mist) 25%, var(--nowo-chat-surface));
 }
 
 .nowo-chat-linkdialog__button {
@@ -3807,9 +3837,6 @@ a.nowo-chat-linkcard:focus-visible {
 }
 
 @media (max-width: 480px) {
-  .nowo-chat-linkdialog {
-    width: calc(100vw - 16px);
-  }
   .nowo-chat-linkdialog__button {
     min-height: 40px;
   }

@@ -160,8 +160,10 @@
                     {% endfor %}
                 {{ form_end(nowo_chat_status_form) }}
             </div>
+            {# 1.20 (dialog rule v2): Clear stands apart as a secondary action, then Cancel and the one primary, last. -#}
             <footer class="nowo-chat-status-menu__footer">
                 <button type="button" class="nowo-chat-status-form__clear" data-part="status-clear">{{ 'chat.status_clear'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                <button type="button" class="nowo-chat-status-form__cancel" data-part="status-cancel">{{ 'chat.cancel'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
                 <button type="submit" form="nowo-chat-status-form" class="nowo-chat-status-form__save">{{ 'chat.save'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
             </footer>
         </div>

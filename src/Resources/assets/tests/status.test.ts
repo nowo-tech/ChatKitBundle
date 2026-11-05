@@ -118,13 +118,20 @@ describe('chat status', () => {
     expect(header?.querySelector('h2')?.id).toBe('nowo-chat-status-menu-title');
     expect(popover.querySelector('.nowo-chat-status-menu__body form')).not.toBeNull();
     expect(footer?.closest('.nowo-chat-status-menu__body')).toBeNull();
-    expect([...(footer?.querySelectorAll('button') ?? [])].map((button) => button.className)).toEqual(['nowo-chat-status-form__clear', 'nowo-chat-status-form__save']);
+    expect([...(footer?.querySelectorAll('button') ?? [])].map((button) => button.className)).toEqual(['nowo-chat-status-form__clear', 'nowo-chat-status-form__cancel', 'nowo-chat-status-form__save']);
     expect(footer?.querySelector('button[type="submit"]')?.getAttribute('form')).toBe(popover.querySelector('form')?.id);
     expect(popover.querySelectorAll('.nowo-chat-status-form__save')).toHaveLength(1);
 
     trigger.click();
     expect(instance.isOpen).toBe(true);
     popover.querySelector<HTMLButtonElement>('[data-part="status-close"]')?.click();
+    expect(instance.isOpen).toBe(false);
+    expect(document.activeElement).toBe(trigger);
+
+    // 1.20: the footer's Cancel closes it too.
+    trigger.click();
+    expect(instance.isOpen).toBe(true);
+    popover.querySelector<HTMLButtonElement>('[data-part="status-cancel"]')?.click();
     expect(instance.isOpen).toBe(false);
     expect(document.activeElement).toBe(trigger);
   });

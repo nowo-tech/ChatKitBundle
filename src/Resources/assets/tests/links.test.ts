@@ -263,6 +263,9 @@ describe('conversation links', () => {
     const element = dialog() as HTMLDialogElement;
     expect(element.hasAttribute('open')).toBe(true);
     expect(element.dataset.mode).toBe('add');
+    // 1.20 (dialog rule v2): the medium size; header and footer outside the scrolling body.
+    expect(element.classList.contains('nowo-chat-dialog--md')).toBe(true);
+    expect(element.querySelector('.nowo-chat-linkdialog__body footer, .nowo-chat-linkdialog__body header')).toBeNull();
     const heading = element.querySelector('h2') as HTMLElement;
     expect(heading.textContent).toBe('Add link');
     expect(element.getAttribute('aria-labelledby')).toBe(heading.id);
