@@ -111,6 +111,24 @@ describe('chat status', () => {
     expect(instance.isOpen).toBe(false);
   });
 
+  it('has the UiKit 2.29 anatomy: a close button in the header, the body scrolls, the footer holds one primary last (1.18)', () => {
+    const { instance, trigger, popover } = menu();
+    const header = popover.querySelector('.nowo-chat-status-menu__header');
+    const footer = popover.querySelector('.nowo-chat-status-menu__footer');
+    expect(header?.querySelector('h2')?.id).toBe('nowo-chat-status-menu-title');
+    expect(popover.querySelector('.nowo-chat-status-menu__body form')).not.toBeNull();
+    expect(footer?.closest('.nowo-chat-status-menu__body')).toBeNull();
+    expect([...(footer?.querySelectorAll('button') ?? [])].map((button) => button.className)).toEqual(['nowo-chat-status-form__clear', 'nowo-chat-status-form__save']);
+    expect(footer?.querySelector('button[type="submit"]')?.getAttribute('form')).toBe(popover.querySelector('form')?.id);
+    expect(popover.querySelectorAll('.nowo-chat-status-form__save')).toHaveLength(1);
+
+    trigger.click();
+    expect(instance.isOpen).toBe(true);
+    popover.querySelector<HTMLButtonElement>('[data-part="status-close"]')?.click();
+    expect(instance.isOpen).toBe(false);
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('saves a picked status, the custom status form and "clear", and reports errors', async () => {
     const { trigger, popover, options, setStatus, changed } = menu();
     expect(options[0]?.getAttribute('aria-checked')).toBe('true');

@@ -2586,17 +2586,16 @@ a.nowo-chat-ref:focus-visible {
   box-shadow: 0 0 0 2px var(--nowo-chat-surface);
 }
 
+/* 1.18 (UiKit 2.29 dialog anatomy): header and footer never scroll; the body between them is the only part that does. */
 .nowo-chat-status-menu {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: 8px;
   max-height: min(460px, calc(100vh - var(--nowo-chat-lift, 0px) - 120px));
   max-height: min(460px, calc(100dvh - var(--nowo-chat-lift, 0px) - 120px));
   min-height: 0;
-  padding: 10px 12px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 70%, transparent);
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--nowo-chat-surface);
   color: var(--nowo-chat-text);
 }
@@ -2604,10 +2603,48 @@ a.nowo-chat-ref:focus-visible {
   display: none;
 }
 
+.nowo-chat-status-menu__header,
+.nowo-chat-status-menu__footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.nowo-chat-status-menu__header {
+  justify-content: space-between;
+  border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+}
+
+.nowo-chat-status-menu__footer {
+  justify-content: flex-end;
+  border-top: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+}
+
+.nowo-chat-status-menu__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px 12px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .nowo-chat-status-menu__title,
 .nowo-chat-status-form__title {
   margin: 0;
+  font-size: inherit;
   font-weight: 600;
+  line-height: inherit;
+}
+
+.nowo-chat-status-menu__close {
+  flex: none;
+  font-size: 1.25rem;
+  line-height: 1;
 }
 
 .nowo-chat-status-menu__options {
@@ -2700,6 +2737,7 @@ a.nowo-chat-ref:focus-visible {
 }
 
 .nowo-chat-status-form__clear,
+.nowo-chat-status-form__secondary,
 .nowo-chat-status-form__save {
   padding: 6px 12px;
   border: 1px solid var(--nowo-chat-border);
@@ -2950,10 +2988,6 @@ a.nowo-chat-ref:focus-visible {
 .nowo-chat-panel:has(> .nowo-chat-status-menu:not([hidden])) > .nowo-chat-panel__body,
 .nowo-chat-panel:has(> .nowo-chat-status-menu:not([hidden])) > .nowo-chat-toast {
   display: none;
-}
-
-.nowo-chat-status-menu {
-  overscroll-behavior: contain;
 }
 
 /* 1.13.1: the open status menu keeps the list's height (the dock never grows or shrinks when you pick a status): it
@@ -3230,15 +3264,18 @@ a.nowo-chat-ref:focus-visible {
   color: var(--nowo-chat-muted);
 }
 
+/* 1.18 (UiKit 2.29 anatomy): the heading and the Add button stay; only the list scrolls. */
 .nowo-chat-quick {
   position: absolute;
   z-index: 3;
   right: 10px;
   bottom: calc(100% + 6px);
   left: 10px;
+  display: flex;
+  flex-direction: column;
   max-height: 260px;
   padding: 8px;
-  overflow-y: auto;
+  overflow: hidden;
   border: 1px solid var(--nowo-chat-border);
   border-radius: var(--nowo-chat-radius-control);
   background: var(--nowo-chat-surface);
@@ -3261,9 +3298,23 @@ a.nowo-chat-ref:focus-visible {
 }
 
 .nowo-chat-quick__list {
+  flex: 1 1 auto;
+  min-height: 0;
   margin: 0 0 6px;
   padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   list-style: none;
+}
+
+.nowo-chat-quick__heading,
+.nowo-chat-quick__empty,
+.nowo-chat-quick__add {
+  flex: none;
+}
+
+.nowo-chat-quick__add {
+  align-self: flex-start;
 }
 
 .nowo-chat-quick__item {
