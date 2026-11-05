@@ -615,6 +615,31 @@ delete document.documentElement.dataset.nowoOverlay;
 document.dispatchEvent(new CustomEvent('nowo:overlay-close', { detail: { depth: 0, kind: 'drawer', owner: drawer } }));
 ```
 
+**From a host drawer: `acquireOverlay()` (1.18).** Hand-written events break as soon as two overlays are open at once (a
+UiKit dialog over a drawer: the drawer's `depth: 0` brings the dock back while the dialog is still open). Ask the chat for
+a handle instead; it shares UiKit's depth when UiKit's registry is on the page (`window.NowoUiOverlay`, UiKit 2.28+, also
+inside `nowo-ui-dialog.js` / `nowo-ui-side-panel.js`) and keeps its own count otherwise:
+
+```js
+// e.g. Beacon's EdgeDrawer: open
+this.overlay = window.NowoChat?.acquireOverlay(slider, { kind: 'drawer' }) ?? null;
+// close (idempotent; also call it when the drawer is disconnected)
+this.overlay?.release();
+this.overlay = null;
+```
+
+| API | Meaning |
+| --- | --- |
+| `acquireOverlay(owner, { kind = 'drawer', inertShell = false })` | `kind`: `dialog` \| `side-panel` \| `drawer` \| `host`. `inertShell` is passed to UiKit (its shell regions `[data-nowo-ui-shell] > header`, `[data-nowo-ui-aside]`, `[data-nowo-ui-overlay-region]` become inert); `false` by default because a host drawer usually manages its own shell, and ignored without UiKit |
+| `handle.release()` / `handle.active()` | Ends the overlay (idempotent) / whether it still counts |
+| `OVERLAY_OPEN_EVENT`, `OVERLAY_CLOSE_EVENT`, `OVERLAY_ROOT_ATTR` | `nowo:overlay-open`, `nowo:overlay-close`, `data-nowo-overlay` |
+
+It is exported by the IIFE (`window.NowoChat.acquireOverlay`) and by the source entry (`import { acquireOverlay }` from
+`src/Resources/assets/src/index.ts`). When UiKit's registry is not on the page the chat's own count dispatches the same
+events and sets `html[data-nowo-overlay]`; load UiKit's registry before the first acquire if both are used (a count
+started without UiKit is not merged into UiKit's later). A host that loads UiKit can call
+`window.NowoUiOverlay.acquire(owner, { kind: 'drawer', inertShell: false })` directly: the result is the same.
+
 For overlays that announce nothing, `dock.watch_aria_modal: true` also suppresses the dock while a modal `<dialog>`
 (`:modal`, or `aria-modal="true"`) or a shown `[aria-modal="true"]` element is open **outside** the dock (one
 `MutationObserver` on the body, one scan per animation frame; off by default for its cost on busy pages).
@@ -874,7 +899,43 @@ The bundle makes no outbound HTTP call or subprocess itself:
     message text (search index, exports, analytics), re-index the conversations of the erased user.
   - Realtime updates and Web Push notifications or e-mail digests already delivered cannot be recalled.
 
-Wire them into your GDPR export / erasure flow.
+- `ChatPersonalData::eraseMentions($user, $label = '@…')` (1.18, DATA-CHAT-MENTION-ERASE; the mention part of `erase()`,
+  same design and naming as WikiBundle 1.17 `WikiCommentService::eraseMentions()`): every `@[Name](publicId)` of the
+  user in a message that is not deleted becomes `$label` (body and re-rendered HTML, not marked as edited) and the user's
+  mention rows are deleted. Use it alone for accounts erased before 1.15.2, or from a host eraser that keeps the rest.
+  - Candidates are the messages with a mention row of the user **or** whose body contains `](publicId)`, walked in
+    batches of `ChatPersonalData::ERASE_BATCH` (200) paged by id, each flushed and then released from the entity
+    manager, all inside **one transaction** (a failure rolls everything back). Only the messages the lookup loaded
+    itself are detached; instances your code already held stay managed. A flush writes every pending change of the
+    entity manager, yours included.
+  - **Never writes on a failure:** a message whose text cannot be scanned (invalid UTF-8, any regex failure) is skipped
+    and reported, and keeps its mention row so a second run finds it again.
+  - **The erased public id always goes:** a mention the rewrite would form from the text around the token (e.g.
+    `@[x @[Ana](id)](other)` → `@[x @…](other)`) becomes its plain `@name` text instead (`@x @…`), as `ChatMentions`
+    does for a non-member; a crafted message cannot block the erasure.
+  - **A label that could render as a mention is refused** (`InvalidArgumentException`): empty, invalid UTF-8, `[`, `]`,
+    `(` or `)` anywhere, a handle character or `-` first, `@` followed by a handle character, or `@` last. `@…` (default)
+    and `«deleted user»` are fine.
+  - Returns `ChatMentionErasure` (countable: rewritten messages; `messageIds`, `skippedMessageIds`, `skipped()`,
+    `publicId`). `ChatMentionsErasedEvent` (`publicId`, `messageIds`, `skippedMessageIds`) is dispatched after the
+    commit when a message was rewritten or skipped (inside an outer transaction of yours it fires before your commit):
+    refresh your copies of the listed messages and report the skipped ones. **Listeners must not log the `publicId`**
+    (it is the erased person's identifier): log counts or message ids. Then open clients get `message_updated` for the
+    rewritten messages, in chunks of `ERASE_BATCH`; a failed broadcast is logged (`logger`), never thrown, since the
+    erasure is already committed and clients catch up on their next load.
+  - `erase()` runs it with the default label and, since 1.18, runs entirely in one transaction, dispatches the same
+    event and returns the `ChatMentionErasure`.
+  - **Entity manager:** call `erase()` / `eraseMentions()` on a fresh entity manager, or one you flushed and cleared,
+    so no pending host change is written by the erasure's flush. After a call that threw (rolled back), `clear()` the
+    entity manager (or use a fresh one): instances it still holds may carry redacted text that the database no longer
+    has.
+  - **Not scrubbed:** other people's private quick replies (`ChatQuickReply`, a snippet may hold a pasted name or
+    token; they are the owner's text and are deleted only with the owner's own erasure), and Web Push notifications,
+    e-mail digests and realtime updates that were already delivered (they cannot be recalled).
+
+ChatKit has no eraser of its own in UserKit's personal-data chain (`nowo_user_kit.personal_data.eraser`): register a
+host eraser that calls `erase()` (or `eraseMentions()`) with the user, before the eraser that anonymizes the display
+name. Wire them into your GDPR export / erasure flow.
 
 ## JSON API
 

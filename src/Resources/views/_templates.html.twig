@@ -82,80 +82,88 @@
     {# 1.10: the user's own status — an ARIA menu of statuses and the custom status (emoji, text, when it clears). #}
     {% set nowo_chat_status_form = nowo_chat_forms.status %}
     <template data-nowo-chat-template="status-menu">
+        {# 1.18 (UiKit 2.29 dialog anatomy): a header (title, close), the only part that scrolls, and a footer outside it
+           with one primary, last (Save, bound to the form with `form`). #}
         <div class="nowo-chat-status-menu" id="nowo-chat-status-menu" role="dialog" aria-labelledby="nowo-chat-status-menu-title" data-testid="nowo-chat-status-menu" hidden>
-            <p class="nowo-chat-status-menu__title" id="nowo-chat-status-menu-title">{{ 'chat.status_menu'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</p>
-            <div class="nowo-chat-status-menu__options" role="menu" aria-labelledby="nowo-chat-status-menu-title">
-                {% for nowo_chat_status in ['available', 'busy', 'away', 'dnd', 'invisible'] %}
-                    <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="{{ nowo_chat_status }}">
-                        <span class="nowo-chat-status-dot nowo-chat-status-dot--{{ nowo_chat_status == 'invisible' ? 'offline' : nowo_chat_status }}" aria-hidden="true"></span>
-                        <span class="nowo-chat-status-option__text">
-                            <span class="nowo-chat-status-option__label">{{ ('chat.status_' ~ nowo_chat_status)|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</span>
-                            <span class="nowo-chat-status-option__hint">{{ ('chat.status_' ~ nowo_chat_status ~ '_hint')|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</span>
-                        </span>
-                    </button>
-                {% endfor %}
-            </div>
-            {{ form_start(nowo_chat_status_form) }}
-                <p class="nowo-chat-status-form__title">{{ 'chat.status_custom'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</p>
-                {# 1.10.1: one click fills the emoji, the text and when it clears, and saves. 1.12: the suggestions come from
-                   the `status_presets` option (`quick`: these buttons; `more`: the "More statuses" drop-down). #}
-                {% if nowo_chat_status_form.vars.status_presets is not empty %}
-                    <div class="nowo-chat-status-presets" role="group" aria-label="{{ 'chat.status_presets'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}">
-                        {% for nowo_chat_preset in nowo_chat_status_form.vars.status_presets %}
-                            <button type="button" class="nowo-chat-status-preset" data-preset-emoji="{{ nowo_chat_preset.emoji }}" data-preset-text="{{ nowo_chat_preset.text }}" data-preset-clear-after="{{ nowo_chat_preset.clear_after }}"><span aria-hidden="true">{{ nowo_chat_preset.emoji }}</span> {{ nowo_chat_preset.text }}</button>
-                        {% endfor %}
-                    </div>
-                {% endif %}
-                {% if nowo_chat_status_form.moreStatus is defined %}
-                    <div class="nowo-chat-status-form__row nowo-chat-status-form__more-row">
-                        {{ form_label(nowo_chat_status_form.moreStatus) }}
-                        {{ form_widget(nowo_chat_status_form.moreStatus) }}
-                    </div>
-                {% endif %}
-                <div class="nowo-chat-status-form__row">
-                    {% set nowo_chat_label = 'chat.status_emoji'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
-                    {{ form_widget(nowo_chat_status_form.emoji, {translation_domain: false, attr: nowo_chat_status_form.emoji.vars.attr|merge({placeholder: '🙂', 'aria-label': nowo_chat_label, title: nowo_chat_label})}) }}
-                    {% set nowo_chat_label = 'chat.status_emoji_pick'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
-                    <button type="button" class="nowo-chat-icon-btn nowo-chat-status-form__emoji-pick" data-part="status-emoji-pick" aria-expanded="false" aria-label="{{ nowo_chat_label }}" title="{{ nowo_chat_label }}"><span data-icon="smile"></span></button>
-                    {% set nowo_chat_label = 'chat.status_text'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
-                    {{ form_widget(nowo_chat_status_form.text, {translation_domain: false, attr: nowo_chat_status_form.text.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
+            <header class="nowo-chat-status-menu__header">
+                <h2 class="nowo-chat-status-menu__title" id="nowo-chat-status-menu-title">{{ 'chat.status_menu'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</h2>
+                <button type="button" class="nowo-chat-icon-btn nowo-chat-status-menu__close" data-part="status-close" aria-label="{{ 'chat.close'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}"><span aria-hidden="true">&times;</span></button>
+            </header>
+            <div class="nowo-chat-status-menu__body">
+                <div class="nowo-chat-status-menu__options" role="menu" aria-labelledby="nowo-chat-status-menu-title">
+                    {% for nowo_chat_status in ['available', 'busy', 'away', 'dnd', 'invisible'] %}
+                        <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="{{ nowo_chat_status }}">
+                            <span class="nowo-chat-status-dot nowo-chat-status-dot--{{ nowo_chat_status == 'invisible' ? 'offline' : nowo_chat_status }}" aria-hidden="true"></span>
+                            <span class="nowo-chat-status-option__text">
+                                <span class="nowo-chat-status-option__label">{{ ('chat.status_' ~ nowo_chat_status)|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</span>
+                                <span class="nowo-chat-status-option__hint">{{ ('chat.status_' ~ nowo_chat_status ~ '_hint')|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</span>
+                            </span>
+                        </button>
+                    {% endfor %}
                 </div>
-                <div class="nowo-chat-status-form__picker" data-part="status-emoji-panel"></div>
-                <div class="nowo-chat-status-form__row">
-                    {{ form_label(nowo_chat_status_form.clearAfter) }}
-                    {{ form_widget(nowo_chat_status_form.clearAfter) }}
-                </div>
-                <p class="nowo-chat-status-form__error" role="alert" data-part="status-error" hidden></p>
-                <span class="nowo-chat-status-form__actions">
-                    <button type="button" class="nowo-chat-status-form__clear" data-part="status-clear">{{ 'chat.status_clear'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
-                    <button type="submit" class="nowo-chat-status-form__save">{{ 'chat.save'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
-                </span>
-                {# 1.11: the automatic reply, saved on its own. #}
-                <details class="nowo-chat-auto-reply" data-part="auto-reply">
-                    <summary>{{ 'chat.auto_reply'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</summary>
-                    <div class="nowo-chat-auto-reply__check">{{ form_widget(nowo_chat_status_form.autoReplyEnabled) }} {{ form_label(nowo_chat_status_form.autoReplyEnabled) }}</div>
-                    {{ form_label(nowo_chat_status_form.autoReplyText) }}
-                    {{ form_widget(nowo_chat_status_form.autoReplyText) }}
-                    {{ form_label(nowo_chat_status_form.autoReplyWhen) }}
-                    {{ form_widget(nowo_chat_status_form.autoReplyWhen) }}
-                    <div class="nowo-chat-auto-reply__range" data-part="auto-reply-range" hidden>
-                        {{ form_label(nowo_chat_status_form.autoReplyFrom) }}
-                        {{ form_widget(nowo_chat_status_form.autoReplyFrom) }}
-                        {{ form_label(nowo_chat_status_form.autoReplyUntil) }}
-                        {{ form_widget(nowo_chat_status_form.autoReplyUntil) }}
-                    </div>
-                    <div class="nowo-chat-auto-reply__check">{{ form_widget(nowo_chat_status_form.autoReplyMentions) }} {{ form_label(nowo_chat_status_form.autoReplyMentions) }}</div>
-                    <p class="nowo-chat-status-form__error" role="alert" data-part="auto-reply-error" hidden></p>
-                    <span class="nowo-chat-status-form__actions">
-                        <button type="button" class="nowo-chat-status-form__save" data-part="auto-reply-save">{{ 'chat.auto_reply_save'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
-                    </span>
-                </details>
-                {% for child in nowo_chat_status_form %}
-                    {% if not child.rendered %}
-                        {{ form_row(child) }}
+                {{ form_start(nowo_chat_status_form, {attr: nowo_chat_status_form.vars.attr|merge({id: 'nowo-chat-status-form'})}) }}
+                    <p class="nowo-chat-status-form__title">{{ 'chat.status_custom'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</p>
+                    {# 1.10.1: one click fills the emoji, the text and when it clears, and saves. 1.12: the suggestions come from
+                       the `status_presets` option (`quick`: these buttons; `more`: the "More statuses" drop-down). #}
+                    {% if nowo_chat_status_form.vars.status_presets is not empty %}
+                        <div class="nowo-chat-status-presets" role="group" aria-label="{{ 'chat.status_presets'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}">
+                            {% for nowo_chat_preset in nowo_chat_status_form.vars.status_presets %}
+                                <button type="button" class="nowo-chat-status-preset" data-preset-emoji="{{ nowo_chat_preset.emoji }}" data-preset-text="{{ nowo_chat_preset.text }}" data-preset-clear-after="{{ nowo_chat_preset.clear_after }}"><span aria-hidden="true">{{ nowo_chat_preset.emoji }}</span> {{ nowo_chat_preset.text }}</button>
+                            {% endfor %}
+                        </div>
                     {% endif %}
-                {% endfor %}
-            {{ form_end(nowo_chat_status_form) }}
+                    {% if nowo_chat_status_form.moreStatus is defined %}
+                        <div class="nowo-chat-status-form__row nowo-chat-status-form__more-row">
+                            {{ form_label(nowo_chat_status_form.moreStatus) }}
+                            {{ form_widget(nowo_chat_status_form.moreStatus) }}
+                        </div>
+                    {% endif %}
+                    <div class="nowo-chat-status-form__row">
+                        {% set nowo_chat_label = 'chat.status_emoji'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                        {{ form_widget(nowo_chat_status_form.emoji, {translation_domain: false, attr: nowo_chat_status_form.emoji.vars.attr|merge({placeholder: '🙂', 'aria-label': nowo_chat_label, title: nowo_chat_label})}) }}
+                        {% set nowo_chat_label = 'chat.status_emoji_pick'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-status-form__emoji-pick" data-part="status-emoji-pick" aria-expanded="false" aria-label="{{ nowo_chat_label }}" title="{{ nowo_chat_label }}"><span data-icon="smile"></span></button>
+                        {% set nowo_chat_label = 'chat.status_text'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
+                        {{ form_widget(nowo_chat_status_form.text, {translation_domain: false, attr: nowo_chat_status_form.text.vars.attr|merge({placeholder: nowo_chat_label, 'aria-label': nowo_chat_label})}) }}
+                    </div>
+                    <div class="nowo-chat-status-form__picker" data-part="status-emoji-panel"></div>
+                    <div class="nowo-chat-status-form__row">
+                        {{ form_label(nowo_chat_status_form.clearAfter) }}
+                        {{ form_widget(nowo_chat_status_form.clearAfter) }}
+                    </div>
+                    <p class="nowo-chat-status-form__error" role="alert" data-part="status-error" hidden></p>
+                    {# 1.11: the automatic reply, saved on its own. #}
+                    <details class="nowo-chat-auto-reply" data-part="auto-reply">
+                        <summary>{{ 'chat.auto_reply'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</summary>
+                        <div class="nowo-chat-auto-reply__check">{{ form_widget(nowo_chat_status_form.autoReplyEnabled) }} {{ form_label(nowo_chat_status_form.autoReplyEnabled) }}</div>
+                        {{ form_label(nowo_chat_status_form.autoReplyText) }}
+                        {{ form_widget(nowo_chat_status_form.autoReplyText) }}
+                        {{ form_label(nowo_chat_status_form.autoReplyWhen) }}
+                        {{ form_widget(nowo_chat_status_form.autoReplyWhen) }}
+                        <div class="nowo-chat-auto-reply__range" data-part="auto-reply-range" hidden>
+                            {{ form_label(nowo_chat_status_form.autoReplyFrom) }}
+                            {{ form_widget(nowo_chat_status_form.autoReplyFrom) }}
+                            {{ form_label(nowo_chat_status_form.autoReplyUntil) }}
+                            {{ form_widget(nowo_chat_status_form.autoReplyUntil) }}
+                        </div>
+                        <div class="nowo-chat-auto-reply__check">{{ form_widget(nowo_chat_status_form.autoReplyMentions) }} {{ form_label(nowo_chat_status_form.autoReplyMentions) }}</div>
+                        <p class="nowo-chat-status-form__error" role="alert" data-part="auto-reply-error" hidden></p>
+                        <span class="nowo-chat-status-form__actions">
+                            {# 1.18: secondary — the footer's Save is the menu's one primary. #}
+                            <button type="button" class="nowo-chat-status-form__secondary" data-part="auto-reply-save">{{ 'chat.auto_reply_save'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                        </span>
+                    </details>
+                    {% for child in nowo_chat_status_form %}
+                        {% if not child.rendered %}
+                            {{ form_row(child) }}
+                        {% endif %}
+                    {% endfor %}
+                {{ form_end(nowo_chat_status_form) }}
+            </div>
+            <footer class="nowo-chat-status-menu__footer">
+                <button type="button" class="nowo-chat-status-form__clear" data-part="status-clear">{{ 'chat.status_clear'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                <button type="submit" form="nowo-chat-status-form" class="nowo-chat-status-form__save">{{ 'chat.save'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+            </footer>
         </div>
     </template>
 {% endblock %}
@@ -349,8 +357,9 @@
     <template data-nowo-chat-template="delete-confirm">
         <span class="nowo-chat-confirm" role="group" aria-label="{{ 'chat.delete_confirm'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}">
             <span class="nowo-chat-confirm__text">{{ 'chat.delete_confirm'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</span>
-            <button type="button" class="nowo-chat-confirm__yes" data-part="confirm">{{ 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+            {# 1.18: Cancel first, the destructive primary last (UiKit 2.29 anatomy). #}
             <button type="button" class="nowo-chat-confirm__no" data-part="cancel">{{ 'chat.cancel'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+            <button type="button" class="nowo-chat-confirm__yes" data-part="confirm">{{ 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
         </span>
     </template>
     {# A message sent from here, not yet confirmed by the server. #}

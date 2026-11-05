@@ -46,6 +46,28 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+From **1.17.x**: `composer update nowo-tech/chat-kit-bundle`. No schema change, no route change, no configuration change.
+
+- **Status menu template** (`nowo_chat_template_status_menu`, UiKit 2.29 dialog anatomy): the Clear and Save buttons
+  moved out of the form into `<footer class="nowo-chat-status-menu__footer">` (Save keeps `type="submit"` with
+  `form="nowo-chat-status-form"`; the form gets that id), the options and the form sit in
+  `.nowo-chat-status-menu__body`, the title is an `<h2>` in `.nowo-chat-status-menu__header` with a close button
+  (`data-part="status-close"`, optional). A host that overrides the block keeps working as before (the close button is
+  looked up only when present); to follow the anatomy, copy the new block. CSS that styled the menu's padding or scroll
+  on `.nowo-chat-status-menu` itself now applies to `.nowo-chat-status-menu__body`.
+- The automatic reply's save button is `.nowo-chat-status-form__secondary` (was `.nowo-chat-status-form__save`); the
+  delete confirmation renders Cancel before Delete. Selectors on `data-part` are unchanged.
+- **Erasure:** `ChatPersonalData::erase()` now runs in one transaction (nested in yours, if any), flushes the entity
+  manager when it rewrote a mention (pending changes of yours are written with it) and dispatches
+  `ChatMentionsErasedEvent` (before the `message_updated` broadcast, which now only logs a failure). It returns the
+  `ChatMentionErasure` instead of `void`. Listen to the event to re-index the rewritten messages and to report
+  `skippedMessageIds` (text that could not be scanned; fix or delete those messages, then call `eraseMentions()` again);
+  do not log its `publicId`. Call it on a fresh (or flushed and cleared) entity manager, and clear it after a call that
+  threw. To scrub accounts erased before 1.15.2, call `eraseMentions($user)`.
+- **Host drawers:** replace hand-written `nowo:overlay-*` events with `window.NowoChat.acquireOverlay(drawer)` /
+  `handle.release()` (or UiKit's `window.NowoUiOverlay.acquire()`), so a UiKit dialog opened over the drawer does not
+  bring the dock back early ([USAGE](USAGE.md#stacking-with-drawers-and-modals)).
+
 ## To 1.17.0
 
 From **1.16.x**:

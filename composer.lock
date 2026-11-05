@@ -1058,16 +1058,16 @@
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v2.17.4",
+            "version": "v2.29.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "3700b1ffcc87385ccdd8588c4706c02842a75111"
+                "reference": "4130f49ab8eccf51acf76e20550a5a3176d9c11d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/3700b1ffcc87385ccdd8588c4706c02842a75111",
-                "reference": "3700b1ffcc87385ccdd8588c4706c02842a75111",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/4130f49ab8eccf51acf76e20550a5a3176d9c11d",
+                "reference": "4130f49ab8eccf51acf76e20550a5a3176d9c11d",
                 "shasum": ""
             },
             "require": {
@@ -1085,7 +1085,7 @@
             },
             "require-dev": {
                 "friendsofphp/php-cs-fixer": "^3.0",
-                "igor-php/igor-php": "^0.9.7",
+                "igor-php/igor-php": "^0.9.7 || ^0.10.0",
                 "nowo-tech/phpstan-frankenphp": "^1.0",
                 "phpstan/extension-installer": "^1.0",
                 "phpstan/phpstan": "^2.0",
@@ -1099,7 +1099,7 @@
                 "symfony/http-client": "^7.4 || ^8.0",
                 "symfony/validator": "^7.4 || ^8.0",
                 "symfony/yaml": "^7.4 || ^8.0",
-                "vincentlanglet/twig-cs-fixer": "^3.0"
+                "vincentlanglet/twig-cs-fixer": "^3.0 || ^4.0"
             },
             "suggest": {
                 "phpunit/phpunit": "UI bundles: require-dev, to run Nowo\\UiKitBundle\\Test\\PageContractTestCase (REQ-UI-003 contract test)",
@@ -1148,7 +1148,8 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-10-30T13:16:04+00:00"
+            "time": "2026-11-05T13:12:29+00:00",
+            "published-time": "2026-11-05T13:14:49+00:00"
         },
         {
             "name": "psr/cache",

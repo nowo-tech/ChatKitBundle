@@ -1250,6 +1250,17 @@ describe('ChatDock', () => {
       expect(q<HTMLElement>('.nowo-chat-dock').inert).toBe(false);
     });
 
+    it('steps aside for a host drawer that acquires an overlay (1.18, acquireOverlay)', async () => {
+      const { acquireOverlay } = await import('../src/overlay');
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      const drawer = document.createElement('aside');
+      const handle = acquireOverlay(drawer);
+      expect(root.getAttribute('data-overlay')).toBe('hidden');
+      handle.release();
+      expect(root.hasAttribute('data-overlay')).toBe(false);
+    });
+
     it('reads the html marker without a depth and at mount time', () => {
       document.documentElement.setAttribute('data-nowo-overlay', '1');
       const { root } = mount([]);

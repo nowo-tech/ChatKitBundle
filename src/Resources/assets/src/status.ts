@@ -236,6 +236,8 @@ export class StatusMenu {
       this.clearAfter.value = 'never';
       void this.save({ text: null, emoji: null });
     });
+    // 1.18: the header's close button (UiKit 2.29 anatomy); absent in a host template that predates it.
+    popover.querySelector<HTMLButtonElement>('[data-part="status-close"]')?.addEventListener('click', () => this.close(true));
     popover.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
