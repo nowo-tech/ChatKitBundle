@@ -13,6 +13,8 @@ import type { ChatConfig } from './types';
 export { ChatDock } from './dock';
 export type { ChatDockOptions } from './dock';
 export { markPageRead } from './page';
+export { acquireOverlay, OVERLAY_CLOSE_EVENT, OVERLAY_OPEN_EVENT, OVERLAY_ROOT_ATTR } from './overlay';
+export type { ChatOverlayHandle, ChatOverlayKind, ChatOverlayOptions } from './overlay';
 export { PREFS_EVENT, saveChatPreference } from './prefs';
 export { playSound, SOUND_NAMES } from './sounds';
 export type { ChatConfig, ChatPrefs, ChatStatus, OwnStatus, SoundName } from './types';
