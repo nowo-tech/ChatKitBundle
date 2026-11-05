@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.18.0](#to-1180)
 - [To 1.17.0](#to-1170)
 - [To 1.16.1](#to-1161)
 - [To 1.16.0 (profile pictures)](#to-1160-profile-pictures)
@@ -45,6 +46,8 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.18.0
 
 From **1.17.x**: `composer update nowo-tech/chat-kit-bundle`. No schema change, no route change, no configuration change.
 
