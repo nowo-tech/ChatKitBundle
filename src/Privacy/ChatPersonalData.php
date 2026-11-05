@@ -10,7 +10,9 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
+use Nowo\ChatKitBundle\Entity\ChatConversationLink;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatMessageLink;
 use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
@@ -57,7 +59,9 @@ use const DATE_ATOM;
  * become tombstones with no author and no text (the thread keeps its shape for the others), reactions, read
  * cursors, settings, mention rows and the user's own support tickets are deleted, @mentions of the user in
  * other people's messages lose the user's name and public id, the pinned-by / deleted-by / assignee / resolved-by
- * pointers to the user are cleared, and support bot lines in other people's tickets lose the user's name.
+ * pointers to the user are cleared, and support bot lines in other people's tickets lose the user's name. 1.19: links the
+ * user pinned to a conversation are shared content: they stay, without their author (`created_by_id` null); the link
+ * index rows of the user's messages go with the text. The export lists the links the user pinned.
  */
 final readonly class ChatPersonalData
 {
@@ -105,7 +109,7 @@ final readonly class ChatPersonalData
      *
      * @param ChatUserInterface $user The user whose data is exported
      *
-     * @return array{settings: array<string, mixed>, quick_replies: list<array{title: string, text: string}>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>} Settings, authored messages and the pins the user made
+     * @return array{settings: array<string, mixed>, quick_replies: list<array{title: string, text: string}>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>, links: list<array<string, string|null>>} Settings, authored messages, the pins the user made and (1.19) the links the user pinned
      */
     public function export(ChatUserInterface $user): array
     {
@@ -167,6 +171,14 @@ final readonly class ChatPersonalData
                 'message_uuid'      => $message->getUuid(),
                 'pinned_at'         => $message->getPinnedAt()?->format(DATE_ATOM),
             ], $pins),
+            // 1.19: links the user pinned to a conversation.
+            'links' => array_map(static fn (ChatConversationLink $link): array => [
+                'conversation_uuid' => $link->getConversation()->getUuid(),
+                'url'               => $link->getUrl(),
+                'title'             => $link->getTitle(),
+                'created_at'        => $link->getCreatedAt()->format(DATE_ATOM),
+                'updated_at'        => $link->getUpdatedAt()?->format(DATE_ATOM),
+            ], $this->entityManager->getRepository(ChatConversationLink::class)->findBy(['createdBy' => $user], ['id' => 'ASC'])),
         ];
     }
 
@@ -195,7 +207,7 @@ final readonly class ChatPersonalData
         try {
             $erasure = $this->scrubMentions($user, self::ERASED_MENTION);
             $this->keepModeratedState($user);
-            foreach ([[ChatMessage::class, 'pinnedBy'], [ChatMessage::class, 'deletedBy'], [ChatConversation::class, 'assignee'], [ChatConversation::class, 'resolvedBy']] as [$entity, $field]) {
+            foreach ([[ChatMessage::class, 'pinnedBy'], [ChatMessage::class, 'deletedBy'], [ChatConversation::class, 'assignee'], [ChatConversation::class, 'resolvedBy'], [ChatConversationLink::class, 'createdBy']] as [$entity, $field]) {
                 $qb()->update($entity, 'x')->set('x.' . $field, ':none')->where('x.' . $field . ' = :user')
                     ->setParameter('none', null)->setParameter('user', $user)->getQuery()->execute();
             }
@@ -206,6 +218,9 @@ final readonly class ChatPersonalData
                 ->setParameter('user', $user)->getQuery()->getSingleColumnResult();
             if ($authored !== []) {
                 $qb()->delete(ChatMessageMention::class, 'n')->where('IDENTITY(n.message) IN (:ids)')
+                    ->setParameter('ids', $authored)->getQuery()->execute();
+                // 1.19: their links leave the Links panel (the messages become tombstones).
+                $qb()->delete(ChatMessageLink::class, 'k')->where('IDENTITY(k.message) IN (:ids)')
                     ->setParameter('ids', $authored)->getQuery()->execute();
             }
             $qb()->update(ChatMessage::class, 'm')
@@ -225,7 +240,9 @@ final readonly class ChatPersonalData
                 $messageIds = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->getSingleColumnResult();
                 if ($messageIds !== []) {
                     $qb()->delete(ChatReaction::class, 'r')->where('IDENTITY(r.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
+                    $qb()->delete(ChatMessageLink::class, 'k')->where('IDENTITY(k.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
                 }
+                $qb()->delete(ChatConversationLink::class, 'l')->where('l.conversation = :c')->setParameter('c', $support)->getQuery()->execute();
                 $qb()->delete(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->execute();
                 $qb()->delete(ChatParticipant::class, 'p')->where('p.conversation = :c')->setParameter('c', $support)->getQuery()->execute();
                 $qb()->delete(ChatConversation::class, 'c')->where('c.id = :id')->setParameter('id', $support->getId())->getQuery()->execute();

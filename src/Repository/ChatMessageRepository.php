@@ -10,6 +10,7 @@ use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatMessageLink;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 
@@ -188,6 +189,13 @@ class ChatMessageRepository extends ServiceEntityRepository
         $this->getEntityManager()->createQueryBuilder()
             ->delete(ChatReaction::class, 'r')
             ->where('IDENTITY(r.message) IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute();
+        // 1.19: their links leave the Links panel.
+        $this->getEntityManager()->createQueryBuilder()
+            ->delete(ChatMessageLink::class, 'ml')
+            ->where('IDENTITY(ml.message) IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
             ->execute();

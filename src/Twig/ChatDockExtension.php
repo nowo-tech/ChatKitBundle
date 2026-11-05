@@ -14,8 +14,11 @@ use Nowo\ChatKitBundle\Form\ChatDockComposerType;
 use Nowo\ChatKitBundle\Form\ChatDockEditType;
 use Nowo\ChatKitBundle\Form\ChatDockSearchType;
 use Nowo\ChatKitBundle\Form\ChatDockStatusType;
+use Nowo\ChatKitBundle\Link\ChatLinks;
+use Nowo\ChatKitBundle\Link\ChatLinkUrls;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Model\ChatLinkProvider;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
@@ -68,6 +71,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param array<string, mixed> $statusPresets Suggested custom statuses (`status_presets`, 1.12: `quick` and `more`)
      * @param ChatAvatars|null $avatars 1.16: the user's own picture (`me.avatarUrl`); null gives null
      * @param array{overlay?: string, watch_aria_modal?: bool} $dock 1.17: dock reaction to modal overlays (`dock`)
+     * @param ChatLinks|null $links 1.19: pinned links, link cards and the Links panel (`links`); null or disabled hides them
      */
     public function __construct(
         private readonly Security $security,
@@ -93,6 +97,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly array $statusPresets = Configuration::DEFAULT_STATUS_PRESETS,
         private readonly ?ChatAvatars $avatars = null,
         private readonly array $dock = ['overlay' => 'hide', 'watch_aria_modal' => false],
+        private readonly ?ChatLinks $links = null,
     ) {
     }
 
@@ -201,7 +206,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'autoReply'      => $this->urls->generate('nowo_chat_api_auto_reply'),
                 'quickReplies'   => $this->urls->generate('nowo_chat_api_quick_replies'),
                 'pin'            => $this->pattern('nowo_chat_api_pin', ['messageUuid' => self::PLACEHOLDER], '__message__'),
-            ],
+            ] + $this->linkEndpoints(),
             // Sounds per event, volume, buzz, opening, send key … (ChatUserSettings::preferences()).
             'prefs' => $settings->preferences(),
             // The user's own chat status (set from the dock's status menu) and the auto-away delay.
@@ -220,7 +225,49 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'overlay'        => $this->dock['overlay'] ?? 'hide',
                 'watchAriaModal' => $this->dock['watch_aria_modal'] ?? false,
             ],
-            'i18n' => $this->strings($locale),
+            // 1.19: links (absent when the feature is off).
+            'links' => $this->linksConfig(),
+            'i18n'  => $this->strings($locale),
+        ];
+    }
+
+    /**
+     * 1.19: the links endpoints (none when the feature is off).
+     *
+     * @return array<string, string>
+     */
+    private function linkEndpoints(): array
+    {
+        if ($this->links?->isEnabled() !== true) {
+            return [];
+        }
+
+        return [
+            'pinnedLinks' => $this->pattern('nowo_chat_api_pinned_links'),
+            'pinnedLink'  => $this->pattern('nowo_chat_api_pinned_link', ['linkUuid' => self::PLACEHOLDER], '__link__'),
+            'links'       => $this->pattern('nowo_chat_api_links'),
+        ];
+    }
+
+    /**
+     * 1.19: what the dock needs to offer links: limits, `http:` and the providers (null when the feature is off).
+     *
+     * @return array{enabled: true, allowHttp: bool, maxPinned: int, titleMaxLength: int, urlMaxLength: int, providers: list<array{key: string, label: string, hosts: list<string>, icon: string, fallbackIcon: string}>}|null
+     */
+    private function linksConfig(): ?array
+    {
+        if ($this->links?->isEnabled() !== true) {
+            return null;
+        }
+        $urls = $this->links->urls();
+
+        return [
+            'enabled'        => true,
+            'allowHttp'      => $urls->allowsHttp(),
+            'maxPinned'      => $this->links->maxPinned(),
+            'titleMaxLength' => ChatLinkUrls::TITLE_MAX_LENGTH,
+            'urlMaxLength'   => ChatLinkUrls::URL_MAX_LENGTH,
+            'providers'      => array_map(static fn (ChatLinkProvider $provider): array => $provider->toArray() + ['hosts' => $provider->hosts], $urls->providers()),
         ];
     }
 

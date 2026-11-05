@@ -169,6 +169,16 @@ final readonly class ChatNotifier
     }
 
     /**
+     * The pinned links of a conversation changed (1.19): every reader reloads its links bar.
+     *
+     * @param ChatConversation $conversation The conversation
+     */
+    public function linksChanged(ChatConversation $conversation): void
+    {
+        $this->publisher->publish('links', ['conversationUuid' => $conversation->getUuid()], $this->recipients->of($conversation));
+    }
+
+    /**
      * The user closed or reopened conversations: their other tabs and devices reload the list.
      *
      * @param ChatUserInterface $user The user

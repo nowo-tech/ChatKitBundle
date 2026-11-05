@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Service;
 
+use InvalidArgumentException;
+use Nowo\ChatKitBundle\Link\ChatLinkUrls;
+
 use function count;
 use function strlen;
 
@@ -17,10 +20,22 @@ use const ENT_SUBSTITUTE;
  * *italic* / _italic_, ~~strike~~, bullet / numbered lists, line breaks, http(s) autolinks
  * (`rel="noopener nofollow ugc"`, new tab) and @mention tokens (`@[name](publicId)`, ChatMentions) as
  * `<span class="nowo-chat-mention" data-mention="publicId">@name</span>`, and #references (`#[Title](type:id)`,
- * ChatReferences) as an empty slot filled for each viewer at read time. No raw HTML, no images, no other URL schemes.
+ * ChatReferences) as an empty slot filled for each viewer at read time, and 1.19 link cards (`!link[Title](https://…)`,
+ * ChatLinkUrls::card(); a card with a link that is not accepted stays plain text). No raw HTML, no images, no other URL
+ * schemes.
  */
 final class ChatMarkdownRenderer
 {
+    /**
+     * Builds the renderer.
+     *
+     * @param ChatLinkUrls $links 1.19: URL rules and providers of the link cards (`!link[Title](https://…)`)
+     */
+    public function __construct(
+        private readonly ChatLinkUrls $links = new ChatLinkUrls(),
+    ) {
+    }
+
     /**
      * Renders a message body to safe HTML: escapes everything, then applies fenced / inline code, bold, italic,
      * strike, lists, line breaks and http(s) autolinks.
@@ -138,7 +153,7 @@ final class ChatMarkdownRenderer
      */
     public function plainText(string $markdown, int $maxLength = 120): string
     {
-        $text = (string) preg_replace([ChatMentions::TOKEN, ChatReferences::TOKEN, '~\[([^\]\n]{1,200})\]\(((?:https?://|mailto:)[^\s)]+)\)~i', '/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)]|>)[ \t]*/m', '/\s+/'], ['@$1', '#…', '$1', '', '', '', ' '], self::clean($markdown));
+        $text = (string) preg_replace([ChatMentions::TOKEN, ChatReferences::TOKEN, ChatLinkUrls::CARD_TOKEN, '~\[([^\]\n]{1,200})\]\(((?:https?://|mailto:)[^\s)]+)\)~i', '/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)]|>)[ \t]*/m', '/\s+/'], ['@$1', '#…', '$1', '$1', '', '', '', ' '], self::clean($markdown));
         $text = trim($text);
 
         return mb_strlen($text) > $maxLength ? rtrim(mb_substr($text, 0, $maxLength - 1)) . '…' : $text;
@@ -167,6 +182,16 @@ final class ChatMarkdownRenderer
         }, $text);
 
         $links = [];
+        // 1.19: link cards first (their `[Title](url)` part is not a Markdown link).
+        $text = (string) preg_replace_callback(ChatLinkUrls::CARD_TOKEN, function (array $m) use (&$links): string {
+            try {
+                $links[] = $this->links->card($this->links->normalize($m[2]), $this->links->title($m[1]));
+            } catch (InvalidArgumentException) {
+                $links[] = self::escape($m[0]);
+            }
+
+            return "\u{E000}L" . (count($links) - 1) . "\u{E000}";
+        }, $text);
         // 1.11: [text](url) with an http(s) or mailto URL; the text is plain (escaped), never markup.
         $text = (string) preg_replace_callback('~\[([^\]\n]{1,200})\]\(((?:https?://|mailto:)[^\s<>"\'`)]+)\)~i', static function (array $m) use (&$links): string {
             $links[] = self::anchor($m[2], $m[1]);

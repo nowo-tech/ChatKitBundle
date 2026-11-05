@@ -8,6 +8,7 @@ use Closure;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Contract\ChatLinkPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
@@ -17,6 +18,7 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Contracts\Service\ResetInterface;
 
 use function array_key_exists;
+use function assert;
 
 /**
  * The single place that decides reachability, on top of the application's policy and channel provider.
@@ -97,6 +99,42 @@ final class ChatAccess implements ResetInterface
         $channel = $this->channel((string) $conversation->getChannelKey());
 
         return $this->policy instanceof ChatPinPolicyInterface && $channel instanceof ChatChannel && $this->policy->canPinInChannel($user, $channel);
+    }
+
+    /**
+     * 1.19: whether the user may add, change and remove the pinned links of the conversation — both people of a direct
+     * conversation, support agents in tickets, and in channels every member (`$channelMembers`, `links.channel_managers:
+     * members`) or only whom the application allows (`admins`: ChatLinkPolicyInterface, else ChatPinPolicyInterface,
+     * else nobody). Always within what the user may read.
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $user The user
+     * @param bool $channelMembers True when every channel member manages the links
+     *
+     * @return bool True when allowed
+     */
+    public function canManageLinks(ChatConversation $conversation, ChatUserInterface $user, bool $channelMembers = true): bool
+    {
+        if (!$this->canView($conversation, $user)) {
+            return false;
+        }
+        if ($conversation->isDirect()) {
+            return true;
+        }
+        if ($conversation->isSupport()) {
+            return $this->isSupportAgent($user);
+        }
+        if ($channelMembers) {
+            return true;
+        }
+        $channel = $this->channel((string) $conversation->getChannelKey());
+        // canView() above found the channel.
+        assert($channel instanceof ChatChannel);
+        if ($this->policy instanceof ChatLinkPolicyInterface) {
+            return $this->policy->canManageLinksInChannel($user, $channel);
+        }
+
+        return $this->policy instanceof ChatPinPolicyInterface && $this->policy->canPinInChannel($user, $channel);
     }
 
     /**

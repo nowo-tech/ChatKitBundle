@@ -36,13 +36,15 @@ final readonly class TablePrefixListener
      * `nowo_chat_kit.doctrine.tables` map and one `nowo_chat_kit.doctrine.table.<key>` parameter per table.
      */
     public const array TABLES = [
-        'conversation'    => 'nowo_chat_conversation',
-        'message'         => 'nowo_chat_message',
-        'message_mention' => 'nowo_chat_message_mention',
-        'participant'     => 'nowo_chat_participant',
-        'quick_reply'     => 'nowo_chat_quick_reply',
-        'reaction'        => 'nowo_chat_reaction',
-        'user_settings'   => 'nowo_chat_user_settings',
+        'conversation'      => 'nowo_chat_conversation',
+        'conversation_link' => 'nowo_chat_conversation_link',
+        'message'           => 'nowo_chat_message',
+        'message_link'      => 'nowo_chat_message_link',
+        'message_mention'   => 'nowo_chat_message_mention',
+        'participant'       => 'nowo_chat_participant',
+        'quick_reply'       => 'nowo_chat_quick_reply',
+        'reaction'          => 'nowo_chat_reaction',
+        'user_settings'     => 'nowo_chat_user_settings',
     ];
 
     /** Longest identifier PostgreSQL keeps (MySQL allows 64): every generated name must fit. */

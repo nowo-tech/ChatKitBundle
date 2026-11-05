@@ -19,6 +19,7 @@ use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
 use Nowo\ChatKitBundle\Event\ChatSupportStatusChangedEvent;
 use Nowo\ChatKitBundle\Event\SupportTicketReopenedEvent;
 use Nowo\ChatKitBundle\Event\SupportTicketStatusChangedEvent;
+use Nowo\ChatKitBundle\Link\ChatLinks;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
@@ -51,6 +52,7 @@ final readonly class ChatService
      * @param ChatMentions|null $mentions Validates and stores @mentions; null keeps mention tokens as written
      * @param ChatMessageMentionRepository|null $mentionRows Mention rows (removed with a deleted message, read with the thread)
      * @param ChatReferences|null $references Validates #reference tokens; null keeps them as written
+     * @param ChatLinks|null $links 1.19: validates the link cards and keeps the link index; null keeps cards as written and indexes nothing
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -68,6 +70,7 @@ final readonly class ChatService
         private int $maxPins = 20,
         private ?ChatMessageRepository $messageRepository = null,
         private ?ChatAutoReplier $autoReplies = null,
+        private ?ChatLinks $links = null,
     ) {
     }
 
@@ -139,18 +142,21 @@ final readonly class ChatService
      * @param ChatConversation $conversation The conversation
      * @param string $body Raw Markdown text
      *
-     * @throws InvalidArgumentException `empty` or `too_long`
+     * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link` (1.19: a link card with a link that is not accepted)
      *
      * @return ChatMessage The stored message
      */
     public function send(ChatUserInterface $author, ChatConversation $conversation, string $body): ChatMessage
     {
         $body               = $this->normalize($body);
+        $body               = $this->links?->normalizeCards($body) ?? $body;
         $body               = $this->references?->validate($conversation, $author, $body) ?? $body;
         [$body, $mentioned] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, []];
         $now                = $this->clock->now();
         $message            = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
         $this->entityManager->persist($message);
+        // 1.19: the message's links go to the index of the Links panel (flushed with the message).
+        $this->links?->index($message);
         $mentioned = $this->mentions?->sync($message, $mentioned) ?? [];
         $conversation->touch($now);
         $reopened = $this->supportTransition($conversation, $author);
@@ -195,11 +201,12 @@ final readonly class ChatService
      * @param ChatMessage $message The message to edit
      * @param string $body New raw Markdown text
      *
-     * @throws InvalidArgumentException `empty` or `too_long`
+     * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link`
      */
     public function edit(ChatMessage $message, string $body): void
     {
         $body   = $this->normalize($body);
+        $body   = $this->links?->normalizeCards($body) ?? $body;
         $author = $message->getAuthor();
         // A reference the author may no longer open (or a forged one) is kept as plain text.
         $body               = $author instanceof ChatUserInterface ? ($this->references?->validate($message->getConversation(), $author, $body) ?? $body) : $body;
@@ -208,6 +215,7 @@ final readonly class ChatService
             : [$body, []];
         $message->edit($body, $this->markdown->render($body), $this->clock->now());
         $added = $this->mentions?->sync($message, $mentioned) ?? [];
+        $this->links?->index($message);
         $this->entityManager->flush();
         $this->notifier->messageUpdated($message, $this->reactionsOf($message));
         if ($added !== []) {
@@ -232,6 +240,8 @@ final readonly class ChatService
             $this->entityManager->remove($reaction);
         }
         $this->mentionRows?->removeFor($message);
+        // 1.19: a deleted message leaves the Links panel.
+        $this->links?->forget($message);
         $this->entityManager->flush();
         $this->notifier->messageUpdated($message);
         if ($wasPinned) {
