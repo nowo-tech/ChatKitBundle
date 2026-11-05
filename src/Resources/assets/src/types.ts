@@ -208,7 +208,8 @@ export type RealtimeEvent =
   | { type: 'my_status'; status: OwnStatus }
   | { type: 'prefs'; prefs: ChatPrefs }
   | { type: 'list' }
-  | { type: 'pins'; conversationUuid: string };
+  | { type: 'pins'; conversationUuid: string }
+  | { type: 'links'; conversationUuid: string };
 
 /** 1.17: `hide` (invisible and inert), `inert` (painted, inert) or `none` (1.16 behaviour). */
 export type DockOverlayMode = 'hide' | 'inert' | 'none';
@@ -271,6 +272,12 @@ export interface ChatConfig {
     autoReply?: string;
     /** 1.11: the user's quick replies (`GET`, `POST`; `/{id}` `PATCH` / `DELETE`). */
     quickReplies?: string;
+    /** 1.19: pinned links of a conversation (`__uuid__`): `GET` list, `POST` create. */
+    pinnedLinks?: string;
+    /** 1.19: one pinned link (`__uuid__`, `__link__`): `PATCH`, `DELETE`. */
+    pinnedLink?: string;
+    /** 1.19: the links panel of a conversation (`__uuid__`; `?q=&provider=&before=`). */
+    links?: string;
   };
   prefs: ChatPrefs;
   /** 1.10: the user's own status (absent before 1.10: no status menu). */
@@ -293,7 +300,89 @@ export interface ChatConfig {
    * without the watcher). Driven by the `nowo:overlay-open` / `nowo:overlay-close` events and `html[data-nowo-overlay]`.
    */
   dock?: { overlay?: DockOverlayMode; watchAriaModal?: boolean };
+  /** 1.19: pinned links and the links panel (absent or `enabled: false`: no links UI). */
+  links?: LinksSettings;
   i18n: Record<string, string>;
+}
+
+/** A link provider of the configuration (Teams, Meet, Zoom …): the hosts it matches (and their subdomains). */
+export interface LinkProvider extends LinkProviderRef {
+  hosts: string[];
+}
+
+/** The provider of a link, as the API reports it. */
+export interface LinkProviderRef {
+  key: string;
+  label: string;
+  /** Dock icon name (`provider_<key>`, the application's UX Icon). */
+  icon: string;
+  /** Built-in icon used when the application has no SVG for `icon`. */
+  fallbackIcon: string;
+}
+
+/** 1.19: the `links` section of the dock configuration. */
+export interface LinksSettings {
+  enabled: boolean;
+  /** `http:` links are accepted (otherwise `https:` only). */
+  allowHttp: boolean;
+  /** Pinned links per conversation. */
+  maxPinned: number;
+  titleMaxLength: number;
+  urlMaxLength: number;
+  providers: LinkProvider[];
+}
+
+/** Someone who pinned or shared a link (null after their erasure). */
+export interface LinkPerson {
+  uuid: string;
+  name: string;
+}
+
+/** A link pinned to a conversation (the bar under the header). */
+export interface PinnedLink {
+  uuid: string;
+  url: string;
+  /** The title as typed (null: none). */
+  title: string | null;
+  /** What to show: the title, else the provider label, else the host. */
+  label: string;
+  host: string;
+  provider: LinkProviderRef | null;
+  createdBy: LinkPerson | null;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+/** The pinned links of a conversation and whether the viewer may manage them. */
+export interface PinnedLinksState {
+  links: PinnedLink[];
+  canManage: boolean;
+  max: number;
+}
+
+/** A link card shared in a message (the links panel). */
+export interface SharedLink {
+  id: number;
+  url: string;
+  title: string | null;
+  label: string;
+  host: string;
+  provider: LinkProviderRef | null;
+  kind: 'card' | 'link';
+  messageId: number;
+  messageUuid: string;
+  author: LinkPerson | null;
+  createdAt: string;
+}
+
+/** One page of the links panel (`pinned` only on the first page). */
+export interface LinksPage {
+  pinned?: PinnedLink[];
+  links: SharedLink[];
+  hasMore: boolean;
+  next: number | null;
+  providers: LinkProviderRef[];
+  canManage: boolean;
 }
 
 export interface LinkPreview {

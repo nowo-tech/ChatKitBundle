@@ -115,6 +115,11 @@ nowo_chat_kit:
 | `profiles.<name>.support.emojis` | bool | `true` | Decorative emojis (`aria-hidden`) before the ticket status, the topic label and the support assistant's lines; `false` shows text only. |
 | `profiles.<name>.support.translation_domain` | string | `NowoChatKitBundle` | Domain of the topic labels and replies. |
 | `profiles.<name>.support.topics` | list | incident, billing, how_to, account, other | Topics offered when a ticket opens: `key` (a-z, 0-9, `_`, `-`), `label` / `reply` (translation keys; default `support.topic.<key>` / `support.topic_reply.<key>`; `reply: ''` posts none), `icon` (for your templates), `emoji` (decorative, before the label; null = the built-in one of incident 🐞, billing 💳, how_to ❓, account 🔐, other 💬; `""` = none), `assignee` (public id of the agent new tickets of the topic go to). |
+| `profiles.<name>.links.enabled` | bool | `true` | 1.19: pinned links, link cards, the **Attach link** action and the Links panel. Off: the links API answers 404, nothing is indexed, the dock shows none of it. |
+| `profiles.<name>.links.max_pinned` | int 1–200 | `20` | 1.19: pinned links per conversation (`422 too_many_links` beyond). |
+| `profiles.<name>.links.allow_http` | bool | `false` | 1.19: also accept `http:` links (pinned links and link cards). `https:` only by default; no other scheme ever. |
+| `profiles.<name>.links.channel_managers` | `members` \| `admins` | `members` | 1.19: who manages the pinned links of a channel: every member, or only whom `ChatLinkPolicyInterface::canManageLinksInChannel()` allows (else `ChatPinPolicyInterface::canPinInChannel()`, else nobody). Both people of a direct conversation always do; in tickets, the agents. |
+| `profiles.<name>.links.providers` | map | teams, meet, zoom, jitsi, webex | 1.19: known providers, `key => {label, hosts, icon, fallback_icon}`: `hosts` are lowercase hostnames (a subdomain matches too; only the hostname is looked at), `icon` the UX Icons name of the dock icon `provider_<key>` (null: the built-in `fallback_icon`, default `video`). Keys: `a-z`, `0-9`, `_` (not `other`). A map you set replaces the default one (`Configuration::DEFAULT_LINK_PROVIDERS`). |
 | `profiles.<name>.limits.*` | int | see below | Rate limits. |
 
 ## Rate limits

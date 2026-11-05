@@ -10,6 +10,7 @@ import { emojiPicker, insertAtCaret } from './emoji';
 import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from './format';
 import { decodeMentions, markOwnMentions, MentionAutocomplete, mentionsViewer } from './mention';
 import { decodeReferences, ReferenceAutocomplete } from './reference';
+import { ConversationLinks, decodeLinkTokens, linksSettings, linkToken } from './links';
 import { SupportPanel } from './support';
 import { customStatus, statusLabel } from './status';
 import { part, text, type Templates } from './templates';
@@ -109,6 +110,8 @@ export class ThreadView {
   private pins: ChatMessage[] = [];
   private canPin = false;
   private readonly pinsBar: HTMLElement;
+  /** 1.19: pinned links (bar under the header), the "Attach link" composer button and the links panel. */
+  private readonly links: ConversationLinks | null;
   private loaded = false;
   private loadingOlder = false;
   private minimised = false;
@@ -267,11 +270,36 @@ export class ThreadView {
     this.canPin = summary.canPin === true;
     this.pinsBar = h('div', { class: 'nowo-chat-pins', 'data-testid': 'nowo-chat-pins', hidden: true });
     part(this.element, 'context').after(this.pinsBar);
+    const links = linksSettings(host.config);
+    this.links =
+      links === null
+        ? null
+        : new ConversationLinks(
+            {
+              config: host.config,
+              api: host.api,
+              templates: host.templates,
+              element: this.element,
+              input: this.input,
+              uuid: () => this.summary.uuid,
+              announce: (message) => {
+                this.live.textContent = message;
+              },
+              notice: (message) => this.flashNotice(message),
+              jumpTo: (id) => this.jumpTo({ id }),
+            },
+            links,
+          );
+    // Pinned links first, then the pinned messages.
+    if (this.links !== null) {
+      part(this.element, 'context').after(this.links.bar);
+    }
 
     const draft = host.draft(summary.uuid);
     this.mention.load(this.reference?.decode(draft) ?? draft);
     this.applySummary(summary);
     void this.loadPins();
+    void this.loadLinks();
   }
 
   /**
@@ -313,6 +341,13 @@ export class ThreadView {
     } catch {
       // The bar stays as it was.
     }
+  }
+
+  /**
+   * Loads the pinned links and refreshes the open links panel (1.19; the dock calls it again on a realtime `links` event).
+   */
+  async loadLinks(): Promise<void> {
+    await this.links?.load();
   }
 
   /**
@@ -380,9 +415,9 @@ export class ThreadView {
   /**
    * Shows a message in the thread (loading older pages until it is there), briefly highlighted.
    *
-   * @param message The message to show.
+   * @param message The message to show (only its id is needed).
    */
-  async jumpTo(message: ChatMessage): Promise<void> {
+  async jumpTo(message: { id: number }): Promise<void> {
     const find = (): HTMLElement | null => this.log.querySelector<HTMLElement>(`[data-id="${message.id}"]`);
     let guard = 0;
     while (find() === null && this.hasMore && guard < 20) {
@@ -662,6 +697,7 @@ export class ThreadView {
     if (incoming.length === 0) {
       return;
     }
+    this.links?.messagesChanged();
     const wasAtBottom = this.isNearBottom();
     const previousLast = this.messages.at(-1);
     const onlyAppended = incoming.every((message) => fresh.includes(message));
@@ -713,6 +749,7 @@ export class ThreadView {
       return;
     }
     const merged = { ...message, mine: (this.messages[index] as ChatMessage).mine };
+    this.links?.messagesChanged();
     this.messages[index] = merged;
     if (this.editing === message.id && message.deleted) {
       this.editing = null;
@@ -1432,7 +1469,7 @@ export class ThreadView {
     if (!this.host.config.linkPreviews || message.deleted) {
       return;
     }
-    const urls = [...new Set([...part(article, 'bubble').querySelectorAll<HTMLAnchorElement>('a[href]')].map((link) => link.getAttribute('href') ?? ''))].filter((url) => url !== '').slice(0, 3);
+    const urls = [...new Set([...part(article, 'bubble').querySelectorAll<HTMLAnchorElement>('a[href]:not(.nowo-chat-linkcard)')].map((link) => link.getAttribute('href') ?? ''))].filter((url) => url !== '').slice(0, 3);
     for (const url of urls) {
       void this.host.linkPreview(url).then((preview) => {
         if (preview !== null) {
@@ -1575,7 +1612,7 @@ export class ThreadView {
     const i18n = this.host.config.i18n;
     const article = this.host.templates.clone('pending');
     article.classList.toggle('nowo-chat-msg--failed', pending.status === 'failed');
-    part(article, 'bubble').textContent = decodeMentions(decodeReferences(pending.body).text).text;
+    part(article, 'bubble').textContent = decodeMentions(decodeReferences(decodeLinkTokens(pending.body)).text).text;
     const status = part(article, 'status');
     if (pending.status === 'sending') {
       status.textContent = t(i18n, 'sending');
@@ -1718,6 +1755,12 @@ export function plain(html: string, lines = false): string {
   doc.body.querySelectorAll('.nowo-chat-ref').forEach((chip) => {
     const title = chip.querySelector('.nowo-chat-ref__title')?.textContent ?? '';
     chip.replaceWith(chip.classList.contains('nowo-chat-ref--restricted') ? `[${title}]` : `#${title}`);
+  });
+  // 1.19: a link card reads its title; the editor gets the `!link[Title](url)` token back, so an edit keeps the card.
+  doc.body.querySelectorAll('.nowo-chat-linkcard').forEach((card) => {
+    const shown = card.querySelector('.nowo-chat-linkcard__title')?.textContent ?? '';
+    const href = card.getAttribute('href') ?? '';
+    card.replaceWith(lines ? linkToken(card.getAttribute('data-title') ?? shown, href) : shown !== '' ? shown : href);
   });
   const text = doc.body.textContent ?? '';
   // One line for previews: block boundaries become spaces ("supports:\n- dms" → "supports: dms").

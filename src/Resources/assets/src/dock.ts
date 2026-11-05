@@ -1109,6 +1109,11 @@ export class ChatDock implements ThreadHost {
       void this.windows.get(event.conversationUuid)?.loadPins();
       return;
     }
+    if (event.type === 'links') {
+      // 1.19: the pinned links changed (the open panel follows).
+      void this.windows.get(event.conversationUuid)?.loadLinks();
+      return;
+    }
     if (event.type === 'list') {
       // Closed or reopened in another tab.
       void this.refreshList(true);

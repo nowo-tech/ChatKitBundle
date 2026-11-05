@@ -4,7 +4,7 @@
  * application's UX Icons (<template data-nowo-chat-icon>) or the built-in SVG, unless they already hold one.
  */
 import { attachAvatarImage } from './avatar';
-import { builtinIcon, h } from './dom';
+import { builtinIcon, h, hasBuiltinIcon } from './dom';
 import type { VisibleStatus } from './types';
 
 /** Serial suffix that keeps the ids of cloned form controls unique (several windows clone the same template). */
@@ -42,13 +42,15 @@ export class Templates {
   }
 
   /**
-   * Icon by name: the application's (ux_icon) when provided, else the built-in SVG.
+   * Icon by name: the application's (ux_icon) when provided, else the built-in SVG; when neither exists and a
+   * fallback is given (e.g. `provider_teams` → `video`), the fallback icon.
    *
    * @param name Icon name.
    * @param size Width and height in pixels.
+   * @param fallback Icon used when the application and the built-in set have none named `name`.
    * @returns The icon element (aria-hidden).
    */
-  icon(name: string, size = 18): Element {
+  icon(name: string, size = 18, fallback?: string | null): Element {
     const custom = this.root.querySelector<HTMLTemplateElement>(`template[data-nowo-chat-icon="${name}"]`)?.content.firstElementChild;
     if (custom instanceof Element) {
       const copy = custom.cloneNode(true) as Element;
@@ -56,6 +58,9 @@ export class Templates {
       copy.setAttribute('height', String(size));
       copy.setAttribute('aria-hidden', 'true');
       return copy;
+    }
+    if (!hasBuiltinIcon(name) && fallback !== undefined && fallback !== null && fallback !== '' && fallback !== name) {
+      return this.icon(fallback, size);
     }
     return builtinIcon(name, size);
   }
@@ -104,15 +109,15 @@ export class Templates {
   }
 
   /**
-   * Fills every empty `data-icon` slot of a cloned template or a rendered message (`data-icon-size`, default 18);
-   * slots that already hold markup are kept.
+   * Fills every empty `data-icon` slot of a cloned template or a rendered message (`data-icon-size`, default 18,
+   * `data-icon-fallback` when the icon does not exist); slots that already hold markup are kept.
    *
    * @param scope Cloned element or message body.
    */
   fillIcons(scope: Element): void {
     scope.querySelectorAll<HTMLElement>('[data-icon]').forEach((slot) => {
       if (slot.childElementCount === 0) {
-        slot.replaceChildren(this.icon(slot.dataset.icon ?? '', Number(slot.dataset.iconSize ?? 18)));
+        slot.replaceChildren(this.icon(slot.dataset.icon ?? '', Number(slot.dataset.iconSize ?? 18), slot.dataset.iconFallback));
       }
     });
   }

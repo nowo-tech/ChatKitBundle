@@ -41,6 +41,39 @@ function respond(body: unknown, ok = true, status = 200) {
 describe('chat api client', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('calls the pinned links and links panel endpoints (1.19)', async () => {
+    const fetchMock = respond({ links: [], canManage: true, max: 10 });
+    vi.stubGlobal('fetch', fetchMock);
+    const api = new ChatApi({ ...config, endpoints: { ...config.endpoints, pinnedLinks: '/conv/__uuid__/pinned-links', pinnedLink: '/conv/__uuid__/pinned-links/__link__', links: '/conv/__uuid__/links' } });
+
+    expect(await api.pinnedLinks('c 1')).toEqual({ links: [], canManage: true, max: 10 });
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/conv/c%201/pinned-links');
+    await api.addPinnedLink('c', 'https://x.com/', 'Daily');
+    expect(fetchMock).toHaveBeenLastCalledWith('/conv/c/pinned-links', expect.objectContaining({ method: 'POST', body: '{"url":"https://x.com/","title":"Daily"}' }));
+    await api.addPinnedLink('c', 'https://x.com/', '');
+    expect(fetchMock.mock.lastCall?.[1]).toMatchObject({ body: '{"url":"https://x.com/","title":null}' });
+    await api.updatePinnedLink('c', 'l/1', 'https://y.com/', null);
+    expect(fetchMock).toHaveBeenLastCalledWith('/conv/c/pinned-links/l%2F1', expect.objectContaining({ method: 'PATCH', body: '{"url":"https://y.com/","title":null}' }));
+    await api.updatePinnedLink('c', 'l', 'https://y.com/', 'T');
+    expect(fetchMock.mock.lastCall?.[1]).toMatchObject({ body: '{"url":"https://y.com/","title":"T"}' });
+    await api.removePinnedLink('c', 'l');
+    expect(fetchMock).toHaveBeenLastCalledWith('/conv/c/pinned-links/l', expect.objectContaining({ method: 'DELETE' }));
+    await api.links('c');
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/conv/c/links');
+    await api.links('c', { q: '  ', provider: '', before: null });
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/conv/c/links');
+    await api.links('c', { q: ' daily ', provider: 'teams', before: 42 });
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/conv/c/links?q=daily&provider=teams&before=42');
+
+    vi.stubGlobal('fetch', respond({ error: 'too_many_links' }, false, 422));
+    await expect(api.addPinnedLink('c', 'https://x.com/', null)).rejects.toMatchObject({ status: 422, code: 'too_many_links' });
+    // Without the endpoints configured the URLs are empty (the UI never calls them then).
+    const bare = new ChatApi(config);
+    vi.stubGlobal('fetch', fetchMock);
+    await bare.removePinnedLink('c', 'l');
+    expect(fetchMock.mock.lastCall?.[0]).toBe('');
+  });
+
   it('calls the support ticket endpoints', async () => {
     const fetchMock = respond({ tickets: [{ uuid: 't' }], conversation: { uuid: 'x' }, messages: [{ id: 1 }] });
     vi.stubGlobal('fetch', fetchMock);
