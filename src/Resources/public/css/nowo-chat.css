@@ -1172,7 +1172,7 @@
 .nowo-chat.is-mobile .nowo-chat-window .nowo-chat-window__back {
   display: grid;
 }
-.nowo-chat.is-mobile .nowo-chat-window .nowo-chat-window__actions > .nowo-chat-icon-btn:not(.nowo-chat-window__buzz):not(.nowo-chat-window__resolve) {
+.nowo-chat.is-mobile .nowo-chat-window .nowo-chat-window__actions > .nowo-chat-icon-btn:not(.nowo-chat-window__buzz):not(.nowo-chat-window__resolve):not(.nowo-chat-window__links) {
   display: none;
 }
 .nowo-chat.is-mobile .nowo-chat-panel.is-open .nowo-chat-panel__header,
@@ -3457,4 +3457,529 @@ a.nowo-chat-ref:focus-visible {
 .nowo-chat-avatar.has-image,
 .nowo-chat-mention-option__initials.has-image {
   color: transparent;
+}
+
+/* 1.19 links: provider accents (cards, chips, panel items). The icon colour mixes the accent with the text colour, so it
+   darkens on the light scheme and lightens on the dark one (readable on both without a dark-mode copy of each value). */
+:is(.nowo-chat-linkcard, .nowo-chat-linkchip, .nowo-chat-links__item, .nowo-chat-linkdialog__detected) {
+  --nowo-chat-link-accent: var(--nowo-chat-accent);
+  --nowo-chat-link-icon: color-mix(in srgb, var(--nowo-chat-link-accent) 72%, var(--nowo-chat-text));
+  --nowo-chat-link-tile: color-mix(in srgb, var(--nowo-chat-link-accent) 16%, var(--nowo-chat-surface));
+}
+:is(.nowo-chat-linkcard, .nowo-chat-linkchip, .nowo-chat-links__item)[data-provider="teams"] {
+  --nowo-chat-link-accent: #5b5fc7;
+}
+:is(.nowo-chat-linkcard, .nowo-chat-linkchip, .nowo-chat-links__item)[data-provider="meet"] {
+  --nowo-chat-link-accent: #00897b;
+}
+:is(.nowo-chat-linkcard, .nowo-chat-linkchip, .nowo-chat-links__item)[data-provider="zoom"] {
+  --nowo-chat-link-accent: #0b5cff;
+}
+:is(.nowo-chat-linkcard, .nowo-chat-linkchip, .nowo-chat-links__item)[data-provider="jitsi"] {
+  --nowo-chat-link-accent: #1d76ba;
+}
+:is(.nowo-chat-linkcard, .nowo-chat-linkchip, .nowo-chat-links__item)[data-provider="webex"] {
+  --nowo-chat-link-accent: #00a0d1;
+}
+
+/* Link card of a message (`!link[Title](url)`, rendered by the server): an icon tile, the title and "Provider · host".
+   Like the #reference card it sets its own surface and foreground, so it reads the same in the sender's accent bubble. */
+.nowo-chat-linkcard {
+  display: flex;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  min-width: min(220px, 100%);
+  margin: 4px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  line-height: 1.3;
+  white-space: normal;
+}
+.nowo-chat-bubble a.nowo-chat-linkcard,
+.nowo-chat-msg--mine .nowo-chat-bubble a.nowo-chat-linkcard {
+  color: var(--nowo-chat-text);
+  text-decoration: none;
+}
+.nowo-chat-msg--mine .nowo-chat-linkcard {
+  border-color: color-mix(in srgb, var(--nowo-chat-on-accent) 55%, var(--nowo-chat-accent));
+}
+a.nowo-chat-linkcard:hover {
+  border-color: var(--nowo-chat-link-accent);
+}
+a.nowo-chat-linkcard:focus-visible {
+  outline: 2px solid var(--nowo-chat-accent);
+  outline-offset: 2px;
+}
+.nowo-chat-msg--mine a.nowo-chat-linkcard:focus-visible {
+  outline-color: var(--nowo-chat-on-accent);
+}
+
+.nowo-chat-linkcard__icon,
+.nowo-chat-links__icon {
+  display: grid;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: calc(var(--nowo-chat-radius-control) - 2px);
+  background: var(--nowo-chat-link-tile);
+  color: var(--nowo-chat-link-icon);
+}
+
+.nowo-chat-linkcard__text,
+.nowo-chat-links__text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.nowo-chat-linkcard__title,
+.nowo-chat-linkcard__meta,
+.nowo-chat-links__label,
+.nowo-chat-links__host,
+.nowo-chat-links__meta,
+.nowo-chat-linkchip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowo-chat-linkcard__title {
+  font-weight: 600;
+}
+
+.nowo-chat-linkcard__meta {
+  color: color-mix(in srgb, var(--nowo-chat-text) 72%, var(--nowo-chat-surface));
+  font-size: 0.75rem;
+}
+
+/* Pinned links bar (under the header, before the pinned messages): one line of chips that scrolls sideways. */
+.nowo-chat-linkbar {
+  flex: none;
+  min-width: 0;
+  padding: 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 70%, transparent);
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+  font-size: 0.75rem;
+}
+.nowo-chat-linkbar[hidden] {
+  display: none;
+}
+
+.nowo-chat-linkbar__list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.nowo-chat-linkbar__item {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+}
+
+.nowo-chat-linkchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 180px;
+  padding: 2px 8px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-pill);
+  background: var(--nowo-chat-surface-muted);
+  color: var(--nowo-chat-text);
+  line-height: 1.5;
+  text-decoration: none;
+}
+.nowo-chat-linkchip > svg {
+  flex: none;
+  color: var(--nowo-chat-link-icon);
+}
+.nowo-chat-linkchip:hover {
+  border-color: var(--nowo-chat-link-accent);
+}
+
+.nowo-chat-linkbar__edit,
+.nowo-chat-linkbar__add {
+  border: 0;
+  background: transparent;
+  color: var(--nowo-chat-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.nowo-chat-linkbar__edit {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+}
+.nowo-chat-linkbar__edit:hover {
+  background: var(--nowo-chat-surface-muted);
+  color: var(--nowo-chat-text);
+}
+
+.nowo-chat-linkbar__add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px dashed var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-pill);
+  color: var(--nowo-chat-accent-strong);
+  line-height: 1.5;
+}
+.nowo-chat-linkbar__add:hover {
+  border-style: solid;
+}
+.nowo-chat-linkbar__add[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.nowo-chat-linkchip:focus-visible,
+.nowo-chat-linkbar__edit:focus-visible,
+.nowo-chat-linkbar__add:focus-visible,
+.nowo-chat-linkdialog__button:focus-visible,
+.nowo-chat-links__more:focus-visible {
+  outline: 2px solid var(--nowo-chat-accent);
+  outline-offset: 1px;
+}
+
+/* Link dialog (UiKit 2.29 anatomy): a modal <dialog> in the top layer, above the dock; header and footer never scroll. */
+.nowo-chat-linkdialog {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px));
+  max-height: min(560px, calc(100vh - 32px));
+  max-height: min(560px, calc(100dvh - 32px));
+  padding: 0;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-window);
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+  box-shadow: var(--nowo-chat-shadow);
+  font-size: var(--nowo-chat-font-size);
+  overflow: hidden;
+  pointer-events: auto;
+}
+.nowo-chat-linkdialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.nowo-chat-linkdialog__form {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+  margin: 0;
+}
+
+.nowo-chat-linkdialog__header,
+.nowo-chat-linkdialog__footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.nowo-chat-linkdialog__header {
+  justify-content: space-between;
+  border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+}
+
+.nowo-chat-linkdialog__title {
+  margin: 0;
+  font-family: var(--nowo-chat-font-display);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.nowo-chat-linkdialog__close {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.nowo-chat-linkdialog__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 12px 14px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.nowo-chat-linkdialog__label {
+  font-weight: 600;
+}
+.nowo-chat-linkdialog__input + .nowo-chat-linkdialog__label {
+  margin-top: 6px;
+}
+
+.nowo-chat-linkdialog__input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  color: inherit;
+  font: inherit;
+}
+.nowo-chat-linkdialog__input:focus-visible {
+  border-color: var(--nowo-chat-accent);
+  outline: 2px solid color-mix(in srgb, var(--nowo-chat-accent) 40%, transparent);
+  outline-offset: 0;
+}
+.nowo-chat-linkdialog__input[aria-invalid="true"] {
+  border-color: var(--nowo-chat-danger);
+}
+
+.nowo-chat-linkdialog__detected {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  color: var(--nowo-chat-muted);
+}
+.nowo-chat-linkdialog__detected > svg {
+  color: var(--nowo-chat-link-icon);
+}
+.nowo-chat-linkdialog__detected[hidden],
+.nowo-chat-linkdialog__error[hidden] {
+  display: none;
+}
+
+.nowo-chat-linkdialog__error {
+  margin: 4px 0 0;
+  color: var(--nowo-chat-danger);
+}
+
+.nowo-chat-linkdialog__footer {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  border-top: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+}
+
+.nowo-chat-linkdialog__button {
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.nowo-chat-linkdialog__button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.nowo-chat-linkdialog__button--primary {
+  border-color: var(--nowo-chat-accent);
+  background: var(--nowo-chat-accent);
+  color: var(--nowo-chat-on-accent);
+}
+.nowo-chat-linkdialog__button--primary:hover {
+  border-color: var(--nowo-chat-accent-strong);
+  background: var(--nowo-chat-accent-strong);
+}
+/* The destructive action stands apart, on the left. */
+.nowo-chat-linkdialog__button--danger {
+  margin-inline-end: auto;
+  border-color: var(--nowo-chat-danger);
+  color: var(--nowo-chat-danger);
+}
+
+@media (max-width: 480px) {
+  .nowo-chat-linkdialog {
+    width: calc(100vw - 16px);
+  }
+  .nowo-chat-linkdialog__button {
+    min-height: 40px;
+  }
+}
+
+/* Links panel: over the window's main area (thread and composer), its own scrolling body. */
+.nowo-chat-links {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+}
+.nowo-chat-links[hidden] {
+  display: none;
+}
+
+.nowo-chat-links__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+}
+
+.nowo-chat-links__title {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.nowo-chat-links__filters {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.nowo-chat-links__search,
+.nowo-chat-links__provider {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  color: inherit;
+  font: inherit;
+}
+.nowo-chat-links__search {
+  flex: 1;
+}
+.nowo-chat-links__provider {
+  flex: none;
+  max-width: 45%;
+}
+.nowo-chat-links__search:focus-visible,
+.nowo-chat-links__provider:focus-visible {
+  border-color: var(--nowo-chat-accent);
+  outline: 2px solid color-mix(in srgb, var(--nowo-chat-accent) 40%, transparent);
+  outline-offset: 0;
+}
+
+.nowo-chat-links__body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 10px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.nowo-chat-links__section[hidden],
+.nowo-chat-links__state[hidden],
+.nowo-chat-links__more[hidden] {
+  display: none;
+}
+
+.nowo-chat-links__section {
+  display: flex;
+  flex-direction: column;
+}
+
+.nowo-chat-links__heading {
+  margin: 10px 0 4px;
+  color: var(--nowo-chat-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nowo-chat-links__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nowo-chat-links__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: var(--nowo-chat-radius-control);
+}
+.nowo-chat-links__item:hover,
+.nowo-chat-links__item:focus-within {
+  background: var(--nowo-chat-surface-muted);
+}
+
+.nowo-chat-links__label {
+  font-weight: 600;
+}
+
+.nowo-chat-links__host,
+.nowo-chat-links__meta {
+  color: var(--nowo-chat-muted);
+  font-size: 0.75rem;
+}
+
+.nowo-chat-links__actions {
+  display: flex;
+  flex: none;
+}
+
+.nowo-chat-links__action {
+  width: 28px;
+  height: 28px;
+}
+
+.nowo-chat-links__state {
+  margin: 0;
+  padding: 24px 8px;
+  color: var(--nowo-chat-muted);
+  text-align: center;
+}
+
+.nowo-chat-links__more {
+  align-self: center;
+  margin-top: 8px;
+  padding: 4px 12px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .nowo-chat-linkchip,
+  .nowo-chat-linkbar__add {
+    min-height: 32px;
+  }
+  .nowo-chat-linkbar__edit,
+  .nowo-chat-links__action {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (forced-colors: active) {
+  .nowo-chat-linkcard__icon,
+  .nowo-chat-links__icon {
+    border: 1px solid CanvasText;
+  }
 }

@@ -25,22 +25,22 @@ final class ChatMarkdownRendererTest extends TestCase
         yield 'numbered list then text' => ["1. a\n2) b\nfin", '<ol><li>a</li><li>b</li></ol><p>fin</p>'];
         yield 'list kind switch' => ["- a\n1. b", '<ul><li>a</li></ul><ol><li>b</li></ol>'];
         yield 'raw html escaped' => ['<script>alert(1)</script><img src=x onerror=y>', '<p>&lt;script&gt;alert(1)&lt;/script&gt;&lt;img src=x onerror=y&gt;</p>'];
-        yield 'autolink trims punctuation' => ['ver https://beacon.test/p/1?a=1&b=2.', '<p>ver <a href="https://beacon.test/p/1?a=1&amp;b=2" rel="noopener nofollow ugc" target="_blank">https://beacon.test/p/1?a=1&amp;b=2</a>.</p>'];
-        yield 'link with underscores not italic' => ['https://x.test/a_b_c', '<p><a href="https://x.test/a_b_c" rel="noopener nofollow ugc" target="_blank">https://x.test/a_b_c</a></p>'];
+        yield 'autolink trims punctuation' => ['ver https://beacon.test/p/1?a=1&b=2.', '<p>ver <a href="https://beacon.test/p/1?a=1&amp;b=2" rel="noopener noreferrer nofollow ugc" target="_blank">https://beacon.test/p/1?a=1&amp;b=2</a>.</p>'];
+        yield 'link with underscores not italic' => ['https://x.test/a_b_c', '<p><a href="https://x.test/a_b_c" rel="noopener noreferrer nofollow ugc" target="_blank">https://x.test/a_b_c</a></p>'];
         yield 'javascript scheme stays text' => ['javascript:alert(1)', '<p>javascript:alert(1)</p>'];
         yield 'injected placeholders are stripped' => ["a\u{E000}B0\u{E000}b", '<p>aB0b</p>'];
         yield 'bidi overrides are stripped' => ["evil\u{202E}txt.exe", '<p>eviltxt.exe</p>'];
         yield 'block marker inline with text' => ['see ```x``` now', '<p>see <pre><code>x</code></pre> now</p>'];
         // 1.11: [text](url), www. / e-mail autolinks, quotes.
-        yield 'markdown link' => ['see [the docs](https://x.test/a?b=1&c=2)', '<p>see <a href="https://x.test/a?b=1&amp;c=2" rel="noopener nofollow ugc" target="_blank">the docs</a></p>'];
-        yield 'markdown link text is plain' => ['[<b>x</b>](https://x.test)', '<p><a href="https://x.test" rel="noopener nofollow ugc" target="_blank">&lt;b&gt;x&lt;/b&gt;</a></p>'];
+        yield 'markdown link' => ['see [the docs](https://x.test/a?b=1&c=2)', '<p>see <a href="https://x.test/a?b=1&amp;c=2" rel="noopener noreferrer nofollow ugc" target="_blank">the docs</a></p>'];
+        yield 'markdown link text is plain' => ['[<b>x</b>](https://x.test)', '<p><a href="https://x.test" rel="noopener noreferrer nofollow ugc" target="_blank">&lt;b&gt;x&lt;/b&gt;</a></p>'];
         yield 'markdown mailto link' => ['[write](mailto:ana@x.test)', '<p><a href="mailto:ana@x.test" rel="nofollow">write</a></p>'];
         yield 'javascript link stays text' => ['[x](javascript:alert(1))', '<p>[x](javascript:alert(1))</p>'];
-        yield 'www autolink' => ['go www.x.test.', '<p>go <a href="https://www.x.test" rel="noopener nofollow ugc" target="_blank">www.x.test</a>.</p>'];
+        yield 'www autolink' => ['go www.x.test.', '<p>go <a href="https://www.x.test" rel="noopener noreferrer nofollow ugc" target="_blank">www.x.test</a>.</p>'];
         yield 'e-mail autolink' => ['mail ana.b@x.test or mailto:c@y.test', '<p>mail <a href="mailto:ana.b@x.test" rel="nofollow">ana.b@x.test</a> or <a href="mailto:c@y.test" rel="nofollow">c@y.test</a></p>'];
         yield 'quote' => ["> one *a*\n> two\n\nafter", '<blockquote><p>one <em>a</em><br>two</p></blockquote><p>after</p>'];
         yield 'quote between list and text' => ["- a\n> q\nb", '<ul><li>a</li></ul><blockquote><p>q</p></blockquote><p>b</p>'];
-        yield 'quotes in link escaped' => ['https://x.test/"onmouseover', '<p><a href="https://x.test/" rel="noopener nofollow ugc" target="_blank">https://x.test/</a>&quot;onmouseover</p>'];
+        yield 'quotes in link escaped' => ['https://x.test/"onmouseover', '<p><a href="https://x.test/" rel="noopener noreferrer nofollow ugc" target="_blank">https://x.test/</a>&quot;onmouseover</p>'];
     }
 
     #[DataProvider('cases')]

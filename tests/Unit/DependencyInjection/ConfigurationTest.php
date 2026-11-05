@@ -46,6 +46,7 @@ final class ConfigurationTest extends TestCase
             'max_pins'                  => 20,
             'auto_away_minutes'         => 10,
             'dock'                      => ['overlay' => 'hide', 'watch_aria_modal' => false],
+            'links'                     => ['enabled' => true, 'max_pinned' => 20, 'allow_http' => false, 'channel_managers' => 'members', 'providers' => Configuration::DEFAULT_LINK_PROVIDERS],
             'status_presets'            => Configuration::DEFAULT_STATUS_PRESETS,
             'support'                   => [
                 'ticket_prefix'      => 'SUP-',
@@ -107,6 +108,33 @@ final class ConfigurationTest extends TestCase
         yield 'dash in table_prefix' => [['table_prefix' => 'app-']];
         yield 'non-string table_prefix' => [['table_prefix' => 1]];
         yield 'trailing newline' => [['table_name_prefix' => "chat_\n"]];
+    }
+
+    public function testLinkProvidersReplaceTheDefaults(): void
+    {
+        $config = $this->process([['profiles' => ['default' => ['links' => ['channel_managers' => 'admins', 'allow_http' => true, 'providers' => [
+            'whereby' => ['label' => 'Whereby', 'hosts' => ['whereby.com']],
+        ]]]]]]);
+
+        self::assertSame(['whereby' => ['label' => 'Whereby', 'hosts' => ['whereby.com'], 'icon' => null, 'fallback_icon' => 'video']], $config['profiles']['default']['links']['providers']);
+        self::assertSame('admins', $config['profiles']['default']['links']['channel_managers']);
+        self::assertTrue($config['profiles']['default']['links']['allow_http']);
+    }
+
+    public function testLinkProviderHostMustBeAHostname(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('lowercase hostname');
+
+        $this->process([['profiles' => ['default' => ['links' => ['providers' => ['x' => ['label' => 'X', 'hosts' => ['https://x.com/']]]]]]]]);
+    }
+
+    public function testLinkProviderKeyOtherIsReserved(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('"other"');
+
+        $this->process([['profiles' => ['default' => ['links' => ['providers' => ['other' => ['label' => 'X', 'hosts' => ['x.com']]]]]]]]);
     }
 
     /**

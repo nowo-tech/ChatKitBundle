@@ -17,6 +17,8 @@ use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
+use Nowo\ChatKitBundle\Link\ChatLinks;
+use Nowo\ChatKitBundle\Link\ChatLinkUrls;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Push\ChatPushDispatcher;
 use Nowo\ChatKitBundle\Push\NullChatPushSender;
@@ -121,6 +123,14 @@ return static function (ContainerConfigurator $container): void {
     $services->get(ChatService::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'))
         ->arg('$maxPins', param('nowo_chat_kit.max_pins'));
+    // 1.19: links (pinned links, link cards, the Links panel).
+    $services->get(ChatLinkUrls::class)
+        ->arg('$providers', param('nowo_chat_kit.links.providers'))
+        ->arg('$allowHttp', param('nowo_chat_kit.links.allow_http'));
+    $services->get(ChatLinks::class)
+        ->arg('$maxPinned', param('nowo_chat_kit.links.max_pinned'))
+        ->arg('$enabled', param('nowo_chat_kit.links.enabled'))
+        ->arg('$channelMembers', param('nowo_chat_kit.links.channel_members'));
     $services->get(ChatDockExtension::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'))
         ->arg('$iconSet', param('nowo_chat_kit.icon_set'))

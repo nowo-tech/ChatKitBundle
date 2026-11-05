@@ -49,6 +49,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Links (1.19, owner request: "attach links, e.g. the Teams link in a channel or in a conversation with a colleague,
+  and have access to those links").** See [USAGE — Links](USAGE.md#links).
+  - **Pinned links per conversation** (like bookmarks): a compact bar under the conversation header with link chips
+    (provider icon + title). Members add, edit and remove them in a medium dialog (UiKit 2.29 anatomy: header, body,
+    footer with the one primary last) with a URL and an optional title. Who manages them: both people of a direct
+    conversation, agents in tickets, and in channels every member (`links.channel_managers: members`, default) or only
+    whom the application allows (`admins`: new optional `ChatLinkPolicyInterface`, else `ChatPinPolicyInterface`, else
+    nobody). At most `links.max_pinned` (default 20) per conversation.
+  - **"Attach link" in the composer**: inserts a link card `!link[Title](https://…)` into the message, rendered as a rich
+    chip (provider icon, title, provider and host) in the message list.
+  - **Known providers** get an icon and a label: Microsoft Teams (`teams.microsoft.com`, `teams.live.com`), Google
+    Meet, Zoom, Jitsi, Webex; generic links show the host. Configurable with `links.providers`; detection only looks at
+    the hostname (the host or a subdomain of it).
+  - **Links panel** per conversation (header button): the pinned links first, then every link shared in messages (link
+    cards, Markdown links and autolinked URLs), newest first, with provider icon, title or host, who shared it and when,
+    Open (new tab, `noopener noreferrer`), Copy link and Go to message; search and a provider filter; paged (30). Read
+    from a new link index (`nowo_chat_message_link`) kept in step when a message is sent, edited, deleted, purged or
+    erased — never by scanning the history. `nowo:chat:links:backfill` indexes the messages written before 1.19.
+  - API: `GET|POST /api/conversations/{uuid}/pinned-links`, `PATCH|DELETE /api/conversations/{uuid}/pinned-links/{linkUuid}`,
+    `GET /api/conversations/{uuid}/links?q=&provider=&before=`; realtime event `links` when the pinned links change;
+    events `ChatLinkAddedEvent`, `ChatLinkUpdatedEvent`, `ChatLinkRemovedEvent`.
+  - Security: `https:` only (`http:` with `links.allow_http`), no other scheme, no user information, normalised and
+    percent-encoded server-side, title ≤ 120 characters, everything rendered escaped with `target="_blank"` and
+    `rel="noopener noreferrer"`. **Nothing is ever fetched from a link** (no server-side preview, no SSRF surface).
+  - Privacy: the personal data export lists the links the user pinned; the erasure **deletes** them in every
+    conversation (their URL and title may be personal: a 1:1 room, a meeting password) with `ChatLinkRemovedEvent` and
+    the `links` broadcast, and removes the link index rows of the user's messages with their text. `nowo:chat:purge`
+    also deletes pinned links not changed within `retention_days`.
+  - `links.max_pinned` holds under concurrent adds (conversation row locked, count checked again inside the
+    transaction).
+  - Audit FZ fixes before release: a card title holding inline code or a mention reads as text (no placeholder leak),
+    `canManageLinks()` denies explicitly when the channel disappears, the backfill caps `--batch` at 5000 and skips
+    automatic replies.
+  - Translations in the 7 locales; light and dark; keyboard and screen-reader labels.
+
+### Changed
+
+- **Markdown links and autolinks now carry `rel="noopener noreferrer nofollow ugc"`** (`noreferrer` added, audit
+  FZ-I7): the destination no longer receives the chat page as `Referer`, the same as link cards and the Links panel.
+- `ChatMarkdownRenderer` takes an optional `ChatLinkUrls` (link cards); `ChatService`, `ChatDockExtension` take an
+  optional `ChatLinks`. Two new tables (see [UPGRADING](UPGRADING.md#unreleased)).
+
 ## [1.18.0] - 2026-11-05
 
 Minor release. See [UPGRADING](UPGRADING.md#to-1180).

@@ -22,6 +22,7 @@ const api = {
   archiveRead: vi.fn(),
   pins: vi.fn(),
   pin: vi.fn(),
+  pinnedLinks: vi.fn(),
   linkPreviews: vi.fn(),
   message: vi.fn(),
 };
@@ -1204,6 +1205,20 @@ describe('ChatDock', () => {
       await flush();
       expect(api.archive).toHaveBeenLastCalledWith('b', false);
       document.getElementById('page')?.click();
+    });
+
+    it('reloads the pinned links of the open window on a links event (1.19)', async () => {
+      api.pinnedLinks.mockResolvedValue({ links: [], canManage: true, max: 5 });
+      const links = { enabled: true, allowHttp: false, maxPinned: 5, titleMaxLength: 120, urlMaxLength: 2048, providers: [] };
+      const { dock, q } = mount([summary('a')], { endpoints: { ...endpoints, pinnedLinks: '/c/__uuid__/pinned-links' }, i18n: i18nPlus, links });
+      await dock.start();
+      await dock.open(summary('a'));
+      await flush();
+      expect(q('[data-testid="nowo-chat-links-bar"]').hidden).toBe(false);
+      api.pinnedLinks.mockClear();
+      realtimeHandlers?.onEvent({ type: 'links', conversationUuid: 'a' });
+      realtimeHandlers?.onEvent({ type: 'links', conversationUuid: 'closed' });
+      expect(api.pinnedLinks).toHaveBeenCalledTimes(1);
     });
 
     it('reloads the pinned bar on a pins event, never rings for a pinned line, and previews it in the list', async () => {

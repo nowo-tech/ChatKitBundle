@@ -23,6 +23,7 @@
 - [Chat status](#chat-status)
 - [Closing conversations](#closing-conversations)
 - [Pinned messages](#pinned-messages)
+- [Links](#links)
 - [Automatic replies](#automatic-replies)
 - [Quick replies](#quick-replies)
 - [Formatting](#formatting)
@@ -294,6 +295,9 @@ from the dock templates, `_templates.html.twig`). Keep the content element with 
 | `SupportTicketStatusChangedEvent` | a deliberate status change (`previous`, `by`); not the automatic open ↔ waiting switch | notify the requester |
 | `SupportTicketAssignedEvent` | a ticket was assigned or unassigned (`assignee` null), by an agent or by the topic's default assignee | notify the assignee |
 | `ChatMentionEvent` | a stored message mentions members (`users`: only the people an edit adds; `edited`) | notify the mentioned people |
+| `ChatLinkAddedEvent` | 1.19: a link was pinned to a conversation (`link`, `by`) | notify, audit |
+| `ChatLinkUpdatedEvent` | 1.19: a pinned link changed (`link`, `by`, `previousUrl`, `previousTitle`) | audit |
+| `ChatLinkRemovedEvent` | 1.19: a pinned link was removed (`conversation`, `uuid`, `url`, `title`, `by`) | audit |
 
 ## Mentions
 
@@ -824,6 +828,69 @@ get no Pin action and the API answers `403 pin_forbidden` (`404` when they canno
 Summaries carry `canPin`, messages `pinned` (and a pin line `pinnedMessage`). The personal data export lists the pins a
 person made.
 
+## Links
+
+1.19. Links such as the Teams meeting of a team, in a channel or in a direct conversation:
+
+- **Pinned links** — a compact bar under the conversation header shows the conversation's links as chips (provider
+  icon + title; a click opens the link in a new tab). Members with the right add, edit and remove them through a dialog
+  (URL + optional title; the provider is detected while typing). Who: both people of a direct conversation, support
+  agents in tickets, and in channels every member (`links.channel_managers: members`, default) or only whom your access
+  policy allows (`admins`): implement `ChatLinkPolicyInterface::canManageLinksInChannel()` on it (without it, `admins`
+  uses `ChatPinPolicyInterface::canPinInChannel()`, and denies without that too). Writing to the conversation is also
+  required (a read-only member only reads). At most `links.max_pinned` (default 20) per conversation, also under concurrent
+  adds (the conversation row is locked and the count checked again in the transaction). Open clients
+  reload the bar on the realtime `links` event.
+- **Attach link** — the composer's link action inserts a link card `!link[Title](https://…)` (title optional) into the
+  message; it renders as a rich chip with the provider icon, the title and the provider · host.
+- **Known providers** — Microsoft Teams (`teams.microsoft.com`, `teams.live.com`, e.g. `/l/meetup-join/…`), Google Meet,
+  Zoom (any `*.zoom.us`), Jitsi, Webex; anything else is a generic link that shows its host. Configure them with
+  `links.providers` ([CONFIGURATION](CONFIGURATION.md#reference)). Detection only matches the hostname, never the path.
+- **Links panel** — the **Links** button of the conversation header lists every link of the conversation: the pinned
+  links first, then the links shared in messages (link cards, Markdown links and autolinked URLs), most recently shared
+  first, with icon, title or host, who shared it and when, and **Open**, **Copy link** and **Go to message**; a search
+  box (title and URL) and a provider filter (a provider or *Others*); 30 per page. Members only.
+
+**Security.** A link is accepted only as an absolute `https:` URL (`http:` too with `links.allow_http`): no
+`javascript:`, `data:` or other scheme, no user information (`user:pass@`), no spaces or control characters, at most 2048
+characters. The server normalises it (lowercase scheme and host, an internationalised host in its ASCII form, no default
+port, quotes, parentheses and non-ASCII characters percent-encoded) and caps titles at 120 characters; everything is
+rendered escaped, with `target="_blank"` and `rel="noopener noreferrer"`. **No link is ever fetched** by the bundle: no
+server-side preview, no DNS lookup, so the feature adds no SSRF surface. The existing per-viewer
+`ChatLinkPreviewProviderInterface` is unchanged (link cards are not sent to it). If you want rich previews, build them in
+that provider from data you already have, or fetch through OutboundUrlGuardBundle — the bundle does not do it.
+
+**The link index.** The panel reads `nowo_chat_message_link`, filled when a message is sent or edited (its rows are
+replaced) and emptied when it is deleted, purged (`nowo:chat:purge`) or erased; the history is never scanned per request.
+Messages written before 1.19: run `bin/console nowo:chat:links:backfill` once (idempotent; `--after-id`, `--batch`).
+Each row stores the provider found when it was indexed: run the backfill again after changing `links.providers`.
+
+**Privacy.** `ChatPersonalData::erase()` **deletes every link the user pinned**, in every conversation (direct,
+channel, ticket): their URL and title may be personal (a 1:1 room, a meeting link with its password). One
+`ChatLinkRemovedEvent` per removed link of a conversation that survives the erasure (`by` = the erased user; the user's
+own tickets are deleted whole), then a `links` broadcast per conversation, after the commit. The index rows of the user's
+own messages go with their text. `export()` lists the links the user pinned (`links`: conversation, URL, title, dates).
+**Retention:** `nowo:chat:purge` also deletes pinned links whose last change (else their creation) is older than
+`retention_days`; the link index follows its messages.
+
+**Events** (dispatched after the flush, before the `links` broadcast): `ChatLinkAddedEvent` (`link`, `by`),
+`ChatLinkUpdatedEvent` (`link`, `by`, `previousUrl`, `previousTitle`; only when something changed),
+`ChatLinkRemovedEvent` (`conversation`, `uuid`, `url`, `title`, `by`).
+
+**API** (CSRF header on changes; unknown or foreign conversation → 404):
+
+| Method | Path | |
+| --- | --- | --- |
+| GET | `/api/conversations/{uuid}/pinned-links` | `{links, canManage, max}` (oldest first) |
+| POST | `/api/conversations/{uuid}/pinned-links` `{url, title?}` | `201 {link, links, canManage, max}`; `403 links_forbidden`, `422 invalid_link_url` / `invalid_link_title` / `too_many_links` |
+| PATCH / DELETE | `/api/conversations/{uuid}/pinned-links/{linkUuid}` | change `{url, title?}` / remove |
+| GET | `/api/conversations/{uuid}/links?q=&provider=&before=` | `{pinned, links, hasMore, next, providers, canManage}`; `pinned` on the first page only; `provider` = a key or `other`; `before` = the previous `next` |
+
+A pinned link: `{uuid, url, title, label, host, provider: {key, label, icon, fallbackIcon}|null, createdBy: {uuid, name}|null,
+createdAt, updatedAt}`. A shared link: `{id, url, title, label, host, provider, kind: card|link, messageId, messageUuid,
+author: {uuid, name}|null, createdAt}`. The dock configuration carries `links` (`enabled`, `allowHttp`, `maxPinned`,
+`titleMaxLength`, `urlMaxLength`, `providers` with their `hosts`) and the endpoints `pinnedLinks`, `pinnedLink`, `links`.
+
 ## Automatic replies
 
 Set from the chat (1.11): the **Automatic reply** section of the status menu — on / off, a Markdown text (at most 500
@@ -886,14 +953,17 @@ The bundle makes no outbound HTTP call or subprocess itself:
 
 ## Privacy
 
-- `nowo:chat:purge` — retention.
+- `nowo:chat:purge` — retention (messages, their reactions and link index rows; 1.19: pinned links not changed within
+  `retention_days`).
 - `ChatPersonalData::export($user)` — own messages and settings (not other people's messages).
 - `ChatPersonalData::erase($user)` — authored messages become tombstones without author or text; reactions, read cursors,
   settings, mention rows and the user's own support threads are deleted; @mentions of the user in other people's
   messages become a plain `@…` (no name, no public id, HTML rendered again, `message_updated` to open clients); the
   pinned-by, deleted-by, assignee and resolved-by pointers to the user become null (an assigned ticket returns to the
   queue; a message the user removed as a moderator still reads "Removed by a moderator" through `meta.moderated`,
-  without naming anyone); support bot lines in other people's tickets show `…` instead of the user's name.
+  without naming anyone); support bot lines in other people's tickets show `…` instead of the user's name; 1.19: the
+  links the user pinned are deleted in every conversation (`ChatLinkRemovedEvent`, `links` broadcast) — see
+  [Links](#links).
   - Call `erase()` **before** you anonymize the account: bot lines are matched on the current display name.
   - The rewrites are bulk DQL updates, which fire no Doctrine lifecycle events. If the host keeps its own copies of
     message text (search index, exports, analytics), re-index the conversations of the erased user.
@@ -969,6 +1039,8 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/auto-reply` `{enabled, text, when, from?, until?, mentions}` | the caller's automatic reply (1.11) |
 | GET / POST | `/api/quick-replies` · PATCH / DELETE `/api/quick-replies/{id}` | the caller's quick replies (1.11) |
 | GET | `/api/conversations/{uuid}/pins` · POST / DELETE `/api/conversations/{uuid}/messages/{messageUuid}/pin` | pinned messages, pin / unpin (1.10) |
+| GET / POST | `/api/conversations/{uuid}/pinned-links` · PATCH / DELETE `/api/conversations/{uuid}/pinned-links/{linkUuid}` | pinned links (1.19, [Links](#links)) |
+| GET | `/api/conversations/{uuid}/links?q=&provider=&before=` | the Links panel (1.19) |
 
 ### Pagination and limits
 
@@ -983,6 +1055,7 @@ Every list is bounded server-side (constants, not configuration); nothing return
 | `GET /api/support/inbox` | 50 threads (`ChatSupportInbox::list()` default) | narrow with `status` / `q` |
 | `GET /api/conversations/{uuid}/references` | 8 items (`ChatReferences::SEARCH_LIMIT`), query capped at 80 characters | narrow with `q` |
 | `GET /api/link-previews?url[]=…` | 10 URLs per request (500 characters each) | the dock batches |
+| `GET /api/conversations/{uuid}/links` | 30 shared links per page (all pinned links, at most `links.max_pinned`, on the first page) | `?before={next}`, response `hasMore` / `next` |
 | Full page `/chat/`, `/chat/{uuid}` | 50 conversations, last 50 messages | none (server-rendered view) |
 
 The conversation list loads unread counts, last messages and direct peers in batched queries, and a message page loads

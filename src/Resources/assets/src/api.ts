@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, LinkPreview, Member, OwnStatus, PeerStatus, QuickReply, Reactions, Reader, Reference, ReferenceType, SupportContext, SupportStatus, SupportTicket } from './types';
+import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, LinkPreview, LinksPage, Member, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SupportContext, SupportStatus, SupportTicket } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -123,6 +123,74 @@ export class ChatApi {
    */
   async pin(uuid: string, messageUuid: string, pinned: boolean): Promise<{ pins: ChatMessage[]; canPin: boolean }> {
     return this.request(pinned ? 'POST' : 'DELETE', this.messageUrl('pin', uuid, messageUuid), {});
+  }
+
+  /**
+   * Pinned links of a conversation, oldest first, whether the viewer may manage them and the limit (1.19).
+   *
+   * @param uuid Conversation uuid.
+   * @returns The pinned links state.
+   */
+  async pinnedLinks(uuid: string): Promise<PinnedLinksState> {
+    return this.get(this.url('pinnedLinks', uuid));
+  }
+
+  /**
+   * Pins a link to a conversation.
+   *
+   * @param uuid Conversation uuid.
+   * @param url The link (http(s) URL).
+   * @param title Optional title (null or "": none).
+   * @returns The new link and the pinned links after the change.
+   */
+  async addPinnedLink(uuid: string, url: string, title: string | null): Promise<PinnedLinksState & { link: PinnedLink }> {
+    return this.post(this.url('pinnedLinks', uuid), { url, title: title === '' ? null : title });
+  }
+
+  /**
+   * Changes a pinned link.
+   *
+   * @param uuid Conversation uuid.
+   * @param linkUuid Pinned link uuid.
+   * @param url The link.
+   * @param title Optional title (null or "": none).
+   * @returns The link and the pinned links after the change.
+   */
+  async updatePinnedLink(uuid: string, linkUuid: string, url: string, title: string | null): Promise<PinnedLinksState & { link: PinnedLink }> {
+    return this.request('PATCH', this.linkUrl(uuid, linkUuid), { url, title: title === '' ? null : title });
+  }
+
+  /**
+   * Unpins a link.
+   *
+   * @param uuid Conversation uuid.
+   * @param linkUuid Pinned link uuid.
+   * @returns The pinned links after the change.
+   */
+  async removePinnedLink(uuid: string, linkUuid: string): Promise<PinnedLinksState> {
+    return this.request('DELETE', this.linkUrl(uuid, linkUuid), {});
+  }
+
+  /**
+   * The links panel: pinned links (first page only) and links shared in messages, newest first (1.19).
+   *
+   * @param uuid Conversation uuid.
+   * @param filter `q` text search, `provider` key (or `other`), `before` paging cursor (`next` of the previous page).
+   * @returns One page.
+   */
+  async links(uuid: string, filter: { q?: string; provider?: string; before?: number | null } = {}): Promise<LinksPage> {
+    const params = new URLSearchParams();
+    if (filter.q !== undefined && filter.q.trim() !== '') {
+      params.set('q', filter.q.trim());
+    }
+    if (filter.provider !== undefined && filter.provider !== '') {
+      params.set('provider', filter.provider);
+    }
+    if (filter.before !== undefined && filter.before !== null) {
+      params.set('before', String(filter.before));
+    }
+    const query = params.toString();
+    return this.get(`${this.url('links', uuid)}${query === '' ? '' : `?${query}`}`);
   }
 
   /**
@@ -444,7 +512,7 @@ export class ChatApi {
    * @returns The URL.
    */
   private url(
-    kind: 'conversation' | 'messages' | 'members' | 'references' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign' | 'archive' | 'pins',
+    kind: 'conversation' | 'messages' | 'members' | 'references' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign' | 'archive' | 'pins' | 'pinnedLinks' | 'links',
     uuid: string,
   ): string {
     return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid));
@@ -460,6 +528,17 @@ export class ChatApi {
    */
   private messageUrl(kind: 'message' | 'reactions' | 'pin', uuid: string, messageUuid: string): string {
     return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid)).replace('__message__', encodeURIComponent(messageUuid));
+  }
+
+  /**
+   * Endpoint URL of one pinned link (`__uuid__` and `__link__` replaced).
+   *
+   * @param uuid Conversation uuid.
+   * @param linkUuid Pinned link uuid.
+   * @returns The URL.
+   */
+  private linkUrl(uuid: string, linkUuid: string): string {
+    return (this.config.endpoints.pinnedLink ?? '').replace('__uuid__', encodeURIComponent(uuid)).replace('__link__', encodeURIComponent(linkUuid));
   }
 
   /**

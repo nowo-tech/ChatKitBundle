@@ -137,6 +137,19 @@ final class SchemaNamesTest extends TestCase
                 'FK_D7385CFFCA8AEAC6' => 'support_owner_id -> test_user',
             ],
         ],
+        'nowo_chat_conversation_link' => [
+            'indexes' => [
+                'IDX_C437798CB03A8386'         => 'created_by_id',
+                'idx_nowo_chat_conv_link_conv' => 'conversation_id',
+            ],
+            'unique' => [
+                'uniq_nowo_chat_conv_link_uuid' => 'uuid',
+            ],
+            'fk' => [
+                'FK_C437798C9AC0396'  => 'conversation_id -> nowo_chat_conversation',
+                'FK_C437798CB03A8386' => 'created_by_id -> test_user',
+            ],
+        ],
         'nowo_chat_message' => [
             'indexes' => [
                 'IDX_A40D82CC59662AC1'          => 'pinned_by_id',
@@ -154,6 +167,15 @@ final class SchemaNamesTest extends TestCase
                 'FK_A40D82CC9AC0396'  => 'conversation_id -> nowo_chat_conversation',
                 'FK_A40D82CCC76F1F52' => 'deleted_by_id -> test_user',
                 'FK_A40D82CCF675F31B' => 'author_id -> test_user',
+            ],
+        ],
+        'nowo_chat_message_link' => [
+            'indexes' => [
+                'idx_nowo_chat_message_link_msg' => 'message_id',
+            ],
+            'unique' => [],
+            'fk'     => [
+                'FK_C28F783E537A1329' => 'message_id -> nowo_chat_message',
             ],
         ],
         'nowo_chat_message_mention' => [
@@ -237,6 +259,19 @@ final class SchemaNamesTest extends TestCase
                 'FK_74654F68CA8AEAC6' => 'support_owner_id -> test_user',
             ],
         ],
+        'chat_conversation_link' => [
+            'indexes' => [
+                'IDX_4F32834B03A8386'     => 'created_by_id',
+                'idx_chat_conv_link_conv' => 'conversation_id',
+            ],
+            'unique' => [
+                'uniq_chat_conv_link_uuid' => 'uuid',
+            ],
+            'fk' => [
+                'FK_4F328349AC0396'  => 'conversation_id -> chat_conversation',
+                'FK_4F32834B03A8386' => 'created_by_id -> test_user',
+            ],
+        ],
         'chat_message' => [
             'indexes' => [
                 'IDX_FAB3FC1659662AC1'     => 'pinned_by_id',
@@ -254,6 +289,15 @@ final class SchemaNamesTest extends TestCase
                 'FK_FAB3FC169AC0396'  => 'conversation_id -> chat_conversation',
                 'FK_FAB3FC16C76F1F52' => 'deleted_by_id -> test_user',
                 'FK_FAB3FC16F675F31B' => 'author_id -> test_user',
+            ],
+        ],
+        'chat_message_link' => [
+            'indexes' => [
+                'idx_chat_message_link_msg' => 'message_id',
+            ],
+            'unique' => [],
+            'fk'     => [
+                'FK_61D26BA9537A1329' => 'message_id -> chat_message',
             ],
         ],
         'chat_message_mention' => [

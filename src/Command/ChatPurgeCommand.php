@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Command;
 
+use Nowo\ChatKitBundle\Repository\ChatConversationLinkRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -22,7 +23,8 @@ use function sprintf;
 use const DATE_ATOM;
 
 /**
- * Deletes messages (and their reactions) older than `retention_days`, in bounded batches. Schedule it daily.
+ * Deletes messages (and their reactions and link index rows) older than `retention_days`, and (1.19) pinned links not
+ * changed within that window, in bounded batches. Schedule it daily.
  */
 #[AsCommand(name: 'nowo:chat:purge', description: 'Delete chat messages older than the retention window')]
 final class ChatPurgeCommand extends Command
@@ -37,12 +39,14 @@ final class ChatPurgeCommand extends Command
      * @param int $retentionDays Retention window in days (never less than MIN_DAYS)
      * @param ClockInterface $clock Clock the cutoff is computed from
      * @param LoggerInterface $logger Start / end / failure of a purge run (counts only, never message content)
+     * @param ChatConversationLinkRepository|null $links 1.19: pinned links not changed within the window go too (audit FZ-L3)
      */
     public function __construct(
         private readonly ChatMessageRepository $messages,
         private readonly int $retentionDays = 365,
         private readonly ClockInterface $clock = new Clock(),
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly ?ChatConversationLinkRepository $links = null,
     ) {
         parent::__construct();
     }
@@ -57,6 +61,7 @@ final class ChatPurgeCommand extends Command
         $days    = max(self::MIN_DAYS, $this->retentionDays);
         $cutoff  = $this->clock->now()->modify(sprintf('-%d days', $days));
         $deleted = 0;
+        $links   = 0;
         $max     = max(1, (int) $input->getOption('max-batches'));
         $this->logger->info('Chat purge started.', ['retention_days' => $days, 'cutoff' => $cutoff->format(DATE_ATOM), 'max_batches' => $max]);
         try {
@@ -67,13 +72,20 @@ final class ChatPurgeCommand extends Command
                     break;
                 }
             }
+            for ($batch = 0; $this->links instanceof ChatConversationLinkRepository && $batch < $max; ++$batch) {
+                $count = $this->links->purgeOlderThan($cutoff, self::BATCH);
+                $links += $count;
+                if ($count < self::BATCH) {
+                    break;
+                }
+            }
         } catch (Throwable $exception) {
             $this->logger->error('Chat purge failed.', ['deleted' => $deleted, 'exception' => $exception::class, 'message' => $exception->getMessage()]);
 
             throw $exception;
         }
-        $this->logger->info('Chat purge finished.', ['deleted' => $deleted, 'retention_days' => $days]);
-        (new SymfonyStyle($input, $output))->success(sprintf('Deleted %d chat message(s) older than %d days.', $deleted, $days));
+        $this->logger->info('Chat purge finished.', ['deleted' => $deleted, 'links' => $links, 'retention_days' => $days]);
+        (new SymfonyStyle($input, $output))->success(sprintf('Deleted %d chat message(s) and %d pinned link(s) older than %d days.', $deleted, $links, $days));
 
         return Command::SUCCESS;
     }

@@ -85,7 +85,23 @@ const ICONS: Record<string, string> = {
   report: '<path d="M6 3h9l4 4v14H6V3Z" /><path d="M14 3v5h5M9 17v-3M12 17v-6M15 17v-2" />',
   ticket: '<path d="M4 8a2 2 0 0 0 0 4v4h16v-4a2 2 0 0 1 0-4V4H4v4Z" /><path d="M10 4v12" />',
   page: '<path d="M6 3h9l4 4v14H6V3Z" /><path d="M14 3v5h5M9 12h6M9 16h6" />',
+  // Pinned and shared links: a meeting link without the application's provider icon, the panel, its actions.
+  video: '<rect x="3" y="6" width="13" height="12" rx="2" /><path d="m16 10.5 5-3v9l-5-3" />',
+  links: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /><path d="M4 4h4M4 8h2M16 20h4M18 16h2" />',
+  plus: '<path d="M12 5v14M5 12h14" />',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />',
+  goto: '<path d="M5 5v7a3 3 0 0 0 3 3h11" /><path d="m15 11 4 4-4 4" />',
 };
+
+/**
+ * Whether the built-in set has an icon of this name.
+ *
+ * @param name Icon name.
+ * @returns True when a built-in SVG exists.
+ */
+export function hasBuiltinIcon(name: string): boolean {
+  return Object.prototype.hasOwnProperty.call(ICONS, name);
+}
 
 /**
  * Decorative inline SVG (aria-hidden) from the built-in set; the accessible name lives on the button.

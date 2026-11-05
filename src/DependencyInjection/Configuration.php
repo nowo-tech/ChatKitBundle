@@ -75,6 +75,9 @@ final class Configuration implements ConfigurationInterface
         'list'        => 'tabler:list',
         'help'        => 'tabler:help',
         'auto'        => 'tabler:clock-play',
+        // 1.19: the Links panel button; the provider icons (`provider_<key>`) come from `links.providers`.
+        'links' => 'tabler:link',
+        'video' => 'tabler:video',
     ];
 
     /**
@@ -121,6 +124,20 @@ final class Configuration implements ConfigurationInterface
                 ],
             ],
         ],
+    ];
+
+    /**
+     * 1.19: known link providers (`links.providers`): label, hostnames (subdomains match too), the UX icon of the dock
+     * icon `provider_<key>` and the built-in icon used when the application has no SVG for it.
+     *
+     * @var array<string, array{label: string, hosts: list<string>, icon: string|null, fallback_icon: string}>
+     */
+    public const array DEFAULT_LINK_PROVIDERS = [
+        'teams' => ['label' => 'Microsoft Teams', 'hosts' => ['teams.microsoft.com', 'teams.live.com'], 'icon' => 'tabler:brand-teams', 'fallback_icon' => 'video'],
+        'meet'  => ['label' => 'Google Meet', 'hosts' => ['meet.google.com'], 'icon' => 'tabler:brand-google', 'fallback_icon' => 'video'],
+        'zoom'  => ['label' => 'Zoom', 'hosts' => ['zoom.us', 'zoom.com'], 'icon' => 'tabler:brand-zoom', 'fallback_icon' => 'video'],
+        'jitsi' => ['label' => 'Jitsi Meet', 'hosts' => ['meet.jit.si', '8x8.vc'], 'icon' => 'tabler:video', 'fallback_icon' => 'video'],
+        'webex' => ['label' => 'Webex', 'hosts' => ['webex.com'], 'icon' => 'tabler:video', 'fallback_icon' => 'video'],
     ];
 
     /** Support ticket topics offered by default (labels and replies in the bundle catalogue). */
@@ -307,6 +324,7 @@ final class Configuration implements ConfigurationInterface
                                     ->end()
                                 ->end()
                             ->end()
+                            ->append($this->linksNode())
                             ->append($this->statusPresetsNode())
                             ->append($this->supportNode())
                             ->arrayNode('limits')
@@ -378,6 +396,71 @@ final class Configuration implements ConfigurationInterface
                         ->end()
                     ->end()
                     ->defaultValue(self::DEFAULT_STATUS_PRESETS['more'])
+                ->end()
+            ->end();
+
+        return $node;
+    }
+
+    /**
+     * `links` (1.19): pinned links per conversation, link cards in messages and the Links panel.
+     */
+    private function linksNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('links'))->getRootNode();
+        $node
+            ->info('Links (1.19): pinned links under the conversation header, link cards in messages and the Links panel. Nothing is ever fetched from a link (no server-side preview).')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->booleanNode('enabled')
+                    ->info('Offer the pinned links, the "Attach link" action and the Links panel; off, the links API answers 404 and nothing is indexed.')
+                    ->defaultTrue()
+                ->end()
+                ->integerNode('max_pinned')
+                    ->info('Pinned links per conversation.')
+                    ->defaultValue(20)->min(1)->max(200)
+                ->end()
+                ->booleanNode('allow_http')
+                    ->info('Also accept http: links (https: only by default).')
+                    ->defaultFalse()
+                ->end()
+                ->enumNode('channel_managers')
+                    ->info('Who manages the pinned links of a channel: members (every member) or admins (whom ChatLinkPolicyInterface allows; else ChatPinPolicyInterface; else nobody). Both people of a direct conversation always do; in tickets, the agents.')
+                    ->values(['members', 'admins'])
+                    ->defaultValue('members')
+                ->end()
+                ->arrayNode('providers')
+                    ->info('Known providers (icon and label), matched on the hostname only (the host or a subdomain of it). A map you set replaces the default one.')
+                    ->useAttributeAsKey('key')
+                    ->arrayPrototype()
+                        ->children()
+                            ->scalarNode('label')->isRequired()->cannotBeEmpty()->end()
+                            ->arrayNode('hosts')
+                                ->isRequired()
+                                ->requiresAtLeastOneElement()
+                                ->scalarPrototype()
+                                    ->validate()
+                                        ->ifTrue(static fn (mixed $host): bool => !is_string($host) || preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/', $host) !== 1)
+                                        ->thenInvalid('A link provider host must be a lowercase hostname such as "teams.microsoft.com".')
+                                    ->end()
+                                ->end()
+                            ->end()
+                            ->scalarNode('icon')
+                                ->info('UX Icons name of the provider (icon_set: ux_icon); null: the built-in fallback icon.')
+                                ->defaultNull()
+                            ->end()
+                            ->scalarNode('fallback_icon')
+                                ->info('Built-in dock icon when the application has no SVG for the provider (video, link …).')
+                                ->defaultValue('video')
+                                ->cannotBeEmpty()
+                            ->end()
+                        ->end()
+                    ->end()
+                    ->validate()
+                        ->ifTrue(static fn (array $providers): bool => array_filter(array_keys($providers), static fn (int|string $key): bool => $key === 'other' || preg_match('/^[a-z0-9_]{1,32}$/', (string) $key) !== 1) !== [])
+                        ->thenInvalid('A link provider key may only contain 1–32 lowercase letters, digits and "_" ("other" is the filter of links without a provider).')
+                    ->end()
+                    ->defaultValue(self::DEFAULT_LINK_PROVIDERS)
                 ->end()
             ->end();
 

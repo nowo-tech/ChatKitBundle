@@ -10,12 +10,15 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
+use Nowo\ChatKitBundle\Entity\ChatConversationLink;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatMessageLink;
 use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
+use Nowo\ChatKitBundle\Event\ChatLinkRemovedEvent;
 use Nowo\ChatKitBundle\Event\ChatMentionsErasedEvent;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
@@ -57,7 +60,10 @@ use const DATE_ATOM;
  * become tombstones with no author and no text (the thread keeps its shape for the others), reactions, read
  * cursors, settings, mention rows and the user's own support tickets are deleted, @mentions of the user in
  * other people's messages lose the user's name and public id, the pinned-by / deleted-by / assignee / resolved-by
- * pointers to the user are cleared, and support bot lines in other people's tickets lose the user's name.
+ * pointers to the user are cleared, and support bot lines in other people's tickets lose the user's name. 1.19: the links
+ * the user pinned are deleted in every conversation (ChatLinkRemovedEvent, `links` broadcast; their URL and title may be
+ * personal, audit FZ-L1); the link index rows of the user's messages go with the text. The export lists the links the
+ * user pinned.
  */
 final readonly class ChatPersonalData
 {
@@ -105,7 +111,7 @@ final readonly class ChatPersonalData
      *
      * @param ChatUserInterface $user The user whose data is exported
      *
-     * @return array{settings: array<string, mixed>, quick_replies: list<array{title: string, text: string}>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>} Settings, authored messages and the pins the user made
+     * @return array{settings: array<string, mixed>, quick_replies: list<array{title: string, text: string}>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>, links: list<array<string, string|null>>} Settings, authored messages, the pins the user made and (1.19) the links the user pinned
      */
     public function export(ChatUserInterface $user): array
     {
@@ -167,6 +173,14 @@ final readonly class ChatPersonalData
                 'message_uuid'      => $message->getUuid(),
                 'pinned_at'         => $message->getPinnedAt()?->format(DATE_ATOM),
             ], $pins),
+            // 1.19: links the user pinned to a conversation.
+            'links' => array_map(static fn (ChatConversationLink $link): array => [
+                'conversation_uuid' => $link->getConversation()->getUuid(),
+                'url'               => $link->getUrl(),
+                'title'             => $link->getTitle(),
+                'created_at'        => $link->getCreatedAt()->format(DATE_ATOM),
+                'updated_at'        => $link->getUpdatedAt()?->format(DATE_ATOM),
+            ], $this->entityManager->getRepository(ChatConversationLink::class)->findBy(['createdBy' => $user], ['id' => 'ASC'])),
         ];
     }
 
@@ -200,12 +214,17 @@ final readonly class ChatPersonalData
                     ->setParameter('none', null)->setParameter('user', $user)->getQuery()->execute();
             }
             $this->eraseBotNames($user);
+            // 1.19 (audit FZ-L1): the links the user pinned go, in every conversation (their URL and title may be personal).
+            $removedLinks = $this->removePinnedLinks($user);
 
             // The mention rows of the messages the user wrote (they become tombstones below).
             $authored = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where('m.author = :user')
                 ->setParameter('user', $user)->getQuery()->getSingleColumnResult();
             if ($authored !== []) {
                 $qb()->delete(ChatMessageMention::class, 'n')->where('IDENTITY(n.message) IN (:ids)')
+                    ->setParameter('ids', $authored)->getQuery()->execute();
+                // 1.19: their links leave the Links panel (the messages become tombstones).
+                $qb()->delete(ChatMessageLink::class, 'k')->where('IDENTITY(k.message) IN (:ids)')
                     ->setParameter('ids', $authored)->getQuery()->execute();
             }
             $qb()->update(ChatMessage::class, 'm')
@@ -225,7 +244,9 @@ final readonly class ChatPersonalData
                 $messageIds = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->getSingleColumnResult();
                 if ($messageIds !== []) {
                     $qb()->delete(ChatReaction::class, 'r')->where('IDENTITY(r.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
+                    $qb()->delete(ChatMessageLink::class, 'k')->where('IDENTITY(k.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
                 }
+                $qb()->delete(ChatConversationLink::class, 'l')->where('l.conversation = :c')->setParameter('c', $support)->getQuery()->execute();
                 $qb()->delete(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->execute();
                 $qb()->delete(ChatParticipant::class, 'p')->where('p.conversation = :c')->setParameter('c', $support)->getQuery()->execute();
                 $qb()->delete(ChatConversation::class, 'c')->where('c.id = :id')->setParameter('id', $support->getId())->getQuery()->execute();
@@ -240,8 +261,58 @@ final readonly class ChatPersonalData
         // Audit FT-L2: the event first (host re-index, skipped report), then the best-effort broadcast.
         $this->dispatchErased($erasure);
         $this->publishRewritten($erasure->messageIds);
+        $this->dispatchLinksRemoved($removedLinks);
 
         return $erasure;
+    }
+
+    /**
+     * Deletes the links the user pinned (inside the erasure's transaction) and returns what the events need: the links
+     * of conversations that survive the erasure (not the user's own support tickets, deleted with all their links).
+     *
+     * @return list<ChatLinkRemovedEvent>
+     */
+    private function removePinnedLinks(ChatUserInterface $user): array
+    {
+        /** @var list<ChatConversationLink> $links */
+        $links = $this->entityManager->createQueryBuilder()
+            ->select('l', 'c')->from(ChatConversationLink::class, 'l')->innerJoin('l.conversation', 'c')
+            ->where('l.createdBy = :user')
+            ->setParameter('user', $user)
+            ->orderBy('l.id', 'ASC')
+            ->getQuery()->getResult();
+        $events = [];
+        foreach ($links as $link) {
+            $conversation = $link->getConversation();
+            if ($conversation->getSupportOwner()?->getId() !== $user->getId()) {
+                $events[] = new ChatLinkRemovedEvent($conversation, $link->getUuid(), $link->getUrl(), $link->getTitle(), $user);
+            }
+        }
+        $this->entityManager->createQueryBuilder()->delete(ChatConversationLink::class, 'l')->where('l.createdBy = :user')
+            ->setParameter('user', $user)->getQuery()->execute();
+        foreach ($links as $link) {
+            $this->entityManager->detach($link);
+        }
+
+        return $events;
+    }
+
+    /**
+     * After the commit: ChatLinkRemovedEvent for each removed pinned link (`by` is the erased user), then one `links`
+     * broadcast per conversation.
+     *
+     * @param list<ChatLinkRemovedEvent> $events
+     */
+    private function dispatchLinksRemoved(array $events): void
+    {
+        $conversations = [];
+        foreach ($events as $event) {
+            $this->events?->dispatch($event);
+            $conversations[$event->conversation->getUuid()] = $event->conversation;
+        }
+        foreach ($conversations as $conversation) {
+            $this->notifier?->linksChanged($conversation);
+        }
     }
 
     /**

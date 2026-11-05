@@ -57,6 +57,29 @@ describe('Templates', () => {
     expect(slot.querySelector('svg')).toBeNull();
   });
 
+  it('falls back to another icon when neither the application nor the built-in set has one (1.19)', () => {
+    const root = templatesRoot();
+    const templates = new Templates(root);
+    // No `provider_teams` anywhere: the built-in `video`.
+    expect(templates.icon('provider_teams', 18, 'video').innerHTML).toContain('<rect');
+    // Without a fallback an unknown icon stays an empty SVG; a built-in name ignores the fallback.
+    expect(templates.icon('provider_teams').innerHTML).toBe('');
+    expect(templates.icon('provider_teams', 18, 'provider_teams').innerHTML).toBe('');
+    expect(templates.icon('link', 18, 'video').innerHTML).not.toContain('<rect');
+    const custom = document.createElement('template');
+    custom.dataset.nowoChatIcon = 'provider_teams';
+    custom.innerHTML = '<svg class="ux-teams" viewBox="0 0 24 24"></svg>';
+    root.append(custom);
+    expect(templates.icon('provider_teams', 18, 'video').classList.contains('ux-teams')).toBe(true);
+    // A rendered message: `data-icon-fallback` is honoured.
+    const body = document.createElement('div');
+    body.innerHTML = '<span data-icon="provider_zoom" data-icon-fallback="video" data-icon-size="18"></span><span data-icon="provider_teams" data-icon-fallback="video"></span>';
+    templates.fillIcons(body);
+    const [zoom, teams] = [...body.querySelectorAll('[data-icon]')];
+    expect(zoom?.querySelector('svg')?.innerHTML).toContain('<rect');
+    expect(teams?.querySelector('svg.ux-teams')).not.toBeNull();
+  });
+
   it('builds avatars for people, channels and the support inbox', () => {
     const templates = new Templates(templatesRoot());
     const person = templates.avatar('AN', 'direct', 'sm', true);
