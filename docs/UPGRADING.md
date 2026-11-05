@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.19.0](#to-1190)
 - [To 1.18.0](#to-1180)
 - [To 1.17.0](#to-1170)
 - [To 1.16.1](#to-1161)
@@ -47,7 +48,9 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
-From **1.18.x** (planned 1.19.0): `composer update nowo-tech/chat-kit-bundle`, then **create the two new tables** and
+## To 1.19.0
+
+From **1.18.x**: `composer update nowo-tech/chat-kit-bundle`, then **create the two new tables** and
 index the existing messages.
 
 1. Schema: generate a migration (`bin/console doctrine:migrations:diff`) or apply the SQL below. Names shown with the
