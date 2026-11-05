@@ -48,6 +48,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **`ChatPersonalData::eraseMentions($user, $label = '@…')` (DATA-CHAT-MENTION-ERASE, requested by symfony-beacon;
+  same design and naming as WikiBundle 1.17 `eraseMentions()`).** The mention part of `erase()` is public and hardened:
+  candidates (a mention row of the user, or `](publicId)` in the body) are walked in batches of `ERASE_BATCH` (200)
+  paged by id inside one transaction, each batch flushed and only the messages the lookup loaded detached; a message
+  whose text cannot be scanned (regex failure, invalid UTF-8) or whose rewrite would form a new mention is never
+  written but skipped and reported (it keeps its mention row); a label that could render as a mention is refused
+  (`InvalidArgumentException`). Returns `ChatMentionErasure` (countable; `messageIds`, `skippedMessageIds`). New
+  `ChatMentionsErasedEvent` (`publicId`, `messageIds`, `skippedMessageIds`) after the commit; `ChatMessage::redact()`
+  rewrites a body without marking it as edited; `ChatPersonalData::ERASED_MENTION` is public.
+- **`acquireOverlay(owner, {kind, inertShell})`** (`window.NowoChat.acquireOverlay`, requested by symfony-beacon for its
+  `EdgeDrawer`): a host drawer or modal makes the floating dock step aside through the 1.17 `dock.overlay` contract with
+  a handle (`release()`, idempotent). It uses UiKit's `window.NowoUiOverlay` registry when present (one depth for UiKit
+  dialogs and host drawers) and a small count of its own otherwise (same `nowo:overlay-open` / `-close` events and
+  `html[data-nowo-overlay]`).
+
+### Changed
+
+- **Dialog anatomy (UiKit 2.29, owner rule UI-PATTERNS §16).** The status menu (`role="dialog"`) has a header (title as
+  `<h2>`, new close button `data-part="status-close"`), a body that is the only part that scrolls, and a footer outside
+  it with Clear (secondary) and Save (the one primary, last, bound with `form="nowo-chat-status-form"`); the automatic
+  reply's own save is secondary now (`.nowo-chat-status-form__secondary`). The quick replies popover keeps its heading
+  and *Add* button in view while the list scrolls. The inline delete confirmation puts Cancel first and the destructive
+  Delete last. The menu keeps the panel's fixed height (1.13.1), so it never jumps.
+- `ChatPersonalData::erase()` runs in one transaction and dispatches `ChatMentionsErasedEvent`; it flushes the entity
+  manager when a mention was rewritten (the rewrite goes through the entities instead of one DQL update per message).
+- Dev lock: `nowo-tech/ui-kit-bundle` 2.29.0.
+
 ## [1.17.0] - 2026-11-04
 
 ### Added
