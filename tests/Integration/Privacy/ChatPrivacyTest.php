@@ -47,7 +47,7 @@ final class ChatPrivacyTest extends DatabaseTestCase
 
         $tester = new CommandTester($this->get(ChatPurgeCommand::class));
         self::assertSame(0, $tester->execute(['--max-batches' => '0']));
-        self::assertStringContainsString('Deleted 1 chat message(s) older than 365 days.', $tester->getDisplay());
+        self::assertStringContainsString('Deleted 1 chat message(s) and 0 pinned link(s) older than 365 days.', $tester->getDisplay());
         self::assertCount(1, $this->em->getRepository(ChatMessage::class)->findAll());
 
         $short = new CommandTester(new ChatPurgeCommand($this->em->getRepository(ChatMessage::class), 1));

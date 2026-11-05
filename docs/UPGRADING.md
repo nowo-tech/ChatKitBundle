@@ -101,7 +101,14 @@ index the existing messages.
    and `provider_<key>` (UX Icons, built-in fallbacks). A host that overrides `_templates.html.twig` needs no change: the
    links bar, the header **Links** button and the composer **Attach link** button are added by the script.
 
-4. Behaviour to know: `!link[Title](https://…)` in a message body is now a link card (a token whose link is not
+4. Privacy and retention: `ChatPersonalData::erase()` **deletes the pinned links the user created** in every
+   conversation (dispatching `ChatLinkRemovedEvent` with `by` = the erased user, and the `links` broadcast) — they may
+   carry personal data such as a 1:1 room or a meeting password. `nowo:chat:purge` now also deletes pinned links whose
+   last change (else their creation) is older than `retention_days` (no event; open bars refresh on their next load).
+   Markdown links and autolinks gain `noreferrer` in their `rel` (the stored HTML of older messages keeps the old value
+   until it is edited).
+
+5. Behaviour to know: `!link[Title](https://…)` in a message body is now a link card (a token whose link is not
    accepted makes the send / edit fail with `422 invalid_link`); the message HTML gains `a.nowo-chat-linkcard`, which
    your own copies of message HTML (search index, e-mail) can keep or reduce to the title (`ChatMarkdownRenderer::plainText()`
    does).

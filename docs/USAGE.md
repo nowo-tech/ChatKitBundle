@@ -838,7 +838,8 @@ person made.
   agents in tickets, and in channels every member (`links.channel_managers: members`, default) or only whom your access
   policy allows (`admins`): implement `ChatLinkPolicyInterface::canManageLinksInChannel()` on it (without it, `admins`
   uses `ChatPinPolicyInterface::canPinInChannel()`, and denies without that too). Writing to the conversation is also
-  required (a read-only member only reads). At most `links.max_pinned` (default 20) per conversation. Open clients
+  required (a read-only member only reads). At most `links.max_pinned` (default 20) per conversation, also under concurrent
+  adds (the conversation row is locked and the count checked again in the transaction). Open clients
   reload the bar on the realtime `links` event.
 - **Attach link** — the composer's link action inserts a link card `!link[Title](https://…)` (title optional) into the
   message; it renders as a rich chip with the provider icon, the title and the provider · host.
@@ -864,10 +865,13 @@ replaced) and emptied when it is deleted, purged (`nowo:chat:purge`) or erased; 
 Messages written before 1.19: run `bin/console nowo:chat:links:backfill` once (idempotent; `--after-id`, `--batch`).
 Each row stores the provider found when it was indexed: run the backfill again after changing `links.providers`.
 
-**Privacy.** Pinned links are shared content of the conversation: `ChatPersonalData::erase()` keeps the links the user
-pinned and clears their author (`created_by_id` null, the panel shows "deleted user"), consistent with the 1.18 erasure;
-the index rows of the user's own messages go with their text, and the user's support tickets go with their links.
-`export()` lists the links the user pinned (`links`: conversation, URL, title, dates).
+**Privacy.** `ChatPersonalData::erase()` **deletes every link the user pinned**, in every conversation (direct,
+channel, ticket): their URL and title may be personal (a 1:1 room, a meeting link with its password). One
+`ChatLinkRemovedEvent` per removed link of a conversation that survives the erasure (`by` = the erased user; the user's
+own tickets are deleted whole), then a `links` broadcast per conversation, after the commit. The index rows of the user's
+own messages go with their text. `export()` lists the links the user pinned (`links`: conversation, URL, title, dates).
+**Retention:** `nowo:chat:purge` also deletes pinned links whose last change (else their creation) is older than
+`retention_days`; the link index follows its messages.
 
 **Events** (dispatched after the flush, before the `links` broadcast): `ChatLinkAddedEvent` (`link`, `by`),
 `ChatLinkUpdatedEvent` (`link`, `by`, `previousUrl`, `previousTitle`; only when something changed),
@@ -949,14 +953,17 @@ The bundle makes no outbound HTTP call or subprocess itself:
 
 ## Privacy
 
-- `nowo:chat:purge` — retention.
+- `nowo:chat:purge` — retention (messages, their reactions and link index rows; 1.19: pinned links not changed within
+  `retention_days`).
 - `ChatPersonalData::export($user)` — own messages and settings (not other people's messages).
 - `ChatPersonalData::erase($user)` — authored messages become tombstones without author or text; reactions, read cursors,
   settings, mention rows and the user's own support threads are deleted; @mentions of the user in other people's
   messages become a plain `@…` (no name, no public id, HTML rendered again, `message_updated` to open clients); the
   pinned-by, deleted-by, assignee and resolved-by pointers to the user become null (an assigned ticket returns to the
   queue; a message the user removed as a moderator still reads "Removed by a moderator" through `meta.moderated`,
-  without naming anyone); support bot lines in other people's tickets show `…` instead of the user's name.
+  without naming anyone); support bot lines in other people's tickets show `…` instead of the user's name; 1.19: the
+  links the user pinned are deleted in every conversation (`ChatLinkRemovedEvent`, `links` broadcast) — see
+  [Links](#links).
   - Call `erase()` **before** you anonymize the account: bot lines are matched on the current display name.
   - The rewrites are bulk DQL updates, which fire no Doctrine lifecycle events. If the host keeps its own copies of
     message text (search index, exports, analytics), re-index the conversations of the erased user.

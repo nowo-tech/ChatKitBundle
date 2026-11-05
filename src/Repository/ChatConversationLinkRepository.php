@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Repository;
 
+use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -46,6 +47,53 @@ class ChatConversationLinkRepository extends ServiceEntityRepository
             ->getResult();
 
         return $links;
+    }
+
+    /**
+     * Number of pinned links of a conversation.
+     *
+     * @param ChatConversation $conversation The conversation
+     *
+     * @return int The count
+     */
+    public function countFor(ChatConversation $conversation): int
+    {
+        return (int) $this->createQueryBuilder('l')
+            ->select('COUNT(l.id)')
+            ->where('l.conversation = :conversation')
+            ->setParameter('conversation', $conversation)
+            ->getQuery()
+            ->getSingleScalarResult();
+    }
+
+    /**
+     * Deletes pinned links not changed since the cutoff (the last change, else the creation), in a bounded batch, for the
+     * retention purge (1.19, audit FZ-L3).
+     *
+     * @param DateTimeImmutable $cutoff Links last changed before this go
+     * @param int $batchSize Maximum links per call
+     *
+     * @return int Links deleted
+     */
+    public function purgeOlderThan(DateTimeImmutable $cutoff, int $batchSize): int
+    {
+        $ids = $this->createQueryBuilder('l')
+            ->select('l.id')
+            ->where('(l.updatedAt IS NULL AND l.createdAt < :cutoff) OR l.updatedAt < :cutoff')
+            ->setParameter('cutoff', $cutoff)
+            ->setMaxResults($batchSize)
+            ->getQuery()
+            ->getSingleColumnResult();
+        if ($ids === []) {
+            return 0;
+        }
+
+        return (int) $this->createQueryBuilder('l')
+            ->delete()
+            ->where('l.id IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute();
     }
 
     /**

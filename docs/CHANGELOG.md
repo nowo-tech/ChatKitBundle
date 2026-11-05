@@ -75,12 +75,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Security: `https:` only (`http:` with `links.allow_http`), no other scheme, no user information, normalised and
     percent-encoded server-side, title ≤ 120 characters, everything rendered escaped with `target="_blank"` and
     `rel="noopener noreferrer"`. **Nothing is ever fetched from a link** (no server-side preview, no SSRF surface).
-  - Privacy: the personal data export lists the links the user pinned; the erasure keeps them (shared content) with the
-    author cleared, and removes the link index rows of the user's messages with their text.
+  - Privacy: the personal data export lists the links the user pinned; the erasure **deletes** them in every
+    conversation (their URL and title may be personal: a 1:1 room, a meeting password) with `ChatLinkRemovedEvent` and
+    the `links` broadcast, and removes the link index rows of the user's messages with their text. `nowo:chat:purge`
+    also deletes pinned links not changed within `retention_days`.
+  - `links.max_pinned` holds under concurrent adds (conversation row locked, count checked again inside the
+    transaction).
+  - Audit FZ fixes before release: a card title holding inline code or a mention reads as text (no placeholder leak),
+    `canManageLinks()` denies explicitly when the channel disappears, the backfill caps `--batch` at 5000 and skips
+    automatic replies.
   - Translations in the 7 locales; light and dark; keyboard and screen-reader labels.
 
 ### Changed
 
+- **Markdown links and autolinks now carry `rel="noopener noreferrer nofollow ugc"`** (`noreferrer` added, audit
+  FZ-I7): the destination no longer receives the chat page as `Referer`, the same as link cards and the Links panel.
 - `ChatMarkdownRenderer` takes an optional `ChatLinkUrls` (link cards); `ChatService`, `ChatDockExtension` take an
   optional `ChatLinks`. Two new tables (see [UPGRADING](UPGRADING.md#unreleased)).
 
