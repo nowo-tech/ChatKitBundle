@@ -935,7 +935,7 @@
             "dist": {
                 "type": "path",
                 "url": "/var/chat-kit-bundle",
-                "reference": "1cbb584b91ca3351a6d03f6a1198d5fe1092de09"
+                "reference": "41b7c883ab423db28b45c8d587bffe78229cea3e"
             },
             "require": {
                 "doctrine/doctrine-bundle": "^2.13 || ^3.0",
@@ -979,10 +979,10 @@
                 "rector/rector": "^2.0",
                 "symfony/browser-kit": "^7.4 || ^8.0",
                 "symfony/css-selector": "^7.4 || ^8.0",
-                "symfony/mercure": "^0.6",
+                "symfony/mercure": "^0.6 || ^0.9",
                 "symfony/messenger": "^7.4 || ^8.0",
                 "symfony/yaml": "^7.4 || ^8.0",
-                "vincentlanglet/twig-cs-fixer": "^3.0"
+                "vincentlanglet/twig-cs-fixer": "^3.0 || ^4.0"
             },
             "suggest": {
                 "minishlink/web-push": "Web Push notifications when the app is not open (implement ChatPushSenderInterface)",
@@ -1216,16 +1216,16 @@
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v2.17.2",
+            "version": "v2.29.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "d70caefb15c160e6417a3dec938e2e2399797ed9"
+                "reference": "4130f49ab8eccf51acf76e20550a5a3176d9c11d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/d70caefb15c160e6417a3dec938e2e2399797ed9",
-                "reference": "d70caefb15c160e6417a3dec938e2e2399797ed9",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/4130f49ab8eccf51acf76e20550a5a3176d9c11d",
+                "reference": "4130f49ab8eccf51acf76e20550a5a3176d9c11d",
                 "shasum": ""
             },
             "require": {
@@ -1243,7 +1243,7 @@
             },
             "require-dev": {
                 "friendsofphp/php-cs-fixer": "^3.0",
-                "igor-php/igor-php": "^0.9.7",
+                "igor-php/igor-php": "^0.9.7 || ^0.10.0",
                 "nowo-tech/phpstan-frankenphp": "^1.0",
                 "phpstan/extension-installer": "^1.0",
                 "phpstan/phpstan": "^2.0",
@@ -1257,7 +1257,7 @@
                 "symfony/http-client": "^7.4 || ^8.0",
                 "symfony/validator": "^7.4 || ^8.0",
                 "symfony/yaml": "^7.4 || ^8.0",
-                "vincentlanglet/twig-cs-fixer": "^3.0"
+                "vincentlanglet/twig-cs-fixer": "^3.0 || ^4.0"
             },
             "suggest": {
                 "phpunit/phpunit": "UI bundles: require-dev, to run Nowo\\UiKitBundle\\Test\\PageContractTestCase (REQ-UI-003 contract test)",
@@ -1306,7 +1306,8 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-10-28T13:23:13+00:00"
+            "time": "2026-11-05T13:12:29+00:00",
+            "published-time": "2026-11-05T13:14:49+00:00"
         },
         {
             "name": "pentatrion/vite-bundle",
@@ -9011,5 +9012,5 @@
         "php": ">=8.4.1,<8.6"
     },
     "platform-dev": {},
-    "plugin-api-version": "2.9.0"
+    "plugin-api-version": "2.11.0"
 }
