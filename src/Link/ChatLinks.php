@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Link;
 
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -20,6 +21,7 @@ use Nowo\ChatKitBundle\Repository\ChatMessageLinkRepository;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+use Throwable;
 
 use function count;
 use function mb_strtolower;
@@ -131,12 +133,29 @@ final readonly class ChatLinks
     {
         $url   = $this->urls->normalize($url);
         $title = $this->urls->title($title);
-        if (count($this->pinned->forConversation($conversation)) >= $this->maxPinned) {
-            throw new InvalidArgumentException('too_many_links');
+        $link  = new ChatConversationLink($conversation, $by, $url, $this->urls->host($url), $title, $this->clock->now());
+        // Audit FZ-L2: the limit holds under concurrent adds — the conversation row is locked (SELECT … FOR UPDATE where
+        // the platform has it) and the count is checked again after the insert, inside one transaction.
+        $this->entityManager->beginTransaction();
+        try {
+            $this->entityManager->lock($conversation, LockMode::PESSIMISTIC_WRITE);
+            if ($this->pinned->countFor($conversation) >= $this->maxPinned) {
+                throw new InvalidArgumentException('too_many_links');
+            }
+            $this->entityManager->persist($link);
+            $this->entityManager->flush();
+            if ($this->pinned->countFor($conversation) > $this->maxPinned) {
+                throw new InvalidArgumentException('too_many_links');
+            }
+            $this->entityManager->commit();
+        } catch (Throwable $exception) {
+            $this->entityManager->rollback();
+            if ($this->entityManager->contains($link)) {
+                $this->entityManager->detach($link);
+            }
+
+            throw $exception;
         }
-        $link = new ChatConversationLink($conversation, $by, $url, $this->urls->host($url), $title, $this->clock->now());
-        $this->entityManager->persist($link);
-        $this->entityManager->flush();
         $this->events?->dispatch(new ChatLinkAddedEvent($link, $by));
         $this->notifier->linksChanged($conversation);
 
