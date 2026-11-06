@@ -350,7 +350,8 @@ final readonly class ChannelQuota
   row and the other gets that conversation, even if your listener denied them. Do not record anything on the event as if
   the channel now existed.
 - `find()` of your channel provider must return the canonical key, or null: `scope` is the plain text of that key.
-- The row is written through DBAL, so Doctrine lifecycle events do not fire for a new channel conversation.
+- The row is written through DBAL in a savepoint, so Doctrine lifecycle events do not fire for a new channel conversation,
+  and the database must support savepoints (MySQL, MariaDB, PostgreSQL and SQLite do; DB2 does not).
 
 ## Mentions
 

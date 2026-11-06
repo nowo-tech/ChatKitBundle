@@ -132,8 +132,8 @@ dependencies current. Security fixes are released as patch versions of the suppo
 
 ### 1.21 host options (Appendix GZ, 2026-11-06)
 
-Audited at `30389b4` as Pass (good) / Low; delta at `1f8ce2d` Pass (conditional) / Medium; fixes to be re-verified at
-`<final>`. **Status: re-verification pending.**
+Audited at `30389b4` as Pass (good) / Low; delta at `1f8ce2d` Pass (conditional) / Medium; fixes re-verified at `46c026b`:
+**Pass (good) / Low**, no open Critical, High or Medium.
 
 - `ChatChannelOpeningEvent` / `channel_denied`: authorisation (`canUseChannel`, CSRF) runs first, so a stranger gets the
   same 404 as for an unknown key and no listener runs. `ChatService::openChannel()` is the only place the bundle creates a
@@ -149,8 +149,11 @@ Audited at `30389b4` as Pass (good) / Low; delta at `1f8ce2d` Pass (conditional)
 - The fill rule uses `:has()` on the page's parent: layout only, and only with the option on.
 - `src/public` re-exports existing functions; nothing new is reachable.
 
-Open residuals (Low): a lock that is not the first read gives a stale count on MySQL's repeatable read, and a limit
-spanning several plans needs the host's own lock. Doctrine lifecycle events do not fire for a new channel row.
+Open residual (Low): a lock that is not the first read gives a stale count on MySQL's repeatable read, so a limit is exact
+only with the lock first; a limit spanning several plans needs the host's own lock. Accepted: Doctrine lifecycle events do
+not fire for a new channel row; the same person opening one channel twice at the same moment can get one error, and a
+retry works; a database deadlock gives an error with nothing written. Creating a channel needs savepoints: MySQL, MariaDB,
+PostgreSQL and SQLite have them, DB2 does not.
 
 ## Reporting a vulnerability
 
