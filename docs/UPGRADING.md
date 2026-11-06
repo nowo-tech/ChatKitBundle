@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.20.0](#to-1200)
 - [To 1.19.0](#to-1190)
 - [To 1.18.0](#to-1180)
 - [To 1.17.0](#to-1170)
@@ -47,6 +48,8 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.20.0
 
 From **1.19.x**: `composer update nowo-tech/chat-kit-bundle`. No schema, route or configuration change. **Visual change
 (dialog rule v2):**
