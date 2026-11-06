@@ -130,22 +130,27 @@ dependencies current. Security fixes are released as patch versions of the suppo
 | Findings | CHAT-SEC-01 (Medium) revoked-access previews → **fixed** (`ChatAccess::canView()` on lists and digest); CHAT-SEC-02 (Medium) outdated security doc → **fixed** (this document); CHAT-SEC-03 (Low) push body text → **fixed** (`push_preview`, default off); CHAT-SEC-04 (Low) off-site support context → **fixed** (root-relative paths only, label sanitised); CHAT-SEC-05 (Low) 30 s recipient cache → **mitigated** (`ChatRecipients::forget()`, documented); CHAT-SEC-10 (Info) storage after session timeout → **fixed** (cleared on 401); CHAT-SEC-06 / 07 / 08 / 09 (Info) → documented above as host responsibilities / accepted |
 | Recorded in | `BUNDLES_SECURITY_ANALYSIS.md` (monorepo security report) |
 
-### Unreleased changes (re-verification pending)
+### 1.21 host options (Appendix GZ, 2026-11-06)
 
-Appendix GZ audited `30389b4` (PR #39): Pass (good) / Low. The commits after it fix its findings and have not been
-reviewed yet. **Status: re-verification pending.**
+Audited at `30389b4` as Pass (good) / Low; delta at `1f8ce2d` Pass (conditional) / Medium; fixes to be re-verified at
+`<final>`. **Status: re-verification pending.**
 
-- `ChatChannelOpeningEvent` / `channel_denied`: authorisation (`canUseChannel`, CSRF) still runs first, so a stranger gets
-  404 and no listener runs. The one creation path is `ChatService::openChannel()`. The host's reason reaches only the
-  person who asked; the dock prints it through `textContent`, and only for the code `channel_denied`, so `message` in
-  any other error body is never shown.
-- The event and the create share one transaction, so a listener that locks its own row with `SELECT … FOR UPDATE` holds an
-  exact limit until the commit. The event is not an access check and does not run for a channel already in use. A
-  provider's `find()` must return the canonical key, or null, because `scope` is plain text taken from that key.
-- A reason that is not valid UTF-8 is scrubbed in `ChatApiExceptionListener`, so the refusal still answers.
+- `ChatChannelOpeningEvent` / `channel_denied`: authorisation (`canUseChannel`, CSRF) runs first, so a stranger gets the
+  same 404 as for an unknown key and no listener runs. `ChatService::openChannel()` is the only place the bundle creates a
+  channel conversation. The host's reason reaches only the person who asked; the dock prints it through `textContent`, and
+  only for the code `channel_denied`, so `message` in any other error body is never shown. A reason that is not valid UTF-8
+  is scrubbed.
+- The event and the create share one transaction. A listener that locks its own row with `SELECT … FOR UPDATE` as its
+  first read, on the same connection, holds an exact limit until the commit.
+- A denial when the channel exists by then opens that channel: the person already passed `canUse()`. The event is not an
+  access check and does not run for a channel already in use. A provider's `find()` must return the canonical key, or null,
+  because `scope` is plain text taken from that key.
 - `web_ui.assets` and `web_ui.page.full_height` print or omit fixed tags and a fixed class, with no input from the request.
-- The fill rule uses `:has()` on the page's parent: layout only.
+- The fill rule uses `:has()` on the page's parent: layout only, and only with the option on.
 - `src/public` re-exports existing functions; nothing new is reachable.
+
+Open residuals (Low): a lock that is not the first read gives a stale count on MySQL's repeatable read, and a limit
+spanning several plans needs the host's own lock. Doctrine lifecycle events do not fire for a new channel row.
 
 ## Reporting a vulnerability
 

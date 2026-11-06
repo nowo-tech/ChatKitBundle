@@ -9,6 +9,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
+use LogicException;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -47,6 +48,8 @@ use function is_string;
  */
 final readonly class ChatService
 {
+    private const string CHANNEL_INSERT_SAVEPOINT = 'nowo_chat_channel_insert';
+
     /**
      * Builds the service from the entity manager, repositories, renderer, notifier and the offered reactions.
      *
@@ -479,16 +482,19 @@ final readonly class ChatService
     /**
      * The first opening of a channel: the event and the insert in one transaction, then the row, whoever wrote it.
      *
-     * @throws ChatChannelDeniedException When a listener refuses and the channel still does not exist
+     * @throws ChatChannelDeniedException When a listener refused and the channel still does not exist
+     * @throws UniqueConstraintViolationException When another opening won and its row cannot be read here (a caller's own transaction on a repeatable read)
      */
     private function createChannel(ChatUserInterface $actor, ChatChannel $channel): ChatConversation
     {
         $opening = new ChatChannelOpeningEvent($channel, $actor);
         $failure = null;
-        // A listener's `SELECT … FOR UPDATE` lasts until this commit. Nothing is thrown through the closure:
-        // wrapInTransaction() closes the EntityManager on any exception, and the host still needs it to answer.
-        // @igor-ignore Runs and ends inside this call; the EntityManager does not keep it.
-        $this->entityManager->wrapInTransaction(function () use ($opening, $channel, &$failure): void {
+        $lost    = null;
+        // A listener's `SELECT … FOR UPDATE` lasts until this commit. The connection's transaction, not the EntityManager's:
+        // that one flushes pending changes whatever happened, and closes the EntityManager on any exception. What a listener
+        // flushed stays even if it throws afterwards, so its exception leaves the closure as a value.
+        // @igor-ignore Runs and ends inside this call; the connection does not keep it.
+        $this->entityManager->getConnection()->transactional(function () use ($opening, $channel, &$failure, &$lost): void {
             try {
                 $this->events?->dispatch($opening);
             } catch (Throwable $thrown) {
@@ -497,41 +503,63 @@ final readonly class ChatService
                 return;
             }
             if (!$opening->isDenied()) {
-                $this->insertChannel($channel);
+                $lost = $this->insertChannel($channel);
             }
         });
         if ($failure instanceof Throwable) {
             throw $failure;
         }
-
         // Read after the commit: inside the transaction a repeatable read may not see the row of whoever got there first.
         // A channel that now exists opens for this person too, even if the limit was reached by creating it.
-        return $this->conversations->findChannel($channel->key)
-            ?? throw new ChatChannelDeniedException($channel->key, $opening->reason());
+        $conversation = $this->conversations->findChannel($channel->key);
+        if ($conversation instanceof ChatConversation) {
+            return $conversation;
+        }
+        if ($opening->isDenied()) {
+            throw new ChatChannelDeniedException($channel->key, $opening->reason());
+        }
+
+        throw $lost ?? new LogicException('The channel row was written but cannot be read.');
     }
 
     /**
      * Writes the channel's row through DBAL: a flush that hits the unique key closes the EntityManager, and losing to
-     * another first opening of the same channel is not an error.
+     * another first opening of the same channel is not an error. The savepoint keeps the transaction usable after that
+     * loss (Postgres aborts it otherwise). It is explicit because a nested DBAL 3 transaction uses one only when the host
+     * enabled `use_savepoints`, and otherwise makes the outer commit fail.
+     *
+     * @return UniqueConstraintViolationException|null What stopped the insert; null when this call wrote the row
      */
-    private function insertChannel(ChatChannel $channel): void
+    private function insertChannel(ChatChannel $channel): ?UniqueConstraintViolationException
     {
         $conversation = ChatConversation::channel($channel->key, $this->clock->now());
+        $connection   = $this->entityManager->getConnection();
         $metadata     = $this->entityManager->getClassMetadata(ChatConversation::class);
+        $idColumn     = $metadata->getSingleIdentifierColumnName();
+        // A sequence has to be asked before the insert: its column has no default. An identity column fills itself.
+        $id = $metadata->idGenerator->isPostInsertGenerator() ? [] : [$idColumn => $metadata->idGenerator->generateId($this->entityManager, $conversation)];
+        $connection->createSavepoint(self::CHANNEL_INSERT_SAVEPOINT);
         try {
-            $this->entityManager->getConnection()->insert($metadata->getTableName(), [
+            $connection->insert($metadata->getTableName(), $id + [
                 $metadata->getColumnName('uuid')          => $conversation->getUuid(),
                 $metadata->getColumnName('kind')          => $conversation->getKind()->value,
                 $metadata->getColumnName('channelKey')    => $channel->key,
                 $metadata->getColumnName('lastMessageAt') => $conversation->getLastMessageAt(),
                 $metadata->getColumnName('createdAt')     => $conversation->getCreatedAt(),
             ], [
+                $idColumn                                 => Types::INTEGER,
                 $metadata->getColumnName('lastMessageAt') => Types::DATETIME_IMMUTABLE,
                 $metadata->getColumnName('createdAt')     => Types::DATETIME_IMMUTABLE,
             ]);
-        } catch (UniqueConstraintViolationException) {
-            // Someone else's first opening committed it; createChannel() reads their row.
+        } catch (UniqueConstraintViolationException $lost) {
+            $connection->rollbackSavepoint(self::CHANNEL_INSERT_SAVEPOINT);
+            $connection->releaseSavepoint(self::CHANNEL_INSERT_SAVEPOINT);
+
+            return $lost;
         }
+        $connection->releaseSavepoint(self::CHANNEL_INSERT_SAVEPOINT);
+
+        return null;
     }
 
     /**

@@ -268,6 +268,66 @@ jobs:
       - name: Check code style
         run: composer cs-check
 
+  # GZ-M1: the channel row is written through DBAL, so it needs real databases and both id strategies and DBAL versions.
+  database:
+    name: Channel race (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: 'MySQL 8.4, DBAL 4', url: 'mysql://root:ci-not-secret@127.0.0.1:3306/race?serverVersion=8.4.0&charset=utf8mb4', generation: '', dbal: '' }
+          - { name: 'Postgres 17 identity, DBAL 4', url: 'postgresql://postgres:ci-not-secret@127.0.0.1:5432/race?serverVersion=17&charset=utf8', generation: 'identity', dbal: '' }
+          - { name: 'Postgres 17 sequence, DBAL 4', url: 'postgresql://postgres:ci-not-secret@127.0.0.1:5432/race?serverVersion=17&charset=utf8', generation: 'sequence', dbal: '' }
+          - { name: 'MySQL 8.4, DBAL 3', url: 'mysql://root:ci-not-secret@127.0.0.1:3306/race?serverVersion=8.4.0&charset=utf8mb4', generation: '', dbal: '^3.8.2' }
+          - { name: 'Postgres 17 default, DBAL 3', url: 'postgresql://postgres:ci-not-secret@127.0.0.1:5432/race?serverVersion=17&charset=utf8', generation: '', dbal: '^3.8.2' }
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ci-not-secret
+          MYSQL_DATABASE: race
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "mysqladmin ping -h127.0.0.1 -uroot -pci-not-secret --silent"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci-not-secret
+          POSTGRES_DB: race
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, pdo_mysql, pdo_pgsql
+          coverage: none
+          tools: composer:v2
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Use DBAL 3
+        if: ${{ matrix.dbal != '' }}
+        run: composer require --dev --no-interaction --no-progress --with-all-dependencies "doctrine/dbal:${{ matrix.dbal }}"
+
+      - name: Run the race tests
+        timeout-minutes: 10
+        env:
+          CHAT_KIT_RACE_DATABASE_URL: ${{ matrix.url }}
+          CHAT_KIT_RACE_ID_GENERATION: ${{ matrix.generation }}
+        run: vendor/bin/phpunit --no-coverage --fail-on-skipped --filter ChatChannelRaceTest
+
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest

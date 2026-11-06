@@ -58,7 +58,7 @@ Four options that let a host drop its overrides of the chat page, all off by def
 - **`web_ui.assets` (default `true`).** `false` leaves the `nowo-chat.css` and `nowo-chat.js` tags out of the full-page
   chat, also on the deprecated 1.x template, for a host that bundles them. No `web_ui.templates.page` override needed.
 - **`ChatChannelOpeningEvent`** (`channelKey`, `scope`, `channel`, `user`, `deny(reason)`), dispatched before a channel's
-  conversation is created. A refusal writes nothing; `ChatService::openChannel()` throws `ChatChannelDeniedException`, the
+  conversation is created. A refusal writes no conversation or participant row; `ChatService::openChannel()` throws `ChatChannelDeniedException`, the
   API answers 403 `channel_denied` with the reason in `message`, and the dock prints it as text. A channel already in use
   opens without the event. The event and the create share one transaction, so a listener's `SELECT … FOR UPDATE` holds an
   exact limit. The channel row is written through DBAL, so Doctrine lifecycle events do not fire for it. `ChatApiException` gains an optional `reason`; `ChatApiError` gains `reason`.

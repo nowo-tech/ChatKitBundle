@@ -335,17 +335,21 @@ final readonly class ChannelQuota
   text in the people picker, or in a notice of the opened list after a `data-nowo-chat-open` link. Without a reason it
   shows its generic error.
 - The reason goes to the person who asked: give it translated, plain, and without other people's data.
-- Code of yours that calls `ChatService::openChannel()` catches `ChatChannelDeniedException` (`channelKey`, `reason`).
-- The event and the create share one transaction. For an exact limit, lock your own row first with
-  `SELECT … FOR UPDATE`, then count: the lock lasts until the commit. A count with no lock lets two people opening two new
-  channels at the same moment both pass, and a transaction your listener commits itself ends before the conversation is
-  written.
+- Code of yours that calls `ChatService::openChannel()` catches `ChatChannelDeniedException` (`channelKey`, `reason`). Inside
+  your own transaction on MySQL's repeatable read, losing a first opening to someone else throws the unique-key error
+  instead, because your snapshot cannot see their row: retry after your transaction.
+- The event and the create share one transaction. For an exact limit, lock your own row with `SELECT … FOR UPDATE`, on the
+  connection of the chat's EntityManager, then count. Make the lock the first read in your listener: on MySQL's repeatable
+  read, an earlier plain read, such as loading the entity you are about to lock, fixes the snapshot and the count goes
+  stale. A count with no lock lets two people opening two new channels at the same moment both pass, and a transaction
+  your listener commits itself ends before the conversation is written.
+- A refusal or an exception from a listener writes no conversation or participant row, and the EntityManager stays open.
+  What your listener flushed stays, even on a refusal; what it did not flush stays pending, and the bundle does not flush it.
 - This is a limit on creating channels, not a per-user limit or an access check: once a channel exists, everyone
   `canUse()` allows opens it without the event. Two people opening the same new channel can both fire it: one creates the
   row and the other gets that conversation, even if your listener denied them. Do not record anything on the event as if
   the channel now existed.
 - `find()` of your channel provider must return the canonical key, or null: `scope` is the plain text of that key.
-- An exception from a listener reaches the caller with nothing written by the bundle, and the EntityManager stays open.
 - The row is written through DBAL, so Doctrine lifecycle events do not fire for a new channel conversation.
 
 ## Mentions

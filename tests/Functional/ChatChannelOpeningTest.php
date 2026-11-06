@@ -4,16 +4,24 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Id\AbstractIdGenerator;
 use DomainException;
+use LogicException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Event\ChatChannelOpeningEvent;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Service\ChatChannelDeniedException;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use PHPUnit\Framework\Attributes\DataProvider;
+use ReflectionClass;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -215,6 +223,124 @@ final class ChatChannelOpeningTest extends DatabaseTestCase
         self::assertSame(0, $this->em->getRepository(ChatConversation::class)->count(['channelKey' => TestChannelProvider::KEY]));
     }
 
+    public function testAnIdGeneratorThatRunsBeforeTheInsertIsAsked(): void
+    {
+        // GZ-M1: what a sequence does on Postgres, whose id column has no default.
+        $this->em->getClassMetadata(ChatConversation::class)->setIdGenerator(new class extends AbstractIdGenerator {
+            public function generateId(EntityManagerInterface $em, ?object $entity): int
+            {
+                return 4242;
+            }
+        });
+
+        $conversation = $this->get(ChatService::class)->openChannel($this->user('Ana'), new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+
+        self::assertSame(4242, $conversation->getId());
+    }
+
+    /**
+     * @return iterable<string, array{bool, bool, bool, int}>
+     */
+    public static function pendingChanges(): iterable
+    {
+        // GZ-L2: flushed by the listener, by whom, how it ends, rows expected.
+        yield 'listener flushes, then denies' => [true, true, false, 1];
+        yield 'listener flushes, then throws' => [true, true, true, 1];
+        yield 'listener only persists, denies' => [false, true, false, 0];
+        yield 'listener only persists, throws' => [false, true, true, 0];
+        yield 'the caller left it pending, denies' => [false, false, false, 0];
+    }
+
+    #[DataProvider('pendingChanges')]
+    public function testARefusalDoesNotFlushWhatIsPending(bool $flushes, bool $inListener, bool $throws, int $rows): void
+    {
+        $em      = $this->em;
+        $ana     = $this->user('Ana');
+        $pending = new TestUser('Pending', 'pending@example.test');
+        if (!$inListener) {
+            $em->persist($pending);
+        }
+        $this->listen(static function (ChatChannelOpeningEvent $event) use ($em, $pending, $flushes, $inListener, $throws): void {
+            if ($inListener) {
+                $em->persist($pending);
+            }
+            if ($flushes) {
+                $em->flush();
+            }
+            if ($throws) {
+                throw new DomainException('Plan refused');
+            }
+            $event->deny('Limit');
+        });
+
+        try {
+            $this->get(ChatService::class)->openChannel($ana, new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+            self::fail('Expected a refusal.');
+        } catch (ChatChannelDeniedException|DomainException) {
+        }
+
+        self::assertTrue($em->isOpen());
+        $table = $em->getClassMetadata(TestUser::class)->getTableName();
+        self::assertSame($rows, (int) $em->getConnection()->fetchOne('SELECT COUNT(*) FROM ' . $table . " WHERE email = 'pending@example.test'"));
+        self::assertSame($rows === 0, $em->getUnitOfWork()->isScheduledForInsert($pending), 'what was not flushed stays pending');
+    }
+
+    public function testACallersTransactionSurvivesLosingTheRace(): void
+    {
+        $em = $this->em;
+        $this->listen(static function () use ($em): void {
+            $em->persist(ChatConversation::channel(TestChannelProvider::KEY));
+            $em->flush();
+        });
+        $ana        = $this->user('Ana');
+        $connection = $em->getConnection();
+
+        $connection->beginTransaction();
+        $conversation = $this->get(ChatService::class)->openChannel($ana, new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+        $connection->commit();
+
+        self::assertTrue($em->isOpen());
+        self::assertFalse($connection->isTransactionActive());
+        self::assertSame(TestChannelProvider::KEY, $conversation->getChannelKey());
+    }
+
+    public function testLosingToARowThatCannotBeReadRethrowsTheUniqueError(): void
+    {
+        // GZ-I10: a caller's transaction on MySQL's repeatable read. Nobody refused, so this is no refusal.
+        $this->rivalListener();
+
+        $this->expectException(UniqueConstraintViolationException::class);
+        $this->serviceThatCannotSeeTheRow()->openChannel($this->user('Ana'), new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+    }
+
+    public function testADenialThatCannotSeeTheRowIsStillADenial(): void
+    {
+        $this->rivalListener(deny: true);
+
+        $this->expectException(ChatChannelDeniedException::class);
+        $this->serviceThatCannotSeeTheRow()->openChannel($this->user('Ana'), new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+    }
+
+    public function testARowThatCannotBeReadAfterItsOwnInsertIsALogicError(): void
+    {
+        $this->expectException(LogicException::class);
+        $this->serviceThatCannotSeeTheRow()->openChannel($this->user('Ana'), new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+    }
+
+    public function testAnErrorInTheInsertLeavesTheEntityManagerOpen(): void
+    {
+        // GZ-I12: any failure inside the transaction; a key the entity refuses is the cheapest one.
+        $ana = $this->user('Ana');
+
+        try {
+            $this->get(ChatService::class)->openChannel($ana, new ChatChannel(str_repeat('x', ChatConversation::CHANNEL_KEY_MAX_LENGTH + 1), 'Long'));
+            self::fail('Expected the error.');
+        } catch (LogicException) {
+            self::assertTrue($this->em->isOpen());
+            self::assertFalse($this->em->getConnection()->isTransactionActive());
+        }
+    }
+
     /**
      * @param callable(ChatChannelOpeningEvent): void $listener
      *
@@ -234,6 +360,37 @@ final class ChatChannelOpeningTest extends DatabaseTestCase
         }, $priority);
 
         return $heard;
+    }
+
+    private function rivalListener(bool $deny = false): void
+    {
+        $em = $this->em;
+        $this->listen(static function (ChatChannelOpeningEvent $event) use ($em, $deny): void {
+            $em->getConnection()->insert($em->getClassMetadata(ChatConversation::class)->getTableName(), [
+                'uuid'            => '0190aaaa-0000-7000-8000-000000000000',
+                'kind'            => 'channel',
+                'channel_key'     => TestChannelProvider::KEY,
+                'last_message_at' => '2026-11-06 10:00:00',
+                'created_at'      => '2026-11-06 10:00:00',
+            ]);
+            if ($deny) {
+                $event->deny('Limit');
+            }
+        });
+    }
+
+    /** The real service, with a repository that never finds the channel. */
+    private function serviceThatCannotSeeTheRow(): ChatService
+    {
+        $real       = $this->get(ChatService::class);
+        $reflection = new ReflectionClass($real);
+        $arguments  = [];
+        foreach ($reflection->getConstructor()?->getParameters() ?? [] as $parameter) {
+            $arguments[$parameter->getName()] = $reflection->getProperty($parameter->getName())->getValue($real);
+        }
+        $arguments['conversations'] = $this->createStub(ChatConversationRepository::class);
+
+        return new ChatService(...$arguments);
     }
 
     /**

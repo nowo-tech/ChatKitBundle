@@ -107,7 +107,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, self::databaseUrl()])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION')])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -152,6 +152,11 @@ final class TestKernel extends Kernel
                 ],
             ],
         ]);
+        // ChatChannelRaceTest: Postgres with a sequence, the default on DBAL 3.
+        $idGeneration = getenv('CHAT_KIT_RACE_ID_GENERATION');
+        if (is_string($idGeneration) && $idGeneration !== '') {
+            $container->extension('doctrine', ['orm' => ['identity_generation_preferences' => ['Doctrine\\DBAL\\Platforms\\PostgreSQLPlatform' => $idGeneration]]]);
+        }
         $container->extension('nowo_chat_kit', array_replace_recursive(
             ['profiles' => ['default' => ['user_class' => TestUser::class]]],
             $this->chatKitConfig,
