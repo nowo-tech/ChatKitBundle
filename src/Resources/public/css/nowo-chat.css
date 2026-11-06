@@ -2014,6 +2014,30 @@
   color: var(--nowo-chat-text);
   font-size: var(--nowo-chat-font-size);
 }
+/* 1.21 (web_ui.page.full_height): the page fills what is left of the host content area under the page header, with the
+   same height before and after the dock takes it over. The page's parent and, under the UiKit bridge, the content area
+   around the host-page wrapper become flex columns; it needs a bounded height from the host. */
+:has(> [class*="nowo-ui-host-page--"] > .nowo-chat-page.nowo-chat-page--fill),
+:has(> .nowo-chat-page.nowo-chat-page--fill) {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+.nowo-chat-page.nowo-chat-page--fill {
+  flex: 1 1 0;
+  min-height: 24rem;
+  margin-bottom: 0;
+}
+.nowo-chat-page.nowo-chat-page--fill.is-page-mode {
+  display: flex;
+  flex-direction: column;
+}
+.nowo-chat-page--fill .nowo-chat-pagemode {
+  flex: 1 1 0;
+  height: auto;
+  min-height: 0;
+}
 .nowo-chat-pagemode__list,
 .nowo-chat-pagemode__thread {
   /* Positioned: the screen-reader-only parts inside the scrollers never widen the page. */

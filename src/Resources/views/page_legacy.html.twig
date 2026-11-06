@@ -13,18 +13,22 @@
 
 {% block stylesheets %}
     {{ parent() }}
+{% if nowo_chat_assets ?? true %}
     <link rel="stylesheet" href="{{ asset('css/nowo-chat.css', 'nowo_chat_kit') }}">
+{% endif %}
 {% endblock %}
 
 {% block javascripts %}
     {{ parent() }}
+{% if nowo_chat_assets ?? true %}
     <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
+{% endif %}
 {% endblock %}
 
 {% block title %}{{ current ? current.title : 'chat.page_title'|trans }}{% endblock %}
 
 {% block body %}
-    <div class="nowo-chat-page{{ current ? ' has-current' }}" data-testid="chat-page"{% if read ?? null %} data-nowo-chat-read-url="{{ read.url }}" data-nowo-chat-read-id="{{ read.messageId }}" data-nowo-chat-read-csrf="{{ read.csrf }}"{% endif %}>
+    <div class="nowo-chat-page{{ current ? ' has-current' }}{{ (nowo_chat_full_height ?? false) ? ' nowo-chat-page--fill' }}" data-testid="chat-page"{% if read ?? null %} data-nowo-chat-read-url="{{ read.url }}" data-nowo-chat-read-id="{{ read.messageId }}" data-nowo-chat-read-csrf="{{ read.csrf }}"{% endif %}>
         {% block nowo_chat_page_list %}
             <nav class="nowo-chat-page__list" aria-label="{{ 'chat.launcher'|trans }}">
                 <h1 class="nowo-chat-page__heading">{{ 'chat.page_title'|trans }}</h1>

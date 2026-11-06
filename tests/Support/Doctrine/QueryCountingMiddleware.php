@@ -14,6 +14,8 @@ use Doctrine\DBAL\Driver\Result;
 use Doctrine\DBAL\Driver\Statement;
 use SensitiveParameter;
 
+use function func_get_args;
+
 /**
  * DBAL middleware recording every executed statement into the QueryCounter (query-count regression tests).
  *
@@ -56,11 +58,12 @@ final readonly class QueryCountingMiddleware implements Middleware
                                 parent::__construct($statement);
                             }
 
-                            public function execute(): Result
+                            /** The optional parameter is for DBAL 3, whose execute() takes one. */
+                            public function execute(mixed $params = null): Result
                             {
                                 $this->counter->record($this->sql);
 
-                                return parent::execute();
+                                return parent::execute(...func_get_args());
                             }
                         };
                     }
@@ -72,11 +75,12 @@ final readonly class QueryCountingMiddleware implements Middleware
                         return parent::query($sql);
                     }
 
-                    public function exec(string $sql): int|string
+                    /** `int` fits DBAL 3 (`int`) and DBAL 4 (`int|string`). */
+                    public function exec(string $sql): int
                     {
                         $this->counter->record($sql);
 
-                        return parent::exec($sql);
+                        return (int) parent::exec($sql);
                     }
                 };
             }

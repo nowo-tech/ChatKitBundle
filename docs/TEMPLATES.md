@@ -60,6 +60,10 @@ option ([CONFIGURATION](CONFIGURATION.md)); override the block only to change th
 
 ## Per-page overrides
 
+`web_ui.assets: false` (1.21, variable `nowo_chat_assets`) leaves out the page's two asset tags, and
+`web_ui.page.full_height: true` (1.21, variable `nowo_chat_full_height`) adds the class `nowo-chat-page--fill`; neither
+needs an override.
+
 `nowo_chat_kit.profiles.<profile>.web_ui.templates.page`: a host template that
 `{% extends '@!NowoChatKitBundle/page.html.twig' %}` and redefines `nowo_chat_page_list`, `nowo_chat_page_thread` or
 `nowo_chat_page_script` (the `nowo-chat.js` tag; empty it when the host loads the chat script itself) (or a file under `templates/bundles/NowoChatKitBundle/` doing the same). Do not copy the whole page.

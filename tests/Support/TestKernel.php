@@ -42,6 +42,7 @@ use Twig\Environment;
 use Twig\Extra\TwigExtraBundle\TwigExtraBundle;
 
 use function dirname;
+use function is_string;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 /**
@@ -96,9 +97,17 @@ final class TestKernel extends Kernel
         return dirname(__DIR__, 2);
     }
 
+    /** The database of ChatChannelRaceTest (`CHAT_KIT_RACE_DATABASE_URL`); null = in-memory SQLite. */
+    public static function databaseUrl(): ?string
+    {
+        $url = getenv('CHAT_KIT_RACE_DATABASE_URL');
+
+        return is_string($url) && $url !== '' ? $url : null;
+    }
+
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION')])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -131,7 +140,7 @@ final class TestKernel extends Kernel
         // Only `send` and `x` exist: the other dock icons fall back to the built-in SVG.
         $container->extension('ux_icons', ['icon_dir' => __DIR__ . '/icons', 'iconify' => ['enabled' => false]]);
         $container->extension('doctrine', [
-            'dbal' => ['driver' => 'pdo_sqlite', 'memory' => true],
+            'dbal' => self::databaseUrl() === null ? ['driver' => 'pdo_sqlite', 'memory' => true] : ['url' => self::databaseUrl()],
             'orm'  => [
                 'mappings' => [
                     'TestSupport' => [
@@ -143,6 +152,11 @@ final class TestKernel extends Kernel
                 ],
             ],
         ]);
+        // ChatChannelRaceTest: Postgres with a sequence, the default on DBAL 3.
+        $idGeneration = getenv('CHAT_KIT_RACE_ID_GENERATION');
+        if (is_string($idGeneration) && $idGeneration !== '') {
+            $container->extension('doctrine', ['orm' => ['identity_generation_preferences' => ['Doctrine\\DBAL\\Platforms\\PostgreSQLPlatform' => $idGeneration]]]);
+        }
         $container->extension('nowo_chat_kit', array_replace_recursive(
             ['profiles' => ['default' => ['user_class' => TestUser::class]]],
             $this->chatKitConfig,

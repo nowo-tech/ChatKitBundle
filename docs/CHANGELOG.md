@@ -51,6 +51,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Four options that let a host drop its overrides of the chat page, all off by default: leave out the page's asset tags, refuse to open a channel, a public entry for preferences and sounds, and a page that fills the content area.
+
+### Added
+
+- **`web_ui.assets` (default `true`).** `false` leaves the `nowo-chat.css` and `nowo-chat.js` tags out of the full-page
+  chat, also on the deprecated 1.x template, for a host that bundles them. No `web_ui.templates.page` override needed.
+- **`ChatChannelOpeningEvent`** (`channelKey`, `scope`, `channel`, `user`, `deny(reason)`), dispatched before a channel's
+  conversation is created. A refusal writes no conversation or participant row; `ChatService::openChannel()` throws `ChatChannelDeniedException`, the
+  API answers 403 `channel_denied` with the reason in `message`, and the dock prints it as text. A channel already in use
+  opens without the event. The event and the create share one transaction, so a listener's `SELECT … FOR UPDATE` holds an
+  exact limit. The channel row is written through DBAL, so Doctrine lifecycle events do not fire for it. `ChatApiException` gains an optional `reason`; `ChatApiError` gains `reason`.
+- **Public TypeScript entry `src/Resources/assets/src/public`:** `saveChatPreference`, `PREFS_EVENT`, `playSound`,
+  `SOUND_NAMES`, `SoundName`, `ChatPrefs`, without loading the dock.
+- **`web_ui.page.full_height` (default `false`).** `true` makes the full-page chat fill the host content area (class
+  `nowo-chat-page--fill`).
+
+### Fixed
+
+- Two first openings of the same channel: the second gets the existing conversation instead of a unique-key error and a
+  closed EntityManager.
+- `playSound()` is a no-op for `constructor`, `__proto__` and `toString`, as its docblock says; it threw before.
+- `POST /chat/api/channel` with a `channelKey` that is not a string answers 404 without a PHP warning.
+
 ## [1.20.0] - 2026-11-06
 
 Dialog rule v2: the link dialog uses the medium width and a content-driven height, and the status menu gets a Cancel button that discards the draft. CI now fails when the committed assets drift from the TypeScript source.

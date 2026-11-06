@@ -95,6 +95,8 @@ nowo_chat_kit:
 | `profiles.<name>.doctrine.table_prefix` | string | `''` | Prepended to every bundle table, index and unique-constraint name **after** `table_name_prefix` is applied (lowercase letters, digits, `_`). `app_` gives `app_nowo_chat_conversation`, `app_idx_nowo_chat_message_created`, … Generate a migration after changing it. |
 | `profiles.<name>.web_ui.layout_template` | ?string | `null` | Layout the full-page chat extends (REQ-UI-003); `null` = `nowo_ui_kit.layouts.admin`. It must render the UiKit canonical blocks. |
 | `profiles.<name>.web_ui.templates.page` | string | `@NowoChatKitBundle/page.html.twig` | Template of the full-page chat (a host template extending `@!NowoChatKitBundle/page.html.twig` and overriding one block). |
+| `profiles.<name>.web_ui.assets` | bool | `true` | 1.21: `false` = the full-page chat leaves out the `nowo-chat.css` and `nowo-chat.js` tags (your bundler ships them). The dock on your other pages takes its own `nowo_chat_assets: false` ([USAGE](USAGE.md#front-end-iife-or-your-bundler)). |
+| `profiles.<name>.web_ui.page.full_height` | bool | `false` | 1.21: `true` = the full-page chat fills what is left of the host content area under the page header (class `nowo-chat-page--fill`) instead of the viewport-based `--nowo-chat-page-height`. The content area needs a bounded height ([USAGE](USAGE.md#full-page-chat)). |
 | `profiles.<name>.page_layout` | ?string | `null` | **Deprecated** (use `web_ui.layout_template`): a 1.x layout with the `title`, `stylesheets`, `javascripts` and `body` blocks; while it is the only layout set, the page keeps its 1.x template. |
 | `profiles.<name>.cache_pool` | string | `cache.app` | PSR-6 pool for presence and recipient lists. Share it between workers / replicas. |
 | `profiles.<name>.reactions` | list | `👍 ❤️ 😂 😮 😢 🎉` | Emojis offered as reactions (anything else is refused). |
@@ -189,7 +191,7 @@ Inside the bundle every query takes the names from the Doctrine metadata, never 
 ## Container parameters
 
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
-key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `doctrine.table_prefix`, `doctrine.table_name_prefix`, `doctrine.tables`, `doctrine.table.<key>`,
+key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `web_ui.assets`, `web_ui.page.full_height`, `doctrine.table_prefix`, `doctrine.table_name_prefix`, `doctrine.tables`, `doctrine.table.<key>`,
 `reactions`, `icon_set`, `icons`, `presence_ttl`, `auto_away_minutes`, `status_presets`, `max_pins`, `auto_reply_interval_hours`, `limits`, `digest`, `support`, `dock`, and `support.<key>` for each support key).
 
 ## Timeouts

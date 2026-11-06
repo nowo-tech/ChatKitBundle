@@ -49,6 +49,19 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+From **1.20.x**: `composer update nowo-tech/chat-kit-bundle`. No schema or route change. A host that sets nothing gets
+the same pages. A new channel's row is now written through DBAL in a transaction, so a Doctrine listener on
+`ChatConversation` no longer fires for it. Optional, to delete host code:
+
+- A `web_ui.templates.page` override that only emptied `nowo_ui_styles` / `nowo_chat_page_script`: remove it and set
+  `web_ui.assets: false`. Keep passing `nowo_chat_assets: false` to the dock on your other pages.
+- A route or `kernel.controller` listener that limited `nowo_chat_api_open_channel`: move it to
+  `ChatChannelOpeningEvent` and call `deny($reason)`. Anything that read the old 403 body now gets `error: channel_denied`.
+  For an exact limit, lock your plan row with `SELECT … FOR UPDATE` before counting.
+- Deep imports of `src/prefs`, `src/sounds` or `src/types`: import `src/public`.
+- Host CSS that stretched `.nowo-chat-page`: remove it and set `web_ui.page.full_height: true`, then check the page in
+  your shell, since it needs a bounded content area.
+
 ## To 1.20.0
 
 From **1.19.x**: `composer update nowo-tech/chat-kit-bundle`. No schema, route or configuration change. **Visual change

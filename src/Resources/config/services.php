@@ -57,6 +57,7 @@ return static function (ContainerConfigurator $container): void {
             '../../Push/DeliverChatPushMessage.php',
             '../../Digest/SendChatDigestMessage.php',
             '../../Http/ChatApiException.php',
+            '../../Service/ChatChannelDeniedException.php',
             '../../Realtime/ChatTopics.php',
             '../../Avatar/AvatarUrlPolicy.php',
         ]);

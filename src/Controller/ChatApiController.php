@@ -35,6 +35,7 @@ use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
+use Nowo\ChatKitBundle\Service\ChatChannelDeniedException;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
@@ -321,7 +322,8 @@ final class ChatApiController extends AbstractController
     }
 
     /**
-     * Opens (or creates) the conversation of the posted `channelKey`; 404 when the channel is unknown or not usable.
+     * Opens (or creates) the conversation of the posted `channelKey`; 404 when the channel is unknown or not usable, 403
+     * `channel_denied` (with the listener's `message`) when ChatChannelOpeningEvent refuses to create it (1.21).
      *
      * @param Request $request JSON body `{channelKey}`
      *
@@ -331,13 +333,20 @@ final class ChatApiController extends AbstractController
     public function openChannel(Request $request): JsonResponse
     {
         $user    = $this->writer($request);
-        $key     = (string) ($this->payload($request)['channelKey'] ?? '');
+        $key     = $this->payload($request)['channelKey'] ?? '';
+        $key     = is_string($key) ? $key : '';
         $channel = $this->access->channel($key);
         if (!$channel instanceof ChatChannel || !$this->access->canUseChannel($user, $key)) {
             throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
         }
 
-        return $this->json(['conversation' => $this->present($this->chat->openChannel($user, $channel), $user)]);
+        try {
+            $conversation = $this->chat->openChannel($user, $channel);
+        } catch (ChatChannelDeniedException $denied) {
+            throw new ChatApiException($denied->getMessage(), Response::HTTP_FORBIDDEN, $denied, $denied->reason);
+        }
+
+        return $this->json(['conversation' => $this->present($conversation, $user)]);
     }
 
     /**

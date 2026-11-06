@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ChatApi, ChatApiError } from '../src/api';
+import { ChatApi, ChatApiError, channelDeniedReason } from '../src/api';
 import type { ChatConfig } from '../src/types';
 
 const config = {
@@ -191,6 +191,20 @@ describe('chat api client', () => {
     expect(await api.linkPreviews(['/a b', '/c'])).toEqual({ '/a b': { title: 'A', subtitle: '', badge: '' } });
     vi.stubGlobal('fetch', respond({ previews: [] }));
     expect(await api.linkPreviews(['/z'])).toEqual({});
+  });
+
+  it('keeps the text of a refusal, for a refused channel only (1.21)', async () => {
+    vi.stubGlobal('fetch', respond({ ok: false, error: 'channel_denied', message: 'Your plan allows 3 channels.' }, false, 403));
+    const error = await new ChatApi(config).openChannel('project:x').catch((e: unknown) => e);
+    expect(error).toMatchObject({ status: 403, code: 'channel_denied', reason: 'Your plan allows 3 channels.' });
+    expect(channelDeniedReason(error)).toBe('Your plan allows 3 channels.');
+
+    expect(channelDeniedReason(new ChatApiError(403, 'channel_denied'))).toBeNull();
+    expect(channelDeniedReason(new ChatApiError(403, 'read_only', 'not for the person'))).toBeNull();
+    expect(channelDeniedReason(new Error('channel_denied'))).toBeNull();
+
+    vi.stubGlobal('fetch', respond({ error: 'channel_denied', message: 42 }, false, 403));
+    await expect(new ChatApi(config).openChannel('project:x')).rejects.toMatchObject({ code: 'channel_denied', reason: '' });
   });
 
   it('raises a typed error with the server code, or "error" without a body', async () => {

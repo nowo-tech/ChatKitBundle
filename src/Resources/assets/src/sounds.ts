@@ -60,7 +60,8 @@ export const SOUND_NAMES: readonly SoundName[] = ['none', 'pop', 'chime', 'ding'
  * @param volume 0 – 100 (the user's chat volume); 100 = the sound's own level.
  */
 export function playSound(name: SoundName, volume = 100): void {
-  const notes = name === 'none' ? undefined : SOUNDS[name];
+  // Own keys only: `constructor` or `__proto__` from an unchecked name are not sounds.
+  const notes = name !== 'none' && Object.hasOwn(SOUNDS, name) ? SOUNDS[name] : undefined;
   const level = Math.min(100, Math.max(0, volume)) / 100;
   if (notes === undefined || level === 0) {
     return;

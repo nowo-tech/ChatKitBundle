@@ -6,18 +6,32 @@ import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact
 export class ChatApiError extends Error {
   readonly status: number;
   readonly code: string;
+  /** Text for the person from the JSON body (`message`), when the server gave one; printed as text, never as HTML. */
+  readonly reason: string;
 
   /**
    * Creates the error; its message is the error code.
    *
    * @param status HTTP status of the response (401, 403, 422, 429…).
    * @param code Machine-readable error code from the JSON body (`error`), or "error" when it has none.
+   * @param reason Text for the person from the JSON body (`message`).
    */
-  constructor(status: number, code: string) {
+  constructor(status: number, code: string, reason = '') {
     super(code);
     this.status = status;
     this.code = code;
+    this.reason = reason;
   }
+}
+
+/**
+ * What to tell the person when the host refused to open a channel (1.21, ChatChannelOpeningEvent).
+ *
+ * @param error What the API call threw.
+ * @returns The host's reason; null for any other error, or a refusal without a reason.
+ */
+export function channelDeniedReason(error: unknown): string | null {
+  return error instanceof ChatApiError && error.code === 'channel_denied' && error.reason !== '' ? error.reason : null;
 }
 
 /** Thin client of the bundle JSON endpoints: same-origin credentials, CSRF header on writes, typed answers. */
@@ -607,7 +621,8 @@ export class ChatApi {
     if (!response.ok) {
       const code =
         typeof payload === 'object' && payload !== null && 'error' in payload ? String(payload.error) : 'error';
-      throw new ChatApiError(response.status, code);
+      const reason = typeof payload === 'object' && payload !== null && 'message' in payload && typeof payload.message === 'string' ? payload.message : '';
+      throw new ChatApiError(response.status, code, reason);
     }
     return payload as T;
   }

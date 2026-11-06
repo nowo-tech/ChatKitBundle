@@ -324,6 +324,59 @@ describe('ChatDock', () => {
     expect(all('.nowo-chat-window')).toHaveLength(1);
   });
 
+  describe('a channel the host refuses to open (1.21)', () => {
+    const denied = async () => {
+      const { ChatApiError } = await import('../src/api');
+      return new ChatApiError(403, 'channel_denied', '<img src=x onerror=alert(1)> Your plan allows 3 channels.');
+    };
+
+    it('says why in the people picker, as text', async () => {
+      const { q, all } = mount([], { contextChannel: { key: 'project:x', label: 'Acme' } });
+      await flush();
+      q('.nowo-chat-launcher, [data-part="launcher"]')?.click();
+      q('.nowo-chat-panel__compose').click();
+      await flush();
+      api.openChannel.mockRejectedValueOnce(await denied());
+      all('.nowo-chat-picker .nowo-chat-row').find((row) => row.textContent?.includes('#Acme'))?.click();
+      await flush();
+
+      const alert = q('.nowo-chat-picker__results [role="alert"]');
+      expect(alert.textContent).toContain('<img src=x onerror=alert(1)> Your plan allows 3 channels.');
+      expect(alert.querySelector('img')).toBeNull();
+      expect(q<HTMLElement>('.nowo-chat-picker').hidden).toBe(false);
+    });
+
+    it('says why after a link outside the dock, with the list open, and keeps the generic error for the rest', async () => {
+      const { q } = mount([]);
+      await flush();
+      const link = document.createElement('a');
+      link.dataset.nowoChatOpen = 'channel:project:x';
+      document.body.append(link);
+
+      api.openChannel.mockRejectedValueOnce(await denied());
+      link.click();
+      await flush();
+      const toast = q('[data-testid="nowo-chat-toast"]');
+      expect(toast.hidden).toBe(false);
+      expect(toast.textContent).toBe('<img src=x onerror=alert(1)> Your plan allows 3 channels.');
+      expect(toast.querySelector('img')).toBeNull();
+      expect(q<HTMLElement>('[data-part="panel-body"]').closest<HTMLElement>('[hidden]')).toBeNull();
+
+      vi.advanceTimersByTime(6_000);
+      api.openChannel.mockRejectedValueOnce(await denied());
+      link.click();
+      await flush();
+      expect(toast.hidden).toBe(false);
+
+      vi.advanceTimersByTime(6_000);
+      api.openChannel.mockRejectedValueOnce(new Error('network'));
+      link.click();
+      await flush();
+      expect(toast.hidden).toBe(true);
+      expect(q('.nowo-chat-status').textContent).toBe('error');
+    });
+  });
+
   it('uses the people picker: pinned rows, sections, search debounce and errors', async () => {
     const contacts: Contact[] = [
       { uuid: 'u1', name: 'Lucía', email: 'l@x', initials: 'LU', source: 'group', via: 'Backend' },

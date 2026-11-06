@@ -283,6 +283,12 @@ To change one part of the page without JavaScript, point `web_ui.templates.page`
 from the dock templates, `_templates.html.twig`). Keep the content element with `data-nowo-chat-page-mode`. Theme the page and the dock once with UiKit: the
 `--nowo-chat-*` tokens default to the `--nowo-ui-*` tokens. With the route prefix `/chat`, the list lives at `/chat/` (Symfony redirects `/chat` there).
 
+To make the page fill your content area instead of using a height based on the viewport, set
+`web_ui.page.full_height: true` (1.21). The page gets the class `nowo-chat-page--fill`; the stylesheet then turns its
+parent and, under the UiKit bridge, the element around the host-page wrapper into flex columns, and keeps a minimum of
+24rem. Your content area has to end up with a bounded height (a child of a flex column with a fixed height, for example),
+or the page stays at that minimum. `--nowo-chat-page-height` does not apply on such a page.
+
 ## Events
 
 | Event | When | Typical use |
@@ -295,9 +301,57 @@ from the dock templates, `_templates.html.twig`). Keep the content element with 
 | `SupportTicketStatusChangedEvent` | a deliberate status change (`previous`, `by`); not the automatic open ↔ waiting switch | notify the requester |
 | `SupportTicketAssignedEvent` | a ticket was assigned or unassigned (`assignee` null), by an agent or by the topic's default assignee | notify the assignee |
 | `ChatMentionEvent` | a stored message mentions members (`users`: only the people an edit adds; `edited`) | notify the mentioned people |
+| `ChatChannelOpeningEvent` | 1.21: before a channel's conversation is created; a listener can refuse (`channelKey`, `scope`, `channel`, `user`, `deny(reason)`) | plan limits, quotas ([below](#refusing-to-open-a-channel)) |
 | `ChatLinkAddedEvent` | 1.19: a link was pinned to a conversation (`link`, `by`) | notify, audit |
 | `ChatLinkUpdatedEvent` | 1.19: a pinned link changed (`link`, `by`, `previousUrl`, `previousTitle`) | audit |
 | `ChatLinkRemovedEvent` | 1.19: a pinned link was removed (`conversation`, `uuid`, `url`, `title`, `by`) | audit |
+
+### Refusing to open a channel
+
+`ChatChannelOpeningEvent` (1.21) runs in `ChatService::openChannel()`, the only place a channel conversation is created,
+after the access check and before anything is written. It runs only when the conversation does not exist yet: a channel
+already in use always opens.
+
+```php
+#[AsEventListener]
+final readonly class ChannelQuota
+{
+    public function __invoke(ChatChannelOpeningEvent $event): void
+    {
+        if ('project' !== $event->scope) {
+            return;
+        }
+        $plan = $this->plans->lockForChannel($event->channelKey); // SELECT … FOR UPDATE, before counting
+        if ($this->channels->countFor($plan) >= $plan->channelLimit()) {
+            $event->deny($this->translator->trans('chat.channel_limit'));
+        }
+    }
+}
+```
+
+- `scope` is what the key says before its first `:` (`project` for `project:<uuid>`), null when it has none.
+- After `deny()` no conversation and no participant row exist, and later listeners do not run. The API answers 403
+  `{ok: false, error: "channel_denied", message: <reason>}` (no `message` without a reason); the dock prints the reason as
+  text in the people picker, or in a notice of the opened list after a `data-nowo-chat-open` link. Without a reason it
+  shows its generic error.
+- The reason goes to the person who asked: give it translated, plain, and without other people's data.
+- Code of yours that calls `ChatService::openChannel()` catches `ChatChannelDeniedException` (`channelKey`, `reason`). Inside
+  your own transaction on MySQL's repeatable read, losing a first opening to someone else throws the unique-key error
+  instead, because your snapshot cannot see their row: retry after your transaction.
+- The event and the create share one transaction. For an exact limit, lock your own row with `SELECT … FOR UPDATE`, on the
+  connection of the chat's EntityManager, then count. Make the lock the first read in your listener: on MySQL's repeatable
+  read, an earlier plain read, such as loading the entity you are about to lock, fixes the snapshot and the count goes
+  stale. A count with no lock lets two people opening two new channels at the same moment both pass, and a transaction
+  your listener commits itself ends before the conversation is written.
+- A refusal or an exception from a listener writes no conversation or participant row, and the EntityManager stays open.
+  What your listener flushed stays, even on a refusal; what it did not flush stays pending, and the bundle does not flush it.
+- This is a limit on creating channels, not a per-user limit or an access check: once a channel exists, everyone
+  `canUse()` allows opens it without the event. Two people opening the same new channel can both fire it: one creates the
+  row and the other gets that conversation, even if your listener denied them. Do not record anything on the event as if
+  the channel now existed.
+- `find()` of your channel provider must return the canonical key, or null: `scope` is the plain text of that key.
+- The row is written through DBAL in a savepoint, so Doctrine lifecycle events do not fire for a new channel conversation,
+  and the database must support savepoints (MySQL, MariaDB, PostgreSQL and SQLite do; DB2 does not).
 
 ## Mentions
 
@@ -697,7 +751,9 @@ import { mount, unmount } from '../vendor/nowo-tech/chat-kit-bundle/src/Resource
 {# or, on your own root: <div data-nowo-chat-config="…" data-nowo-chat-manual …> #}
 ```
 
-  To drop the bundle script from the chat page as well (your bundler ships it), empty `nowo_chat_page_script` in the
+  To drop the bundle stylesheet and script from the chat page as well, set `web_ui.assets: false` (1.21); no template
+  override needed. A layout that includes the dock with `with_context = false` must pass `nowo_chat_assets: false` to it
+  too, because the option reaches that dock only through the shared context. To replace only the script, empty `nowo_chat_page_script` in the
   `web_ui.templates.page` override: `{% block nowo_chat_page_script %}{% endblock %}`.
 
 - **Bundler hosts** (1.6): `nowo_chat_assets: false` leaves the bundle `<link>` / `<script>` out of the dock (you ship
@@ -712,6 +768,18 @@ import { mount, unmount } from '../vendor/nowo-tech/chat-kit-bundle/src/Resource
     nowo_chat_root_attr: {'data-controller': 'chat-dock'},
 }) }}
 ```
+
+### Preferences and sounds without the dock
+
+A settings screen of your own imports the public entry (1.21), which loads neither the dock nor its API client:
+
+```ts
+import { PREFS_EVENT, playSound, saveChatPreference, SOUND_NAMES } from '../../vendor/nowo-tech/chat-kit-bundle/src/Resources/assets/src/public';
+import type { ChatPrefs, SoundName } from '../../vendor/nowo-tech/chat-kit-bundle/src/Resources/assets/src/public';
+```
+
+This entry and `src/index` are the supported imports: the other files of that folder (`prefs`, `sounds`, `types` …) are
+internal and can move in any release.
 
 ## User settings
 
