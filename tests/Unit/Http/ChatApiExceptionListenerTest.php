@@ -25,5 +25,9 @@ final class ChatApiExceptionListenerTest extends TestCase
         (new ChatApiExceptionListener())($event);
         self::assertSame(403, $event->getResponse()?->getStatusCode());
         self::assertSame('{"ok":false,"error":"read_only"}', $event->getResponse()->getContent());
+
+        $denied = new ExceptionEvent($kernel, new Request(), HttpKernelInterface::MAIN_REQUEST, new ChatApiException('channel_denied', 403, null, 'Plan limit'));
+        (new ChatApiExceptionListener())($denied);
+        self::assertSame('{"ok":false,"error":"channel_denied","message":"Plan limit"}', $denied->getResponse()?->getContent());
     }
 }

@@ -13,6 +13,7 @@ use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
+use Nowo\ChatKitBundle\Event\ChatChannelOpeningEvent;
 use Nowo\ChatKitBundle\Event\ChatMentionEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageDeletedEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
@@ -93,17 +94,28 @@ final readonly class ChatService
     }
 
     /**
-     * Returns the channel's conversation (created on first use) and makes sure the actor has a participant row.
+     * Returns the channel's conversation (created on first use) and makes sure the actor has a participant row. This is
+     * the only place a channel conversation is created: ChatChannelOpeningEvent (1.21) runs before it, once per
+     * attempt, and a channel already in use always opens.
      *
      * @param ChatUserInterface $actor The user who opens it
      * @param ChatChannel $channel The application channel
+     *
+     * @throws ChatChannelDeniedException When a listener refuses to create it; nothing is written
      *
      * @return ChatConversation The channel conversation
      */
     public function openChannel(ChatUserInterface $actor, ChatChannel $channel): ChatConversation
     {
-        $conversation = $this->conversations->findChannel($channel->key)
-            ?? $this->create(ChatConversation::channel($channel->key, $this->clock->now()), []);
+        $conversation = $this->conversations->findChannel($channel->key);
+        if (!$conversation instanceof ChatConversation) {
+            $opening = new ChatChannelOpeningEvent($channel, $actor);
+            $this->events?->dispatch($opening);
+            if ($opening->isDenied()) {
+                throw new ChatChannelDeniedException($channel->key, $opening->reason());
+            }
+            $conversation = $this->create(ChatConversation::channel($channel->key, $this->clock->now()), []);
+        }
         $this->participant($conversation, $actor);
         $this->entityManager->flush();
 

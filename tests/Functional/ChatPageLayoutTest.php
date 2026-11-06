@@ -34,6 +34,22 @@ final class ChatPageLayoutTest extends DatabaseTestCase
         self::assertStringNotContainsString('data-nowo-chat-read-url', $html);
     }
 
+    public function testTheLegacyTemplateFollowsTheAssetAndHeightVariables(): void
+    {
+        $context = ['conversations' => [], 'current' => null, 'messages' => [], 'can_send' => false];
+
+        $default = $this->twig()->render('@NowoChatKitBundle/page_legacy.html.twig', $context);
+        self::assertStringContainsString('css/nowo-chat.css', $default);
+        self::assertStringContainsString('js/nowo-chat.js', $default);
+        self::assertStringNotContainsString('nowo-chat-page--fill', $default);
+
+        $set = $this->twig()->render('@NowoChatKitBundle/page_legacy.html.twig', $context + ['nowo_chat_assets' => false, 'nowo_chat_full_height' => true]);
+        self::assertStringContainsString('<link rel="stylesheet" href="/host.css">', $set, 'the layout stylesheets are kept');
+        self::assertStringNotContainsString('css/nowo-chat.css', $set);
+        self::assertStringNotContainsString('js/nowo-chat.js', $set);
+        self::assertStringContainsString('nowo-chat-page--fill', $set);
+    }
+
     public function testThePageLoadsTheChatAssetsOnceWithTheDockInTheLayout(): void
     {
         $chat = $this->get(ChatService::class);

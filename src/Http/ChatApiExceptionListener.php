@@ -16,7 +16,8 @@ use Symfony\Component\HttpKernel\KernelEvents;
 final class ChatApiExceptionListener
 {
     /**
-     * Replaces the response of a ChatApiException with `{ok: false, error: <code>}` and its HTTP status.
+     * Replaces the response of a ChatApiException with `{ok: false, error: <code>}` (plus `message` when it carries a
+     * reason) and its HTTP status.
      *
      * @param ExceptionEvent $event The kernel exception event
      */
@@ -26,7 +27,7 @@ final class ChatApiExceptionListener
         if (!$exception instanceof ChatApiException) {
             return;
         }
-        $response = new JsonResponse(['ok' => false, 'error' => $exception->getMessage()], $exception->getCode());
+        $response = new JsonResponse(['ok' => false, 'error' => $exception->getMessage()] + ($exception->reason === '' ? [] : ['message' => $exception->reason]), $exception->getCode());
         $response->headers->set('Cache-Control', 'no-store, private');
         $event->setResponse($response);
     }

@@ -4,7 +4,7 @@
  * survive every navigation (DockStore) and stay in step across browser tabs (BroadcastChannel). On phones the
  * launcher opens a full-screen sheet. Everything happens in place: no request reloads or navigates the page.
  */
-import { ChatApi } from './api';
+import { ChatApi, channelDeniedReason } from './api';
 import { h, setBadge } from './dom';
 import { listTimeLabel, t } from './format';
 import { ChatRealtime } from './realtime';
@@ -927,7 +927,7 @@ export class ChatDock implements ThreadHost {
           return;
         }
         event.preventDefault();
-        void this.openTarget(trigger).catch(() => this.showStatus('error'));
+        void this.openTarget(trigger).catch((error: unknown) => this.showOpenError(error));
       },
       { signal },
     );
@@ -1053,6 +1053,25 @@ export class ChatDock implements ThreadHost {
     if (key !== 'reconnecting') {
       this.statusTimer = window.setTimeout(() => (this.status.hidden = true), key === 'error' ? 4_000 : 2_500);
     }
+  }
+
+  /**
+   * A link outside the dock could not open its conversation. A refused channel (1.21) brings the list up to say why:
+   * the toast lives in the panel, which may be closed or tucked.
+   *
+   * @param error What the API call threw.
+   */
+  private showOpenError(error: unknown): void {
+    const reason = channelDeniedReason(error);
+    if (reason === null) {
+      this.showStatus('error');
+      return;
+    }
+    this.setTucked(false, false);
+    if (!this.store.get().listOpen) {
+      this.toggleList(true);
+    }
+    this.showToast(reason);
   }
 
   /** Push notification click: `?chat=<uuid>` opens that conversation, then the parameter is dropped. */
@@ -1911,11 +1930,11 @@ export class ChatDock implements ThreadHost {
     row.addEventListener('click', () => {
       row.disabled = true;
       onPick()
-        .catch(() => {
+        .catch((cause: unknown) => {
           row.classList.add('is-error');
           row.setAttribute('aria-describedby', 'nowo-chat-picker-error');
           this.pickerResults.querySelector('#nowo-chat-picker-error')?.remove();
-          const error = this.pickerState(t(this.config.i18n, 'error'), true);
+          const error = this.pickerState(channelDeniedReason(cause) ?? t(this.config.i18n, 'error'), true);
           error.id = 'nowo-chat-picker-error';
           error.classList.add('nowo-chat-list__error');
           this.pickerResults.prepend(error);

@@ -60,6 +60,8 @@ final class ChatPageController extends AbstractController
      * @param ChatPresence|null $presence Status of the person of the open direct conversation
      * @param ClockInterface $clock Clock for status expiry
      * @param ChatParticipantRepository|null $participants Conversations the viewer closed (1.10)
+     * @param bool $assets Whether the page prints the nowo-chat.css and nowo-chat.js tags (`web_ui.assets`, 1.21)
+     * @param bool $fullHeight Whether the page fills the host content area (`web_ui.page.full_height`, 1.21)
      */
     public function __construct(
         private readonly ChatService $chat,
@@ -82,6 +84,10 @@ final class ChatPageController extends AbstractController
         private readonly ?ChatPresence $presence = null,
         private readonly ClockInterface $clock = new Clock(),
         private readonly ?ChatParticipantRepository $participants = null,
+        #[Autowire(param: 'nowo_chat_kit.web_ui.assets')]
+        private readonly bool $assets = true,
+        #[Autowire(param: 'nowo_chat_kit.web_ui.page.full_height')]
+        private readonly bool $fullHeight = false,
     ) {
     }
 
@@ -240,6 +246,9 @@ final class ChatPageController extends AbstractController
             // 1.10: the viewer's own status (the status button opens the dock's status menu).
             'my_status' => $this->settings?->forUser($user)->statusView($this->clock->now()),
             'archived'  => $archived,
+            // 1.21: `nowo_chat_assets` also reaches a dock the layout includes (the include shares this context).
+            'nowo_chat_assets'      => $this->assets,
+            'nowo_chat_full_height' => $this->fullHeight,
         ];
     }
 

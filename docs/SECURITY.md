@@ -33,6 +33,7 @@ whom).
 | JSON API `/chat/api/*` (GET + POST / PATCH / DELETE) | `ChatApiController` | Signed-in users only (401 otherwise) |
 | Full-page chat `/chat/`, `/chat/{uuid}` (GET + form POST) | `ChatPageController`, `ChatPageMessageType` | Signed-in users only (403 otherwise) |
 | Message bodies (Markdown, ≤ 4000 characters), reactions, support context (path + label) | API / page | Conversation members |
+| Host-written refusal text (`ChatChannelOpeningEvent::deny()`) | `/chat/api/channel` → the asking user's dock, as text | Deployer's code |
 | Link-preview URLs (`url[]`, ≤ 10 per request) | `/chat/api/link-previews` → host `ChatLinkPreviewProviderInterface` | Signed-in users |
 | Realtime: private Mercure topic, subscriber JWT | `MercureChatRealtime`, `/chat/api/realtime` | The user's own topic only |
 | Messenger messages `DeliverChatPushMessage`, `SendChatDigestMessage` (ids only) | Push / Digest dispatchers | Async workers |
@@ -128,6 +129,18 @@ dependencies current. Security fixes are released as patch versions of the suppo
 | Re-audit | Overall **Low**, **Pass (good)**; CHAT-SEC-11 (Low) page CSRF with form CSRF disabled → **fixed** (`isCsrfTokenValid()`); CHAT-SEC-12 (Low) storage kept after a login redirect → **fixed** (redirected responses = session lost); CHAT-SEC-13 (Info) doc accuracy and C0 control characters → **fixed** |
 | Findings | CHAT-SEC-01 (Medium) revoked-access previews → **fixed** (`ChatAccess::canView()` on lists and digest); CHAT-SEC-02 (Medium) outdated security doc → **fixed** (this document); CHAT-SEC-03 (Low) push body text → **fixed** (`push_preview`, default off); CHAT-SEC-04 (Low) off-site support context → **fixed** (root-relative paths only, label sanitised); CHAT-SEC-05 (Low) 30 s recipient cache → **mitigated** (`ChatRecipients::forget()`, documented); CHAT-SEC-10 (Info) storage after session timeout → **fixed** (cleared on 401); CHAT-SEC-06 / 07 / 08 / 09 (Info) → documented above as host responsibilities / accepted |
 | Recorded in | `BUNDLES_SECURITY_ANALYSIS.md` (monorepo security report) |
+
+### Unreleased changes (re-verification pending)
+
+An independent auditor has not reviewed these yet. **Status: re-verification pending.**
+
+- `ChatChannelOpeningEvent` / `channel_denied`: authorisation (`canUseChannel`, CSRF) still runs first, so a stranger gets
+  404 and no listener runs. The one creation path is `ChatService::openChannel()`. The host's reason reaches only the
+  person who asked; the dock prints it through `textContent`, and only for the code `channel_denied`, so `message` in
+  any other error body is never shown.
+- `web_ui.assets` and `web_ui.page.full_height` print or omit fixed tags and a fixed class, with no input from the request.
+- The fill rule uses `:has()` on the page's parent: layout only.
+- `src/public` re-exports existing functions; nothing new is reachable.
 
 ## Reporting a vulnerability
 

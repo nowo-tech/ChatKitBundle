@@ -35,7 +35,7 @@ final class ConfigurationTest extends TestCase
             'push_preview'              => false,
             'doctrine'                  => ['table_name_prefix' => 'nowo_chat_', 'table_prefix' => ''],
             'digest'                    => ['enabled' => false, 'delay_minutes' => 15, 'interval_minutes' => 60],
-            'web_ui'                    => ['layout_template' => null, 'templates' => ['page' => '@NowoChatKitBundle/page.html.twig']],
+            'web_ui'                    => ['layout_template' => null, 'assets' => true, 'page' => ['full_height' => false], 'templates' => ['page' => '@NowoChatKitBundle/page.html.twig']],
             'page_layout'               => null,
             'cache_pool'                => 'cache.app',
             'reactions'                 => ['👍', '❤️', '😂', '😮', '😢', '🎉'],

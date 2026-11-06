@@ -283,6 +283,12 @@ To change one part of the page without JavaScript, point `web_ui.templates.page`
 from the dock templates, `_templates.html.twig`). Keep the content element with `data-nowo-chat-page-mode`. Theme the page and the dock once with UiKit: the
 `--nowo-chat-*` tokens default to the `--nowo-ui-*` tokens. With the route prefix `/chat`, the list lives at `/chat/` (Symfony redirects `/chat` there).
 
+To make the page fill your content area instead of using a height based on the viewport, set
+`web_ui.page.full_height: true` (1.21). The page gets the class `nowo-chat-page--fill`; the stylesheet then turns its
+parent and, under the UiKit bridge, the element around the host-page wrapper into flex columns, and keeps a minimum of
+24rem. Your content area has to end up with a bounded height (a child of a flex column with a fixed height, for example),
+or the page stays at that minimum. `--nowo-chat-page-height` does not apply on such a page.
+
 ## Events
 
 | Event | When | Typical use |
@@ -295,9 +301,39 @@ from the dock templates, `_templates.html.twig`). Keep the content element with 
 | `SupportTicketStatusChangedEvent` | a deliberate status change (`previous`, `by`); not the automatic open ↔ waiting switch | notify the requester |
 | `SupportTicketAssignedEvent` | a ticket was assigned or unassigned (`assignee` null), by an agent or by the topic's default assignee | notify the assignee |
 | `ChatMentionEvent` | a stored message mentions members (`users`: only the people an edit adds; `edited`) | notify the mentioned people |
+| `ChatChannelOpeningEvent` | 1.21: before a channel's conversation is created; a listener can refuse (`channelKey`, `scope`, `channel`, `user`, `deny(reason)`) | plan limits, quotas ([below](#refusing-to-open-a-channel)) |
 | `ChatLinkAddedEvent` | 1.19: a link was pinned to a conversation (`link`, `by`) | notify, audit |
 | `ChatLinkUpdatedEvent` | 1.19: a pinned link changed (`link`, `by`, `previousUrl`, `previousTitle`) | audit |
 | `ChatLinkRemovedEvent` | 1.19: a pinned link was removed (`conversation`, `uuid`, `url`, `title`, `by`) | audit |
+
+### Refusing to open a channel
+
+`ChatChannelOpeningEvent` (1.21) runs in `ChatService::openChannel()`, the only place a channel conversation is created,
+after the access check and before anything is written. It runs only when the conversation does not exist yet: a channel
+already in use always opens.
+
+```php
+#[AsEventListener]
+final readonly class ChannelQuota
+{
+    public function __invoke(ChatChannelOpeningEvent $event): void
+    {
+        if ('project' === $event->scope && $this->overLimit($event->channelKey, $event->user)) {
+            $event->deny($this->translator->trans('chat.channel_limit'));
+        }
+    }
+}
+```
+
+- `scope` is what the key says before its first `:` (`project` for `project:<uuid>`), null when it has none.
+- After `deny()` no conversation and no participant row exist, and later listeners do not run. The API answers 403
+  `{ok: false, error: "channel_denied", message: <reason>}` (no `message` without a reason); the dock prints the reason as
+  text in the people picker, or in a notice of the opened list after a `data-nowo-chat-open` link. Without a reason it
+  shows its generic error.
+- The reason goes to the person who asked: give it translated, plain, and without other people's data.
+- Code of yours that calls `ChatService::openChannel()` catches `ChatChannelDeniedException` (`channelKey`, `reason`).
+- The event sits outside any transaction: two people opening two new channels at the same moment can both pass a
+  count-based check. If a limit must be exact, take a lock in your listener.
 
 ## Mentions
 
@@ -697,7 +733,8 @@ import { mount, unmount } from '../vendor/nowo-tech/chat-kit-bundle/src/Resource
 {# or, on your own root: <div data-nowo-chat-config="…" data-nowo-chat-manual …> #}
 ```
 
-  To drop the bundle script from the chat page as well (your bundler ships it), empty `nowo_chat_page_script` in the
+  To drop the bundle stylesheet and script from the chat page as well, set `web_ui.assets: false` (1.21); no template
+  override needed. To replace only the script, empty `nowo_chat_page_script` in the
   `web_ui.templates.page` override: `{% block nowo_chat_page_script %}{% endblock %}`.
 
 - **Bundler hosts** (1.6): `nowo_chat_assets: false` leaves the bundle `<link>` / `<script>` out of the dock (you ship
@@ -712,6 +749,18 @@ import { mount, unmount } from '../vendor/nowo-tech/chat-kit-bundle/src/Resource
     nowo_chat_root_attr: {'data-controller': 'chat-dock'},
 }) }}
 ```
+
+### Preferences and sounds without the dock
+
+A settings screen of your own imports the public entry (1.21), which loads neither the dock nor its API client:
+
+```ts
+import { PREFS_EVENT, playSound, saveChatPreference, SOUND_NAMES } from '../../vendor/nowo-tech/chat-kit-bundle/src/Resources/assets/src/public';
+import type { ChatPrefs, SoundName } from '../../vendor/nowo-tech/chat-kit-bundle/src/Resources/assets/src/public';
+```
+
+This entry and `src/index` are the supported imports: the other files of that folder (`prefs`, `sounds`, `types` …) are
+internal and can move in any release.
 
 ## User settings
 
