@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.21.0] - 2026-11-06](#1210---2026-11-06)
 - [[1.20.0] - 2026-11-06](#1200---2026-11-06)
 - [[1.19.0] - 2026-11-05](#1190---2026-11-05)
 - [[1.18.0] - 2026-11-05](#1180---2026-11-05)
@@ -50,6 +51,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.21.0] - 2026-11-06
 
 Four options that let a host drop its overrides of the chat page, all off by default: leave out the page's asset tags, refuse to open a channel, a public entry for preferences and sounds, and a page that fills the content area.
 
@@ -911,7 +914,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.20.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.21.0...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0

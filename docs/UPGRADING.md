@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.21.0](#to-1210)
 - [To 1.20.0](#to-1200)
 - [To 1.19.0](#to-1190)
 - [To 1.18.0](#to-1180)
@@ -48,6 +49,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.21.0
+
+From **1.20.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 From **1.20.x**: `composer update nowo-tech/chat-kit-bundle`. No schema or route change. A host that sets nothing gets
 the same pages. A new channel's row is now written through DBAL in a transaction, so a Doctrine listener on
