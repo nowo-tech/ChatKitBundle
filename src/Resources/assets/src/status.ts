@@ -154,6 +154,8 @@ export class StatusMenu {
   private readonly emojiInput: HTMLInputElement;
   private readonly clearAfter: HTMLSelectElement;
   private readonly error: HTMLElement;
+  /** 1.20: puts the automatic reply fields back to the saved reply (set when the section exists). */
+  private resetAutoReply: () => void = () => undefined;
 
   /**
    * Binds the trigger and the popover (cloned from the `status-menu` template) and paints the current status.
@@ -236,8 +238,14 @@ export class StatusMenu {
       this.clearAfter.value = 'never';
       void this.save({ text: null, emoji: null });
     });
-    // 1.18: the header's close button (UiKit 2.29 anatomy); absent in a host template that predates it.
-    popover.querySelector<HTMLButtonElement>('[data-part="status-close"]')?.addEventListener('click', () => this.close(true));
+    // 1.18: the header's close button (UiKit 2.29 anatomy); 1.20: the footer's Cancel. Either may be absent in a host
+    // template that predates it. Both discard what was typed: the menu reopens with the saved values.
+    popover.querySelectorAll<HTMLButtonElement>('[data-part="status-close"], [data-part="status-cancel"]').forEach((button) => {
+      button.addEventListener('click', () => {
+        this.discard();
+        this.close(true);
+      });
+    });
     popover.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -298,6 +306,18 @@ export class StatusMenu {
     if (focusTrigger) {
       this.trigger.focus();
     }
+  }
+
+  /** 1.20: drops unsaved edits — the custom status, "clear after", the drop-down and the automatic reply as saved. */
+  private discard(): void {
+    this.paint();
+    this.clearAfter.value = 'never';
+    const more = this.popover.querySelector<HTMLSelectElement>('[data-part="status-more"]');
+    if (more !== null) {
+      more.value = '';
+    }
+    this.error.hidden = true;
+    this.resetAutoReply();
   }
 
   /**
@@ -410,16 +430,22 @@ export class StatusMenu {
       return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
     };
     const iso = (value: string): string | null => (value === '' ? null : new Date(value).toISOString());
-    enabled.checked = current.enabled;
-    text.value = current.text;
-    when.value = current.when;
-    from.value = local(current.from);
-    until.value = local(current.until);
-    mentions.checked = current.mentions;
     const showRange = (): void => {
       range.hidden = when.value !== 'range';
     };
-    showRange();
+    const fill = (): void => {
+      const saved = this.host.config.autoReply ?? current;
+      enabled.checked = saved.enabled;
+      text.value = saved.text;
+      when.value = saved.when;
+      from.value = local(saved.from);
+      until.value = local(saved.until);
+      mentions.checked = saved.mentions;
+      error.hidden = true;
+      showRange();
+    };
+    fill();
+    this.resetAutoReply = fill;
     when.addEventListener('change', showRange);
     part(section, 'auto-reply-save').addEventListener('click', () => {
       void this.host.api

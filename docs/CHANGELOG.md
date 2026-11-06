@@ -50,6 +50,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **Dialogs follow the owner's dialog rule v2 (symfony-beacon D-20261105-54, UI-PATTERNS §16; visual change, see
+  [UPGRADING](UPGRADING.md#unreleased)).** Inventory: the link dialog (add / edit a pinned link, attach a link card;
+  1.19) is the only modal dialog the chat opens — the status menu is a view of the dock's panel, the quick replies a
+  popover above the composer, the Links panel an overlay of the window, the edit / delete confirmations inline.
+  - **Link dialog:** the medium dialog size from the shared tokens (`--nowo-dialog-width-md`, else
+    `min(40rem, 100vw − 2rem)`; new classes `nowo-chat-dialog nowo-chat-dialog--md`, and `--wide` for the wide size),
+    the height follows the content, capped at `min(--nowo-dialog-height-md (36rem), 100dvh − 2rem)` (was a fixed
+    `min(440px, …)` width, `min(560px, …)` cap and `100vw − 16px` on phones); tinted header and footer. Footer
+    unchanged: Remove (danger outline, apart on the left), Cancel, the one primary last.
+  - **Status menu:** the footer gains **Cancel** (`data-part="status-cancel"`, closes like ×) between Clear (secondary,
+    apart on the left) and Save (the one primary); tinted header and footer. Cancel and × discard what was typed (custom
+    status, "clear after", the *More statuses* drop-down, the automatic reply): the menu reopens with the saved values.
+    Its height stays the dock panel's (1.13.1: the dock never jumps); it is not a centred dialog.
+  - The link dialog's form fills the open dialog (flex column) instead of inheriting its `max-height`, so at the height
+    cap the border no longer clips the footer.
+  - CI: the TypeScript job rebuilds the assets and fails when the committed `src/Resources/public/js|css` differ.
+
 ## [1.19.0] - 2026-11-05
 
 ### Added

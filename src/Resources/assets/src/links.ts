@@ -231,6 +231,8 @@ export interface LinkDialogOptions {
 /**
  * The link dialog: a modal `<dialog>` (UiKit 2.29 anatomy: header with the title and ×, a scrolling body with the URL,
  * the optional title, the detected provider and the error, and a footer — Remove first, Cancel, the primary last).
+ * 1.20 (dialog rule v2): the medium dialog size (`nowo-chat-dialog--md`: `--nowo-dialog-width-md`), its height the
+ * content's, capped at `--nowo-dialog-height-md` and the viewport minus 2rem.
  */
 export class LinkDialog {
   readonly element: HTMLDialogElement;
@@ -258,7 +260,7 @@ export class LinkDialog {
     serial += 1;
     const id = `nowo-chat-link-dialog-${serial}`;
     const heading = { add: 'links_add', edit: 'links_edit', message: 'links_attach' }[options.mode];
-    this.element = h('dialog', { class: 'nowo-chat-linkdialog', 'aria-labelledby': `${id}-title`, 'data-testid': 'nowo-chat-link-dialog', 'data-mode': options.mode });
+    this.element = h('dialog', { class: 'nowo-chat-dialog nowo-chat-dialog--md nowo-chat-linkdialog', 'aria-labelledby': `${id}-title`, 'data-testid': 'nowo-chat-link-dialog', 'data-mode': options.mode });
     const close = h('button', { type: 'button', class: 'nowo-chat-icon-btn nowo-chat-linkdialog__close', 'aria-label': t(i18n, 'close'), title: t(i18n, 'close') }, h('span', { 'aria-hidden': 'true', text: '×' }));
     close.addEventListener('click', () => this.close());
     this.url = h('input', {

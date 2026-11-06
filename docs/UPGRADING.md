@@ -48,6 +48,19 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+From **1.19.x**: `composer update nowo-tech/chat-kit-bundle`. No schema, route or configuration change. **Visual change
+(dialog rule v2):**
+
+- **Link dialog** (pinned links, attach a link): medium width `var(--nowo-dialog-width-md, min(40rem, 100vw − 2rem))`
+  (was 440px; on phones the screen width minus 2rem, was minus 16px), height = content, capped at
+  `min(var(--nowo-dialog-height-md, 36rem), 100dvh − 2rem)`. Declare UiKit's `--nowo-dialog-width-md|wide` /
+  `--nowo-dialog-height-md|wide` on `:root` to size it with your other dialogs. CSS that set the width or `max-height`
+  of `.nowo-chat-linkdialog` should be removed (the sizes live on `.nowo-chat-dialog` / `.nowo-chat-dialog--md`).
+- **Status menu template** (`nowo_chat_template_status_menu`): the footer has a Cancel button
+  (`<button type="button" class="nowo-chat-status-form__cancel" data-part="status-cancel">`) between Clear and Save. An
+  overridden block without it keeps working (the button is looked up only when present); copy it to follow the
+  anatomy. Header and footer are tinted from `--nowo-chat-mist`.
+
 ## To 1.19.0
 
 From **1.18.x**: `composer update nowo-tech/chat-kit-bundle`, then **create the two new tables** and
