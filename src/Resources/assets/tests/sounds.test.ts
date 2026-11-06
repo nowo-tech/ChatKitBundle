@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { SoundName } from '../src/types';
 
 function fakeAudio(state: 'running' | 'suspended') {
   const started: number[] = [];
@@ -23,6 +24,16 @@ describe('chat sounds', () => {
     vi.unstubAllGlobals();
     vi.resetModules();
     window.localStorage.clear();
+  });
+
+  it('treats names from the object prototype as unknown', async () => {
+    const created = vi.fn();
+    vi.stubGlobal('AudioContext', class { constructor() { created(); } });
+    const { playSound } = await import('../src/sounds');
+    for (const name of ['constructor', '__proto__', 'toString', 'nope']) {
+      expect(() => playSound(name as SoundName)).not.toThrow();
+    }
+    expect(created).not.toHaveBeenCalled();
   });
 
   it('synthesises each sound and resumes a suspended context', async () => {

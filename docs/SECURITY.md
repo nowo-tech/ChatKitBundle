@@ -132,12 +132,17 @@ dependencies current. Security fixes are released as patch versions of the suppo
 
 ### Unreleased changes (re-verification pending)
 
-An independent auditor has not reviewed these yet. **Status: re-verification pending.**
+Appendix GZ audited `30389b4` (PR #39): Pass (good) / Low. The commits after it fix its findings and have not been
+reviewed yet. **Status: re-verification pending.**
 
 - `ChatChannelOpeningEvent` / `channel_denied`: authorisation (`canUseChannel`, CSRF) still runs first, so a stranger gets
   404 and no listener runs. The one creation path is `ChatService::openChannel()`. The host's reason reaches only the
   person who asked; the dock prints it through `textContent`, and only for the code `channel_denied`, so `message` in
   any other error body is never shown.
+- The event and the create share one transaction, so a listener that locks its own row with `SELECT … FOR UPDATE` holds an
+  exact limit until the commit. The event is not an access check and does not run for a channel already in use. A
+  provider's `find()` must return the canonical key, or null, because `scope` is plain text taken from that key.
+- A reason that is not valid UTF-8 is scrubbed in `ChatApiExceptionListener`, so the refusal still answers.
 - `web_ui.assets` and `web_ui.page.full_height` print or omit fixed tags and a fixed class, with no input from the request.
 - The fill rule uses `:has()` on the page's parent: layout only.
 - `src/public` re-exports existing functions; nothing new is reachable.

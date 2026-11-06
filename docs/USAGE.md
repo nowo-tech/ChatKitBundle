@@ -318,7 +318,11 @@ final readonly class ChannelQuota
 {
     public function __invoke(ChatChannelOpeningEvent $event): void
     {
-        if ('project' === $event->scope && $this->overLimit($event->channelKey, $event->user)) {
+        if ('project' !== $event->scope) {
+            return;
+        }
+        $plan = $this->plans->lockForChannel($event->channelKey); // SELECT … FOR UPDATE, before counting
+        if ($this->channels->countFor($plan) >= $plan->channelLimit()) {
             $event->deny($this->translator->trans('chat.channel_limit'));
         }
     }
@@ -332,8 +336,17 @@ final readonly class ChannelQuota
   shows its generic error.
 - The reason goes to the person who asked: give it translated, plain, and without other people's data.
 - Code of yours that calls `ChatService::openChannel()` catches `ChatChannelDeniedException` (`channelKey`, `reason`).
-- The event sits outside any transaction: two people opening two new channels at the same moment can both pass a
-  count-based check. If a limit must be exact, take a lock in your listener.
+- The event and the create share one transaction. For an exact limit, lock your own row first with
+  `SELECT … FOR UPDATE`, then count: the lock lasts until the commit. A count with no lock lets two people opening two new
+  channels at the same moment both pass, and a transaction your listener commits itself ends before the conversation is
+  written.
+- This is a limit on creating channels, not a per-user limit or an access check: once a channel exists, everyone
+  `canUse()` allows opens it without the event. Two people opening the same new channel can both fire it: one creates the
+  row and the other gets that conversation, even if your listener denied them. Do not record anything on the event as if
+  the channel now existed.
+- `find()` of your channel provider must return the canonical key, or null: `scope` is the plain text of that key.
+- An exception from a listener reaches the caller with nothing written by the bundle, and the EntityManager stays open.
+- The row is written through DBAL, so Doctrine lifecycle events do not fire for a new channel conversation.
 
 ## Mentions
 
@@ -734,7 +747,8 @@ import { mount, unmount } from '../vendor/nowo-tech/chat-kit-bundle/src/Resource
 ```
 
   To drop the bundle stylesheet and script from the chat page as well, set `web_ui.assets: false` (1.21); no template
-  override needed. To replace only the script, empty `nowo_chat_page_script` in the
+  override needed. A layout that includes the dock with `with_context = false` must pass `nowo_chat_assets: false` to it
+  too, because the option reaches that dock only through the shared context. To replace only the script, empty `nowo_chat_page_script` in the
   `web_ui.templates.page` override: `{% block nowo_chat_page_script %}{% endblock %}`.
 
 - **Bundler hosts** (1.6): `nowo_chat_assets: false` leaves the bundle `<link>` / `<script>` out of the dock (you ship

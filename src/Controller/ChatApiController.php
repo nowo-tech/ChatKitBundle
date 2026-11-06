@@ -333,7 +333,8 @@ final class ChatApiController extends AbstractController
     public function openChannel(Request $request): JsonResponse
     {
         $user    = $this->writer($request);
-        $key     = (string) ($this->payload($request)['channelKey'] ?? '');
+        $key     = $this->payload($request)['channelKey'] ?? '';
+        $key     = is_string($key) ? $key : '';
         $channel = $this->access->channel($key);
         if (!$channel instanceof ChatChannel || !$this->access->canUseChannel($user, $key)) {
             throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);

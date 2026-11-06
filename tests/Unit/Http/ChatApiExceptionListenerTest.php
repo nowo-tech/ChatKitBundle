@@ -29,5 +29,10 @@ final class ChatApiExceptionListenerTest extends TestCase
         $denied = new ExceptionEvent($kernel, new Request(), HttpKernelInterface::MAIN_REQUEST, new ChatApiException('channel_denied', 403, null, 'Plan limit'));
         (new ChatApiExceptionListener())($denied);
         self::assertSame('{"ok":false,"error":"channel_denied","message":"Plan limit"}', $denied->getResponse()?->getContent());
+
+        $broken = new ExceptionEvent($kernel, new Request(), HttpKernelInterface::MAIN_REQUEST, new ChatApiException('channel_denied', 403, null, "Plan \xC3 limit"));
+        (new ChatApiExceptionListener())($broken);
+        self::assertSame(403, $broken->getResponse()?->getStatusCode(), 'host text that is not valid UTF-8 still answers');
+        self::assertSame('{"ok":false,"error":"channel_denied","message":"Plan ? limit"}', $broken->getResponse()->getContent());
     }
 }
