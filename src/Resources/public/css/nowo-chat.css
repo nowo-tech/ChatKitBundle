@@ -3704,14 +3704,21 @@ a.nowo-chat-linkcard:focus-visible {
   overflow: hidden;
   pointer-events: auto;
 }
+.nowo-chat-linkdialog[open] {
+  display: flex;
+  flex-direction: column;
+}
 .nowo-chat-linkdialog::backdrop {
   background: rgba(0, 0, 0, 0.45);
 }
 
+/* The form fills the open dialog (a flex column) instead of inheriting its max-height: at the height cap the dialog's
+   border no longer clips the footer; only the body scrolls. */
 .nowo-chat-linkdialog__form {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  max-height: inherit;
+  min-height: 0;
   margin: 0;
 }
 

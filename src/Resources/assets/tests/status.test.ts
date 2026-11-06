@@ -322,6 +322,54 @@ describe('chat status', () => {
     expect(() => new StatusMenu({ config, api: {} as unknown as ChatApi }, document.createElement('button'), nothing, vi.fn(), new AbortController().signal)).not.toThrow();
   });
 
+  it('discards unsaved edits on Cancel and × (1.20): the menu reopens with the saved values', () => {
+    const trigger = document.createElement('button');
+    const popover = templates().clone('status-menu');
+    document.body.append(trigger, popover);
+    const reply = { enabled: false, text: 'Back soon', when: 'status' as const, from: null, until: null, mentions: false };
+    const config = { i18n, status: own({ text: 'Lunch', emoji: '🍕' }), autoReply: reply, endpoints: { autoReply: '/auto' } } as unknown as ChatConfig;
+    const instance = new StatusMenu({ config, api: { setStatus: vi.fn() } as unknown as ChatApi }, trigger, popover, vi.fn(), new AbortController().signal);
+    const field = <T extends HTMLElement>(name: string) => popover.querySelector<T>(`[data-part="${name}"]`) as T;
+    const more = field<HTMLSelectElement>('status-more');
+    const draft = (): void => {
+      field<HTMLInputElement>('status-text').value = 'Draft';
+      field<HTMLInputElement>('status-emoji').value = '🚧';
+      field<HTMLSelectElement>('status-clear-after').value = '1h';
+      more.value = more.options[1]?.value ?? '';
+      field<HTMLInputElement>('auto-reply-enabled').checked = true;
+      field<HTMLTextAreaElement>('auto-reply-text').value = 'Changed';
+      field<HTMLSelectElement>('auto-reply-when').value = 'range';
+      field('status-error').hidden = false;
+    };
+    for (const close of ['status-cancel', 'status-close']) {
+      trigger.click();
+      draft();
+      field<HTMLButtonElement>(close).click();
+      expect(instance.isOpen).toBe(false);
+      trigger.click();
+      expect(field<HTMLInputElement>('status-text').value).toBe('Lunch');
+      expect(field<HTMLInputElement>('status-emoji').value).toBe('🍕');
+      expect(field<HTMLSelectElement>('status-clear-after').value).toBe('never');
+      expect(more.value).toBe('');
+      expect(field<HTMLInputElement>('auto-reply-enabled').checked).toBe(false);
+      expect(field<HTMLTextAreaElement>('auto-reply-text').value).toBe('Back soon');
+      expect(field('auto-reply-range').hidden).toBe(true);
+      expect(field('status-error').hidden).toBe(true);
+      instance.close(false);
+    }
+
+    // A host template without the drop-down or the automatic reply still discards the custom status.
+    const bare = templates().clone('status-menu');
+    bare.querySelector('[data-part="status-more"]')?.closest('.nowo-chat-status-form__more-row')?.remove();
+    bare.querySelector('[data-part="status-more"]')?.remove();
+    document.body.append(bare);
+    const other = new StatusMenu({ config: { i18n, status: own(), endpoints: {} } as unknown as ChatConfig, api: {} as unknown as ChatApi }, document.createElement('button'), bare, vi.fn(), new AbortController().signal);
+    other.open();
+    (bare.querySelector('[data-part="status-text"]') as HTMLInputElement).value = 'Draft';
+    bare.querySelector<HTMLButtonElement>('[data-part="status-cancel"]')?.click();
+    expect((bare.querySelector('[data-part="status-text"]') as HTMLInputElement).value).toBe('');
+  });
+
   it('starts the accessible name with the visible initials (WCAG 2.5.3, 1.11.1)', () => {
     const trigger = document.createElement('button');
     trigger.innerHTML = '<span class="nowo-chat-avatar">DA</span><span data-part="me-dot"></span>';

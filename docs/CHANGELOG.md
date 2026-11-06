@@ -62,8 +62,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     `min(440px, …)` width, `min(560px, …)` cap and `100vw − 16px` on phones); tinted header and footer. Footer
     unchanged: Remove (danger outline, apart on the left), Cancel, the one primary last.
   - **Status menu:** the footer gains **Cancel** (`data-part="status-cancel"`, closes like ×) between Clear (secondary,
-    apart on the left) and Save (the one primary); tinted header and footer. Its height stays the dock panel's (1.13.1:
-    the dock never jumps); it is not a centred dialog.
+    apart on the left) and Save (the one primary); tinted header and footer. Cancel and × discard what was typed (custom
+    status, "clear after", the *More statuses* drop-down, the automatic reply): the menu reopens with the saved values.
+    Its height stays the dock panel's (1.13.1: the dock never jumps); it is not a centred dialog.
+  - The link dialog's form fills the open dialog (flex column) instead of inheriting its `max-height`, so at the height
+    cap the border no longer clips the footer.
+  - CI: the TypeScript job rebuilds the assets and fails when the committed `src/Resources/public/js|css` differ.
 
 ## [1.19.0] - 2026-11-05
 

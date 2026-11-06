@@ -360,3 +360,9 @@ jobs:
         run: |
           chmod +x .scripts/ts-coverage-percent.sh
           ./.scripts/ts-coverage-percent.sh coverage-ts.txt
+
+      # The committed bundle (src/Resources/public/js, css) must be the build of the TypeScript source.
+      - name: Check the committed assets match the build
+        run: |
+          pnpm run build
+          git diff --exit-code -- src/Resources/public/js src/Resources/public/css
