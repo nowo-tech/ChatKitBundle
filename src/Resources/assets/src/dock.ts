@@ -4,6 +4,7 @@
  * survive every navigation (DockStore) and stay in step across browser tabs (BroadcastChannel). On phones the
  * launcher opens a full-screen sheet. Everything happens in place: no request reloads or navigates the page.
  */
+import { closeWithEffect, finishClosing } from './motion';
 import { ChatApi, channelDeniedReason } from './api';
 import { h, setBadge } from './dom';
 import { listTimeLabel, t } from './format';
@@ -45,6 +46,8 @@ interface PageMode {
 /** History state key of the page mode: the conversation of each history entry ("" = none). */
 const PAGE_STATE_KEY = 'nowoChatPage';
 
+/** If `animationend` never fires for an entry animation. */
+const ENTRY_FALLBACK_MS = 1000;
 const MOBILE_QUERY = '(max-width: 768px)';
 const WINDOW_WIDTH = 336;
 const MINIMISED_WIDTH = 232;
@@ -1387,7 +1390,33 @@ export class ChatDock implements ThreadHost {
    */
   private playEntry(element: HTMLElement): void {
     element.classList.add('is-entering');
-    window.setTimeout(() => element.classList.remove('is-entering'), 260);
+    const done = (): void => {
+      window.clearTimeout(timer);
+      element.removeEventListener('animationend', onEnd);
+      element.classList.remove('is-entering');
+    };
+    const onEnd = (event: AnimationEvent): void => {
+      if (event.animationName === 'nowo-chat-open') {
+        done();
+      }
+    };
+    element.addEventListener('animationend', onEnd);
+    const timer = window.setTimeout(done, ENTRY_FALLBACK_MS);
+  }
+
+  /**
+   * Takes a window off the page; a floating one fades first (a page-mode or phone switch swaps at once, so that two never stack).
+   *
+   * @param element The window.
+   * @param fade Whether it fades.
+   */
+  private removeWindow(element: HTMLElement, fade: boolean): void {
+    if (!fade) {
+      element.remove();
+      return;
+    }
+    element.setAttribute('inert', '');
+    closeWithEffect(element, () => element.remove());
   }
 
   /** Switches the panel to the people picker (opening the list first) and loads the suggestions. */
@@ -1424,7 +1453,14 @@ export class ChatDock implements ThreadHost {
       this.root.classList.toggle('is-tucked', state.tucked);
       this.syncInert();
       this.edge.hidden = !state.tucked;
+      const wasOpen = this.panel.classList.contains('is-open');
       this.panel.classList.toggle('is-open', state.listOpen);
+      if (state.listOpen) {
+        finishClosing(this.panelBody);
+      } else if (wasOpen) {
+        // The body stays painted under the closing mark until its fade ends.
+        closeWithEffect(this.panelBody, () => undefined);
+      }
       this.launcher.setAttribute('aria-expanded', state.listOpen ? 'true' : 'false');
       this.launcherChevron.replaceChildren(this.templates.icon(state.listOpen ? 'chevronDown' : 'chevronUp', 16));
     }
@@ -1435,7 +1471,7 @@ export class ChatDock implements ThreadHost {
     const created: ThreadView[] = [];
     for (const [uuid, view] of this.windows) {
       if (!wantedIds.has(uuid)) {
-        view.element.remove();
+        this.removeWindow(view.element, page === null && (!mobile || single === null));
         this.windows.delete(uuid);
       }
     }

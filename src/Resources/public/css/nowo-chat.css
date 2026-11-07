@@ -256,9 +256,66 @@
   display: flex;
 }
 
+/* UiKit's motion scale, read with own fallbacks: open and close, fade plus a small scale. */
+.nowo-chat-panel__body,
+.nowo-chat-window,
+.nowo-chat-linkdialog {
+  --nowo-chat-motion-open: var(--nowo-ui-motion-medium, 200ms);
+  --nowo-chat-motion-close: var(--nowo-ui-motion-medium-close, 150ms);
+  --nowo-chat-motion-scale: var(--nowo-ui-motion-scale, 0.98);
+}
+
 .nowo-chat-panel.is-entering .nowo-chat-panel__body,
-.nowo-chat-window.is-entering {
-  animation: nowo-chat-rise 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+.nowo-chat-window.is-entering,
+.nowo-chat-linkdialog[open] {
+  animation: nowo-chat-open var(--nowo-chat-motion-open) var(--nowo-ui-motion-ease-out, cubic-bezier(0.2, 0, 0, 1));
+}
+
+/* A close waits for this fade (motion.ts), then hides or removes the element. */
+.nowo-chat-panel .nowo-chat-panel__body[data-nowo-chat-closing] {
+  display: flex;
+}
+.nowo-chat-panel__body[data-nowo-chat-closing],
+.nowo-chat-window[data-nowo-chat-closing],
+.nowo-chat-linkdialog[data-nowo-chat-closing] {
+  animation: none;
+  opacity: 0;
+  transform: scale(var(--nowo-chat-motion-scale));
+  transition:
+    opacity var(--nowo-chat-motion-close) var(--nowo-ui-motion-ease-in, cubic-bezier(0.4, 0, 1, 1)),
+    transform var(--nowo-chat-motion-close) var(--nowo-ui-motion-ease-in, cubic-bezier(0.4, 0, 1, 1));
+}
+.nowo-chat-linkdialog[open]::backdrop {
+  animation: nowo-chat-backdrop-in var(--nowo-chat-motion-open, 200ms) var(--nowo-ui-motion-ease-out, cubic-bezier(0.2, 0, 0, 1));
+}
+.nowo-chat-linkdialog[data-nowo-chat-closing]::backdrop {
+  animation: none;
+  opacity: 0;
+  transition: opacity var(--nowo-chat-motion-close, 150ms) var(--nowo-ui-motion-ease-in, cubic-bezier(0.4, 0, 1, 1));
+}
+@keyframes nowo-chat-open {
+  from {
+    opacity: 0;
+    transform: scale(var(--nowo-chat-motion-scale));
+  }
+}
+@keyframes nowo-chat-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+/* Reduced motion keeps a short fade and no movement; html[data-motion='full'] keeps the full effect. */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion='full']) :is(.nowo-chat-panel__body, .nowo-chat-window, .nowo-chat-linkdialog) {
+    --nowo-chat-motion-open: var(--nowo-ui-motion-medium, 80ms);
+    --nowo-chat-motion-close: var(--nowo-ui-motion-medium-close, 80ms);
+    --nowo-chat-motion-scale: 1;
+  }
+}
+[data-motion='reduce'] :is(.nowo-chat-panel__body, .nowo-chat-window, .nowo-chat-linkdialog) {
+  --nowo-chat-motion-open: var(--nowo-ui-motion-medium, 80ms);
+  --nowo-chat-motion-close: var(--nowo-ui-motion-medium-close, 80ms);
+  --nowo-chat-motion-scale: 1;
 }
 
 .nowo-chat-panel__list {
@@ -1204,8 +1261,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .nowo-chat-panel.is-entering .nowo-chat-panel__body,
-  .nowo-chat-window.is-entering,
   .nowo-chat-picker,
   .nowo-chat-jump {
     animation: none;
@@ -1413,6 +1468,12 @@
   .nowo-chat-typing::before {
     animation: none;
   }
+}
+[data-motion='reduce'] :is(.nowo-chat-picker, .nowo-chat-jump, .nowo-chat-buzz-line.is-new, .nowo-chat-emoji) {
+  animation: none;
+}
+[data-motion='reduce'] .nowo-chat-typing::before {
+  animation: none;
 }
 @keyframes nowo-chat-buzz-line {
   from {

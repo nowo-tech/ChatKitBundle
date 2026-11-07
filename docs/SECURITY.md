@@ -130,6 +130,10 @@ dependencies current. Security fixes are released as patch versions of the suppo
 | Findings | CHAT-SEC-01 (Medium) revoked-access previews → **fixed** (`ChatAccess::canView()` on lists and digest); CHAT-SEC-02 (Medium) outdated security doc → **fixed** (this document); CHAT-SEC-03 (Low) push body text → **fixed** (`push_preview`, default off); CHAT-SEC-04 (Low) off-site support context → **fixed** (root-relative paths only, label sanitised); CHAT-SEC-05 (Low) 30 s recipient cache → **mitigated** (`ChatRecipients::forget()`, documented); CHAT-SEC-10 (Info) storage after session timeout → **fixed** (cleared on 401); CHAT-SEC-06 / 07 / 08 / 09 (Info) → documented above as host responsibilities / accepted |
 | Recorded in | `BUNDLES_SECURITY_ANALYSIS.md` (monorepo security report) |
 
+### Motion batch (Appendix HW, 2026-11-07)
+
+Batch audit Appendix HW (2026-11-07), at `e212d9d`: Pass (good). No token or draft lost. HW-L5 and HW-L6 fixed at `0a68345`; delta audit: **Pass (good)**.
+
 ### 1.21 host options (Appendix GZ, 2026-11-06)
 
 Audited at `30389b4` as Pass (good) / Low; delta at `1f8ce2d` Pass (conditional) / Medium; fixes re-verified at `46c026b`:

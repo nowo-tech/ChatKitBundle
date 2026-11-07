@@ -132,11 +132,15 @@ export function builtinIcon(name: string, size = 18): SVGSVGElement {
 }
 
 /**
- * Whether the user asked the system for reduced motion.
+ * Whether the user asked for reduced motion: `html[data-motion]` (`reduce`, `full`), else the system setting.
  *
- * @returns True when `prefers-reduced-motion: reduce` matches (false without matchMedia).
+ * @returns True for `data-motion="reduce"`, false for `data-motion="full"`, otherwise whether `prefers-reduced-motion: reduce` matches (false without matchMedia).
  */
 export function prefersReducedMotion(): boolean {
+  const setting = document.documentElement.getAttribute('data-motion');
+  if (setting === 'reduce' || setting === 'full') {
+    return setting === 'reduce';
+  }
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
