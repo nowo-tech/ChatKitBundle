@@ -69,4 +69,22 @@ describe('motion', () => {
     expect(close).toHaveBeenCalledOnce();
     expect(isClosing(element)).toBe(false);
   });
+
+  it('finishes every running fade on turbo:before-cache, once each, so that a Turbo snapshot holds none', () => {
+    const first = document.createElement('div');
+    const second = document.createElement('div');
+    const closeFirst = vi.fn();
+    const closeSecond = vi.fn();
+    withTransition('100ms');
+    closeWithEffect(first, closeFirst);
+    closeWithEffect(second, closeSecond);
+    document.dispatchEvent(new Event('turbo:before-cache'));
+    expect(closeFirst).toHaveBeenCalledOnce();
+    expect(closeSecond).toHaveBeenCalledOnce();
+    expect(first.hasAttribute(CLOSING_ATTR)).toBe(false);
+    expect(second.hasAttribute(CLOSING_ATTR)).toBe(false);
+    expect(isClosing(first)).toBe(false);
+    document.dispatchEvent(new Event('turbo:before-cache'));
+    expect(closeFirst).toHaveBeenCalledOnce();
+  });
 });

@@ -23,7 +23,16 @@ export function effectMs(element: Element): number {
   return durations.reduce((longest, duration, index) => Math.max(longest, toMs(duration) + toMs(delays[index % delays.length] as string)), 0);
 }
 
-const running = new WeakMap<Element, () => void>();
+const running = new Map<Element, () => void>();
+
+let cacheBound = false;
+
+/** Turbo clones the page right after this event: a cached page must not hold a half-closed surface. */
+function finishAll(): void {
+  [...running.values()].forEach((finish) => {
+    finish();
+  });
+}
 
 /** Whether an element is fading out. */
 export function isClosing(element: Element): boolean {
@@ -55,6 +64,10 @@ export function closeWithEffect(element: Element, close: () => void): void {
     return;
   }
   running.set(element, finish);
+  if (!cacheBound) {
+    cacheBound = true;
+    document.addEventListener('turbo:before-cache', finishAll);
+  }
   element.addEventListener('transitionend', onEnd);
 }
 

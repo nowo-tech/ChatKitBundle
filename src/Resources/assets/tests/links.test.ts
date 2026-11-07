@@ -459,11 +459,21 @@ describe('conversation links', () => {
     expect(dialog()).toBe(opened);
     expect(opened.hasAttribute('data-nowo-chat-closing')).toBe(true);
     expect(input.value).toBe('');
+    // Typed during the fade: kept, after the token. A second Enter inserts nothing more; a line break is not text.
+    const field = inDialog<HTMLInputElement>('link-url');
+    const typing = (inputType: string, data: string | null): InputEvent => new InputEvent('beforeinput', { inputType, data, bubbles: true, cancelable: true });
+    const key = typing('insertText', 'z');
+    field.dispatchEvent(key);
+    expect(key.defaultPrevented).toBe(true);
+    field.dispatchEvent(typing('insertLineBreak', null));
+    field.dispatchEvent(typing('insertText', 'y'));
+    submitDialog();
     opened.dispatchEvent(new Event('transitionend'));
     await flush();
     style.mockRestore();
     expect(dialog()).toBeNull();
-    expect(input.value).toContain('!link[');
+    expect(input.value.match(/!link\[/g)).toHaveLength(1);
+    expect(input.value.endsWith(')zy')).toBe(true);
     expect(document.activeElement).toBe(input);
   });
 

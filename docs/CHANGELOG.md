@@ -56,6 +56,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Motion:** the list panel, conversation windows and the link dialog with its backdrop open and close on UiKit's `--nowo-ui-motion-medium*`, `--nowo-ui-motion-scale` and easing tokens (own fallbacks: 200 ms in, 150 ms out, scale 0.98), in place of the 220 ms rise with an instant close. A close waits for its fade, with a timer if `transitionend` never fires. A closing window is `inert` at once. A window in page mode, or swapped for another on a phone, still goes at once, so that two never stack.
 - **Reduced motion:** `html[data-motion]` now counts for the buzz shake, its pulse and smooth scrolling (`reduce` and `full` win over the system setting) and for the picker, jump button, buzz line, emoji and typing CSS animations under `reduce`. The panel, windows and dialog keep an 80 ms fade with no movement, where they had no animation under `prefers-reduced-motion`. No `!important`.
+- **Turbo:** running fades finish on `turbo:before-cache`, so that a cached page never holds a half-closed surface. Panel, windows and link dialog: audit finding HW-L5.
+- **Link dialog:** what is typed during the fade after Enter in message mode now lands in the composer after the token, instead of being lost (HW-L6). A second Enter during the fade does nothing.
 
 ## [1.21.0] - 2026-11-06
 

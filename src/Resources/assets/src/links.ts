@@ -6,7 +6,7 @@
  */
 import { ChatApiError, type ChatApi } from './api';
 import { h } from './dom';
-import { closeWithEffect } from './motion';
+import { closeWithEffect, isClosing } from './motion';
 import { insertAtCaret } from './emoji';
 import { listTimeLabel, t } from './format';
 import type { Templates } from './templates';
@@ -223,6 +223,8 @@ export interface LinkDialogOptions {
   link?: { url: string; title: string | null };
   /** Saves (or inserts) the link; a thrown API error is shown in the dialog. */
   submit(url: string, title: string): Promise<void> | void;
+  /** Receives what the user typed during the close of a `message` dialog, once the token is in. */
+  typedDuringClose?(text: string): void;
   /** Unpins the link (edit mode). */
   remove?(): Promise<void>;
   /** Where focus goes once the dialog closes (default: the opener, when it is still in the page). */
@@ -425,11 +427,24 @@ export class LinkDialog {
       return;
     }
     if (this.options.mode === 'message') {
-      // Focus goes to the composer, where the token lands.
+      // Focus goes to the composer, where the token lands. It cannot before the fade ends: what is typed meanwhile follows the token.
+      if (isClosing(this.element)) {
+        return;
+      }
+      const typed: string[] = [];
+      this.element.addEventListener('beforeinput', (event) => {
+        event.preventDefault();
+        if (event.inputType === 'insertText' && event.data !== null) {
+          typed.push(event.data);
+        }
+      });
       await new Promise<void>((resolve) => {
         this.close(false, resolve);
       });
       await this.options.submit(checked.url, title);
+      if (typed.length > 0) {
+        this.options.typedDuringClose?.(typed.join(''));
+      }
       return;
     }
     await this.run(() => this.options.submit(checked.url, title));
@@ -704,7 +719,7 @@ export class ConversationLinks {
     button.addEventListener('click', () => {
       new LinkDialog(
         this.dialogContext(),
-        { mode: 'message', submit: (url, title) => insertLinkToken(this.host.input, linkToken(title, url, this.settings.titleMaxLength)) },
+        { mode: 'message', typedDuringClose: (text) => insertAtCaret(this.host.input, text), submit: (url, title) => insertLinkToken(this.host.input, linkToken(title, url, this.settings.titleMaxLength)) },
         button,
       ).open(this.host.element);
     });
