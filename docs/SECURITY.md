@@ -132,7 +132,7 @@ dependencies current. Security fixes are released as patch versions of the suppo
 
 ### Motion batch (Appendix HW, 2026-11-07)
 
-Independent audit 2026-11-07 (Appendix HW, PR #40 at `e212d9d`): **Pass (good).** No token or draft lost. Can tag. HW-L5 and HW-L6 fixed afterwards at `<final SHA>`, a commit outside that audit.
+Batch audit Appendix HW (2026-11-07), at `e212d9d`: Pass (good). No token or draft lost. HW-L5 and HW-L6 fixed at `0a68345`; delta audit: **Pass (good)**.
 
 ### 1.21 host options (Appendix GZ, 2026-11-06)
 
