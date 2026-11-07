@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.22.0](#to-1220)
 - [To 1.21.0](#to-1210)
 - [To 1.20.0](#to-1200)
 - [To 1.19.0](#to-1190)
@@ -49,6 +50,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.22.0
+
+From **1.21.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 The close now waits for its fade: the `hidden` state, `dialog.close()` or removal comes up to 150 ms later than before, and a test should wait for the closed state or set the durations to `0ms`. With no transition (`0ms`, or a page without the bundle's CSS) it all happens at once, as before. Durations come from UiKit's `--nowo-ui-motion-*` tokens with fallbacks here, so no UiKit release is needed.
 

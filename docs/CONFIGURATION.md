@@ -154,7 +154,7 @@ The bundle maps its tables as `nowo_chat_<name>`. Two options change that, appli
 
 The tables are `conversation`, `message`, `message_mention`, `participant`, `quick_reply`, `reaction` and
 `user_settings`. Doctrine derives the `IDX_*` / `FK_*` names of the foreign keys from the table name, so they change
-with it. Changing either option on an existing database needs a migration; [UPGRADING](UPGRADING.md#unreleased) has the
+with it. Changing either option on an existing database needs a migration; [UPGRADING](UPGRADING.md#to-1220) has the
 rename statements.
 
 ```yaml
