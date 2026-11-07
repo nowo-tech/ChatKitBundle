@@ -228,6 +228,18 @@ describe('ChatDock', () => {
     expect((again as unknown as { root: HTMLElement }).root.querySelector('.nowo-chat-window.is-entering')).toBeNull();
     expect((again as unknown as { root: HTMLElement }).root.querySelectorAll('.nowo-chat-window')).toHaveLength(1);
 
+    // With a transition the window fades first, inert, and the list panel's body does too.
+    const closing = again as unknown as { root: HTMLElement; panelBody: HTMLElement };
+    const style = vi.spyOn(window, 'getComputedStyle').mockReturnValue({ transitionDuration: '150ms', transitionDelay: '0s' } as CSSStyleDeclaration);
+    const fading = closing.root.querySelector<HTMLElement>('.nowo-chat-window') as HTMLElement;
+    again.close('a');
+    expect(fading.isConnected).toBe(true);
+    expect(fading.hasAttribute('inert')).toBe(true);
+    expect(fading.hasAttribute('data-nowo-chat-closing')).toBe(true);
+    fading.dispatchEvent(new Event('transitionend'));
+    expect(fading.isConnected).toBe(false);
+    style.mockRestore();
+
     dock.close('a');
     expect(root.querySelectorAll('.nowo-chat-window')).toHaveLength(0);
   });

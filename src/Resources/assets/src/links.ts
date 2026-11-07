@@ -6,6 +6,7 @@
  */
 import { ChatApiError, type ChatApi } from './api';
 import { h } from './dom';
+import { closeWithEffect } from './motion';
 import { insertAtCaret } from './emoji';
 import { listTimeLabel, t } from './format';
 import type { Templates } from './templates';
@@ -353,13 +354,17 @@ export class LinkDialog {
    * Closes the dialog and gives focus back.
    *
    * @param focusBack Return focus to the opener (false when the caller moves it, e.g. to the composer).
+   * @param after Runs when the dialog really closed, after its fade: the page behind a modal dialog cannot take focus before that.
    */
-  close(focusBack = true): void {
+  close(focusBack = true, after?: () => void): void {
     this.focusBack = focusBack;
-    if (typeof this.element.close === 'function' && this.element.open) {
-      this.element.close();
-    }
-    this.finish();
+    closeWithEffect(this.element, () => {
+      if (typeof this.element.close === 'function' && this.element.open) {
+        this.element.close();
+      }
+      this.finish();
+      after?.();
+    });
   }
 
   /** Removes the closed dialog and returns focus (once). */
@@ -421,7 +426,9 @@ export class LinkDialog {
     }
     if (this.options.mode === 'message') {
       // Focus goes to the composer, where the token lands.
-      this.close(false);
+      await new Promise<void>((resolve) => {
+        this.close(false, resolve);
+      });
       await this.options.submit(checked.url, title);
       return;
     }

@@ -42,4 +42,18 @@ describe('chat dom helpers', () => {
     vi.stubGlobal('matchMedia', undefined);
     expect(prefersReducedMotion()).toBe(false);
   });
+
+  it('follows html[data-motion] over the system setting', () => {
+    const html = document.documentElement;
+    vi.stubGlobal('matchMedia', () => ({ matches: true }));
+    html.setAttribute('data-motion', 'full');
+    expect(prefersReducedMotion()).toBe(false);
+    html.setAttribute('data-motion', 'system');
+    expect(prefersReducedMotion()).toBe(true);
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    html.setAttribute('data-motion', 'reduce');
+    expect(prefersReducedMotion()).toBe(true);
+    html.removeAttribute('data-motion');
+    vi.unstubAllGlobals();
+  });
 });

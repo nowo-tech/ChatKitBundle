@@ -446,6 +446,27 @@ describe('conversation links', () => {
     expect(q('.nowo-chat-msg--pending [data-part="bubble"]').textContent).toBe('Join here\nStandup daily');
   });
 
+  it('fades the dialog before closing it, and moves focus to the composer only after that', async () => {
+    const { q } = setup();
+    await flush();
+    const input = q<HTMLTextAreaElement>('[data-part="input"]');
+    q('[data-testid="nowo-chat-attach-link"]').click();
+    const opened = dialog() as HTMLDialogElement;
+    type(inDialog<HTMLInputElement>('link-url'), 'teams.microsoft.com/l/x');
+    const style = vi.spyOn(window, 'getComputedStyle').mockReturnValue({ transitionDuration: '150ms', transitionDelay: '0s' } as CSSStyleDeclaration);
+    submitDialog();
+    await flush();
+    expect(dialog()).toBe(opened);
+    expect(opened.hasAttribute('data-nowo-chat-closing')).toBe(true);
+    expect(input.value).toBe('');
+    opened.dispatchEvent(new Event('transitionend'));
+    await flush();
+    style.mockRestore();
+    expect(dialog()).toBeNull();
+    expect(input.value).toContain('!link[');
+    expect(document.activeElement).toBe(input);
+  });
+
   it('places the attach button after the formatting toggle without quick replies', async () => {
     const { q } = setup();
     await flush();
