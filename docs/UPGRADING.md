@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.22.1](#to-1221)
 - [To 1.22.0](#to-1220)
 - [To 1.21.0](#to-1210)
 - [To 1.20.0](#to-1200)
@@ -50,6 +51,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.22.1
+
+From **1.22.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 No configuration or schema change. A host that overrides the bundle's strings may translate the new key `chat.session_stale` (domain `NowoChatKitBundle`): the notice the dock keeps after the server refused its CSRF token (403 `invalid_csrf`), asking for a reload. After that refusal the dock sends no heartbeat and no write until the page is reloaded.
 
