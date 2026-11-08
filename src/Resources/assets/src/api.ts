@@ -34,17 +34,31 @@ export function channelDeniedReason(error: unknown): string | null {
   return error instanceof ChatApiError && error.code === 'channel_denied' && error.reason !== '' ? error.reason : null;
 }
 
+/** What the client tells the dock that owns it (since 1.22.1). */
+export interface ChatApiHooks {
+  /**
+   * The server refused the page's CSRF token (403 `invalid_csrf`): the session lost it (a new sign-in clears every
+   * token, for example) and the token is fixed at page load, so no later write can succeed. Called once.
+   */
+  onCsrfRejected?: () => void;
+}
+
 /** Thin client of the bundle JSON endpoints: same-origin credentials, CSRF header on writes, typed answers. */
 export class ChatApi {
   private readonly config: ChatConfig;
+  private readonly hooks: ChatApiHooks;
+  /** Since 1.22.1: the token was refused once; later writes fail at once instead of sending a request bound to fail. */
+  private csrfRejected = false;
 
   /**
    * Creates the client for one dock configuration.
    *
    * @param config Dock configuration (endpoint URLs and the CSRF token).
+   * @param hooks What to tell the dock (a refused CSRF token).
    */
-  constructor(config: ChatConfig) {
+  constructor(config: ChatConfig, hooks: ChatApiHooks = {}) {
     this.config = config;
+    this.hooks = hooks;
   }
 
   /**
@@ -586,6 +600,9 @@ export class ChatApi {
    * @returns The decoded payload.
    */
   private async request<T>(method: 'POST' | 'PATCH' | 'DELETE', url: string, body: unknown): Promise<T> {
+    if (this.csrfRejected) {
+      throw new ChatApiError(403, 'invalid_csrf');
+    }
     const response = await fetch(url, {
       method,
       credentials: 'same-origin',
@@ -596,7 +613,8 @@ export class ChatApi {
   }
 
   /**
-   * Decodes a JSON answer. A 401 clears the chat storage of this device; any non-2xx status throws.
+   * Decodes a JSON answer. A 401 clears the chat storage of this device; a refused CSRF token (403 `invalid_csrf`)
+   * is reported once to the hooks; any non-2xx status throws.
    *
    * @param response Fetch response.
    * @returns The payload (null when the body is not JSON).
@@ -622,6 +640,10 @@ export class ChatApi {
       const code =
         typeof payload === 'object' && payload !== null && 'error' in payload ? String(payload.error) : 'error';
       const reason = typeof payload === 'object' && payload !== null && 'message' in payload && typeof payload.message === 'string' ? payload.message : '';
+      if (response.status === 403 && code === 'invalid_csrf' && !this.csrfRejected) {
+        this.csrfRejected = true;
+        this.hooks.onCsrfRejected?.();
+      }
       throw new ChatApiError(response.status, code, reason);
     }
     return payload as T;

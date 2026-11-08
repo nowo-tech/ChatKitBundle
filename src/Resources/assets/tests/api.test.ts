@@ -41,6 +41,42 @@ function respond(body: unknown, ok = true, status = 200) {
 describe('chat api client', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('reports a refused CSRF token once and sends no later write (1.22.1)', async () => {
+    const fetchMock = respond({ error: 'invalid_csrf' }, false, 403);
+    vi.stubGlobal('fetch', fetchMock);
+    const onCsrfRejected = vi.fn();
+    const api = new ChatApi(config, { onCsrfRejected });
+
+    await expect(api.presence(true)).rejects.toMatchObject({ status: 403, code: 'invalid_csrf' });
+    expect(onCsrfRejected).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Every later write fails at once: no heartbeat, send or read cursor bound to fail reaches the server.
+    await expect(api.presence(true)).rejects.toMatchObject({ status: 403, code: 'invalid_csrf' });
+    await expect(api.send('c', 'hello')).rejects.toBeInstanceOf(ChatApiError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(onCsrfRejected).toHaveBeenCalledTimes(1);
+
+    // Reading goes on.
+    fetchMock.mockResolvedValue({ ok: true, status: 200, json: () => Promise.resolve({ conversations: [], unreadTotal: 0 }) });
+    expect(await api.conversations()).toEqual({ conversations: [], unreadTotal: 0 });
+  });
+
+  it('treats any other 403 as an ordinary error (1.22.1)', async () => {
+    const fetchMock = respond({ error: 'forbidden' }, false, 403);
+    vi.stubGlobal('fetch', fetchMock);
+    const onCsrfRejected = vi.fn();
+    const api = new ChatApi(config, { onCsrfRejected });
+
+    await expect(api.presence(true)).rejects.toMatchObject({ status: 403, code: 'forbidden' });
+    await expect(api.presence(true)).rejects.toMatchObject({ status: 403, code: 'forbidden' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onCsrfRejected).not.toHaveBeenCalled();
+    // Without hooks a refused token still throws.
+    vi.stubGlobal('fetch', respond({ error: 'invalid_csrf' }, false, 403));
+    await expect(new ChatApi(config).typing('c')).rejects.toMatchObject({ code: 'invalid_csrf' });
+  });
+
   it('calls the pinned links and links panel endpoints (1.19)', async () => {
     const fetchMock = respond({ links: [], canManage: true, max: 10 });
     vi.stubGlobal('fetch', fetchMock);

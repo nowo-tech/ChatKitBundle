@@ -53,6 +53,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **A refused CSRF token no longer leaves the tab polling forever.** The dock's token is fixed at page load. When the session loses it (Symfony clears every session CSRF token on each sign-in, remember-me included; a host whose sessions are written without a lock can also lose a token another request just stored), every write answers 403 `invalid_csrf`. The heartbeat swallowed that error and sent another `POST /presence` every 30 s for as long as the tab stayed open, and sends failed with a generic error. Now the first 403 `invalid_csrf` stops the heartbeat, no later write is sent from that page (each fails at once), and a notice that stays asks the person to reload the page (new string `chat.session_stale` in the 7 locales). Reading (the list, the threads) goes on. There is no token endpoint, so the token is not refreshed. Any other 403 is handled as before.
+
 ## [1.22.0] - 2026-11-07
 
 ### Changed

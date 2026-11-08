@@ -95,6 +95,8 @@ export class ChatDock implements ThreadHost {
   private live = false;
   private wasLive = false;
   private statusTimer: number | undefined;
+  /** Since 1.22.1: the server refused this page's CSRF token; the heartbeat stopped and the reload notice stays. */
+  private sessionStale = false;
   /** Link previews already asked for (null: nothing to show), shared by every window. */
   private readonly previews = new Map<string, Promise<LinkPreview | null>>();
   private previewBatch: { urls: string[]; resolve: (map: Record<string, LinkPreview>) => void } | null = null;
@@ -140,7 +142,7 @@ export class ChatDock implements ThreadHost {
     this.root = root;
     this.config = config;
     this.templates = new Templates(root);
-    this.api = new ChatApi(config);
+    this.api = new ChatApi(config, { onCsrfRejected: () => this.csrfRejected() });
     this.store = new DockStore(config.userUuid);
     this.cache = new ThreadCache(config.userUuid, config.locale);
     this.drafts = new DraftStore(config.userUuid);
@@ -1044,7 +1046,10 @@ export class ChatDock implements ThreadHost {
    *
    * @param key Status message key; null hides the status. Every key except "reconnecting" hides itself after a few seconds.
    */
-  private showStatus(key: 'reconnecting' | 'reconnected' | 'error' | null): void {
+  private showStatus(key: 'reconnecting' | 'reconnected' | 'error' | 'session_stale' | null): void {
+    if (this.sessionStale && key !== 'session_stale') {
+      return;
+    }
     window.clearTimeout(this.statusTimer);
     if (key === null) {
       this.status.hidden = true;
@@ -1053,7 +1058,7 @@ export class ChatDock implements ThreadHost {
     this.status.hidden = false;
     this.status.textContent = t(this.config.i18n, key);
     this.status.classList.toggle('is-ok', key === 'reconnected');
-    if (key !== 'reconnecting') {
+    if (key !== 'reconnecting' && key !== 'session_stale') {
       this.statusTimer = window.setTimeout(() => (this.status.hidden = true), key === 'error' ? 4_000 : 2_500);
     }
   }
@@ -1300,13 +1305,26 @@ export class ChatDock implements ThreadHost {
   }
 
   /**
+   * Since 1.22.1: the server refused the page's CSRF token (the session lost it: a new sign-in clears every token). The
+   * token is fixed at page load and the bundle has no endpoint to fetch a new one, so nothing written from this page
+   * can succeed again: stop the heartbeat (no request every 30 s bound to fail) and keep a notice asking for a reload.
+   * The API client sends no later write. Reading (the list, the threads) goes on.
+   */
+  private csrfRejected(): void {
+    this.sessionStale = true;
+    window.clearInterval(this.presenceTimer ?? undefined);
+    this.presenceTimer = null;
+    this.showStatus('session_stale');
+  }
+
+  /**
    * Heartbeat every 30 s (visible or not, idle or not); the answer lights the status dots of direct contacts and
    * refreshes the user's own status (an expired one is back to available).
    */
   private startPresence(): void {
     /** One heartbeat (followers skip it while hidden): updates the dots and statuses that changed. */
     const beat = (): void => {
-      if (document.visibilityState !== 'visible' && !this.leader) {
+      if (this.sessionStale || (document.visibilityState !== 'visible' && !this.leader)) {
         return;
       }
       void this.api

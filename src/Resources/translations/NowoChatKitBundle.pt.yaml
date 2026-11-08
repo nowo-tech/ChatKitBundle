@@ -74,6 +74,7 @@ chat:
   emoji_symbols: 'Símbolos'
   resolve: 'Marcar como resolvido'
   reconnected: 'Ligação restabelecida'
+  session_stale: 'A sua sessão mudou. Recarregue a página para continuar a conversar.'
   settings_title: 'Chat'
   settings_intro: 'Sons, notificações e presença das mensagens.'
   settings_sound: 'Som de nova mensagem'

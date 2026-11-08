@@ -51,6 +51,8 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+No configuration or schema change. A host that overrides the bundle's strings may translate the new key `chat.session_stale` (domain `NowoChatKitBundle`): the notice the dock keeps after the server refused its CSRF token (403 `invalid_csrf`), asking for a reload. After that refusal the dock sends no heartbeat and no write until the page is reloaded.
+
 ## To 1.22.0
 
 From **1.21.0**:
