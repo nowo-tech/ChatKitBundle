@@ -74,6 +74,7 @@ chat:
   emoji_symbols: 'Symbolen'
   resolve: 'Markeren als opgelost'
   reconnected: 'Weer verbonden'
+  session_stale: 'Je sessie is gewijzigd. Laad de pagina opnieuw om verder te chatten.'
   settings_title: 'Chat'
   settings_intro: 'Geluiden, meldingen en aanwezigheid voor berichten.'
   settings_sound: 'Geluid bij nieuw bericht'

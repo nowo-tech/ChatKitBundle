@@ -27,6 +27,7 @@ const api = {
   message: vi.fn(),
 };
 let realtimeHandlers: { onEvent: (event: RealtimeEvent) => void; onState: (connected: boolean) => void } | null = null;
+let apiHooks: { onCsrfRejected?: () => void } = {};
 const playOnce = vi.fn();
 
 vi.mock('../src/api', async (importOriginal) => {
@@ -34,7 +35,8 @@ vi.mock('../src/api', async (importOriginal) => {
   return {
     ...original,
     ChatApi: class {
-      constructor() {
+      constructor(_config: unknown, hooks: { onCsrfRejected?: () => void } = {}) {
+        apiHooks = hooks;
         return api;
       }
     },
@@ -649,6 +651,34 @@ describe('ChatDock', () => {
     expect(api.linkPreviews).toHaveBeenCalledTimes(2);
     api.linkPreviews.mockRejectedValueOnce(new Error('down'));
     expect(await dock.linkPreview('/other')).toBeNull();
+  });
+
+  it('stops the heartbeat and asks for a reload when the server refuses the CSRF token (1.22.1)', async () => {
+    const { dock, q } = mount([summary('a')]);
+    await dock.start();
+    await flush();
+    expect(api.presence).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(30_000);
+    await flush();
+    expect(api.presence).toHaveBeenCalledTimes(2);
+
+    apiHooks.onCsrfRejected?.();
+    const status = q<HTMLElement>('.nowo-chat-status');
+    expect(status.hidden).toBe(false);
+    expect(status.textContent).toBe('session_stale');
+
+    // No beat any more: neither the timer nor a tab coming back sends one.
+    vi.advanceTimersByTime(120_000);
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flush();
+    expect(api.presence).toHaveBeenCalledTimes(2);
+
+    // The notice stays: no timer hides it and no other status replaces it.
+    realtimeHandlers?.onState(false);
+    realtimeHandlers?.onState(true);
+    vi.advanceTimersByTime(10_000);
+    expect(status.hidden).toBe(false);
+    expect(status.textContent).toBe('session_stale');
   });
 
   it('marks online peers from the presence heartbeat', async () => {
