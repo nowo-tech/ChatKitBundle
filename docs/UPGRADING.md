@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.23.0](#to-1230)
 - [To 1.22.1](#to-1221)
 - [To 1.22.0](#to-1220)
 - [To 1.21.0](#to-1210)
@@ -51,6 +52,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.23.0
+
+From **1.22.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 From **1.22.x**: `composer update nowo-tech/chat-kit-bundle`. No schema, route, configuration or template change.
 Phone layout changes (below 768px, and row layout on touch screens); desktop is unchanged:
