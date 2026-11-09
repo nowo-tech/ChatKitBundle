@@ -53,6 +53,17 @@ const WINDOW_WIDTH = 336;
 const MINIMISED_WIDTH = 232;
 const LIST_WIDTH = 312;
 const GAP = 8;
+/**
+ * 1.23 (MUX-02): while the floating dock is shown, `<body>` carries this class and `<html>` the reserve token: the
+ * height the folded dock covers at the bottom of the viewport (plus a small gap), so hosts can pad their scroller.
+ */
+export const DOCK_SHOWN_CLASS = 'nowo-chat-dock-shown';
+export const DOCK_RESERVE_VAR = '--nowo-chat-dock-reserve';
+/** Space between the folded dock and the reserved content. */
+const RESERVE_GAP = 8;
+/** Reserve before the folded dock could be measured (phone: 48px launcher + 12px offset; desktop: 52px tab + 1px). */
+const RESERVE_FALLBACK_MOBILE = 60;
+const RESERVE_FALLBACK_DESKTOP = 53;
 
 /**
  * The floating dock of one page: launcher, conversation list, people picker and the conversation windows.
@@ -97,6 +108,8 @@ export class ChatDock implements ThreadHost {
   private statusTimer: number | undefined;
   /** Since 1.22.1: the server refused this page's CSRF token; the heartbeat stopped and the reload notice stays. */
   private sessionStale = false;
+  /** 1.23: last measured height of the folded dock (px, gap included); 0 until measured. */
+  private reserve = 0;
   /** Link previews already asked for (null: nothing to show), shared by every window. */
   private readonly previews = new Map<string, Promise<LinkPreview | null>>();
   private previewBatch: { urls: string[]; resolve: (map: Record<string, LinkPreview>) => void } | null = null;
@@ -370,6 +383,8 @@ export class ChatDock implements ThreadHost {
         const catchUp = reconnected && this.wasLive;
         this.live = connected;
         this.root.classList.toggle('is-live', connected);
+        // 1.23 (MUX-08): the folded phone launcher shows the dropped connection itself (the banner moves to the top).
+        this.root.classList.toggle('is-reconnecting', !connected && this.wasLive);
         this.showStatus(dropped ? 'reconnecting' : catchUp ? 'reconnected' : null);
         this.wasLive ||= connected;
         if (reconnected || dropped) {
@@ -406,6 +421,8 @@ export class ChatDock implements ThreadHost {
           }
         });
       this.root.style.setProperty('--nowo-chat-toolbar-offset', `${Math.max(0, offset)}px`);
+      // The dock moved with the bars: what it covers moved too.
+      this.syncReserve();
     };
     let frame = 0;
     const schedule = (): void => {
@@ -547,6 +564,8 @@ export class ChatDock implements ThreadHost {
     window.clearTimeout(this.toastTimer);
     this.dock.remove();
     this.edge.remove();
+    document.body.classList.remove(DOCK_SHOWN_CLASS);
+    document.documentElement.style.removeProperty(DOCK_RESERVE_VAR);
     if (this.page !== null) {
       // The server-rendered page comes back (a host that unmounts without leaving the page).
       this.page.app.remove();
@@ -1477,7 +1496,7 @@ export class ChatDock implements ThreadHost {
         finishClosing(this.panelBody);
       } else if (wasOpen) {
         // The body stays painted under the closing mark until its fade ends.
-        closeWithEffect(this.panelBody, () => undefined);
+        closeWithEffect(this.panelBody, () => this.syncReserve());
       }
       this.launcher.setAttribute('aria-expanded', state.listOpen ? 'true' : 'false');
       this.launcherChevron.replaceChildren(this.templates.icon(state.listOpen ? 'chevronDown' : 'chevronUp', 16));
@@ -1525,10 +1544,41 @@ export class ChatDock implements ThreadHost {
     }
     this.cache.prune([...wantedIds]);
     this.root.classList.toggle('has-mobile-thread', page === null && mobile && this.mobileActive !== null);
+    // 1.23 (MUX-91): the phone sheet (list or conversation) rises above the host's header and its own controls.
+    this.root.classList.toggle('is-sheet-open', page === null && mobile && (state.listOpen || this.mobileActive !== null));
     this.layout();
+    this.syncReserve();
     // New windows are attached now: show their latest messages.
     created.forEach((view) => view.scrollToLatest());
     this.renderBadge();
+  }
+
+  /**
+   * 1.23 (MUX-02): marks `<body>` with `nowo-chat-dock-shown` and sets `--nowo-chat-dock-reserve` on `<html>` while
+   * the floating dock is shown (not tucked, not in page mode), so the host can keep its last line clear of the dock.
+   * The reserve is the height the folded dock covers (launcher, list tab, any bottom bar it rests on) plus a small gap;
+   * while the list or a phone sheet is open it keeps the folded value, so the page does not jump.
+   */
+  private syncReserve(): void {
+    if (this.abort.signal.aborted) {
+      // A late close callback after destroy() must not mark the page again.
+      return;
+    }
+    const shown = this.page === null && !this.store.get().tucked;
+    document.body.classList.toggle(DOCK_SHOWN_CLASS, shown);
+    if (!shown) {
+      document.documentElement.style.removeProperty(DOCK_RESERVE_VAR);
+      return;
+    }
+    // A list still fading out (closing mark) would count its body: measure once it is gone.
+    if (!this.panel.classList.contains('is-open') && !this.panelBody.hasAttribute('data-nowo-chat-closing')) {
+      const rect = this.panel.getBoundingClientRect();
+      if (rect.height > 0) {
+        this.reserve = Math.max(0, Math.round(window.innerHeight - rect.top)) + RESERVE_GAP;
+      }
+    }
+    const reserve = this.reserve > 0 ? this.reserve : (this.isMobile() ? RESERVE_FALLBACK_MOBILE : RESERVE_FALLBACK_DESKTOP) + RESERVE_GAP;
+    document.documentElement.style.setProperty(DOCK_RESERVE_VAR, `${reserve}px`);
   }
 
   /** Order windows right-to-left next to the panel; whatever does not fit goes to the "+N" menu. */

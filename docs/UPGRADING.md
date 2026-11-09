@@ -52,6 +52,27 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+From **1.22.x**: `composer update nowo-tech/chat-kit-bundle`. No schema, route, configuration or template change.
+Phone layout changes (below 768px, and row layout on touch screens); desktop is unchanged:
+
+- **Folded phone launcher (MUX-02).** One round 48px button (`--nowo-chat-fab-size`, never under 44px); the user's own
+  status button no longer sits beside it (it is in the open sheet's header). It was ~96 × 59px. CSS that targeted the
+  folded `.nowo-chat-me` or relied on the 40px icon / 8px launcher padding should be checked.
+- **Reserve the dock's space (MUX-02).** While the floating dock is shown, `<body>` has the class
+  `nowo-chat-dock-shown` and `<html>` the token `--nowo-chat-dock-reserve` (measured height of the folded dock + 8px).
+  Nothing changes until you use it: add `padding-bottom: var(--nowo-chat-dock-reserve, 0px)` to the element that
+  scrolls, or put `data-nowo-chat-dock-reserve` on it. Remove any fixed bottom padding you added for the dock.
+- **Open phone sheet above the host (MUX-91).** While the list or a conversation is open on a phone the root has
+  `is-sheet-open` and `z-index: var(--nowo-chat-sheet-z-index, 1000)`, so a fixed host header no longer covers its title
+  and close button. Hosts with a fixed header above 1000 should lower it or raise the token.
+- **Reconnecting notice (MUX-08).** On phones, with the dock folded, the notice is a pill at the top of the screen
+  (`--nowo-chat-status-top`) instead of under the launcher; the root gets `is-reconnecting` while the live connection is
+  down and the launcher shows a warning ring. It keeps `role="status"`.
+- **List rows (MUX-25).** On phones and touch screens (`(max-width: 768px), (hover: none)`) each row `<li>` is a two-column
+  grid: the Close / Reopen button has its own column instead of covering the time and badge; tag and time are 12px.
+  Host CSS that positioned `.nowo-chat-row__archive` on phones should be removed.
+- A demo e2e or visual test that measured the folded phone launcher should expect 48px.
+
 ## To 1.22.1
 
 From **1.22.0**:

@@ -152,6 +152,9 @@ describe('ChatDock page mode', () => {
     expect(root.classList.contains('has-page-mode')).toBe(true);
     expect(root.querySelector<HTMLElement>('.nowo-chat-dock')?.hidden).toBe(true);
     expect(root.querySelector<HTMLElement>('.nowo-chat-edge')?.hidden).toBe(true);
+    // 1.23: no floating dock, nothing to reserve.
+    expect(document.body.classList.contains('nowo-chat-dock-shown')).toBe(false);
+    expect(document.documentElement.style.getPropertyValue('--nowo-chat-dock-reserve')).toBe('');
     // The list panel lives in the page: open, with a heading instead of the launcher.
     const panel = q('.nowo-chat-pagemode__list .nowo-chat-panel');
     expect(panel.classList.contains('is-open')).toBe(true);
