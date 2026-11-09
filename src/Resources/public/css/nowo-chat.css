@@ -4102,3 +4102,127 @@ a.nowo-chat-linkcard:focus-visible {
     border: 1px solid CanvasText;
   }
 }
+
+/*
+ * 1.23 — phones (host mobile UX audit 2026-11-09). Desktop (> 768px, with hover) is unchanged.
+ *
+ * MUX-02: the space the folded dock covers. While the floating dock is shown (not tucked, not the full-page chat) the
+ * script marks <body> with `nowo-chat-dock-shown` and sets `--nowo-chat-dock-reserve` on <html>: the measured height of
+ * the folded launcher / list tab above the viewport bottom, plus an 8px gap. Pad the element that scrolls with it
+ * (`padding-bottom: var(--nowo-chat-dock-reserve, 0px)`), or put `data-nowo-chat-dock-reserve` (or the class
+ * `nowo-chat-dock-reserve`) on it and this stylesheet does it.
+ */
+:where(:root) {
+  --nowo-chat-dock-reserve: 0px;
+}
+body.nowo-chat-dock-shown :is([data-nowo-chat-dock-reserve], .nowo-chat-dock-reserve),
+body.nowo-chat-dock-shown[data-nowo-chat-dock-reserve],
+body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
+  padding-bottom: var(--nowo-chat-dock-reserve, 0px);
+}
+
+/* MUX-02: the folded phone launcher is one round button (`--nowo-chat-fab-size`, 48px; never under 44px): the user's
+   own status button stays in the open sheet's header only. */
+.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-me {
+  display: none;
+}
+.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher {
+  gap: 0;
+  padding: 0;
+}
+.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__icon {
+  width: max(44px, var(--nowo-chat-fab-size, 48px));
+  height: max(44px, var(--nowo-chat-fab-size, 48px));
+}
+.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher:focus-visible {
+  outline-offset: 2px;
+}
+
+/* MUX-08: on a phone the "Reconnecting…" notice of the folded dock leaves the bottom corner (it sat over the page's
+   fields): a pill at the top of the screen (`--nowo-chat-status-top`, set it under a fixed header), and the launcher
+   shows a warning ring while the connection is down. Still the same role="status" element, still announced. */
+.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) > .nowo-chat-status {
+  position: fixed;
+  top: var(--nowo-chat-status-top, calc(env(safe-area-inset-top, 0px) + 8px));
+  left: 50%;
+  max-width: calc(100vw - 32px);
+  padding: 6px 14px;
+  border: 1px solid color-mix(in srgb, var(--nowo-chat-border) 85%, transparent);
+  border-radius: var(--nowo-chat-radius-pill);
+  box-shadow: var(--nowo-chat-shadow-soft);
+  transform: translateX(-50%);
+  pointer-events: none;
+  box-sizing: border-box;
+  animation: nowo-chat-status-drop 0.18s ease-out;
+}
+.nowo-chat.is-mobile.is-reconnecting .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__icon {
+  background: color-mix(in srgb, var(--nowo-chat-warn) 25%, var(--nowo-chat-surface));
+  box-shadow: inset 0 0 0 2px var(--nowo-chat-warn);
+  color: var(--nowo-chat-text);
+}
+@keyframes nowo-chat-status-drop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion='full']) .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) > .nowo-chat-status {
+    animation: none;
+  }
+}
+[data-motion='reduce'] .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) > .nowo-chat-status {
+  animation: none;
+}
+
+/* MUX-91: the phone sheet (list or conversation) goes above the host's own fixed header (`--nowo-chat-sheet-z-index`,
+   1000), so its header — the "Chat" title, new message and the close button — is never covered. */
+.nowo-chat.is-mobile.is-sheet-open {
+  z-index: var(--nowo-chat-sheet-z-index, 1000);
+}
+.nowo-chat.is-mobile .nowo-chat-panel.is-open .nowo-chat-launcher__label {
+  font-size: 1.0625rem;
+}
+
+/* MUX-25: on phones and touch screens the row's Close / Reopen button gets its own column instead of covering the
+   end of the row, so the tag, the time and the unread count stay visible; meta text never goes under 12px. */
+@media (max-width: 768px), (hover: none) {
+  .nowo-chat-list > li:has(> .nowo-chat-row__archive) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .nowo-chat-list > li > .nowo-chat-row {
+    box-sizing: border-box;
+    min-width: 0;
+    padding-inline-end: 4px;
+  }
+  .nowo-chat-list > li > .nowo-chat-row__archive {
+    position: static;
+    margin-inline-end: 4px;
+    background: none;
+    opacity: 1;
+    transform: none;
+  }
+  .nowo-chat-list > li:hover .nowo-chat-row__time,
+  .nowo-chat-list > li:focus-within .nowo-chat-row__time,
+  .nowo-chat-list > li:hover .nowo-chat-row .nowo-chat-badge,
+  .nowo-chat-list > li:focus-within .nowo-chat-row .nowo-chat-badge {
+    visibility: visible;
+  }
+  .nowo-chat-row__tag {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .nowo-chat-row__tag,
+  .nowo-chat-row__time {
+    font-size: 0.75rem;
+  }
+}

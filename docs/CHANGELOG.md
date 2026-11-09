@@ -54,6 +54,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Phone layout fixes from the host's mobile UX audit (2026-11-09); desktop is unchanged.
+
+### Added
+
+- **`--nowo-chat-dock-reserve` and `body.nowo-chat-dock-shown` (MUX-02).** While the floating dock is shown (not tucked, not the full-page chat) the script sets the measured height the folded dock covers (plus 8px) on `<html>` and marks `<body>`, so hosts can keep their last line, buttons and table cells out from under it. `data-nowo-chat-dock-reserve` (or the class `nowo-chat-dock-reserve`) on the scroller applies it as `padding-bottom`. Removed on tuck, in page mode and on `destroy()`.
+- Tokens `--nowo-chat-fab-size` (48px), `--nowo-chat-sheet-z-index` (1000) and `--nowo-chat-status-top`; root classes `is-sheet-open` and `is-reconnecting`.
+- Demo Playwright projects `phone-chromium` and `phone-webkit` (390 × 844) with `phone.spec.ts`, run by `make test-e2e`.
+
+### Fixed
+
+- **The folded phone launcher was 96 × 59px (MUX-02).** The status button sat beside the chat icon: on a phone the folded dock is now one round 48px launcher (never under 44px), named by its label; the status button lives in the open sheet's header.
+- **The phone sheet had no visible title or close (MUX-91).** The open list / conversation is `position: fixed` inside the root's layer (60), under a fixed host header: its header (the "Messaging" title, new message, close) was covered. The root now rises to `--nowo-chat-sheet-z-index` while a phone sheet is open; the close button gives the focus back to the launcher, as Esc does.
+- **The "Reconnecting…" banner sat under the dock, over the page's fields (MUX-08).** On phones, with the dock folded, it is a pill at the top of the screen (no motion under `prefers-reduced-motion`), and the launcher shows a warning ring while the connection is down.
+- **List rows clipped the tag, the time and the unread count on phones (MUX-25).** On phones and touch screens the row's Close / Reopen button has its own grid column instead of covering the end of the row (the row also sizes with `border-box`), and the tag and time are 12px instead of 11px.
+
 ## [1.22.1] - 2026-11-08
 
 The dock stops its heartbeat and asks for a reload when the server refuses its CSRF token (403 `invalid_csrf`), instead of polling forever.

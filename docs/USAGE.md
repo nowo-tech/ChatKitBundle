@@ -626,6 +626,39 @@ resize). The Symfony web debug toolbar is detected automatically at its real hei
 <footer class="site-footer" data-nowo-chat-avoid>…</footer>
 ```
 
+### Keeping content clear of the dock (1.23)
+
+The folded dock covers the bottom-right corner of every page. While the floating dock is shown (not tucked, not the
+full-page chat) the script marks `<body>` with `nowo-chat-dock-shown` and sets `--nowo-chat-dock-reserve` on `<html>`:
+the height the folded dock covers above the bottom of the viewport (the launcher or list tab, plus any bar it rests on),
+plus an 8px gap. It is measured on load, resize, scroll and whenever the dock or a bottom bar changes; while the list
+or a phone sheet is open it keeps the folded value, so the page does not jump. Pad the element that scrolls:
+
+```css
+.app-main { padding-bottom: var(--nowo-chat-dock-reserve, 0px); }
+```
+
+or mark it and let `nowo-chat.css` do it (it sets `padding-bottom` while the dock is shown):
+
+```twig
+<main class="app-main" data-nowo-chat-dock-reserve>…</main>
+```
+
+### Phones (1.23)
+
+Below 768px the root carries `is-mobile` and the dock is a round launcher (`--nowo-chat-fab-size`, default `48px`,
+never under 44px) at the bottom-right; the user's own status button appears in the open sheet's header only.
+
+| Token / class | Default | Use |
+| --- | --- | --- |
+| `--nowo-chat-fab-size` | `48px` | Size of the folded phone launcher |
+| `--nowo-chat-sheet-z-index` | `1000` | Layer of the open phone sheet (list or conversation, root class `is-sheet-open`): above a fixed host header and the page-edge tabs, below UiKit overlays (1040+) |
+| `--nowo-chat-status-top` | `env(safe-area-inset-top) + 8px` | Where the "Reconnecting…" / "Back online" notice of the folded dock shows on phones (a pill at the top; set it under your fixed header) |
+| `.nowo-chat.is-reconnecting` | — | The live connection dropped after it worked; the folded phone launcher shows a warning ring |
+
+On phones and touch screens (`(max-width: 768px), (hover: none)`) the row's Close / Reopen button has its own column, so
+the tag, the time and the unread count are never covered, and the tag and time are at least 12px.
+
 ### Tucking the dock away
 
 The list header has a **Hide to the side** button (`data-part="tuck"`): the list and every open window leave the screen

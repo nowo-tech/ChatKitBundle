@@ -901,6 +901,77 @@ describe('ChatDock', () => {
     expect(offset(), 'observers stop with the dock').toBe('0px');
   });
 
+  it('reserves the folded dock space for the host while it is shown (1.23, MUX-02)', async () => {
+    const reserve = () => document.documentElement.style.getPropertyValue('--nowo-chat-dock-reserve');
+    const shown = () => document.body.classList.contains('nowo-chat-dock-shown');
+    const { dock, root, q } = mount([summary('a')]);
+    await dock.start();
+    // Not measurable yet (jsdom has no layout): the desktop fallback, 53px tab + 8px gap.
+    expect(shown()).toBe(true);
+    expect(reserve()).toBe('61px');
+    // Measured from the folded panel: viewport bottom minus its top, plus the gap.
+    const panel = q('.nowo-chat-panel');
+    const height = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    const rect = vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue({ top: 740, bottom: 800, height: 60, left: 0, right: 0, width: 312, x: 0, y: 740, toJSON: () => ({}) } as DOMRect);
+    window.dispatchEvent(new Event('resize'));
+    expect(reserve()).toBe('68px');
+    // The open list keeps the folded value (no page jump).
+    rect.mockReturnValue({ top: 200, bottom: 800, height: 600, left: 0, right: 0, width: 312, x: 0, y: 200, toJSON: () => ({}) } as DOMRect);
+    q<HTMLButtonElement>('.nowo-chat-launcher').click();
+    window.dispatchEvent(new Event('resize'));
+    expect(reserve()).toBe('68px');
+    // Tucked: nothing covers the bottom any more.
+    dock.setTucked(true);
+    expect(shown()).toBe(false);
+    expect(reserve()).toBe('');
+    dock.setTucked(false);
+    expect(shown()).toBe(true);
+    // Unmounted: the marks go.
+    dock.destroy();
+    expect(shown()).toBe(false);
+    expect(reserve()).toBe('');
+    // A late closing-effect callback after destroy() leaves the page alone.
+    (dock as unknown as { syncReserve(): void }).syncReserve();
+    expect(shown()).toBe(false);
+    expect(root.isConnected).toBe(true);
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
+  });
+
+  it('phones: the open sheet rises above the host, the reserve falls back to the round launcher, a dropped connection marks the root (1.23)', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: () => undefined }));
+    const { dock, root, q, all } = mount([summary('a')]);
+    await dock.start();
+    expect(document.documentElement.style.getPropertyValue('--nowo-chat-dock-reserve')).toBe('68px');
+    expect(root.classList.contains('is-sheet-open')).toBe(false);
+    const launcher = q<HTMLButtonElement>('.nowo-chat-launcher');
+    launcher.click();
+    expect(root.classList.contains('is-sheet-open')).toBe(true);
+    // The sheet's own close button folds it and gives the focus back to the launcher.
+    q<HTMLButtonElement>('.nowo-chat-panel__close').click();
+    expect(root.classList.contains('is-sheet-open')).toBe(false);
+    expect(document.activeElement).toBe(launcher);
+    launcher.click();
+    all('.nowo-chat-list .nowo-chat-row')[0]?.click();
+    await flush();
+    q<HTMLButtonElement>('.nowo-chat-panel__close').click();
+    // A conversation alone keeps the sheet up.
+    expect(root.classList.contains('has-mobile-thread')).toBe(true);
+    expect(root.classList.contains('is-sheet-open')).toBe(true);
+    dock.minimise('a', true);
+    expect(root.classList.contains('is-sheet-open')).toBe(false);
+
+    const rt = realtimeHandlers as NonNullable<typeof realtimeHandlers>;
+    rt.onState(false);
+    expect(root.classList.contains('is-reconnecting'), 'never connected: no reconnecting mark').toBe(false);
+    rt.onState(true);
+    rt.onState(false);
+    expect(root.classList.contains('is-reconnecting')).toBe(true);
+    expect(q<HTMLElement>('.nowo-chat-status').hidden).toBe(false);
+    rt.onState(true);
+    expect(root.classList.contains('is-reconnecting')).toBe(false);
+  });
+
   it('switches to the full-screen sheet on phones', async () => {
     let listener: (() => void) | null = null;
     let matches = true;

@@ -186,7 +186,7 @@ test.describe('chat kit demo on a phone', () => {
     // Named by its translated label, which is hidden visually only; the icon is decorative.
     await expect(page.getByRole('button', { name: 'Messaging' })).toBeVisible();
     await expect(launcher.locator('.nowo-chat-launcher__icon')).toHaveAttribute('aria-hidden', 'true');
-    // Same look as before: a round button around the 40px icon (padding and border only), the label takes no room.
+    // A round button: the 48px icon (1.23, MUX-02; 40px plus padding before), the label takes no room.
     const size = await launcher.evaluate((element) => {
       const style = getComputedStyle(element);
       const icon = (element.querySelector('.nowo-chat-launcher__icon') as HTMLElement).getBoundingClientRect();
@@ -194,8 +194,8 @@ test.describe('chat kit demo on a phone', () => {
       const frame = (side: 'Left' | 'Right' | 'Top' | 'Bottom'): number => parseFloat(style.getPropertyValue(`padding-${side.toLowerCase()}`)) + parseFloat(style.getPropertyValue(`border-${side.toLowerCase()}-width`));
       return { width: box.width, height: box.height, icon: icon.width, iconHeight: icon.height, around: icon.width + frame('Left') + frame('Right'), aroundY: icon.height + frame('Top') + frame('Bottom') };
     });
-    expect(size.icon).toBe(40);
-    expect(size.iconHeight).toBe(40);
+    expect(size.icon).toBe(48);
+    expect(size.iconHeight).toBe(48);
     expect(size.width).toBe(size.around);
     expect(size.height).toBe(size.aroundY);
     expect(size.width).toBe(size.height);

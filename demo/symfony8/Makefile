@@ -144,7 +144,7 @@ test-e2e: ensure-up
 		-v "$(CURDIR)/e2e:/e2e" -w /e2e \
 		-e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
 		$(PLAYWRIGHT_IMAGE) \
-		bash -lc 'npm install --no-fund --no-audit && npx playwright test --project=chromium'
+		bash -lc 'npm install --no-fund --no-audit && npx playwright test --project=chromium --project=phone-chromium --project=phone-webkit'
 
 demo-screenshots: ensure-up
 	@mkdir -p ../../docs/images/demo e2e/node_modules
