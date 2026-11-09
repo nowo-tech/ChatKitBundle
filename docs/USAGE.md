@@ -4,6 +4,7 @@
 
 - [How it fits together](#how-it-fits-together)
 - [Contracts](#contracts)
+- [Using it from a DDD / hexagonal application](#using-it-from-a-ddd--hexagonal-application)
 - [Conversations and permissions](#conversations-and-permissions)
 - [Opening conversations from your pages](#opening-conversations-from-your-pages)
 - [Support inbox](#support-inbox)
@@ -128,6 +129,72 @@ public function send(ChatUserInterface $user, array $items): void; // list<ChatD
 ```
 
 See [Email digest](#email-digest).
+
+## Using it from a DDD / hexagonal application
+
+**Layer.** Chat Kit is a bounded context of its own: it owns its entities (conversations, participants,
+messages, reactions, mentions, links, quick replies, user settings), its Doctrine mapping and its tables
+(`nowo_chat_*`, renameable with `doctrine.table_name_prefix` / `doctrine.table_prefix`). It also ships the
+presentation (JSON API, dock, full page) and transport adapters (Mercure, Messenger). Treat it as a neighbouring
+context, not as part of your domain model.
+
+**Keeping your domain free of the bundle.**
+
+- Implement the ports in your infrastructure layer, never in domain classes:
+  `ChatDirectoryInterface` and `ChatAccessPolicyInterface` (required), and optionally
+  `ChatChannelProviderInterface`, `ChatLinkPolicyInterface`, `ChatPinPolicyInterface`,
+  `ChatPushSenderInterface`, `ChatLinkPreviewProviderInterface`, `ChatDigestSenderInterface`,
+  `ChatSupportTopicProviderInterface`, `ChatAvatarUrlResolverInterface`, `ChatReferenceProviderInterface`.
+  They take `ChatUserInterface` and the value objects in `Nowo\ChatKitBundle\Model` (`ChatContact`,
+  `ChatChannel`, `ChatReference`, `ChatReferenceScope`, ...), so the adapter translates from your own
+  repositories and policies.
+- React to chat activity with event listeners in your application layer: `ChatMessageSentEvent`,
+  `ChatMessageDeletedEvent`, `ChatMentionEvent`, `ChatChannelOpeningEvent` (veto), `ChatSupportStatusChangedEvent`,
+  `SupportTicket*Event`, `ChatLink*Event`, `ChatMentionsErasedEvent`. Copy what you need (uuids, public ids,
+  text) into your own commands; do not keep the entities.
+- Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case.
+
+```php
+// src/Infrastructure/Chat/DirectoryAdapter.php
+final readonly class DirectoryAdapter implements ChatDirectoryInterface
+{
+    public function __construct(private UserRepository $users, private ContactPolicy $contacts) {}
+
+    public function findByPublicId(string $publicId): ?ChatUserInterface
+    {
+        return $this->users->findByUuid($publicId); // your Doctrine user implements ChatUserInterface
+    }
+
+    public function findByIds(array $ids): array
+    {
+        return $this->users->findByIds($ids);
+    }
+
+    public function contactsFor(ChatUserInterface $actor, ?string $query, int $limit): array
+    {
+        return array_map(
+            static fn (User $user): ChatContact => new ChatContact($user, 'team'),
+            $this->contacts->visibleTo($actor, $query, $limit),
+        );
+    }
+
+    public function supportAgents(): array
+    {
+        return $this->users->findByRole('ROLE_SUPPORT');
+    }
+}
+```
+
+**Known limitations.**
+
+- The chat tables have foreign keys to your user table: `user_class` is mapped to `ChatUserInterface` through
+  `doctrine.orm.resolve_target_entities`, so the class implementing `ChatUserInterface` must be a Doctrine
+  entity with an integer id, and deleting a user cascades into chat rows.
+- The Symfony security user must be that same `ChatUserInterface` object (the voter, the dock and the
+  controllers read `getUser()`).
+- Events and `ChatService` methods expose the bundle's Doctrine entities, and `ChatService` is a final class
+  without an interface; wrap it behind your own port if your application layer must not see it.
+- There are no events yet for message edits, reactions, pins, read cursors or conversations being opened.
 
 ## Conversations and permissions
 
