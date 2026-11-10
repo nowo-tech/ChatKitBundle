@@ -70,6 +70,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 'nowo_chat_reference'   => $limiter($limits['references_per_minute'], '1 minute'),
                 'nowo_chat_buzz'        => $limiter(1, $limits['buzz_interval_seconds'] . ' seconds'),
                 'nowo_chat_buzz_global' => $limiter($limits['buzz_per_minute'], '1 minute'),
+                'nowo_chat_mention_all' => $limiter($limits['mention_all_per_hour'], '1 hour'),
             ],
         ]);
 
@@ -180,6 +181,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.web_ui.layout_template', $profile['web_ui']['layout_template']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.templates.page', $profile['web_ui']['templates']['page']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.assets', $profile['web_ui']['assets']);
+        $container->setParameter(Configuration::ALIAS . '.web_ui.channels_url', $profile['web_ui']['channels_url']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.page.full_height', $profile['web_ui']['page']['full_height']);
     }
 

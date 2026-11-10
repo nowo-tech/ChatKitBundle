@@ -128,7 +128,8 @@ final readonly class ChatPresenter
                 $peer?->getChatEmail() ?? '',
                 $peer?->getChatInitials() ?? '?',
             ],
-            $conversation->isChannel() => ['#' . ($channel->label ?? ''), $this->trans('chat.channel'), '#'],
+            // 1.24: the channel's subtitle (topic) and icon, when the application gives them.
+            $conversation->isChannel() => ['#' . ($channel->label ?? ''), $this->clip($channel?->subtitle, ChatChannel::SUBTITLE_MAX_LENGTH) ?? $this->trans('chat.channel'), $this->clip($channel?->icon, ChatChannel::ICON_MAX_LENGTH) ?? '#'],
             default                    => $this->supportTitle($conversation, $viewer, $viewerIsAgent),
         };
 
@@ -156,7 +157,7 @@ final readonly class ChatPresenter
             'lastMessage'     => $last instanceof ChatMessage ? [
                 'preview' => match (true) {
                     $last->isDeleted(), $last->isBuzz() => '',
-                    $last->isBot()                      => mb_substr($this->botText($last), 0, 90),
+                    $last->isBot(), $last->isSystem()   => mb_substr($this->botText($last), 0, 90),
                     default                             => $this->plainText($last->getBody(), $viewer, 90),
                 },
                 'buzz'       => $last->isBuzz(),
@@ -183,15 +184,18 @@ final readonly class ChatPresenter
     public function message(ChatMessage $message, ?ChatUserInterface $viewer, array $reactions = []): array
     {
         $author   = $message->getAuthor();
-        $ids      = $message->isDeleted() ? [] : ChatMentions::parse($message->getBody());
+        $system   = $message->isSystem();
+        $ids      = $message->isDeleted() || $system ? [] : ChatMentions::parse($message->getBody());
         $mentions = [];
         foreach ($ids as $uuid => $name) {
             $mentions[] = ['uuid' => $uuid, 'name' => $name];
         }
 
+        // 1.24: `@channel` / `@here` (only stored when the application allowed it).
+        $all = $message->isDeleted() ? null : $message->getMentionAll();
         $bot = $message->isBot();
         // #references: cards the viewer may open, the neutral chip for the rest; empty slots without a viewer.
-        $filled = $bot || $message->isDeleted() || !$this->references instanceof ChatReferences
+        $filled = $bot || $system || $message->isDeleted() || !$this->references instanceof ChatReferences
             ? ['html' => $message->getBodyHtml(), 'references' => [], 'pending' => false]
             : $this->references->fill($message->getBodyHtml(), $message->getBody(), $viewer);
 
@@ -204,24 +208,29 @@ final readonly class ChatPresenter
             'authorAvatarUrl' => $bot ? null : $this->avatarUrl($author),
             'mine'            => $viewer instanceof ChatUserInterface && $message->isAuthoredBy($viewer),
             'kind'            => $message->getKind(),
-            'html'            => $bot ? $this->botHtml($message) : $filled['html'],
-            'createdAt'       => $message->getCreatedAt()->format(DATE_ATOM),
-            'edited'          => $message->isEdited(),
-            'deleted'         => $message->isDeleted(),
-            'moderated'       => $message->isModerated(),
-            'reactions'       => $reactions,
+            'html'            => match (true) {
+                $bot => $this->botHtml($message),
+                // 1.24: a system line is always text (its key translated, its parameters escaped with it).
+                $system => '<p>' . $this->escape($this->botText($message)) . '</p>',
+                default => $filled['html'],
+            },
+            'createdAt' => $message->getCreatedAt()->format(DATE_ATOM),
+            'edited'    => $message->isEdited(),
+            'deleted'   => $message->isDeleted(),
+            'moderated' => $message->isModerated(),
+            'reactions' => $reactions,
             // Members the message mentions (from its stored tokens, no query) and whether the viewer is one of them.
             'mentions'   => $mentions,
-            'mentionsMe' => $viewer instanceof ChatUserInterface && isset($ids[$viewer->getChatPublicId()]),
+            'mentionsMe' => $viewer instanceof ChatUserInterface && (isset($ids[$viewer->getChatPublicId()]) || ($all !== null && !$message->isAuthoredBy($viewer))),
             // Cards of the references the viewer may open (the editor turns them back into tokens); `refsPending`:
             // a viewer-neutral payload the client fetches again for its user — its #reference slots, or a bot line,
             // translated in the locale of the request that posted it (an agent's), not the reader's.
             'references'  => $filled['references'],
-            'refsPending' => $filled['pending'] || ($bot && !$viewer instanceof ChatUserInterface),
+            'refsPending' => $filled['pending'] || (($bot || $system) && !$viewer instanceof ChatUserInterface),
             // 1.10: pinned to the top of the conversation; a pin line names the message it is about.
             'pinned'        => $message->getPinnedAt() instanceof DateTimeImmutable,
             'pinnedMessage' => $message->getPinnedMessageUuid(),
-        ];
+        ] + ($all === null ? [] : ['mentionAll' => $all]);
     }
 
     /**
@@ -290,6 +299,18 @@ final readonly class ChatPresenter
 
         return '<p>' . ($emoji === '' ? '' : '<span class="nowo-chat-deco" aria-hidden="true">' . $this->escape($emoji) . '</span>')
             . $this->escape($this->botText($message)) . '</p>';
+    }
+
+    /**
+     * 1.24: an application-given channel text for the dock: trimmed, without control characters, line separators,
+     * bidirectional marks / overrides / isolates, zero-width spaces and BOMs (the zero-width joiner of emoji sequences
+     * stays), at most `$max` characters; null when nothing is left.
+     */
+    private function clip(?string $text, int $max): ?string
+    {
+        $text = mb_substr(trim((string) preg_replace('/[\p{Cc}\p{Zl}\p{Zp}\x{061C}\x{200B}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]+/u', ' ', (string) $text)), 0, $max);
+
+        return $text === '' ? null : $text;
     }
 
     private function escape(string $text): string

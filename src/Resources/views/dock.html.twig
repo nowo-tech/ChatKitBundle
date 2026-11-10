@@ -36,7 +36,7 @@
                 {%- endif -%}
             {%- endfor -%}
         >
-            {{ include('@NowoChatKitBundle/_templates.html.twig', {nowo_chat_locale: nowo_chat_config.locale}) }}
+            {{ include('@NowoChatKitBundle/_templates.html.twig', {nowo_chat_locale: nowo_chat_config.locale, nowo_chat_channels_url: nowo_chat_config.channelsUrl ?? null}) }}
         </div>
     {% endblock %}
 {% endif %}

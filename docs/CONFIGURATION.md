@@ -96,12 +96,13 @@ nowo_chat_kit:
 | `profiles.<name>.web_ui.layout_template` | ?string | `null` | Layout the full-page chat extends (REQ-UI-003); `null` = `nowo_ui_kit.layouts.admin`. It must render the UiKit canonical blocks. |
 | `profiles.<name>.web_ui.templates.page` | string | `@NowoChatKitBundle/page.html.twig` | Template of the full-page chat (a host template extending `@!NowoChatKitBundle/page.html.twig` and overriding one block). |
 | `profiles.<name>.web_ui.assets` | bool | `true` | 1.21: `false` = the full-page chat leaves out the `nowo-chat.css` and `nowo-chat.js` tags (your bundler ships them). The dock on your other pages takes its own `nowo_chat_assets: false` ([USAGE](USAGE.md#front-end-iife-or-your-bundler)). |
+| `profiles.<name>.web_ui.channels_url` | ?string | `null` | 1.24: your page to browse or create channels; when set, the dock's people picker shows a **Browse or create channels** link to it and the dock configuration carries `channelsUrl`. A path starting with one `/`, or an absolute `http(s)` URL (no spaces, backslashes or control characters; anything else is a configuration error). |
 | `profiles.<name>.web_ui.page.full_height` | bool | `false` | 1.21: `true` = the full-page chat fills what is left of the host content area under the page header (class `nowo-chat-page--fill`) instead of the viewport-based `--nowo-chat-page-height`. The content area needs a bounded height ([USAGE](USAGE.md#full-page-chat)). |
 | `profiles.<name>.page_layout` | ?string | `null` | **Deprecated** (use `web_ui.layout_template`): a 1.x layout with the `title`, `stylesheets`, `javascripts` and `body` blocks; while it is the only layout set, the page keeps its 1.x template. |
 | `profiles.<name>.cache_pool` | string | `cache.app` | PSR-6 pool for presence and recipient lists. Share it between workers / replicas. |
 | `profiles.<name>.reactions` | list | `👍 ❤️ 😂 😮 😢 🎉` | Emojis offered as reactions (anything else is refused). |
 | `profiles.<name>.icon_set` | `ux_icon` \| `svg_inline` | `ux_icon` | Dock icons from Symfony UX Icons, or the built-in SVG only. |
-| `profiles.<name>.icons` | map | Tabler set | UX Icons name per dock icon (`chat`, `compose`, `chevronUp`, `chevronDown`, `tuck`, `close`, `send`, `back`, `arrowDown`, `search`, `hash`, `lifebuoy`, `retry`, `buzz`, `smile`, `check`, `edit`, `trash`, `link`, `external`). |
+| `profiles.<name>.icons` | map | Tabler set | UX Icons name per dock icon (`chat`, `compose`, `chevronUp`, `chevronDown`, `tuck`, `close`, `send`, `back`, `arrowDown`, `search`, `hash`, `lifebuoy`, `retry`, `buzz`, `smile`, `check`, `edit`, `trash`, `link`, `external`; 1.24: `bell`, `bellOff` = `tabler:bell` / `tabler:bell-off`, the mute button). |
 | `profiles.<name>.presence_ttl` | int ≥ 30 | `90` | Seconds a heartbeat keeps someone online. |
 | `profiles.<name>.auto_reply_interval_hours` | int ≥ 1 | `4` | At most one automatic reply per conversation and person in this many hours (1.11). |
 | `profiles.<name>.max_pins` | int ≥ 1 | `20` | Pinned messages per conversation (1.10). |
@@ -137,6 +138,7 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 | `limits.references_per_minute` | `nowo_chat_reference` (`/` command menu and `#` search) | 120 |
 | `limits.buzz_interval_seconds` | `nowo_chat_buzz` (per conversation) | 15 |
 | `limits.buzz_per_minute` | `nowo_chat_buzz_global` | 10 |
+| `limits.mention_all_per_hour` | `nowo_chat_mention_all` (1.24: `@channel` / `@here` per writer, when the channel provider allows them; over it the message is sent without the group mention) | 6 |
 
 ## Table names
 

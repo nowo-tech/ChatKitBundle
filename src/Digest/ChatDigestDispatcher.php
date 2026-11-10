@@ -101,7 +101,12 @@ final readonly class ChatDigestDispatcher
             $items[] = new ChatDigestItem(
                 (string) $summary['title'],
                 $count,
-                $last === null || $last->isDeleted() || $last->isBuzz() ? '' : $this->preview($last->getBody(), $user),
+                match (true) {
+                    $last === null, $last->isDeleted(), $last->isBuzz() => '',
+                    // 1.24: a system line is its translated text.
+                    $last->isSystem() => mb_substr($this->presenter->botText($last), 0, 140),
+                    default           => $this->preview($last->getBody(), $user),
+                },
                 str_replace('{uuid}', $conversation->getUuid(), $this->urlTemplate),
             );
         }

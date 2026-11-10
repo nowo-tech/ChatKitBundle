@@ -229,6 +229,12 @@ chat:
   support_title: 'Support'
   support_hint: 'Report a problem or ask for help'
   channel: 'Channel'
+  # 1.24: channels (Beacon spec 184): browse link, read-only notice, mute.
+  browse_channels: 'Browse or create channels'
+  channel_read_only: 'This channel is read only.'
+  mute: 'Mute conversation'
+  unmute: 'Unmute conversation'
+  muted: 'Muted'
   people_group: 'Your groups'
   people_project: 'Your projects'
   people_other: 'People'

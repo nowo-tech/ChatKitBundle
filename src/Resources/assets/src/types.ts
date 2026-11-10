@@ -36,6 +36,8 @@ export interface ConversationSummary {
   lastMessage: { preview: string; deleted: boolean; moderated?: boolean; buzz?: boolean; pin?: boolean; mine: boolean; authorName: string | null } | null;
   /** 1.10: the viewer may pin and unpin messages here. */
   canPin?: boolean;
+  /** 1.24: muted for the viewer until then (ISO 8601); null or absent: not muted. */
+  mutedUntil?: string | null;
 }
 
 export interface ChatMessage {
@@ -48,7 +50,10 @@ export interface ChatMessage {
   authorAvatarUrl?: string | null;
   mine: boolean;
   /** `pin` (1.10): "X pinned a message" line (`pinnedMessage` = its uuid). */
-  kind: 'text' | 'buzz' | 'bot' | 'pin' | 'auto';
+  /** `system` (1.24): a line posted by the application (no author), shown centered. */
+  kind: 'text' | 'buzz' | 'bot' | 'pin' | 'auto' | 'system';
+  /** 1.24: the message mentions the whole channel (`channel`) or its online members (`here`). */
+  mentionAll?: 'channel' | 'here';
   /** 1.10: pinned to the top of the conversation. */
   pinned?: boolean;
   pinnedMessage?: string | null;
@@ -224,6 +229,8 @@ export interface ChatConfig {
   maxLength: number;
   editWindowSeconds: number;
   reactions: string[];
+  /** 1.24: host page to browse or create channels (`web_ui.channels_url`); absent: no link. */
+  channelsUrl?: string;
   endpoints: {
     conversations: string;
     contacts: string;
@@ -270,6 +277,8 @@ export interface ChatConfig {
     pin?: string;
     /** 1.11: save the automatic reply. */
     autoReply?: string;
+    /** 1.24: mute (`POST {minutes?}`) / unmute (`DELETE`) a conversation (`__uuid__`). */
+    mute?: string;
     /** 1.11: the user's quick replies (`GET`, `POST`; `/{id}` `PATCH` / `DELETE`). */
     quickReplies?: string;
     /** 1.19: pinned links of a conversation (`__uuid__`): `GET` list, `POST` create. */

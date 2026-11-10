@@ -229,6 +229,12 @@ chat:
   support_title: 'Support'
   support_hint: 'Meld een probleem of vraag om hulp'
   channel: 'Kanaal'
+  # 1.24: channels (Beacon spec 184): browse link, read-only notice, mute.
+  browse_channels: 'Kanalen bekijken of aanmaken'
+  channel_read_only: 'Dit kanaal is alleen-lezen.'
+  mute: 'Gesprek dempen'
+  unmute: 'Dempen opheffen'
+  muted: 'Gedempt'
   people_group: 'Jouw groepen'
   people_project: 'Jouw projecten'
   people_other: 'Personen'

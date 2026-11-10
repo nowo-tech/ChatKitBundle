@@ -27,6 +27,7 @@ use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Realtime\ChatRecipients;
 use Nowo\ChatKitBundle\Realtime\MercureChatRealtime;
 use Nowo\ChatKitBundle\Realtime\NullChatRealtime;
+use Nowo\ChatKitBundle\Service\ChatMentions;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
@@ -121,6 +122,9 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$intervalMinutes', param('nowo_chat_kit.digest.interval_minutes'));
     $services->get(ChatAutoReplier::class)
         ->arg('$intervalHours', param('nowo_chat_kit.auto_reply_interval_hours'));
+    // 1.24: @channel / @here budget per writer (no limiter without framework.rate_limiter: no budget).
+    $services->get(ChatMentions::class)
+        ->arg('$mentionAllLimiter', service('limiter.nowo_chat_mention_all')->nullOnInvalid());
     $services->get(ChatService::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'))
         ->arg('$maxPins', param('nowo_chat_kit.max_pins'));
@@ -141,7 +145,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$supportEmojis', param('nowo_chat_kit.support.emojis'))
         ->arg('$autoAwayMinutes', param('nowo_chat_kit.auto_away_minutes'))
         ->arg('$statusPresets', param('nowo_chat_kit.status_presets'))
-        ->arg('$dock', param('nowo_chat_kit.dock'));
+        ->arg('$dock', param('nowo_chat_kit.dock'))
+        ->arg('$channelsUrl', param('nowo_chat_kit.web_ui.channels_url'));
     $services->get(ChatPurgeCommand::class)
         ->arg('$retentionDays', param('nowo_chat_kit.retention_days'));
 };

@@ -79,6 +79,63 @@ public function members(ChatChannel $channel): array;               // realtime 
 `ChatChannel($key, $label)`: a stable key up to 120 characters, e.g. `project:<uuid>`. The channel of the page being
 viewed is offered first in the people picker.
 
+#### Room channels (1.24)
+
+`ChatChannel` takes three optional arguments (Symfony Beacon spec 184, chat room channels):
+
+```php
+new ChatChannel('channel:' . $room->getUuid(), $room->getName(),
+    readOnly: $room->isArchived(),     // members read; nobody writes, edits, reacts, types, pins or changes links
+    subtitle: $room->getTopic(),       // under the title instead of "Channel"
+    icon: '📣',                        // short text in the avatar bubble instead of #
+);
+```
+
+The dock writes the subtitle and the icon with `textContent`; the API also trims them, drops control characters, line
+separators, bidirectional overrides and zero-width spaces, and cuts them to `ChatChannel::SUBTITLE_MAX_LENGTH` (160) /
+`ICON_MAX_LENGTH` (8) characters.
+
+Two optional interfaces, implemented **by your channel provider** (the class aliased to `ChatChannelProviderInterface`):
+
+```php
+// Who may write in a channel they can read (e.g. only admins in an announcements room). Asked on the server for every
+// send, edit, reaction, typing ping, pin and link change; read-only channels never ask it.
+final class RoomChannels implements ChatChannelProviderInterface, ChatChannelWritePolicyInterface, ChatChannelMentionPolicyInterface
+{
+    public function canWrite(ChatUserInterface $user, ChatChannel $channel): bool { /* … */ }
+
+    // @channel (every member) and @here (every member online now). Without this interface nobody may.
+    public function canMentionAll(ChatUserInterface $user, ChatChannel $channel, int $memberCount): bool
+    {
+        return $memberCount <= 20 || $this->rooms->isAdmin($user, $channel->key);
+    }
+}
+```
+
+Read-only rules live in `ChatVoter` / `ChatAccess::canWriteChannel()`, so the API answers `403 read_only` to a send and
+`404` to an edit, a reaction or a typing ping, whatever the dock shows; the conversation summary has `canSend: false`
+and the dock shows "This channel is read only." (`chat.channel_read_only`) instead of the composer. A decorator of
+`ChatVoter` written only for this (Beacon's `ArchivedChannelVoter`) can be removed.
+
+`@channel` / `@here` are plain words in the message (outside code, e-mail addresses and longer words). When the
+policy allows the writer, the members (or the online members) get a mention row and `ChatMentionEvent` like any
+@mention, at most `ChatMentions::MAX_GROUP_MENTIONS` (500) people, the message payload gains `mentionAll: "channel" |
+"here"` and every reader but the writer gets `mentionsMe: true`. Each writer has a budget,
+`limits.mention_all_per_hour` (6); over it, or without the policy, the message is sent as written and nobody is
+notified. An edit that keeps the group mention spends nothing; one that drops it removes the rows.
+
+#### System lines (1.24)
+
+`ChatService::postSystemLine($conversation, $body, $domain = null, $params = [])` posts a line without an
+author ("Ana renamed the channel"), shown centered in the thread and as the list preview, translated for each reader
+(`$body` is a key of `$domain`, or plain text when `$domain` is null; `$params` are `name => value` for `%name%`). It
+is always escaped text, never HTML or Markdown; nobody can react to, edit, delete or pin it, and it rings no sound and
+sends no Web Push. **No API route creates one**: call it from your own use cases, after your own access checks.
+
+```php
+$this->chat->postSystemLine($conversation, 'rooms.line.renamed', 'messages', ['actor' => $actor->getName(), 'name' => $room->getName()]);
+```
+
 ### `ChatRealtimeInterface` (optional)
 
 `MercureChatRealtime` is used when `symfony/mercure-bundle` has a hub; otherwise `NullChatRealtime` (polling). Implement
@@ -585,7 +642,17 @@ Change part of it — e.g. add a class to the message bubble — by extending th
 ```
 
 Blocks: `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`,
-`nowo_chat_icons`. In `dock.html.twig`: `nowo_chat_assets` (the `<link>` / `<script>`; empty it when your bundler
+`nowo_chat_icons`. 1.24 hooks for channels: `nowo_chat_dock_header_actions` (empty, before **New message** in the
+panel header) and `nowo_chat_window_header_actions` (empty, first in a conversation's header; the window carries
+`data-kind` and, for channels, `data-channel-key`, so your script knows which channel a button is for), and
+`nowo_chat_template_picker_channels`: the **Browse or create channels** link of the people picker, shown when
+`web_ui.channels_url` is set ([CONFIGURATION](CONFIGURATION.md#reference)).
+
+```twig
+{% block nowo_chat_window_header_actions %}
+    <button type="button" class="nowo-chat-icon-btn" data-app-channel-settings aria-label="Channel settings"><span data-icon="hash"></span></button>
+{% endblock %}
+``` In `dock.html.twig`: `nowo_chat_assets` (the `<link>` / `<script>`; empty it when your bundler
 ships them) and `nowo_chat_root`.
 
 Rules: keep every `data-part` (the script throws a clear error naming a missing one), `data-filter` on the filter chips
@@ -974,6 +1041,13 @@ filter lists them, each with **Reopen**; the archive button next to the filters 
 unread messages ("Close all read"). The full-page chat has a *Closed* link and a Close / Reopen button per row
 (`data-nowo-chat-archive` / `data-nowo-chat-unarchive="<uuid>"`, handled by the dock's script).
 
+**Mute (1.24).** The bell in a conversation's header mutes it for the person until they unmute it: no Web Push, no
+sound, no window opened by a buzz, not counted in the launcher's total (`unreadTotal`); the row keeps its own unread
+count and the `mutedUntil` of the summaries says until when. API: `POST /api/conversations/{uuid}/mute` (JSON
+`{minutes}`, 1 to 525600, for a timed mute; without it until unmuted) and `DELETE` to unmute; same access as reading it
+(404 otherwise), CSRF header and the action budget; the person's other tabs get a `list` event. From PHP:
+`ChatService::mute($user, $conversation, $until)`.
+
 Nothing is deleted and nobody else is affected (`nowo_chat_participant.archived_at`). A closed conversation is back in
 the list as soon as a new message arrives — unless the person muted it, and except a resolved or closed support
 ticket, which stays closed. API: `POST` / `DELETE /api/conversations/{uuid}/archive`, `POST
@@ -1204,6 +1278,7 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/status` `{status, text?, emoji?, clearAfter?}` | set the caller's chat status (1.10) |
 | POST | `/api/settings` `{key, value}` | save one chat preference (1.10); answers every preference |
 | POST / DELETE | `/api/conversations/{uuid}/archive` · POST `/api/conversations/archive-read` | close / reopen in the caller's list, close all read (1.10) |
+| POST / DELETE | `/api/conversations/{uuid}/mute` `{minutes?}` | mute / unmute for the caller (1.24, `{mutedUntil}`) |
 | POST | `/api/auto-reply` `{enabled, text, when, from?, until?, mentions}` | the caller's automatic reply (1.11) |
 | GET / POST | `/api/quick-replies` · PATCH / DELETE `/api/quick-replies/{id}` | the caller's quick replies (1.11) |
 | GET | `/api/conversations/{uuid}/pins` · POST / DELETE `/api/conversations/{uuid}/messages/{messageUuid}/pin` | pinned messages, pin / unpin (1.10) |

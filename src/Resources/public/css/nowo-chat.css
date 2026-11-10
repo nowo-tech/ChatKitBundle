@@ -4226,3 +4226,29 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
     font-size: 0.75rem;
   }
 }
+
+/* 1.24: channels (Beacon spec 184) — the "Browse or create channels" link of the picker, system lines, muted windows. */
+.nowo-chat-picker__channels {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 12px 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: inherit;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.nowo-chat-picker__channels:hover,
+.nowo-chat-picker__channels:focus-visible {
+  background: color-mix(in srgb, currentcolor 8%, transparent);
+}
+
+.nowo-chat-system-line {
+  font-style: italic;
+}
+
+.nowo-chat-window.is-muted .nowo-chat-window__mute {
+  opacity: 0.7;
+}

@@ -32,7 +32,7 @@
                         <span class="nowo-chat-badge" data-part="launcher-badge" hidden></span>
                         <span class="nowo-chat-launcher__chevron" data-part="launcher-chevron"></span>
                     </button>
-                    {{ ui.icon_button('compose', 'chat.new_message'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'compose', 'nowo-chat-panel__compose') }}
+                    {% block nowo_chat_dock_header_actions %}{# 1.24: header actions slot (redefine the block to add your own buttons or links). #}{% endblock %}{{ ui.icon_button('compose', 'chat.new_message'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'compose', 'nowo-chat-panel__compose') }}
                     {{ ui.icon_button('tuck', 'chat.tuck'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'tuck', 'nowo-chat-panel__tuck') }}
                     {{ ui.icon_button('close', 'chat.close'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'close-panel', 'nowo-chat-panel__close') }}
                 </div>
@@ -60,6 +60,9 @@
                             {{ ui.icon_button('back', 'chat.back'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'picker-back', 'nowo-chat-picker__back') }}
                             <p class="nowo-chat-picker__title">{{ 'chat.new_message'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</p>
                         </div>
+                        {% block nowo_chat_template_picker_channels %}{# 1.24: "Browse or create channels" (web_ui.channels_url), a link to the host's channels page. #}{% if nowo_chat_channels_url|default(null) is not empty %}
+                        <a class="nowo-chat-picker__channels" href="{{ nowo_chat_channels_url }}" data-part="channels-link" data-testid="chat-browse-channels"><span data-icon="hash" data-icon-size="16"></span> {{ 'chat.browse_channels'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</a>
+                        {% endif %}{% endblock %}
                         <div class="nowo-chat-search-wrap">
                             <span data-icon="search" data-icon-size="16"></span>
                             {% set nowo_chat_label = 'chat.search_people'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) %}
@@ -251,7 +254,8 @@
                     <span class="nowo-chat-badge" data-part="badge" hidden></span>
                 </button>
                 <span class="nowo-chat-window__actions">
-                    {{ ui.icon_button('check', 'chat.resolve'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'resolve', 'nowo-chat-window__resolve') }}
+                    {% block nowo_chat_window_header_actions %}{# 1.24: header actions slot; the window carries data-kind and data-channel-key for your script. #}{% endblock %}{{ ui.icon_button('check', 'chat.resolve'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'resolve', 'nowo-chat-window__resolve') }}
+                    {{ ui.icon_button('bell', 'chat.mute'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'mute', 'nowo-chat-window__mute') }}
                     <a class="nowo-chat-icon-btn nowo-chat-window__popout" data-part="popout" aria-label="{{ 'chat.popout'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" title="{{ 'chat.popout'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}"><span data-icon="external"></span></a>
                     {{ ui.icon_button('buzz', 'chat.buzz'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'buzz', 'nowo-chat-window__buzz') }}
                     {{ ui.icon_button('chevronDown', 'chat.minimise'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'minimise') }}

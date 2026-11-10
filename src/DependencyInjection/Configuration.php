@@ -14,6 +14,7 @@ use function array_key_exists;
 use function count;
 use function is_array;
 use function is_string;
+use function preg_match;
 
 /**
  * Configuration tree for `nowo_chat_kit` (REQ-CFG-001: `default_profile` + `profiles`).
@@ -32,6 +33,9 @@ final class Configuration implements ConfigurationInterface
 
     /** 1.x default of `page_layout`: the bundle's own document, replaced by the UiKit layout (REQ-UI-003). */
     public const string LEGACY_PAGE_LAYOUT = '@NowoChatKitBundle/page_layout.html.twig';
+
+    /** 1.24: `web_ui.channels_url`: a path (one leading slash, no backslash) or an absolute http(s) URL, without spaces or control characters. */
+    public const string CHANNELS_URL_PATTERN = '~^(?:/(?![/\\\\])|https?://[^/\\\\\s\x00-\x1F\x7F]+(?:/|\z))[^\s\\\\\x00-\x1F\x7F]*\z~';
 
     /** Default template of the full-page chat (`web_ui.templates.page`). */
     public const string PAGE_TEMPLATE = '@NowoChatKitBundle/page.html.twig';
@@ -78,6 +82,9 @@ final class Configuration implements ConfigurationInterface
         // 1.19: the Links panel button; the provider icons (`provider_<key>`) come from `links.providers`.
         'links' => 'tabler:link',
         'video' => 'tabler:video',
+        // 1.24: mute / unmute a conversation.
+        'bell'    => 'tabler:bell',
+        'bellOff' => 'tabler:bell-off',
     ];
 
     /**
@@ -255,6 +262,14 @@ final class Configuration implements ConfigurationInterface
                                         ->info('1.21: false = the chat page leaves out the nowo-chat.css and nowo-chat.js tags (the host bundles them).')
                                         ->defaultTrue()
                                     ->end()
+                                    ->scalarNode('channels_url')
+                                        ->info('1.24: host page to browse or create channels; when set, the dock\'s "New message" picker links to it. A path ("/chat/channels") or an absolute http(s) URL; null (default) = no link.')
+                                        ->defaultNull()
+                                        ->validate()
+                                            ->ifTrue(static fn (mixed $url): bool => $url !== null && (!is_string($url) || preg_match(self::CHANNELS_URL_PATTERN, $url) !== 1))
+                                            ->thenInvalid('web_ui.channels_url must be a path starting with a single "/" or an absolute http(s) URL, got %s.')
+                                        ->end()
+                                    ->end()
                                     ->arrayNode('page')
                                         ->addDefaultsIfNotSet()
                                         ->children()
@@ -356,6 +371,10 @@ final class Configuration implements ConfigurationInterface
                                         ->defaultValue(15)->min(1)
                                     ->end()
                                     ->integerNode('buzz_per_minute')->defaultValue(10)->min(1)->end()
+                                    ->integerNode('mention_all_per_hour')
+                                        ->info('1.24: @channel / @here mentions per writer and hour, when the channel provider allows them (ChatChannelMentionPolicyInterface); over the limit the message is sent without the group mention.')
+                                        ->defaultValue(6)->min(1)
+                                    ->end()
                                 ->end()
                             ->end()
                         ->end()

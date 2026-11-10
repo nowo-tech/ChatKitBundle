@@ -14,7 +14,7 @@ import { playOnce } from './sounds';
 import { ActivityTracker, currentStatus, customStatus, StatusMenu, statusLabel } from './status';
 import { clearChatStorage, DockStore, DraftStore, type SyncEvent, ThreadCache } from './state';
 import { part, Templates, text } from './templates';
-import { plain, ThreadView, type ThreadHost } from './thread';
+import { isMuted, plain, ThreadView, type ThreadHost } from './thread';
 import type { ChatConfig, ChatMessage, ChatPrefs, Contact, ConversationSummary, LinkPreview, PeerStatus, RealtimeEvent, SoundName, SupportContext } from './types';
 
 type Filter = 'all' | 'unread' | 'channel' | 'support' | 'archived';
@@ -1193,7 +1193,8 @@ export class ChatDock implements ThreadHost {
       }
       // A "pinned a message" line rings nothing.
       // An automatic reply rings nothing either (1.11).
-      if (!message.mine && message.kind !== 'pin' && message.kind !== 'auto') {
+      // A system line (1.24) rings nothing either.
+      if (!message.mine && message.kind !== 'pin' && message.kind !== 'auto' && message.kind !== 'system') {
         this.alert(event.conversationUuid, message);
       }
       return;
@@ -1240,6 +1241,10 @@ export class ChatDock implements ThreadHost {
     const prefs = this.config.prefs;
     const view = this.windows.get(uuid);
     const summary = this.conversations.get(uuid);
+    if (summary !== undefined && isMuted(summary)) {
+      // 1.24: a muted conversation only counts its unread messages: no sound, no buzz, no window opening.
+      return;
+    }
     const dnd = this.isDoNotDisturb();
     const background = document.visibilityState !== 'visible' || !document.hasFocus();
     const audible = !dnd && (prefs.backgroundOnly !== true || background);
@@ -1910,7 +1915,8 @@ export class ChatDock implements ThreadHost {
 
   /** Total unread count on the launcher badge (and the `has-unread` root class). */
   private renderBadge(): void {
-    const total = [...this.conversations.values()].reduce((sum, summary) => sum + summary.unread, 0);
+    // 1.24: muted conversations keep their own count but leave the total.
+    const total = [...this.conversations.values()].reduce((sum, summary) => sum + (isMuted(summary) ? 0 : summary.unread), 0);
     setBadge(this.launcherBadge, total, t(this.config.i18n, 'unread', { count: total }));
     setBadge(this.edgeBadge, total, t(this.config.i18n, 'unread', { count: total }));
     this.root.classList.toggle('has-unread', total > 0);

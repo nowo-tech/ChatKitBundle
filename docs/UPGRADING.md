@@ -53,6 +53,37 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Target **1.24.0** (from **1.23.x**): `composer update nowo-tech/chat-kit-bundle`.
+
+### Chat room channels (Symfony Beacon spec 184)
+
+No schema change: system lines use the existing nullable `author_id` and the `kind` column, the mute uses the existing
+`muted_until` column. Nothing changes until you use the new options, except:
+
+- **New route** `nowo_chat_api_mute` (`POST` / `DELETE /api/conversations/{uuid}/mute`), loaded by the bundle's
+  `routes.php` import like the others; the dock configuration's `endpoints` gains `mute`.
+- **A bell button in each conversation's header** (`data-part="mute"`, class `nowo-chat-window__mute`). A host that
+  copied `nowo_chat_template_window` keeps working without it (the script skips a missing bell); add the button from the
+  bundle's block to offer muting. With `icon_set: ux_icon` the icons are `tabler:bell` / `tabler:bell-off`: make sure
+  your UX Icons setup can serve them (or map `icons.bell` / `icons.bellOff`).
+- **JSON**: list rows and `GET /api/conversations/{uuid}` gain `mutedUntil` (null unless the person muted it); a message
+  gains `mentionAll` only when it has one. Clients that compare key lists exactly must allow them.
+- **Muted conversations** (rows whose `muted_until` lies in the future, e.g. set by your own code before 1.24) no
+  longer count in `unreadTotal` / the launcher badge and ring no sound.
+- **New limiter** `nowo_chat_mention_all` (`limits.mention_all_per_hour`), prepended like the others.
+
+Optional, to adopt spec 184:
+
+- Replace a `ChatVoter` decorator that blocks writes in archived rooms with `new ChatChannel(..., readOnly: true)` or
+  `ChatChannelWritePolicyInterface` on your channel provider (both enforced server side by the bundle).
+- Replace system lines posted as `ChatMessage::bot()` (shown as the support assistant) with
+  `ChatService::postSystemLine()`.
+- Implement `ChatChannelMentionPolicyInterface` on your channel provider to offer `@channel` / `@here`.
+- Set `web_ui.channels_url` for the **Browse or create channels** link; put your own buttons in the
+  `nowo_chat_dock_header_actions` / `nowo_chat_window_header_actions` blocks.
+- Templates: a copy of `nowo_chat_template_dock` / `nowo_chat_template_window` / the picker misses the new blocks;
+  re-copy them from the bundle if you want the hooks.
+
 ## To 1.23.0
 
 From **1.22.1**:

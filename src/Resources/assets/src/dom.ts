@@ -91,6 +91,9 @@ const ICONS: Record<string, string> = {
   plus: '<path d="M12 5v14M5 12h14" />',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />',
   goto: '<path d="M5 5v7a3 3 0 0 0 3 3h11" /><path d="m15 11 4 4-4 4" />',
+  // 1.24: mute / unmute a conversation.
+  bell: '<path d="M10 5a2 2 0 0 1 4 0 7 7 0 0 1 4 6v3a4 4 0 0 0 2 3H4a4 4 0 0 0 2-3v-3a7 7 0 0 1 4-6" /><path d="M9 17v1a3 3 0 0 0 6 0v-1" />',
+  bellOff: '<path d="M9.3 5.3A2 2 0 0 1 14 5a7 7 0 0 1 4 6v3M18.4 17H4a4 4 0 0 0 2-3v-3a7 7 0 0 1 1.7-4.6" /><path d="M9 17v1a3 3 0 0 0 6 0v-1M3 3l18 18" />',
 };
 
 /**

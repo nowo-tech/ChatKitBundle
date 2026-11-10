@@ -204,6 +204,15 @@ describe('chat api client', () => {
     expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c/x/m/m/pin', expect.objectContaining({ method: 'POST' }));
     await full.pin('x', 'm', false);
     expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c/x/m/m/pin', expect.objectContaining({ method: 'DELETE' }));
+
+    // Mute (1.24).
+    const muting = new ChatApi({ ...config, endpoints: { ...config.endpoints, mute: '/c/__uuid__/mute' } } as unknown as ChatConfig);
+    vi.stubGlobal('fetch', respond({ mutedUntil: '9999-12-31T23:59:59+00:00' }));
+    expect(await muting.mute('x', true)).toBe('9999-12-31T23:59:59+00:00');
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c/x/mute', expect.objectContaining({ method: 'POST' }));
+    vi.stubGlobal('fetch', respond({ mutedUntil: null }));
+    expect(await muting.mute('x', false)).toBeNull();
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/c/x/mute', expect.objectContaining({ method: 'DELETE' }));
     await old.archiveRead();
     await old.pins('x');
 

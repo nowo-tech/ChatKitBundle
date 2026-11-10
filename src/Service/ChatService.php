@@ -158,12 +158,13 @@ final readonly class ChatService
      */
     public function send(ChatUserInterface $author, ChatConversation $conversation, string $body): ChatMessage
     {
-        $body               = $this->normalize($body);
-        $body               = $this->links?->normalizeCards($body) ?? $body;
-        $body               = $this->references?->validate($conversation, $author, $body) ?? $body;
-        [$body, $mentioned] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, []];
-        $now                = $this->clock->now();
-        $message            = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
+        $body                       = $this->normalize($body);
+        $body                       = $this->links?->normalizeCards($body) ?? $body;
+        $body                       = $this->references?->validate($conversation, $author, $body) ?? $body;
+        [$body, $mentioned, $group] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, [], null];
+        $now                        = $this->clock->now();
+        $message                    = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
+        $message->mentionAll($group);
         $this->entityManager->persist($message);
         // 1.19: the message's links go to the index of the Links panel (flushed with the message).
         $this->links?->index($message);
@@ -219,11 +220,12 @@ final readonly class ChatService
         $body   = $this->links?->normalizeCards($body) ?? $body;
         $author = $message->getAuthor();
         // A reference the author may no longer open (or a forged one) is kept as plain text.
-        $body               = $author instanceof ChatUserInterface ? ($this->references?->validate($message->getConversation(), $author, $body) ?? $body) : $body;
-        [$body, $mentioned] = $author instanceof ChatUserInterface && $this->mentions instanceof ChatMentions
-            ? $this->mentions->resolve($message->getConversation(), $author, $body)
-            : [$body, []];
+        $body                       = $author instanceof ChatUserInterface ? ($this->references?->validate($message->getConversation(), $author, $body) ?? $body) : $body;
+        [$body, $mentioned, $group] = $author instanceof ChatUserInterface && $this->mentions instanceof ChatMentions
+            ? $this->mentions->resolve($message->getConversation(), $author, $body, $message->getMentionAll())
+            : [$body, [], null];
         $message->edit($body, $this->markdown->render($body), $this->clock->now());
+        $message->mentionAll($group);
         $added = $this->mentions?->sync($message, $mentioned) ?? [];
         $this->links?->index($message);
         $this->entityManager->flush();
@@ -397,6 +399,53 @@ final readonly class ChatService
             $this->notifier->botMessage($line);
         }
         $this->notifier->pinsChanged($conversation);
+    }
+
+    /**
+     * 1.24: posts a system line in the conversation (no author: e.g. "Ana renamed the channel"), bumps its activity and
+     * tells its readers. Server only: no API route posts one, so call it from your own use cases after your own access
+     * checks. `$body` is a translation key of `$domain` translated for each reader (plain text when `$domain` is null);
+     * `$params` fill its `%name%` placeholders. The dock shows it as text, never as HTML.
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param string $body Translation key, or plain text when `$domain` is null (at most ChatMessage::MAX_LENGTH characters)
+     * @param string|null $domain Translation domain of the key; null for plain text
+     * @param array<string, string> $params Translation parameters (`name` => value, without the `%`)
+     *
+     * @throws InvalidArgumentException `empty` or `too_long`
+     *
+     * @return ChatMessage The stored system line
+     */
+    public function postSystemLine(ChatConversation $conversation, string $body, ?string $domain = null, array $params = []): ChatMessage
+    {
+        $body = $this->normalize($body);
+        $now  = $this->clock->now();
+        $line = ChatMessage::system($conversation, $body, $domain, $params, $now);
+        $this->entityManager->persist($line);
+        $conversation->touch($now);
+        $this->entityManager->flush();
+        $this->notifier->botMessage($line);
+
+        return $line;
+    }
+
+    /**
+     * 1.24: mutes the conversation for the user until the given time (no Web Push, not counted in the dock's total
+     * badge, no sound; its own unread count stays), or unmutes it with null. Access is the caller's job (ChatVoter::VIEW).
+     *
+     * @param ChatUserInterface $user The user
+     * @param ChatConversation $conversation The conversation
+     * @param DateTimeImmutable|null $until Mute end; null to unmute
+     *
+     * @return ChatParticipant The user's participant row
+     */
+    public function mute(ChatUserInterface $user, ChatConversation $conversation, ?DateTimeImmutable $until): ChatParticipant
+    {
+        $participant = $this->participant($conversation, $user);
+        $participant->muteUntil($until);
+        $this->entityManager->flush();
+
+        return $participant;
     }
 
     /**

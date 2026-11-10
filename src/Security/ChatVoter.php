@@ -87,7 +87,8 @@ final class ChatVoter extends Voter
             self::EDIT => $ownInWindow && !$message->isBuzz() && $this->canSend($conversation, $user),
             // Only the author, within the edit window: nobody deletes someone else's message.
             self::DELETE => $ownInWindow && $this->canView($conversation, $user),
-            default      => !$message->isBuzz() && $this->canSend($conversation, $user), // REACT
+            // 1.24: system lines take no reactions either.
+            default => !$message->isBuzz() && !$message->isSystem() && $this->canSend($conversation, $user), // REACT
         };
     }
 
@@ -102,6 +103,11 @@ final class ChatVoter extends Voter
             $peer = $this->access->directPeer($conversation, $user);
 
             return $peer instanceof ChatUserInterface && $this->access->canWriteDirect($user, $peer);
+        }
+
+        if ($conversation->isChannel()) {
+            // 1.24: a read-only channel (ChatChannel::$readOnly, ChatChannelWritePolicyInterface) is read, never written.
+            return $this->access->canWriteChannel($user, (string) $conversation->getChannelKey());
         }
 
         // A closed ticket (or one resolved long ago) is read-only for everyone; agents change its status instead.
