@@ -382,12 +382,19 @@
         </li>
     </template>
     <template data-nowo-chat-template="sidebar-item">
-        <li class="nowo-chat-sidebar__item" role="option" aria-selected="false" tabindex="-1">
+                <li class="nowo-chat-sidebar__item" role="option" aria-selected="false" tabindex="-1">
             <span class="nowo-chat-sidebar__icon" data-part="icon" aria-hidden="true"></span>
-            <span class="nowo-chat-sidebar__text" data-part="label"></span>
+            <span class="nowo-chat-sidebar__body">
+                <span class="nowo-chat-sidebar__top">
+                    <span class="nowo-chat-sidebar__text" data-part="label"></span>
+                    <span class="nowo-chat-sidebar__status" data-part="status" hidden></span>
+                </span>
+                <span class="nowo-chat-sidebar__preview" data-part="preview" hidden></span>
+            </span>
             <span class="nowo-chat-sidebar__muted" data-part="muted" role="img" hidden><span data-icon="bellOff" data-icon-size="14"></span></span>
             <span class="nowo-chat-sidebar__mentions" data-part="mentions" role="img" hidden></span>
             <span class="nowo-chat-badge" data-part="badge" hidden></span>
+            <button type="button" class="nowo-chat-icon-btn nowo-chat-sidebar__close" data-part="close" tabindex="-1" aria-hidden="true" hidden><span data-icon="archive" data-icon-size="14"></span></button>
         </li>
     </template>
     <template data-nowo-chat-template="sidebar-action">

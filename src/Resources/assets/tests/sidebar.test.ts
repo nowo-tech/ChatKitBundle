@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChatSidebarView, navigation, safeLink, sameOriginPath, sanitizeIcon, type SidebarHost } from '../src/sidebar';
+import { ChatSidebarView, loadDialogRuntime, navigation, resetDialogRuntime, safeLink, sameOriginPath, sanitizeIcon, type SidebarHost } from '../src/sidebar';
+import { Templates } from '../src/templates';
 import type { ChatConfig, ConversationSummary, SidebarSection } from '../src/types';
 import { templates, templatesRoot } from './support';
 
@@ -362,5 +363,109 @@ describe('ChatSidebarView', () => {
     const [, conversations] = view.render();
     (conversations?.querySelector('[data-part="toggle"]') as HTMLButtonElement).click();
     expect(conversations?.isConnected).toBe(false);
+  });
+});
+
+describe('ChatSidebarView rows (1.26)', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.body.replaceChildren();
+    document.head.querySelectorAll('script').forEach((script) => script.remove());
+    resetDialogRuntime();
+    delete (window as Window & { nowoUiOpenRemoteForm?: unknown }).nowoUiOpenRemoteForm;
+  });
+
+  it('shows the status, the preview and the Close button of conversation rows', () => {
+    const peer = summary('a', { peerUuid: 'p', peerOnline: true, peerStatusEmoji: '🌴' });
+    const base = host([peer, summary('g', { kind: 'channel', title: '#general' })], null, { endpoints: { archive: '/a/__uuid__' } as ChatConfig['endpoints'], i18n: { ...i18n, status_available: 'Available', status_custom_emoji: 'Status %emoji%', close_conversation: 'Close %name%' } });
+    const view = new ChatSidebarView(Object.assign(base, { preview: (item: ConversationSummary) => `last of ${item.uuid}` }));
+    view.setSections([channels()]);
+    const root = draw(view);
+    const row = q(root, 'chat-sidebar-item-recent-a');
+    expect(row.dataset.peerStatus).toBe('available');
+    expect(row.querySelector('[data-part="status"]')?.getAttribute('aria-label')).toBe('Status 🌴');
+    expect(row.querySelector('[data-part="preview"]')?.textContent).toBe('last of a');
+    // A channel row: no peer status, a preview.
+    const channel = q(root, 'chat-sidebar-item-recent-g');
+    expect(channel.dataset.peerStatus).toBeUndefined();
+    expect(channel.querySelector<HTMLElement>('[data-part="status"]')?.hidden).toBe(true);
+    // A host row of a listed conversation shows its preview too, keeps its own icon and has no Close button.
+    const general = q(root, 'chat-sidebar-item-channels-general');
+    expect(general.querySelector('[data-part="preview"]')?.textContent).toBe('last of g');
+    expect(general.querySelector('.nowo-chat-avatar')).toBeNull();
+    expect(general.querySelector<HTMLElement>('[data-part="close"]')?.hidden).toBe(true);
+    // A host row of an unknown conversation has no preview.
+    expect(q(root, 'chat-sidebar-item-channels-secret').querySelector<HTMLElement>('[data-part="preview"]')?.hidden).toBe(true);
+
+    const close = q<HTMLButtonElement>(root, 'chat-sidebar-item-recent-a-close');
+    close.click();
+    expect(base.archive).toHaveBeenCalledWith(peer);
+    expect(base.openConversation).not.toHaveBeenCalled();
+
+    // Repainted in place after a status change.
+    Object.assign(peer, { peerStatus: 'dnd', peerStatusEmoji: null, peerStatusText: 'Focus' });
+    view.repaintPeer(root, peer);
+    expect(q(root, 'chat-sidebar-item-recent-a')).toBe(row);
+    expect(row.dataset.peerStatus).toBe('dnd');
+    expect(row.querySelector('[data-part="status"]')?.textContent).toBe('Focus');
+    expect(row.querySelector('[data-part="status"]')?.hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('leaves the Close button out without the archive endpoint, and works with a pre-1.26 row template', () => {
+    const view = new ChatSidebarView(host([summary('a', { peerOnline: true })]));
+    const root = draw(view);
+    expect(root.querySelector('[data-part="close"]')).toBeNull();
+    expect(q(root, 'chat-sidebar-item-recent-a').hasAttribute('aria-keyshortcuts')).toBe(false);
+    // No preview callback: the preview stays hidden.
+    expect(q(root, 'chat-sidebar-item-recent-a').querySelector<HTMLElement>('[data-part="preview"]')?.hidden).toBe(true);
+
+    const legacy = templatesRoot();
+    const template = legacy.querySelector<HTMLTemplateElement>('template[data-nowo-chat-template="sidebar-item"]') as HTMLTemplateElement;
+    template.innerHTML = '<li class="nowo-chat-sidebar__item" role="option" tabindex="-1"><span data-part="icon"></span><span data-part="label"></span><span data-part="muted" hidden></span><span data-part="mentions" hidden></span><span class="nowo-chat-badge" data-part="badge" hidden></span></li>';
+    const old = new ChatSidebarView({ ...host([summary('b', { peerOnline: true })], null, { endpoints: { archive: '/a' } as ChatConfig['endpoints'] }), templates: new Templates(legacy) });
+    const rows = draw(old);
+    expect(q(rows, 'chat-sidebar-item-recent-b').dataset.peerStatus).toBe('available');
+    expect(q(rows, 'chat-sidebar-item-recent-b').querySelector('[data-part="label"]')?.textContent).toBe('T b');
+  });
+
+  it('loads the dialog runtime once, only when needed and not already on the page', () => {
+    const cfg = { sidebar: { page: true, dock: false, endpoint: null, dialogs: { md: 'dialog-md', wide: 'dialog-wide' }, dialogRuntime: '/bundles/nowouikit/js/nowo-ui-dialog.js' } } as Partial<ChatConfig>;
+    // No dialog action: nothing to load.
+    const plain = new ChatSidebarView(host([summary('a')], null, cfg));
+    plain.setSections([channels({ actions: [] })]);
+    draw(plain);
+    expect(document.querySelector('script[data-nowo-chat-dialog-runtime]')).toBeNull();
+
+    const nonce = document.createElement('script');
+    nonce.nonce = 'n0nce';
+    document.head.append(nonce);
+    const view = new ChatSidebarView(host([summary('a')], null, cfg));
+    view.setSections([channels()]);
+    draw(view);
+    draw(view);
+    const added = document.querySelectorAll<HTMLScriptElement>('script[data-nowo-chat-dialog-runtime]');
+    expect(added).toHaveLength(1);
+    const script = added[0] as HTMLScriptElement;
+    expect(script.getAttribute('src')).toBe('/bundles/nowouikit/js/nowo-ui-dialog.js');
+    expect(script.defer).toBe(true);
+    expect(script.nonce).toBe('n0nce');
+  });
+
+  it('never loads a second dialog runtime', () => {
+    const url = '/bundles/nowouikit/js/nowo-ui-dialog.js';
+    (window as Window & { nowoUiOpenRemoteForm?: unknown }).nowoUiOpenRemoteForm = () => true;
+    expect(loadDialogRuntime(url)).toBe(false);
+    delete (window as Window & { nowoUiOpenRemoteForm?: unknown }).nowoUiOpenRemoteForm;
+
+    const host = document.createElement('script');
+    host.setAttribute('src', '/assets/nowo-ui-dialog.js?v=2');
+    document.head.append(host);
+    expect(loadDialogRuntime(url)).toBe(false);
+    host.remove();
+
+    expect(loadDialogRuntime('https://evil.example/nowo-ui-dialog.js')).toBe(false);
+    expect(loadDialogRuntime(url)).toBe(true);
+    expect(loadDialogRuntime(url)).toBe(false);
+    expect(document.querySelectorAll('script[data-nowo-chat-dialog-runtime]')).toHaveLength(1);
   });
 });

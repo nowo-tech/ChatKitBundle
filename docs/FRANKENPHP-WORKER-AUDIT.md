@@ -31,6 +31,14 @@ A bundle that is safe under **B** is safe under **A** and under classic mode / P
 | PHPStan FrankenPHP rulesets | ✅ | `ruleset-classic.neon` + `ruleset-worker.neon` included in `phpstan.neon.dist` |
 | Igor worker-state audit | ✅ | `make igor` in `release-check` (REQ-CS-008) |
 
+## 1.26.0 additions (2026-11-10)
+
+| Unit | Status | Notes |
+|------|--------|-------|
+| `ChatApiController::csrf()` (`GET …/api/csrf`, route `nowo_chat_api_csrf`) | ✅ | Reads the user and the session's `nowo_chat` token per call (token manager over the current request's session); nothing kept in the controller. |
+| `ChatDockExtension` `$dialogRuntime` / `$packages` (`web_ui.dock.dialog_runtime`) | ✅ | A config boolean and the stateless `assets.packages` service; the runtime URL is computed per call. |
+| Verified without the services resetter | ✅ | `ChatCsrfRefreshTest` drives the container's `http_kernel` (`handle()` + `terminate()`) directly: two people served in turn (50 rounds: each gets their own id, the other's token is refused) and 1,000 heartbeats (`presence` + `csrf`) under 64 KiB on stable Symfony. On Symfony 8.2.0-BETA1 the main firewall's `kernel.request` listener itself keeps about 0.7-1.5 KB per request (anonymous requests too, no bundle code involved); there the test compares the heartbeat's per-request slope with a host route behind the same firewall. |
+
 ## Rules for future code
 
 - Keep presence, typing and counters in storage (database / cache pool / Mercure), never in service properties.

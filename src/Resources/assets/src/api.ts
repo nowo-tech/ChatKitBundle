@@ -34,11 +34,21 @@ export function channelDeniedReason(error: unknown): string | null {
   return error instanceof ChatApiError && error.code === 'channel_denied' && error.reason !== '' ? error.reason : null;
 }
 
+/**
+ * Whether an API call failed because the server refused the page's CSRF token.
+ *
+ * @param error What the call threw.
+ * @returns True for a 403 `invalid_csrf`.
+ */
+function isCsrfRefusal(error: unknown): boolean {
+  return error instanceof ChatApiError && error.status === 403 && error.code === 'invalid_csrf';
+}
+
 /** What the client tells the dock that owns it (since 1.22.1). */
 export interface ChatApiHooks {
   /**
-   * The server refused the page's CSRF token (403 `invalid_csrf`): the session lost it (a new sign-in clears every
-   * token, for example) and the token is fixed at page load, so no later write can succeed. Called once.
+   * The server refused the page's CSRF token (403 `invalid_csrf`) and no fresh token could be had (1.26: the session's
+   * current token is fetched once first; see ChatApi), so no later write can succeed. Called once.
    */
   onCsrfRejected?: () => void;
 }
@@ -47,8 +57,10 @@ export interface ChatApiHooks {
 export class ChatApi {
   private readonly config: ChatConfig;
   private readonly hooks: ChatApiHooks;
-  /** Since 1.22.1: the token was refused once; later writes fail at once instead of sending a request bound to fail. */
+  /** Since 1.22.1: the token was refused for good; later writes fail at once instead of sending a request bound to fail. */
   private csrfRejected = false;
+  /** 1.26: the token refresh in flight, shared by every write the server refused meanwhile. */
+  private refreshing: Promise<boolean> | null = null;
 
   /**
    * Creates the client for one dock configuration.
@@ -627,18 +639,81 @@ export class ChatApi {
     if (this.csrfRejected) {
       throw new ChatApiError(403, 'invalid_csrf');
     }
-    const response = await fetch(url, {
-      method,
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': this.config.csrf },
-      body: JSON.stringify(body),
-    });
-    return this.decode<T>(response);
+    let used = this.config.csrf;
+    const send = async (): Promise<T> => {
+      used = this.config.csrf;
+      return this.decode<T>(
+        await fetch(url, {
+          method,
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': used },
+          body: JSON.stringify(body),
+        }),
+      );
+    };
+    try {
+      return await send();
+    } catch (error) {
+      if (!isCsrfRefusal(error)) {
+        throw error;
+      }
+      // 1.26: the session lost the page's token (a new sign-in, or a parallel request that saved an older copy of an
+      // unlocked session): take the session's current token and send this write once more.
+      if (!this.csrfRejected && (await this.refreshCsrf(used))) {
+        try {
+          return await send();
+        } catch (retry) {
+          if (!isCsrfRefusal(retry)) {
+            throw retry;
+          }
+        }
+      }
+      if (!this.csrfRejected) {
+        this.csrfRejected = true;
+        this.hooks.onCsrfRejected?.();
+      }
+      throw error;
+    }
   }
 
   /**
-   * Decodes a JSON answer. A 401 clears the chat storage of this device; a refused CSRF token (403 `invalid_csrf`)
-   * is reported once to the hooks; any non-2xx status throws.
+   * 1.26: asks the server for the session's current CSRF token (`endpoints.csrf`) and keeps it when it belongs to the
+   * same person as the page and differs from the refused one. One request at a time, shared by every write refused
+   * meanwhile; a write refused with a token already replaced just retries. False without the endpoint, on any failure,
+   * for another person (signed in elsewhere in this browser: the page must be reloaded) or for the same token (rare:
+   * Symfony masks every token value differently; the real bound is request(), which retries a write once).
+   *
+   * @param refused The token the server refused.
+   * @returns True when another token is in place.
+   */
+  private async refreshCsrf(refused: string): Promise<boolean> {
+    if (this.config.csrf !== refused) {
+      return true;
+    }
+    const endpoint = this.config.endpoints.csrf;
+    if (endpoint === undefined || endpoint === '') {
+      return false;
+    }
+    this.refreshing ??= this.get<{ csrf?: unknown; userUuid?: unknown } | null>(endpoint)
+      .then((answer) => {
+        const token = answer?.csrf;
+        if (typeof token !== 'string' || token === '' || answer?.userUuid !== this.config.userUuid || token === this.config.csrf) {
+          return false;
+        }
+        this.config.csrf = token;
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => {
+        this.refreshing = null;
+      });
+    await this.refreshing;
+    return this.config.csrf !== refused;
+  }
+
+  /**
+   * Decodes a JSON answer. A 401 clears the chat storage of this device; any non-2xx status throws (a refused CSRF
+   * token is handled by request()).
    *
    * @param response Fetch response.
    * @returns The payload (null when the body is not JSON).
@@ -664,10 +739,6 @@ export class ChatApi {
       const code =
         typeof payload === 'object' && payload !== null && 'error' in payload ? String(payload.error) : 'error';
       const reason = typeof payload === 'object' && payload !== null && 'message' in payload && typeof payload.message === 'string' ? payload.message : '';
-      if (response.status === 403 && code === 'invalid_csrf' && !this.csrfRejected) {
-        this.csrfRejected = true;
-        this.hooks.onCsrfRejected?.();
-      }
       throw new ChatApiError(response.status, code, reason);
     }
     return payload as T;

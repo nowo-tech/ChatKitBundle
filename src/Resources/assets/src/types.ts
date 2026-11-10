@@ -269,6 +269,8 @@ export interface ChatConfig {
     settings?: string;
     /** 1.10: close (`POST`) or reopen (`DELETE`) a conversation in the user's list (`__uuid__`). */
     archive?: string;
+    /** 1.26: `GET` the session's current CSRF token (a refused token is refreshed once before giving up). */
+    csrf?: string;
     /** 1.10: close every read conversation. */
     archiveRead?: string;
     /** 1.10: pinned messages of a conversation (`__uuid__`). */
@@ -328,6 +330,11 @@ export interface SidebarSettings {
   endpoint: string | null;
   /** Ids of the UiKit remote form dialogs of the actions, by size. */
   dialogs: Record<SidebarDialogSize, string>;
+  /**
+   * 1.26 (`web_ui.dock.dialog_runtime`): address of UiKit's js/nowo-ui-dialog.js, loaded by the dock when the page has
+   * not loaded it (absent: the host loads it).
+   */
+  dialogRuntime?: string;
 }
 
 export type SidebarDialogSize = 'md' | 'wide';

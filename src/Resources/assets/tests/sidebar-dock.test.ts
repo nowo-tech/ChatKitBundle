@@ -426,4 +426,63 @@ describe('ChatDock sidebar', () => {
     root.innerHTML = '<div class="nowo-chat-dock"></div><dialog class="nowo-ui-dialog nowo-ui-dialog--remote-form"></dialog>';
     expect(root.querySelector('dialog')?.matches('.nowo-chat .nowo-ui-dialog')).toBe(true);
   });
+  it('shows the peer status, the custom status and the last message on grouped rows, and repaints them in place (1.26)', async () => {
+    const { dock, q } = mountPage([
+      summary('a', { peerStatus: 'busy', peerOnline: true, peerStatusText: 'In a call', peerStatusEmoji: '📞', lastMessage: { preview: 'see you', deleted: false, mine: true, authorName: 'Me' } }),
+    ], { i18n: { ...i18n, you: 'You', status_busy: 'Busy', status_away: 'Away', close_conversation: 'Close %name%' } });
+    await dock.start();
+    const row = q('chat-sidebar-item-recent-a');
+    expect(row.dataset.peerStatus).toBe('busy');
+    expect(row.querySelector<HTMLElement>('[data-part="status"]')?.textContent).toBe('📞 In a call');
+    expect(row.querySelector('[data-part="status-label"]')?.textContent).toBe(', Busy');
+    expect(row.querySelector<HTMLElement>('[data-part="preview"]')?.textContent).toBe('You: see you');
+    expect(row.querySelector('.nowo-chat-avatar')?.classList.contains('is-status-busy')).toBe(true);
+
+    // A presence event repaints the same element (focus and hover stay); the dot follows.
+    row.focus();
+    realtime?.onEvent({ type: 'status', userUuid: 'peer-a', status: 'away', text: null, emoji: null } as RealtimeEvent);
+    expect(q('chat-sidebar-item-recent-a')).toBe(row);
+    expect(document.activeElement).toBe(row);
+    expect(row.dataset.peerStatus).toBe('away');
+    expect(row.querySelector<HTMLElement>('[data-part="status"]')?.hidden).toBe(true);
+    expect(row.querySelector('[data-part="status-label"]')?.textContent).toBe(', Away');
+    expect(row.querySelector('.nowo-chat-avatar')?.classList.contains('is-status-away')).toBe(true);
+    // The heartbeat's answer too.
+    api.presence.mockResolvedValue({ online: [], statuses: { 'peer-a': { status: 'offline', text: null, emoji: null } }, me: null });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await flush();
+    expect(api.presence).toHaveBeenCalled();
+    expect(row.dataset.peerStatus).toBe('offline');
+    expect(row.querySelector('[data-part="status-label"]')).toBeNull();
+    expect(row.querySelector('.nowo-chat-avatar')?.classList.contains('is-online')).toBe(false);
+    Reflect.deleteProperty(document, 'visibilityState');
+  });
+
+  it('closes a conversation from the hover button of its grouped row without opening it (1.26)', async () => {
+    const { dock, q, list } = mountPage([summary('a'), summary('b', { lastMessageAt: '2026-10-15T09:00:00Z' })], { i18n: { ...i18n, close_conversation: 'Close %name%' } });
+    await dock.start();
+    const close = q<HTMLButtonElement>('chat-sidebar-item-recent-a-close');
+    expect(close.hidden).toBe(false);
+    expect(close.title).toBe('Close T a');
+    expect(close.getAttribute('aria-hidden')).toBe('true');
+    expect(close.tabIndex).toBe(-1);
+    expect(q('chat-sidebar-item-recent-a').getAttribute('aria-keyshortcuts')).toBe('Delete');
+    // Host rows have none.
+    expect(q('chat-sidebar-item-channels-general').querySelector<HTMLElement>('[data-part="close"]')?.hidden).toBe(true);
+    close.click();
+    await flush();
+    expect(api.archive).toHaveBeenCalledWith('a', true);
+    expect(window.location.pathname).toBe('/chat/');
+    expect(list.querySelector('[data-testid="chat-sidebar-item-recent-a"]')).toBeNull();
+  });
+
+  it('keeps the one-column phone rule over the grouped two columns (1.26)', () => {
+    const CSS = readFileSync('src/Resources/public/css/nowo-chat.css', 'utf8');
+    // The two-column rule lives only inside the wide-screen query.
+    const outside = CSS.replace(/@media \(min-width: 769px\) \{\s*\.nowo-chat-pagemode\.has-sidebar \{[^}]*\}\s*\}/, '');
+    expect(outside).not.toBe(CSS);
+    expect(outside).not.toMatch(/\.nowo-chat-pagemode\.has-sidebar \{/);
+    expect(CSS).toMatch(/@media \(max-width: 768px\) \{\s*\.nowo-chat-pagemode \{\s*grid-template-columns: minmax\(0, 1fr\);/);
+  });
 });

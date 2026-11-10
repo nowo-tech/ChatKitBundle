@@ -62,6 +62,85 @@ describe('chat api client', () => {
     expect(await api.conversations()).toEqual({ conversations: [], unreadTotal: 0 });
   });
 
+  describe('stale CSRF token (1.26)', () => {
+    const refused = { ok: false, status: 403, json: () => Promise.resolve({ ok: false, error: 'invalid_csrf' }) };
+    const ok = (body: unknown) => ({ ok: true, status: 200, json: () => Promise.resolve(body) });
+    const fresh = () => ({ ...config, csrf: 'old', userUuid: 'me', endpoints: { ...config.endpoints, csrf: '/csrf' } }) as ChatConfig;
+    const tokenOf = (call: unknown[]): string | undefined => ((call[1] as RequestInit | undefined)?.headers as Record<string, string> | undefined)?.['X-CSRF-TOKEN'];
+
+    it('takes the session\'s current token once and sends the write again', async () => {
+      const fetchMock = vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(ok({ csrf: 'new', userUuid: 'me' })).mockResolvedValueOnce(ok({ online: [], statuses: {}, me: null }));
+      vi.stubGlobal('fetch', fetchMock);
+      const onCsrfRejected = vi.fn();
+      const cfg = fresh();
+      const api = new ChatApi(cfg, { onCsrfRejected });
+
+      expect(await api.presence(true)).toEqual({ online: [], statuses: {}, me: null });
+      expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(['/presence', '/csrf', '/presence']);
+      expect(fetchMock.mock.calls.map(tokenOf)).toEqual(['old', undefined, 'new']);
+      expect(cfg.csrf).toBe('new');
+      expect(onCsrfRejected).not.toHaveBeenCalled();
+    });
+
+    it('shares one refresh between writes refused together, and retries at once a write refused with a replaced token', async () => {
+      let answer: (value: unknown) => void = () => undefined;
+      const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+        if (url === '/csrf') {
+          return new Promise((resolve) => (answer = resolve));
+        }
+        return Promise.resolve((init?.headers as Record<string, string>)['X-CSRF-TOKEN'] === 'new' ? ok({ ok: true }) : refused);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const api = new ChatApi(fresh());
+      const first = api.typing('c');
+      const second = api.typing('d');
+      await vi.waitFor(() => expect(fetchMock.mock.calls.filter((call) => call[0] === '/csrf')).toHaveLength(1));
+      answer(ok({ csrf: 'new', userUuid: 'me' }));
+      await Promise.all([first, second]);
+      expect(fetchMock.mock.calls.filter((call) => call[0] === '/csrf')).toHaveLength(1);
+    });
+
+    it.each([
+      ['another person signed in', ok({ csrf: 'new', userUuid: 'someone-else' })],
+      ['the same token', ok({ csrf: 'old', userUuid: 'me' })],
+      ['no token', ok({ userUuid: 'me' })],
+      ['an empty answer', ok(null)],
+      ['a failed request', { ok: false, status: 500, json: () => Promise.resolve({}) }],
+    ])('stops the writes and asks for a reload on %s', async (_case, answer) => {
+      const fetchMock = vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(answer);
+      vi.stubGlobal('fetch', fetchMock);
+      const onCsrfRejected = vi.fn();
+      const cfg = fresh();
+      const api = new ChatApi(cfg, { onCsrfRejected });
+
+      await expect(api.presence(true)).rejects.toMatchObject({ status: 403, code: 'invalid_csrf' });
+      expect(onCsrfRejected).toHaveBeenCalledTimes(1);
+      expect(cfg.csrf).toBe('old');
+      // No later write reaches the server.
+      await expect(api.presence(true)).rejects.toMatchObject({ code: 'invalid_csrf' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('gives up when the refreshed token is refused too', async () => {
+      const fetchMock = vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(ok({ csrf: 'new', userUuid: 'me' })).mockResolvedValueOnce(refused);
+      vi.stubGlobal('fetch', fetchMock);
+      const onCsrfRejected = vi.fn();
+      const api = new ChatApi(fresh(), { onCsrfRejected });
+      await expect(api.presence(true)).rejects.toMatchObject({ code: 'invalid_csrf' });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(onCsrfRejected).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes on another error of the retried write', async () => {
+      const fetchMock = vi.fn().mockResolvedValueOnce(refused).mockResolvedValueOnce(ok({ csrf: 'new', userUuid: 'me' })).mockResolvedValueOnce({ ok: false, status: 429, json: () => Promise.resolve({ error: 'rate_limited' }) });
+      vi.stubGlobal('fetch', fetchMock);
+      const onCsrfRejected = vi.fn();
+      const api = new ChatApi(fresh(), { onCsrfRejected });
+      await expect(api.presence(true)).rejects.toMatchObject({ status: 429, code: 'rate_limited' });
+      expect(onCsrfRejected).not.toHaveBeenCalled();
+    });
+  });
+
   it('treats any other 403 as an ordinary error (1.22.1)', async () => {
     const fetchMock = respond({ error: 'forbidden' }, false, 403);
     vi.stubGlobal('fetch', fetchMock);

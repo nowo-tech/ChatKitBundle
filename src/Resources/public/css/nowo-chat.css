@@ -2182,9 +2182,12 @@
   pointer-events: auto;
 }
 /* 1.25: the grouped sidebar (Slack-style): sections that fold, compact rows, the host's actions. The full-page chat
-   gives the list a wider column while it is grouped. */
-.nowo-chat-pagemode.has-sidebar {
-  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+   gives the list a wider column while it is grouped — on wide screens only (1.26): phones keep the one-column rule
+   above (the list, or the conversation). */
+@media (min-width: 769px) {
+  .nowo-chat-pagemode.has-sidebar {
+    grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+  }
 }
 .nowo-chat-list.is-sidebar {
   padding-top: 4px;
@@ -2303,7 +2306,64 @@
   background: var(--nowo-chat-muted);
 }
 .nowo-chat-sidebar__text {
+  flex: 0 1 auto;
+}
+/* 1.26: the row's text column — the name with the peer's custom status, then the last message. */
+.nowo-chat-sidebar__body {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.nowo-chat-sidebar__top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.nowo-chat-sidebar__status,
+.nowo-chat-sidebar__preview {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--nowo-chat-muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nowo-chat-sidebar__status {
+  flex: 0 1 auto;
+  max-width: 45%;
+}
+.nowo-chat-sidebar__status[hidden],
+.nowo-chat-sidebar__preview[hidden],
+.nowo-chat-sidebar__close[hidden] {
+  display: none;
+}
+.nowo-chat-sidebar__item.is-unread .nowo-chat-sidebar__preview {
+  color: var(--nowo-chat-text);
+}
+/* 1.26: the hover Close button (pointer shortcut of the Delete key); the badge steps aside while it shows. */
+.nowo-chat-sidebar__item {
+  position: relative;
+}
+.nowo-chat-sidebar__close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin-inline-end: -4px;
+  opacity: 0;
+}
+.nowo-chat-sidebar__item:hover .nowo-chat-sidebar__close,
+.nowo-chat-sidebar__item:focus-visible .nowo-chat-sidebar__close {
+  opacity: 1;
+}
+.nowo-chat-sidebar__item:has(.nowo-chat-sidebar__close:not([hidden])):hover .nowo-chat-badge {
+  display: none;
+}
+@media (hover: none) {
+  .nowo-chat-sidebar__close {
+    opacity: 1;
+  }
 }
 .nowo-chat-sidebar__icon {
   display: inline-grid;

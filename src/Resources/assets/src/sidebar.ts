@@ -14,8 +14,9 @@
  * and reduced to plain SVG shapes. Action dialogs are UiKit remote form dialogs (`data-nowo-ui-dialog-*` openers,
  * same-origin fragments only, checked again here); without UiKit's dialog script the action is a plain link.
  */
-import { setBadge } from './dom';
+import { h, setBadge } from './dom';
 import { t } from './format';
+import { customStatus, statusLabel } from './status';
 import { part, text, type Templates } from './templates';
 import { isMuted } from './thread';
 import type { ChatConfig, ConversationSummary, SidebarAction, SidebarItem, SidebarSection } from './types';
@@ -37,8 +38,50 @@ export interface SidebarHost {
   current(): string | null;
   /** Opens a conversation by uuid (a known summary, else fetched). */
   openConversation(uuid: string): void;
-  /** Closes (archives) a conversation of the bundle's sections (Delete key). */
+  /** Closes (archives) a conversation of the bundle's sections (Delete key, the row's hover Close button). */
   archive(summary: ConversationSummary): void;
+  /**
+   * 1.26: the second line of a conversation row (the last message, who is typing…), as the 1.24 list shows it; no
+   * preview line without it.
+   */
+  preview?(summary: ConversationSummary): string;
+}
+
+/** 1.26: URL of UiKit's dialog runtime the dock loaded itself (one per page, whatever the docks). */
+let dialogRuntimeRequested: string | null = null;
+
+/**
+ * 1.26 (`web_ui.dock.dialog_runtime`): loads UiKit's remote-dialog runtime (js/nowo-ui-dialog.js) once, so the sidebar
+ * actions open as dialogs on pages whose layout does not load it. Nothing happens when the runtime already runs
+ * (`window.nowoUiOpenRemoteForm`), when the page has a `<script>` for it (the host's, maybe not run yet) or when this
+ * page asked for it already: the runtime binds by delegation, and a second copy would bind every opener twice. The
+ * script takes the CSP nonce of the page's own scripts.
+ *
+ * @param url Address of js/nowo-ui-dialog.js (UiKit's asset package).
+ * @returns True when a script element was added.
+ */
+export function loadDialogRuntime(url: string): boolean {
+  const loaded = typeof (window as Window & { nowoUiOpenRemoteForm?: unknown }).nowoUiOpenRemoteForm === 'function';
+  const present = [...document.querySelectorAll<HTMLScriptElement>('script[src]')].some((script) => /(?:^|\/)nowo-ui-dialog\.js(?:[?#]|$)/.test(script.getAttribute('src') ?? ''));
+  if (loaded || present || dialogRuntimeRequested !== null || sameOriginPath(url) === null) {
+    return false;
+  }
+  dialogRuntimeRequested = url;
+  const script = document.createElement('script');
+  script.src = url;
+  script.defer = true;
+  script.dataset.nowoChatDialogRuntime = '';
+  const nonce = document.querySelector<HTMLScriptElement>('script[nonce]')?.nonce ?? '';
+  if (nonce !== '') {
+    script.nonce = nonce;
+  }
+  document.head.append(script);
+  return true;
+}
+
+/** Test hook: forgets that the dialog runtime was requested. */
+export function resetDialogRuntime(): void {
+  dialogRuntimeRequested = null;
 }
 
 /** Remembered view of one viewer. */
@@ -209,6 +252,21 @@ export class ChatSidebarView {
   }
 
   /**
+   * 1.26: a person's presence changed — repaints their rows in place (status dot, `data-peer-status`, custom status),
+   * so the focus, the hover and the folded sections stay as they are.
+   *
+   * @param list The list element the sections are drawn into.
+   * @param summary The direct conversation (already updated).
+   */
+  repaintPeer(list: HTMLElement, summary: ConversationSummary): void {
+    list.querySelectorAll<HTMLElement>('[role="option"][data-uuid]').forEach((row) => {
+      if (row.dataset.uuid === summary.uuid) {
+        this.decorate(row, summary, row.dataset.row === 'conversation');
+      }
+    });
+  }
+
+  /**
    * Draws every section.
    *
    * @returns The section elements (`<li>` of the list).
@@ -235,7 +293,7 @@ export class ChatSidebarView {
         const muted = summary === undefined ? item.muted : isMuted(summary);
         const count = summary === undefined ? item.unread : summary.unread;
         unread += muted ? 0 : count;
-        return this.hostRow(section.key, item, count, muted);
+        return this.hostRow(section.key, item, count, muted, summary);
       });
       drawn.push({ key: section.key, label: section.label, position: section.position, collapsible: section.collapsible, collapsedByDefault: section.collapsedByDefault, rows, actions: section.actions, unread, empty: null, recent: false });
     }
@@ -243,6 +301,10 @@ export class ChatSidebarView {
     drawn.push({ key: 'conversations', label: t(i18n, 'sidebar_conversations'), position: POSITION_CONVERSATIONS, collapsible: true, collapsedByDefault: false, rows: others.map((summary) => this.conversationRow('conversations', summary)), actions: [], unread: unreadOf(others), empty: t(i18n, 'sidebar_empty'), recent: false });
     // Stable: the host order among equal positions.
     drawn.sort((a, b) => a.position - b.position);
+    const runtime = this.host.config.sidebar?.dialogRuntime;
+    if (typeof runtime === 'string' && this.sections.some((section) => section.actions.some((action) => action.dialogUrl !== null))) {
+      loadDialogRuntime(runtime);
+    }
     return drawn.map((section) => this.sectionElement(section));
   }
 
@@ -462,7 +524,8 @@ export class ChatSidebarView {
    */
   private conversationRow(section: string, summary: ConversationSummary): HTMLElement {
     const row = this.itemElement(section, summary.uuid, summary.title, summary.unread, isMuted(summary), 0, summary.uuid);
-    part(row, 'icon').replaceChildren(this.host.templates.avatar(summary.initials, summary.kind, 'sm', summary.peerOnline, summary.kind === 'direct' ? summary.peerStatus : undefined, summary.avatarUrl));
+    row.dataset.row = 'conversation';
+    this.decorate(row, summary, true);
     row.title = summary.subtitle;
     row.addEventListener('click', () => this.host.openConversation(summary.uuid));
     row.addEventListener('keydown', (event) => {
@@ -471,7 +534,83 @@ export class ChatSidebarView {
         this.host.archive(summary);
       }
     });
+    this.bindClose(row, summary);
     return row;
+  }
+
+  /**
+   * 1.26: what a conversation row shows of its conversation, as the 1.24 list did: the avatar (bundle rows), the
+   * peer's status (`data-peer-status`, a screen-reader label, the custom status after the name) and the last message.
+   * Templates overridden before 1.26 (no status / preview hooks) keep their 1.25 look.
+   *
+   * @param row The option.
+   * @param summary The conversation.
+   * @param avatar Whether the row's icon is the conversation's avatar (bundle sections), not a host icon.
+   */
+  private decorate(row: HTMLElement, summary: ConversationSummary, avatar: boolean): void {
+    const direct = summary.kind === 'direct';
+    if (avatar) {
+      part(row, 'icon').replaceChildren(this.host.templates.avatar(summary.initials, summary.kind, 'sm', summary.peerOnline, direct ? summary.peerStatus : undefined, summary.avatarUrl));
+    }
+    const status = direct ? (summary.peerStatus ?? (summary.peerOnline ? 'available' : 'offline')) : null;
+    if (status === null) {
+      delete row.dataset.peerStatus;
+    } else {
+      row.dataset.peerStatus = status;
+    }
+    row.querySelector('[data-part="status-label"]')?.remove();
+    const label = row.querySelector<HTMLElement>('[data-part="label"]');
+    if (status !== null && status !== 'offline' && label !== null) {
+      label.after(h('span', { class: 'nowo-chat-sr-only', 'data-part': 'status-label', text: `, ${statusLabel(this.host.config.i18n, status)}` }));
+    }
+    const line = row.querySelector<HTMLElement>('[data-part="status"]');
+    if (line !== null) {
+      const custom = direct ? customStatus(summary.peerStatusText, summary.peerStatusEmoji) : '';
+      line.textContent = custom;
+      line.title = custom;
+      line.hidden = custom === '';
+      if (custom !== '' && (summary.peerStatusText ?? '') === '') {
+        // Only an emoji: say what it is.
+        line.setAttribute('aria-label', t(this.host.config.i18n, 'status_custom_emoji', { emoji: custom }));
+      } else {
+        line.removeAttribute('aria-label');
+      }
+    }
+    const preview = row.querySelector<HTMLElement>('[data-part="preview"]');
+    if (preview !== null) {
+      const value = this.host.preview?.(summary) ?? '';
+      preview.textContent = value;
+      preview.hidden = value === '';
+    }
+  }
+
+  /**
+   * 1.26: the row's hover Close button (closes the conversation for the viewer — it is archived, never deleted; Undo in
+   * the notice). A pointer shortcut of the Delete key: out of the tab order and hidden from assistive technology, which
+   * get the key (`aria-keyshortcuts`). Hidden without the archive endpoint.
+   *
+   * @param row The option.
+   * @param summary The conversation.
+   */
+  private bindClose(row: HTMLElement, summary: ConversationSummary): void {
+    const button = row.querySelector<HTMLButtonElement>('[data-part="close"]');
+    if (button === null) {
+      return;
+    }
+    if (this.host.config.endpoints.archive === undefined) {
+      button.remove();
+      return;
+    }
+    const label = t(this.host.config.i18n, 'close_conversation', { name: summary.title });
+    button.hidden = false;
+    button.title = label;
+    button.setAttribute('data-testid', `${row.getAttribute('data-testid') ?? 'chat-sidebar-item'}-close`);
+    row.setAttribute('aria-keyshortcuts', 'Delete');
+    button.addEventListener('click', (event) => {
+      // Closing is not opening: the row's own click must not run.
+      event.stopPropagation();
+      this.host.archive(summary);
+    });
   }
 
   /**
@@ -483,9 +622,14 @@ export class ChatSidebarView {
    * @param muted Muted look (the chat's for a conversation).
    * @returns The option.
    */
-  private hostRow(section: string, item: SidebarItem, unread: number, muted: boolean): HTMLElement {
+  private hostRow(section: string, item: SidebarItem, unread: number, muted: boolean, summary?: ConversationSummary): HTMLElement {
     const row = this.itemElement(section, item.key, item.label, unread, muted, item.mentions, item.conversationUuid);
+    row.dataset.row = 'host';
     part(row, 'icon').replaceChildren(this.iconOf(item.icon ?? 'channel', item.iconSvg));
+    if (summary !== undefined) {
+      // 1.26: a host row of a listed conversation shows its last message (and a direct peer's status) too.
+      this.decorate(row, summary, false);
+    }
     if (item.subtitle !== null && item.subtitle !== '') {
       row.title = item.subtitle;
     }
