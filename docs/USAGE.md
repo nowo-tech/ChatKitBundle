@@ -1467,7 +1467,7 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/support/{uuid}/assign` `{assignee}` | agents: an agent's public id, or null |
 | GET | `/api/link-previews?url[]=…` | previews from your provider, per viewer |
 | GET | `/api/realtime` | hub URL + subscriber token for the caller's topic |
-| GET | `/api/csrf` | the session's current `nowo_chat` CSRF token and the caller's public id (1.26; the dock asks once after a `403 invalid_csrf`, then retries the write; never cached) |
+| GET | `/api/csrf` | the session's current `nowo_chat` CSRF token and the caller's public id (1.26, route `nowo_chat_api_csrf`; the dock asks once after a `403 invalid_csrf`, then retries the write; never cached, `nosniff`). Never enable credentialed CORS on the chat prefix: this answer carries the session's CSRF token |
 | POST | `/api/presence` `{visible, idle?}` | heartbeat; online direct contacts, their `statuses`, the caller's own status (`me`) |
 | POST | `/api/status` `{status, text?, emoji?, clearAfter?}` | set the caller's chat status (1.10) |
 | POST | `/api/settings` `{key, value}` | save one chat preference (1.10); answers every preference |

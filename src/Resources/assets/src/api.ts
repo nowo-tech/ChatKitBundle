@@ -680,7 +680,8 @@ export class ChatApi {
    * 1.26: asks the server for the session's current CSRF token (`endpoints.csrf`) and keeps it when it belongs to the
    * same person as the page and differs from the refused one. One request at a time, shared by every write refused
    * meanwhile; a write refused with a token already replaced just retries. False without the endpoint, on any failure,
-   * for another person (signed in elsewhere in this browser: the page must be reloaded) or for the same token.
+   * for another person (signed in elsewhere in this browser: the page must be reloaded) or for the same token (rare:
+   * Symfony masks every token value differently; the real bound is request(), which retries a write once).
    *
    * @param refused The token the server refused.
    * @returns True when another token is in place.

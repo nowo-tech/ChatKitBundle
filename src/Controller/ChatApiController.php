@@ -896,7 +896,8 @@ final class ChatApiController extends AbstractController
      * the page's token (the session lost it: a new sign-in, or a parallel request that saved an older copy of an
      * unlocked session) and retries; `userUuid` lets the page see that someone else signed in meanwhile (it must
      * reload). Read from the current request's session on every call, never kept: nothing survives the request in a
-     * long-running worker. Same-origin JSON (a cross-site page cannot read it), never cached.
+     * long-running worker. Same-origin JSON (a cross-site page cannot read it: never enable credentialed CORS on the
+     * chat prefix), `nosniff`, never cached.
      *
      * @return JsonResponse `{csrf, userUuid}`
      */
@@ -907,7 +908,7 @@ final class ChatApiController extends AbstractController
         $manager = $this->container->get('security.csrf.token_manager');
         assert($manager instanceof CsrfTokenManagerInterface);
 
-        return new JsonResponse(['csrf' => $manager->getToken(self::CSRF_ID)->getValue(), 'userUuid' => $user->getChatPublicId()], Response::HTTP_OK, ['Cache-Control' => 'no-store, private']);
+        return new JsonResponse(['csrf' => $manager->getToken(self::CSRF_ID)->getValue(), 'userUuid' => $user->getChatPublicId()], Response::HTTP_OK, ['Cache-Control' => 'no-store, private', 'X-Content-Type-Options' => 'nosniff']);
     }
 
     /**

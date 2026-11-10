@@ -75,7 +75,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   (`window.nowoUiOpenRemoteForm`), when the page has a `<script>` for `nowo-ui-dialog.js` or when it was requested once;
   the script takes the CSP nonce of the page's scripts. The dock configuration carries `sidebar.dialogRuntime`.
 - **`GET /api/csrf`** (`nowo_chat_api_csrf`, `endpoints.csrf` in the dock configuration): the session's current CSRF
-  token of the chat and the caller's public id, never cached.
+  token of the chat and the caller's public id, never cached, `X-Content-Type-Options: nosniff`. Never enable
+  credentialed CORS on the chat prefix. `saveChatPreference()` and `markPageRead()` (one-shot posts outside the dock)
+  do not refresh their token yet.
 
 ### Fixed
 

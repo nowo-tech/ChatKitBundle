@@ -220,8 +220,8 @@ final class TestKernel extends Kernel
     }
 
     /**
-     * 1.26: a signed-in host route with no bundle code (loads the user from the session): the framework's own cost of a
-     * request, the baseline of the worker memory tests.
+     * 1.26: a host route behind the same firewall with no bundle code (loads the user from the session): the framework's
+     * own memory cost of a request, the baseline of the worker memory test on Symfony pre-releases.
      */
     public function signedIn(Security $security): Response
     {

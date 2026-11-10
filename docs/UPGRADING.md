@@ -6,7 +6,6 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 - [Unreleased](#unreleased)
 - [To 1.25.1](#to-1251)
-- [To 1.25.1](#to-1251-1)
 - [To 1.25.0](#to-1250)
   - [Target 1.25.0: sidebar sections](#target-1250-sidebar-sections)
 - [To 1.24.0](#to-1240)
@@ -79,9 +78,14 @@ No schema change. Everything is backward compatible:
 - **Dialog runtime (opt-in).** To have the sidebar actions open as dialogs on every page without adding UiKit's
   `js/nowo-ui-dialog.js` to your layout, set `web_ui.dock.dialog_runtime: true`. Pages that already load it are
   untouched (the dock never loads a second copy).
-- **CSRF refresh.** The new `GET /api/csrf` route sits under the bundle's route import like the rest of the API; if
-  your `security.yaml` lists the chat API paths one by one, add it (same access as `/api/conversations`). The 1.22.1
-  `chat.session_stale` notice now shows only when the token cannot be refreshed.
+- **CSRF refresh.** The new route `nowo_chat_api_csrf` (`GET {prefix}/api/csrf`) sits under the bundle's route
+  import like the rest of the API. If your `security.yaml` lists the chat API paths one by one, or your application
+  allows chat routes by name (e.g. an access catalogue of `nowo_chat_api_*` names), add it with the same access as
+  `/api/conversations`; without it the refresh fails closed into the 1.22.1 reload notice. It returns the session's CSRF
+  token: never enable credentialed CORS (`Access-Control-Allow-Credentials`) on the chat prefix. The 1.22.1
+  `chat.session_stale` notice now shows only when the token cannot be refreshed. The settings screen's
+  `saveChatPreference()` and the full-page `markPageRead()` still post with the token they were given (one-shot, no
+  refresh).
 
 ## To 1.25.1
 
@@ -91,9 +95,7 @@ From **1.25.0**:
 composer update nowo-tech/chat-kit-bundle
 ```
 
-## To 1.25.1
-
-From **1.25.0**: `composer update nowo-tech/chat-kit-bundle`. No schema change, no migration, no configuration change.
+No schema change, no migration, no configuration change.
 
 - **Section providers:** `ChatSidebarSection` throws `InvalidArgumentException` when an item is not a
   `ChatSidebarItem` or an action is not a `ChatSidebarAction`. A provider yielding something that is not a

@@ -1450,10 +1450,11 @@ export class ChatDock implements ThreadHost {
   }
 
   /**
-   * Since 1.22.1: the server refused the page's CSRF token (the session lost it: a new sign-in clears every token). The
-   * token is fixed at page load and the bundle has no endpoint to fetch a new one, so nothing written from this page
-   * can succeed again: stop the heartbeat (no request every 30 s bound to fail) and keep a notice asking for a reload.
-   * The API client sends no later write. Reading (the list, the threads) goes on.
+   * Since 1.22.1: the server refused the page's CSRF token for good. Since 1.26 the API client first takes the session's
+   * current token (`GET …/api/csrf`) and retries the write; this runs only when that fails (another person signed in,
+   * no token, a failed request, or the new token refused too). Nothing written from this page can succeed again: stop
+   * the heartbeat (no request every 30 s bound to fail) and keep a notice asking for a reload. The API client sends no
+   * later write. Reading (the list, the threads) goes on.
    */
   private csrfRejected(): void {
     this.sessionStale = true;
