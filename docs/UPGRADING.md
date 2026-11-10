@@ -84,6 +84,43 @@ Optional, to adopt spec 184:
 - Templates: a copy of `nowo_chat_template_dock` / `nowo_chat_template_window` / the picker misses the new blocks;
   re-copy them from the bundle if you want the hooks.
 
+### DDD / hexagonal ports
+
+Additive; nothing to change unless you adopt them:
+
+- **`ChatServiceInterface`** (alias of `ChatService`): the bundle's controllers and `ChatSupportTickets` now depend on
+  the interface. Type-hint it in your code; decorate it to audit or project chat activity. A decorator of the concrete
+  `ChatService` service id keeps working but no longer reaches the bundle's controllers — decorate the interface.
+- **`CurrentChatUserResolverInterface`** (default `SecurityChatUserResolver`: the security user when it implements
+  `ChatUserInterface`, as before). Alias it to your own to map a security user that is a DTO / wrapper to its chat
+  participant; the voter, the dock and every chat controller use it.
+- **Event DTOs**: every event keeps its entity properties and gains read-only views — `messageView()`
+  (`ChatMessageView`), `conversationView()` / `ticketView()` (`ChatConversationView`), `linkView()` (`ChatLinkView`)
+  and public-id accessors (`byPublicId()`, `mentionedPublicIds()`, `requesterPublicId()`, `assigneePublicId()`).
+- New private `*Ref` properties on the entities (unmapped in the default mode; no schema change) and the getters
+  `get<Relation>Reference()`.
+
+### Optional: `doctrine.user_reference: id`
+
+The chat tables stop pointing at your user table: no `resolve_target_entities`, no foreign keys; each user column holds
+the user id as text, and users come from your `ChatDirectoryInterface`. Steps:
+
+1. Set `nowo_chat_kit.profiles.<default>.doctrine.user_reference: id` (`user_class` may go).
+2. Generate the migration: `bin/console doctrine:migrations:diff`. It drops the foreign keys from the chat tables to
+   your user table, changes the eight user columns (`author_id`, `deleted_by_id`, `pinned_by_id` on messages;
+   `support_owner_id`, `resolved_by_id`, `assignee_id` on conversations; `created_by_id` on pinned links; `user_id` on
+   participants, reactions, mentions, quick replies and user settings) to `VARCHAR(64)` and adds the six indexes listed
+   in [CONFIGURATION](CONFIGURATION.md#user-references-124). The values stay the same ids, now as text. Review it:
+   on PostgreSQL the type change may need `USING <column>::varchar`; on MySQL the foreign keys must be dropped before
+   the columns change (the generated order does that).
+3. Call `ChatPersonalData::erase($user)` from your account deletion (nothing cascades any more). For an account that
+   is already gone, pass any `ChatUserInterface` whose `getId()` returns its id.
+4. Code that queried the chat entities with DQL on `author`, `user`, `supportOwner`, … must use the reference fields
+   (`authorRef`, `userRef`, …) in this mode, or the bundle's repositories.
+
+Back to `relation`: the reverse migration (integer columns, foreign keys) only works if every stored id still exists
+in your user table; erase or delete the orphaned rows first.
+
 ## To 1.23.0
 
 From **1.22.1**:

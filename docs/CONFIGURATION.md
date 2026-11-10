@@ -81,7 +81,7 @@ nowo_chat_kit:
 | --- | --- | --- | --- |
 | `default_profile` | string | `default` | Profile in use. |
 | `profiles.<name>.enabled` | bool | `true` | Render the dock. |
-| `profiles.<name>.user_class` | string | — (required with Doctrine) | Your user entity (implements `ChatUserInterface`). |
+| `profiles.<name>.user_class` | string | — (required with Doctrine, unless `doctrine.user_reference: id`) | Your user entity (implements `ChatUserInterface`). |
 | `profiles.<name>.retention_days` | int ≥ 30 | `365` | Messages older than this are purged by `nowo:chat:purge`. `%env()%` allowed. |
 | `profiles.<name>.realtime` | bool | `true` | Use the realtime transport when one is available. |
 | `profiles.<name>.push` | bool | `false` | Queue Web Push for new messages (needs a `ChatPushSenderInterface`). |
@@ -93,6 +93,7 @@ nowo_chat_kit:
 | `profiles.<name>.push_preview` | bool | `false` | Put the first 140 characters of the message in the Web Push body (lock screens). Off: a generic "New message". |
 | `profiles.<name>.doctrine.table_name_prefix` | string | `nowo_chat_` | Replaces the `nowo_chat_` part of every bundle table, index and unique-constraint name (non-empty; lowercase letters, digits, `_`). `chat_` gives `chat_conversation`, `chat_message`, `idx_chat_message_created`, `uniq_chat_message_uuid`, …; the Doctrine-generated `IDX_*` / `FK_*` names follow the new table names. See [Table names](#table-names). |
 | `profiles.<name>.doctrine.table_prefix` | string | `''` | Prepended to every bundle table, index and unique-constraint name **after** `table_name_prefix` is applied (lowercase letters, digits, `_`). `app_` gives `app_nowo_chat_conversation`, `app_idx_nowo_chat_message_created`, … Generate a migration after changing it. |
+| `profiles.<name>.doctrine.user_reference` | `relation` \| `id` | `relation` | 1.24: how the chat tables point at users. `relation` = Doctrine relations to `user_class` with foreign keys (`resolve_target_entities`). `id` = each user column holds the user's id as a string (`VARCHAR(64)`, no foreign key, indexed), users are loaded through `ChatDirectoryInterface::findByIds()` after the rows, `user_class` is not needed and need not be an entity. Global like the table names. Switching needs a migration ([User references](#user-references-124)). |
 | `profiles.<name>.web_ui.layout_template` | ?string | `null` | Layout the full-page chat extends (REQ-UI-003); `null` = `nowo_ui_kit.layouts.admin`. It must render the UiKit canonical blocks. |
 | `profiles.<name>.web_ui.templates.page` | string | `@NowoChatKitBundle/page.html.twig` | Template of the full-page chat (a host template extending `@!NowoChatKitBundle/page.html.twig` and overriding one block). |
 | `profiles.<name>.web_ui.assets` | bool | `true` | 1.21: `false` = the full-page chat leaves out the `nowo-chat.css` and `nowo-chat.js` tags (your bundler ships them). The dock on your other pages takes its own `nowo_chat_assets: false` ([USAGE](USAGE.md#front-end-iife-or-your-bundler)). |
@@ -189,6 +190,32 @@ Container parameters with the resolved physical names, for host SQL (GDPR eraser
 | `nowo_chat_kit.doctrine.tables` | map of the keys above to the names | |
 
 Inside the bundle every query takes the names from the Doctrine metadata, never from literals.
+
+## User references (1.24)
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            doctrine:
+                user_reference: id   # default: relation
+```
+
+| | `relation` (default) | `id` |
+|---|---|---|
+| User columns (`author_id`, `user_id`, `support_owner_id`, `assignee_id`, `resolved_by_id`, `deleted_by_id`, `pinned_by_id`, `created_by_id`) | integer, foreign key to your user table | `VARCHAR(64)` holding `ChatUserInterface::getId()` as text, no foreign key |
+| `resolve_target_entities` | `ChatUserInterface` → `user_class` | none (`user_class` optional) |
+| Your chat user | a Doctrine entity | any object implementing `ChatUserInterface` (a DTO, a read model) |
+| Loading users | joined with the rows | one `ChatDirectoryInterface::findByIds()` call per batch of rows (memoized per request) |
+| Deleting a user | foreign keys cascade / set null | nothing happens: call `ChatPersonalData::erase()` from your account deletion |
+| A row whose user is gone | removed by the database | nullable relations read null ("Deleted user"); participant, reaction, mention, settings and quick-reply rows get an `UnresolvedChatUser` (never reachable, a hashed public id) until erased |
+
+In id mode the indexes the foreign keys gave are mapped explicitly (`idx_nowo_chat_msg_author`,
+`idx_nowo_chat_msg_deleted_by`, `idx_nowo_chat_msg_pinned_by`, `idx_nowo_chat_conv_resolved_by`,
+`idx_nowo_chat_conv_link_by`, `idx_nowo_chat_reaction_user`; renamed by `table_name_prefix` / `table_prefix`), and every
+entity exposes `get<Relation>Reference()` (e.g. `ChatMessage::getAuthorReference()`) to read the stored id without
+loading the user. User ids are still integers (`ChatUserInterface::getId(): ?int`); the columns are strings so a later
+version can accept other identifiers without another migration. [UPGRADING](UPGRADING.md#unreleased) has the migration.
 
 ## Container parameters
 

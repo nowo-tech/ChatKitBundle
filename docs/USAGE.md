@@ -126,7 +126,7 @@ notified. An edit that keeps the group mention spends nothing; one that drops it
 
 #### System lines (1.24)
 
-`ChatService::postSystemLine($conversation, $body, $domain = null, $params = [])` posts a line without an
+`ChatServiceInterface::postSystemLine($conversation, $body, $domain = null, $params = [])` posts a line without an
 author ("Ana renamed the channel"), shown centered in the thread and as the list preview, translated for each reader
 (`$body` is a key of `$domain`, or plain text when `$domain` is null; `$params` are `name => value` for `%name%`). It
 is always escaped text, never HTML or Markdown; nobody can react to, edit, delete or pin it, and it rings no sound and
@@ -201,15 +201,48 @@ context, not as part of your domain model.
   `ChatDirectoryInterface` and `ChatAccessPolicyInterface` (required), and optionally
   `ChatChannelProviderInterface`, `ChatLinkPolicyInterface`, `ChatPinPolicyInterface`,
   `ChatPushSenderInterface`, `ChatLinkPreviewProviderInterface`, `ChatDigestSenderInterface`,
-  `ChatSupportTopicProviderInterface`, `ChatAvatarUrlResolverInterface`, `ChatReferenceProviderInterface`.
+  `ChatSupportTopicProviderInterface`, `ChatAvatarUrlResolverInterface`, `ChatReferenceProviderInterface`, and (1.24)
+  `CurrentChatUserResolverInterface`, `ChatChannelWritePolicyInterface`, `ChatChannelMentionPolicyInterface`.
   They take `ChatUserInterface` and the value objects in `Nowo\ChatKitBundle\Model` (`ChatContact`,
   `ChatChannel`, `ChatReference`, `ChatReferenceScope`, ...), so the adapter translates from your own
   repositories and policies.
 - React to chat activity with event listeners in your application layer: `ChatMessageSentEvent`,
   `ChatMessageDeletedEvent`, `ChatMentionEvent`, `ChatChannelOpeningEvent` (veto), `ChatSupportStatusChangedEvent`,
-  `SupportTicket*Event`, `ChatLink*Event`, `ChatMentionsErasedEvent`. Copy what you need (uuids, public ids,
-  text) into your own commands; do not keep the entities.
-- Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case.
+  `SupportTicket*Event`, `ChatLink*Event`, `ChatMentionsErasedEvent`. 1.24: read their DTOs, never the entities —
+  `messageView()` (`ChatMessageView`: ids, uuids, kind, author public id, body, mentioned public ids, `mentionAll`),
+  `conversationView()` / `ticketView()` (`ChatConversationView`), `linkView()` (`ChatLinkView`) and the public-id
+  accessors (`byPublicId()`, `mentionedPublicIds()`, `requesterPublicId()`, `assigneePublicId()`). They are snapshots
+  of scalars; copy what you need into your own commands.
+- 1.24: call the chat through **`ChatServiceInterface`** (aliased to `ChatService`), so your application layer can
+  wrap it behind its own port, decorate it (audit, projections) or replace it in tests; the bundle's controllers use
+  the interface too, so a decorator sees every API call.
+- 1.24: when your Symfony security user is not the chat participant (a DTO, a wrapper around your domain user), alias
+  **`CurrentChatUserResolverInterface`** to an adapter that maps one to the other; the voter, the dock and every chat
+  controller ask it (default: the security user when it implements `ChatUserInterface`).
+- 1.24: with **`doctrine.user_reference: id`** the chat tables keep the user id as a string, without foreign keys or
+  `resolve_target_entities`: the class implementing `ChatUserInterface` can be a plain object of your infrastructure
+  layer, loaded by your `ChatDirectoryInterface::findByIds()` ([CONFIGURATION](CONFIGURATION.md#user-references-124),
+  migration in [UPGRADING](UPGRADING.md#unreleased)).
+- Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case (in id mode nothing cascades:
+  `erase()` is how the rows go).
+
+```php
+// src/Infrastructure/Chat/CurrentParticipant.php — the security user is a DTO, the participant comes from the directory.
+final readonly class CurrentParticipant implements CurrentChatUserResolverInterface
+{
+    public function __construct(private ChatDirectoryInterface $directory) {}
+
+    public function resolve(?UserInterface $user): ?ChatUserInterface
+    {
+        return $user instanceof SecurityAccount ? $this->directory->findByPublicId($user->accountUuid()) : null;
+    }
+}
+```
+
+```yaml
+# config/services.yaml
+Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface: '@App\Infrastructure\Chat\CurrentParticipant'
+```
 
 ```php
 // src/Infrastructure/Chat/DirectoryAdapter.php
@@ -244,13 +277,14 @@ final readonly class DirectoryAdapter implements ChatDirectoryInterface
 
 **Known limitations.**
 
-- The chat tables have foreign keys to your user table: `user_class` is mapped to `ChatUserInterface` through
-  `doctrine.orm.resolve_target_entities`, so the class implementing `ChatUserInterface` must be a Doctrine
-  entity with an integer id, and deleting a user cascades into chat rows.
-- The Symfony security user must be that same `ChatUserInterface` object (the voter, the dock and the
-  controllers read `getUser()`).
-- Events and `ChatService` methods expose the bundle's Doctrine entities, and `ChatService` is a final class
-  without an interface; wrap it behind your own port if your application layer must not see it.
+- User ids are integers: `ChatUserInterface::getId(): ?int` and `ChatDirectoryInterface::findByIds(list<int>)` stay
+  (UUID-keyed domain users need an integer surrogate). In id mode the columns are strings already, so a later version
+  can accept other identifiers without another migration.
+- The default `relation` mode still maps `user_class` through `resolve_target_entities` with foreign keys to your user
+  table (choose `doctrine.user_reference: id` to avoid it).
+- `ChatServiceInterface` methods still take and return the bundle's entities (`ChatConversation`, `ChatMessage`,
+  `ChatParticipant`); the DTOs are on the events. `ChatSupportTickets`, `ChatLinks` and `ChatPersonalData` have no
+  interface yet.
 - There are no events yet for message edits, reactions, pins, read cursors or conversations being opened.
 
 ## Conversations and permissions
@@ -1046,7 +1080,7 @@ sound, no window opened by a buzz, not counted in the launcher's total (`unreadT
 count and the `mutedUntil` of the summaries says until when. API: `POST /api/conversations/{uuid}/mute` (JSON
 `{minutes}`, 1 to 525600, for a timed mute; without it until unmuted) and `DELETE` to unmute; same access as reading it
 (404 otherwise), CSRF header and the action budget; the person's other tabs get a `list` event. From PHP:
-`ChatService::mute($user, $conversation, $until)`.
+`ChatServiceInterface::mute($user, $conversation, $until)`.
 
 Nothing is deleted and nobody else is affected (`nowo_chat_participant.archived_at`). A closed conversation is back in
 the list as soon as a new message arrives — unless the person muted it, and except a resolved or closed support

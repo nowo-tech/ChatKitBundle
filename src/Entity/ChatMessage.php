@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Entity;
 
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 
@@ -42,7 +43,7 @@ class ChatMessage
 
     /**
      * 1.24: a system line posted by the application (no author; e.g. "Ana renamed the channel"), shown as a centered
-     * line. Only the server posts it (ChatService::postSystemLine()); no API route creates one.
+     * line. Only the server posts it (ChatServiceInterface::postSystemLine()); no API route creates one.
      */
     public const string KIND_SYSTEM = 'system';
 
@@ -85,6 +86,9 @@ class ChatMessage
     #[ORM\JoinColumn(name: 'deleted_by_id', nullable: true, onDelete: 'SET NULL')]
     private ?ChatUserInterface $deletedBy = null;
 
+    /** 1.24: `deletedBy` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $deletedByRef = null;
+
     /** 1.10: pinned to the top of its conversation since then (shared by every participant); null = not pinned. */
     #[ORM\Column(name: 'pinned_at', nullable: true)]
     private ?DateTimeImmutable $pinnedAt = null;
@@ -92,6 +96,12 @@ class ChatMessage
     #[ORM\ManyToOne(targetEntity: ChatUserInterface::class)]
     #[ORM\JoinColumn(name: 'pinned_by_id', nullable: true, onDelete: 'SET NULL')]
     private ?ChatUserInterface $pinnedBy = null;
+
+    /** 1.24: `pinnedBy` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $pinnedByRef = null;
+
+    /** 1.24: `author` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $authorRef;
 
     /**
      * Creates a text message, stamped with a new public uuid.
@@ -118,6 +128,7 @@ class ChatMessage
     ) {
         $this->initUuid();
         $this->createdAt = $createdAt ?? new DateTimeImmutable();
+        $this->authorRef = ChatUserReferences::reference($author);
     }
 
     /**
@@ -216,6 +227,8 @@ class ChatMessage
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->pinnedBy = $at instanceof DateTimeImmutable ? $by : null;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->pinnedByRef = ChatUserReferences::reference($this->pinnedBy);
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->pinnedAt = $at;
     }
 
@@ -237,6 +250,17 @@ class ChatMessage
     public function getPinnedBy(): ?ChatUserInterface
     {
         return $this->pinnedBy;
+    }
+
+    /**
+     * 1.24: the stored reference of `pinnedBy` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getPinnedByReference(): ?string
+    {
+        return $this->pinnedByRef ?? ChatUserReferences::reference($this->pinnedBy);
     }
 
     /**
@@ -404,6 +428,17 @@ class ChatMessage
     }
 
     /**
+     * 1.24: the stored reference of `author` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getAuthorReference(): ?string
+    {
+        return $this->authorRef ?? ChatUserReferences::reference($this->author);
+    }
+
+    /**
      * Whether the given (persisted) user wrote the message.
      *
      * @param ChatUserInterface $user The user to check
@@ -540,6 +575,17 @@ class ChatMessage
     }
 
     /**
+     * 1.24: the stored reference of `deletedBy` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getDeletedByReference(): ?string
+    {
+        return $this->deletedByRef ?? ChatUserReferences::reference($this->deletedBy);
+    }
+
+    /**
      * Tombstone: the text is gone, the row stays so the thread keeps its shape.
      *
      * @param ChatUserInterface $by The user who deletes it
@@ -553,6 +599,8 @@ class ChatMessage
         $this->bodyHtml = '';
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->deletedBy = $by;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->deletedByRef = ChatUserReferences::reference($by);
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->deletedAt = $at ?? new DateTimeImmutable();
         if (!$this->isAuthoredBy($by)) {

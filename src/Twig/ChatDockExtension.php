@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Twig;
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
+use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Controller\ChatApiController;
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -73,6 +74,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param array{overlay?: string, watch_aria_modal?: bool} $dock 1.17: dock reaction to modal overlays (`dock`)
      * @param ChatLinks|null $links 1.19: pinned links, link cards and the Links panel (`links`); null or disabled hides them
      * @param string|null $channelsUrl 1.24: host page to browse or create channels (`web_ui.channels_url`); null: no link
+     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      */
     public function __construct(
         private readonly Security $security,
@@ -100,6 +102,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly array $dock = ['overlay' => 'hide', 'watch_aria_modal' => false],
         private readonly ?ChatLinks $links = null,
         private readonly ?string $channelsUrl = null,
+        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
     ) {
     }
 
@@ -153,6 +156,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
     public function config(): ?array
     {
         $user = $this->security->getUser();
+        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
         if (!$user instanceof ChatUserInterface || !$this->access->isReachable($user)) {
             return null;
         }

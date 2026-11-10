@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Repository;
 
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
@@ -21,8 +22,10 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
      *
      * @param ManagerRegistry $registry Doctrine manager registry
      */
-    public function __construct(ManagerRegistry $registry)
-    {
+    public function __construct(
+        ManagerRegistry $registry,
+        private readonly ChatUserReferences $refs = new ChatUserReferences(),
+    ) {
         parent::__construct($registry, ChatQuickReply::class);
     }
 
@@ -37,8 +40,8 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
     {
         /** @var list<ChatQuickReply> $rows */
         $rows = $this->createQueryBuilder('q')
-            ->where('q.user = :user')
-            ->setParameter('user', $user)
+            ->where($this->refs->field('q', 'user') . ' = :user')
+            ->setParameter('user', $this->refs->value($user))
             ->orderBy('q.title', 'ASC')
             ->addOrderBy('q.id', 'ASC')
             ->getQuery()
@@ -57,7 +60,7 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
      */
     public function findOwned(ChatUserInterface $user, int $id): ?ChatQuickReply
     {
-        return $this->findOneBy(['id' => $id, 'user' => $user]);
+        return $this->findOneBy(['id' => $id] + $this->refs->criteria('user', $user));
     }
 
     /**

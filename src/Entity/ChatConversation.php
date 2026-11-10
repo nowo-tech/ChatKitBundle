@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Entity;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 use LogicException;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -55,12 +56,18 @@ class ChatConversation
     #[ORM\JoinColumn(name: 'support_owner_id', nullable: true, onDelete: 'CASCADE')]
     private ?ChatUserInterface $supportOwner = null;
 
+    /** 1.24: `supportOwner` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $supportOwnerRef = null;
+
     #[ORM\Column(name: 'support_status', length: 16, nullable: true, enumType: SupportStatus::class)]
     private ?SupportStatus $supportStatus = null;
 
     #[ORM\ManyToOne(targetEntity: ChatUserInterface::class)]
     #[ORM\JoinColumn(name: 'resolved_by_id', nullable: true, onDelete: 'SET NULL')]
     private ?ChatUserInterface $resolvedBy = null;
+
+    /** 1.24: `resolvedBy` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $resolvedByRef = null;
 
     /**
      * Support only: where the user reported the problem from (`url`, `label`), shown to agents as a context chip.
@@ -85,6 +92,9 @@ class ChatConversation
     #[ORM\ManyToOne(targetEntity: ChatUserInterface::class)]
     #[ORM\JoinColumn(name: 'assignee_id', nullable: true, onDelete: 'SET NULL')]
     private ?ChatUserInterface $assignee = null;
+
+    /** 1.24: `assignee` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $assigneeRef = null;
 
     /** Support only: when the ticket was closed (read-only from then on). */
     #[ORM\Column(name: 'closed_at', nullable: true)]
@@ -157,9 +167,10 @@ class ChatConversation
      */
     public static function support(ChatUserInterface $owner, ?DateTimeImmutable $createdAt = null): self
     {
-        $conversation                = new self(ConversationKind::Support, $createdAt);
-        $conversation->supportOwner  = $owner;
-        $conversation->supportStatus = SupportStatus::Open;
+        $conversation                  = new self(ConversationKind::Support, $createdAt);
+        $conversation->supportOwner    = $owner;
+        $conversation->supportOwnerRef = ChatUserReferences::reference($owner);
+        $conversation->supportStatus   = SupportStatus::Open;
 
         return $conversation;
     }
@@ -311,6 +322,17 @@ class ChatConversation
     }
 
     /**
+     * 1.24: the stored reference of `supportOwner` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getSupportOwnerReference(): ?string
+    {
+        return $this->supportOwnerRef ?? ChatUserReferences::reference($this->supportOwner);
+    }
+
+    /**
      * Support only: open, waiting for the user, resolved or closed.
      *
      * @return SupportStatus|null The status, or null for other kinds
@@ -346,6 +368,8 @@ class ChatConversation
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->resolvedBy = $agent;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->resolvedByRef = ChatUserReferences::reference($agent);
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->resolvedAt = $at ?? new DateTimeImmutable();
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->closedAt = null;
@@ -363,6 +387,8 @@ class ChatConversation
         $this->supportStatus = SupportStatus::Open;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->resolvedBy = null;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->resolvedByRef = null;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->resolvedAt = null;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
@@ -477,6 +503,17 @@ class ChatConversation
     }
 
     /**
+     * 1.24: the stored reference of `assignee` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getAssigneeReference(): ?string
+    {
+        return $this->assigneeRef ?? ChatUserReferences::reference($this->assignee);
+    }
+
+    /**
      * Assigns the ticket to an agent (null: unassigned).
      *
      * @param ChatUserInterface|null $assignee The agent; null to unassign
@@ -488,6 +525,8 @@ class ChatConversation
         $this->assertSupport();
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->assignee = $assignee;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->assigneeRef = ChatUserReferences::reference($assignee);
     }
 
     /**
@@ -542,6 +581,17 @@ class ChatConversation
     public function getResolvedBy(): ?ChatUserInterface
     {
         return $this->resolvedBy;
+    }
+
+    /**
+     * 1.24: the stored reference of `resolvedBy` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getResolvedByReference(): ?string
+    {
+        return $this->resolvedByRef ?? ChatUserReferences::reference($this->resolvedBy);
     }
 
     /**

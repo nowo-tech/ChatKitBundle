@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Repository;
 
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Symfony\Contracts\Service\ResetInterface;
@@ -27,8 +28,10 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
      *
      * @param ManagerRegistry $registry Doctrine manager registry
      */
-    public function __construct(ManagerRegistry $registry)
-    {
+    public function __construct(
+        ManagerRegistry $registry,
+        private readonly ChatUserReferences $refs = new ChatUserReferences(),
+    ) {
         parent::__construct($registry, ChatUserSettings::class);
     }
 
@@ -52,7 +55,7 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
             return $memo;
         }
 
-        return $this->memo[$id] = $this->findOneBy(['user' => $user]) ?? new ChatUserSettings($user);
+        return $this->memo[$id] = $this->findOneBy($this->refs->criteria('user', $user)) ?? new ChatUserSettings($user);
     }
 
     /**
@@ -81,8 +84,8 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
         }
         /** @var list<ChatUserSettings> $rows */
         $rows = $this->createQueryBuilder('s')
-            ->where('IDENTITY(s.user) IN (:ids)')
-            ->setParameter('ids', array_keys($byId))
+            ->where($this->refs->identity('s', 'user') . ' IN (:ids)')
+            ->setParameter('ids', $this->refs->ids(array_keys($byId)))
             ->getQuery()
             ->getResult();
         foreach ($rows as $settings) {

@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Entity;
 
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationLinkRepository;
 
@@ -43,6 +44,9 @@ class ChatConversationLink
     #[ORM\Column(name: 'updated_at', nullable: true)]
     private ?DateTimeImmutable $updatedAt = null;
 
+    /** 1.24: `createdBy` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $createdByRef;
+
     /**
      * Pins a link to a conversation.
      *
@@ -66,10 +70,12 @@ class ChatConversationLink
         ?DateTimeImmutable $createdAt = null,
     ) {
         $this->initUuid();
-        $this->url       = $url;
-        $this->host      = $host;
-        $this->title     = $title;
-        $this->createdAt = $createdAt ?? new DateTimeImmutable();
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->createdByRef = ChatUserReferences::reference($createdBy);
+        $this->url          = $url;
+        $this->host         = $host;
+        $this->title        = $title;
+        $this->createdAt    = $createdAt ?? new DateTimeImmutable();
     }
 
     /**
@@ -100,6 +106,17 @@ class ChatConversationLink
     public function getCreatedBy(): ?ChatUserInterface
     {
         return $this->createdBy;
+    }
+
+    /**
+     * 1.24: the stored reference of `createdBy` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getCreatedByReference(): ?string
+    {
+        return $this->createdByRef ?? ChatUserReferences::reference($this->createdBy);
     }
 
     /**

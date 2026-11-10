@@ -12,6 +12,8 @@ use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -39,7 +41,6 @@ use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatChannelDeniedException;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
-use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatSupportInbox;
 use Nowo\ChatKitBundle\Support\ChatSupportTickets;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -90,9 +91,10 @@ final class ChatApiController extends AbstractController
      * (send, action, typing, buzz per conversation, buzz per minute, read, reference search).
      *
      * @param ClockInterface $clock Clock for the realtime token expiry
+     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      */
     public function __construct(
-        private readonly ChatService $chat,
+        private readonly ChatServiceInterface $chat,
         private readonly ChatPresenter $presenter,
         private readonly ChatAccess $access,
         private readonly ChatDirectoryInterface $directory,
@@ -126,6 +128,7 @@ final class ChatApiController extends AbstractController
         private readonly ChatReferences $references,
         private readonly ClockInterface $clock = new Clock(),
         private readonly ?ChatQuickReplyRepository $quickReplies = null,
+        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
     ) {
     }
 
@@ -644,7 +647,7 @@ final class ChatApiController extends AbstractController
         return $this->json([
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, $reactions[(int) $message->getId()] ?? []), $page),
             'hasMore'  => $hasMore,
-            'readUpTo' => $this->participants->findOneBy(['conversation' => $conversation, 'user' => $user])?->getLastReadMessageId(),
+            'readUpTo' => $this->participants->findOneFor($conversation, $user)?->getLastReadMessageId(),
             // Other people's read cursors (✓✓ / "Seen by N").
             'readers' => array_map(static fn (ChatParticipant $participant): array => [
                 'userUuid'  => $participant->getUser()->getChatPublicId(),
@@ -1318,6 +1321,7 @@ final class ChatApiController extends AbstractController
     private function chatUser(): ChatUserInterface
     {
         $user = $this->getUser();
+        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
         $this->deny(!$user instanceof ChatUserInterface || !$this->access->isReachable($user), 'unauthorized', Response::HTTP_UNAUTHORIZED);
         assert($user instanceof ChatUserInterface);
 

@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Entity;
 
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 
@@ -24,6 +25,9 @@ class ChatReaction
 
     #[ORM\Column(name: 'created_at')]
     private DateTimeImmutable $createdAt;
+
+    /** 1.24: `user` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $userRef;
 
     /**
      * Creates a reaction of a user on a message.
@@ -44,6 +48,8 @@ class ChatReaction
         private string $emoji,
         ?DateTimeImmutable $createdAt = null,
     ) {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->userRef   = ChatUserReferences::reference($user);
         $this->createdAt = $createdAt ?? new DateTimeImmutable();
     }
 
@@ -75,6 +81,17 @@ class ChatReaction
     public function getUser(): ChatUserInterface
     {
         return $this->user;
+    }
+
+    /**
+     * 1.24: the stored reference of `user` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getUserReference(): ?string
+    {
+        return $this->userRef ?? ChatUserReferences::reference($this->user);
     }
 
     /**

@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
 
@@ -22,8 +23,10 @@ class ChatConversationLinkRepository extends ServiceEntityRepository
      *
      * @param ManagerRegistry $registry Doctrine manager registry
      */
-    public function __construct(ManagerRegistry $registry)
-    {
+    public function __construct(
+        ManagerRegistry $registry,
+        private readonly ChatUserReferences $refs = new ChatUserReferences(),
+    ) {
         parent::__construct($registry, ChatConversationLink::class);
     }
 
@@ -36,17 +39,14 @@ class ChatConversationLinkRepository extends ServiceEntityRepository
      */
     public function forConversation(ChatConversation $conversation): array
     {
-        /** @var list<ChatConversationLink> $links */
-        $links = $this->createQueryBuilder('l')
-            ->addSelect('author')
-            ->leftJoin('l.createdBy', 'author')
-            ->where('l.conversation = :conversation')
+        $qb = $this->createQueryBuilder('l');
+        $this->refs->join($qb, 'l.createdBy', 'author');
+
+        return $qb->where('l.conversation = :conversation')
             ->setParameter('conversation', $conversation)
             ->orderBy('l.id', 'ASC')
             ->getQuery()
             ->getResult();
-
-        return $links;
     }
 
     /**

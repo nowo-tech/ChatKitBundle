@@ -71,9 +71,8 @@ final readonly class ChatPushDispatcher
         if (!$message instanceof ChatMessage || $message->isDeleted() || $command->recipientIds === []) {
             return;
         }
-        $now = $this->clock->now();
-        /** @var list<ChatParticipant> $participants */
-        $participants = $this->participants->findBy(['conversation' => $message->getConversation(), 'user' => $command->recipientIds]);
+        $now          = $this->clock->now();
+        $participants = $this->participants->findForUserIds($message->getConversation(), $command->recipientIds);
         $users        = array_map(static fn (ChatParticipant $participant): ChatUserInterface => $participant->getUser(), $participants);
         $presence     = $this->presence->statusOf($users);
         $settings     = $this->settings->forUsers($users);

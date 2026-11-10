@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\DependencyInjection;
 
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
@@ -188,7 +189,7 @@ final class Configuration implements ConfigurationInterface
                                 ->defaultTrue()
                             ->end()
                             ->scalarNode('user_class')
-                                ->info('Application user entity implementing Nowo\\ChatKitBundle\\Model\\ChatUserInterface.')
+                                ->info('Application user entity implementing Nowo\\ChatKitBundle\\Model\\ChatUserInterface (required with Doctrine unless doctrine.user_reference is "id").')
                                 ->defaultNull()
                             ->end()
                             ->integerNode('retention_days')
@@ -235,6 +236,11 @@ final class Configuration implements ConfigurationInterface
                                             ->ifTrue(static fn (mixed $prefix): bool => !is_string($prefix) || ($prefix !== '' && preg_match(TablePrefixListener::PREFIX_PATTERN, $prefix) !== 1))
                                             ->thenInvalid('table_prefix must be empty or start with a lowercase letter and contain only lowercase letters, digits and underscores.')
                                         ->end()
+                                    ->end()
+                                    ->enumNode('user_reference')
+                                        ->info('1.24: "relation" (default) = Doctrine relations and foreign keys to user_class (resolve_target_entities); "id" = the user columns hold the user id as a string, without foreign keys, and users are loaded through ChatDirectoryInterface (user_class optional; generate a migration when you switch).')
+                                        ->values([ChatUserReferences::RELATION, ChatUserReferences::ID])
+                                        ->defaultValue(ChatUserReferences::RELATION)
                                     ->end()
                                 ->end()
                             ->end()

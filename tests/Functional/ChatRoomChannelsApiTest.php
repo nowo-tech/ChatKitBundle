@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
-use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
+use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
@@ -162,7 +163,8 @@ final class ChatRoomChannelsApiTest extends DatabaseTestCase
         }
         self::assertSame(['mutedUntil' => null], $this->send(Request::METHOD_DELETE, $url, $csrf));
         self::assertSame(3, $this->getJson('/chat/api/conversations')['unreadTotal']);
-        $participant = $this->em->getRepository(ChatParticipant::class)->findOneBy(['conversation' => $dm->getId(), 'user' => $ana->getId()]);
+        $this->em->clear();
+        $participant = $this->get(ChatParticipantRepository::class)->findOneFor($this->em->find(ChatConversation::class, $dm->getId()) ?? $dm, $ana);
         self::assertInstanceOf(ChatParticipant::class, $participant);
         self::assertNull($participant->getMutedUntil());
 
@@ -252,8 +254,7 @@ final class ChatRoomChannelsApiTest extends DatabaseTestCase
 
     private function countMentionsOf(TestUser $user): int
     {
-        return (int) $this->em->createQuery('SELECT COUNT(m.id) FROM ' . ChatMessageMention::class . ' m WHERE m.user = :user')
-            ->setParameter('user', $user)->getSingleScalarResult();
+        return $this->get(ChatMessageMentionRepository::class)->countForUser($user, [TestChannelProvider::KEY], false);
     }
 
     /**

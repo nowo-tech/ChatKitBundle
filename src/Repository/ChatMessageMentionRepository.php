@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageMention;
@@ -27,8 +28,10 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
      *
      * @param ManagerRegistry $registry Doctrine manager registry
      */
-    public function __construct(ManagerRegistry $registry)
-    {
+    public function __construct(
+        ManagerRegistry $registry,
+        private readonly ChatUserReferences $refs = new ChatUserReferences(),
+    ) {
         parent::__construct($registry, ChatMessageMention::class);
     }
 
@@ -46,7 +49,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
         }
         /** @var list<int|string> $ids */
         $ids = $this->createQueryBuilder('mm')
-            ->select('IDENTITY(mm.user)')
+            ->select($this->refs->identity('mm', 'user'))
             ->where('mm.message = :message')
             ->setParameter('message', $message)
             ->getQuery()
@@ -70,7 +73,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             ->where('mm.message = :message')
             ->setParameter('message', $message);
         if ($keepUserIds !== []) {
-            $qb->andWhere('IDENTITY(mm.user) NOT IN (:keep)')->setParameter('keep', $keepUserIds);
+            $qb->andWhere($this->refs->identity('mm', 'user') . ' NOT IN (:keep)')->setParameter('keep', $this->refs->ids($keepUserIds));
         }
 
         return (int) $qb->getQuery()->execute();
@@ -97,11 +100,11 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
         return (int) $this->getEntityManager()->createQueryBuilder()
             ->update(ChatMessageMention::class, 'mm')
             ->set('mm.readAt', ':now')
-            ->where('mm.user = :user')
+            ->where($this->refs->field('mm', 'user') . ' = :user')
             ->andWhere('mm.readAt IS NULL')
             ->andWhere('IDENTITY(mm.message) IN (' . $messages->getDQL() . ')')
             ->setParameter('now', $now)
-            ->setParameter('user', $user)
+            ->setParameter('user', $this->refs->value($user))
             ->setParameter('conversation', $conversation)
             ->setParameter('upTo', $messageId)
             ->getQuery()
@@ -135,17 +138,14 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
         if ($limit <= 0) {
             return [];
         }
-        /** @var list<ChatMessageMention> $rows */
-        $rows = $this->visibleTo($user, $channelKeys, $supportAgent, $unreadOnly, $since, $channelsOnly)
-            ->addSelect('m', 'c', 'author')
-            ->leftJoin('m.author', 'author')
+
+        return $this->visibleTo($user, $channelKeys, $supportAgent, $unreadOnly, $since, $channelsOnly, true)
+            ->addSelect('m', 'c')
             ->orderBy('mm.createdAt', 'DESC')
             ->addOrderBy('mm.id', 'DESC')
             ->setMaxResults($limit)
             ->getQuery()
             ->getResult();
-
-        return $rows;
     }
 
     /**
@@ -184,7 +184,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
      */
     public function findOneForUser(ChatUserInterface $user, int $id): ?ChatMessageMention
     {
-        return $this->findOneBy(['id' => $id, 'user' => $user]);
+        return $this->findOneBy(['id' => $id] + $this->refs->criteria('user', $user));
     }
 
     /**
@@ -204,11 +204,11 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
         $rows = $this->createQueryBuilder('mm')
             ->select('IDENTITY(m.conversation) AS cid', 'COUNT(mm.id) AS n')
             ->innerJoin('mm.message', 'm')
-            ->where('mm.user = :user')
+            ->where($this->refs->field('mm', 'user') . ' = :user')
             ->andWhere('mm.readAt IS NULL')
             ->andWhere('m.deletedAt IS NULL')
             ->andWhere('IDENTITY(m.conversation) IN (:ids)')
-            ->setParameter('user', $user)
+            ->setParameter('user', $this->refs->value($user))
             ->setParameter('ids', $conversationIds)
             ->groupBy('m.conversation')
             ->getQuery()
@@ -224,14 +224,17 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
     /**
      * @param list<string> $channelKeys
      */
-    private function visibleTo(ChatUserInterface $user, array $channelKeys, bool $supportAgent, bool $unreadOnly, ?DateTimeImmutable $since, bool $channelsOnly): QueryBuilder
+    private function visibleTo(ChatUserInterface $user, array $channelKeys, bool $supportAgent, bool $unreadOnly, ?DateTimeImmutable $since, bool $channelsOnly, bool $withAuthors = false): QueryBuilder
     {
         $qb = $this->createQueryBuilder('mm')
             ->innerJoin('mm.message', 'm')
             ->innerJoin('m.conversation', 'c')
-            ->where('mm.user = :user')
+            ->where($this->refs->field('mm', 'user') . ' = :user')
             ->andWhere('m.deletedAt IS NULL')
-            ->setParameter('user', $user);
+            ->setParameter('user', $this->refs->value($user));
+        if ($withAuthors) {
+            $this->refs->join($qb, 'm.author', 'author');
+        }
 
         $visible = [];
         if ($channelKeys !== []) {
@@ -241,7 +244,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
         if (!$channelsOnly) {
             // Both people of a direct thread keep reading it; a support thread stays the owner's (any for an agent).
             $visible[] = 'c.kind = :direct';
-            $visible[] = $supportAgent ? 'c.kind = :support' : '(c.kind = :support AND c.supportOwner = :user)';
+            $visible[] = $supportAgent ? 'c.kind = :support' : '(c.kind = :support AND ' . $this->refs->field('c', 'supportOwner') . ' = :user)';
             $qb->setParameter('direct', ConversationKind::Direct)->setParameter('support', ConversationKind::Support);
         }
         $qb->andWhere($visible === [] ? '1 = 0' : '(' . implode(' OR ', $visible) . ')');

@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Repository;
 
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageLink;
@@ -28,8 +29,10 @@ class ChatMessageLinkRepository extends ServiceEntityRepository
      *
      * @param ManagerRegistry $registry Doctrine manager registry
      */
-    public function __construct(ManagerRegistry $registry)
-    {
+    public function __construct(
+        ManagerRegistry $registry,
+        private readonly ChatUserReferences $refs = new ChatUserReferences(),
+    ) {
         parent::__construct($registry, ChatMessageLink::class);
     }
 
@@ -65,11 +68,9 @@ class ChatMessageLinkRepository extends ServiceEntityRepository
      */
     public function page(ChatConversation $conversation, ?string $query, ?string $provider, ?int $before, int $limit): array
     {
-        $qb = $this->createQueryBuilder('ml')
-            ->addSelect('m', 'author')
-            ->innerJoin('ml.message', 'm')
-            ->leftJoin('m.author', 'author')
-            ->where('m.conversation = :conversation')
+        $qb = $this->createQueryBuilder('ml')->addSelect('m')->innerJoin('ml.message', 'm');
+        $this->refs->join($qb, 'm.author', 'author');
+        $qb->where('m.conversation = :conversation')
             ->andWhere('m.deletedAt IS NULL')
             ->setParameter('conversation', $conversation)
             ->orderBy('ml.id', 'DESC')

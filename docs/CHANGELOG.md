@@ -83,8 +83,22 @@ once. Defaults keep 1.23 behaviour; no schema change in the default mode.
   budget) and `ChatService::mute()` for the existing `nowo_chat_participant.muted_until`; a bell in the window header
   (icons `bell` / `bellOff`); muted conversations leave `unreadTotal` and ring nothing; summaries of the list and of
   `GET /api/conversations/{uuid}` carry `mutedUntil`.
+- **`doctrine.user_reference: id` (DDD, opt-in).** No `resolve_target_entities` and no foreign keys to the host user
+  table: the eight user columns hold the user id as `VARCHAR(64)` (indexed), `UserReferenceListener` maps them and loads
+  the users through `ChatDirectoryInterface::findByIds()` in one call per batch; `user_class` becomes optional and the
+  chat user need not be a Doctrine entity. A user the directory no longer knows reads null (nullable relations) or an
+  `UnresolvedChatUser` (never reachable). Every entity gains `get<Relation>Reference()`. Default `relation` unchanged
+  (same mapping, same schema). Documented migration in UPGRADING.
+- **`CurrentChatUserResolverInterface`** (default `SecurityChatUserResolver`): maps the security user to the chat
+  participant for the voter, the dock and every controller.
+- **Event DTOs**: `ChatMessageView`, `ChatConversationView`, `ChatLinkView` through `messageView()`,
+  `conversationView()` / `ticketView()`, `linkView()` and public-id accessors on every event (entity properties kept).
+- **`ChatServiceInterface`**, aliased to `ChatService`; the controllers and `ChatSupportTickets` depend on it.
+- `ChatParticipantRepository::findOneFor()` / `findForUserIds()`.
 
 ### Documentation
+
+- USAGE "Using it from a DDD / hexagonal application": the new ports, the id mode, and what is left.
 
 - USAGE: new section "Using it from a DDD / hexagonal application" (where the bundle sits in a hexagonal host, the ports, events and DTOs to build an anti-corruption layer on, and the known limitations).
 

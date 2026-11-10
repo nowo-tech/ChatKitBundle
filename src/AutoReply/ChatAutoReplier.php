@@ -76,7 +76,7 @@ final readonly class ChatAutoReplier
             if ($text === null) {
                 continue;
             }
-            $participant = $this->participants->findOneBy(['conversation' => $conversation, 'user' => $candidate]);
+            $participant = $this->participants->findOneFor($conversation, $candidate);
             if (!$participant instanceof ChatParticipant) {
                 $participant = new ChatParticipant($conversation, $candidate, $now);
                 $this->entityManager->persist($participant);

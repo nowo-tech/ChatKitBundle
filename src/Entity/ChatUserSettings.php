@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 
@@ -178,6 +179,9 @@ class ChatUserSettings
     #[ORM\Column(name: 'buzz_enabled', options: ['default' => true])]
     private bool $buzzEnabled = true;
 
+    /** 1.24: `user` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $userRef;
+
     /**
      * Creates default settings for the user (not persisted until changed).
      *
@@ -188,6 +192,8 @@ class ChatUserSettings
         #[ORM\JoinColumn(name: 'user_id', nullable: false, onDelete: 'CASCADE')]
         private ChatUserInterface $user,
     ) {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->userRef = ChatUserReferences::reference($user);
     }
 
     /**
@@ -208,6 +214,17 @@ class ChatUserSettings
     public function getUser(): ChatUserInterface
     {
         return $this->user;
+    }
+
+    /**
+     * 1.24: the stored reference of `user` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getUserReference(): ?string
+    {
+        return $this->userRef ?? ChatUserReferences::reference($this->user);
     }
 
     /**

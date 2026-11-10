@@ -6,6 +6,8 @@ namespace Nowo\ChatKitBundle\Event;
 
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Model\ChatConversationView;
+use Nowo\ChatKitBundle\Model\ChatMessageView;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
 /**
@@ -29,5 +31,35 @@ final readonly class ChatMentionEvent
         public ChatConversation $conversation,
         public bool $edited = false,
     ) {
+    }
+
+    /**
+     * 1.24: the message as a read-only snapshot (scalars and public ids), for listeners that must not keep the entity.
+     *
+     * @return ChatMessageView The snapshot
+     */
+    public function messageView(): ChatMessageView
+    {
+        return ChatMessageView::of($this->message);
+    }
+
+    /**
+     * 1.24: the conversation as a read-only snapshot.
+     *
+     * @return ChatConversationView The snapshot
+     */
+    public function conversationView(): ChatConversationView
+    {
+        return ChatConversationView::of($this->conversation);
+    }
+
+    /**
+     * 1.24: public ids of the people to notify (`users`).
+     *
+     * @return list<string> The public ids
+     */
+    public function mentionedPublicIds(): array
+    {
+        return array_values(array_map(static fn (ChatUserInterface $user): string => $user->getChatPublicId(), $this->users));
     }
 }

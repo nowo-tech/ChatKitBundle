@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageLink;
@@ -26,8 +27,10 @@ class ChatMessageRepository extends ServiceEntityRepository
      *
      * @param ManagerRegistry $registry Doctrine manager registry
      */
-    public function __construct(ManagerRegistry $registry)
-    {
+    public function __construct(
+        ManagerRegistry $registry,
+        private readonly ChatUserReferences $refs = new ChatUserReferences(),
+    ) {
         parent::__construct($registry, ChatMessage::class);
     }
 
@@ -57,9 +60,9 @@ class ChatMessageRepository extends ServiceEntityRepository
      */
     public function findPage(ChatConversation $conversation, int $limit, ?int $beforeId = null, ?int $afterId = null): array
     {
-        $qb = $this->createQueryBuilder('m')
-            ->leftJoin('m.author', 'a')->addSelect('a')
-            ->where('m.conversation = :conversation')
+        $qb = $this->createQueryBuilder('m');
+        $this->refs->join($qb, 'm.author', 'a');
+        $qb->where('m.conversation = :conversation')
             ->setParameter('conversation', $conversation)
             ->setMaxResults($limit);
         if ($afterId !== null) {
@@ -118,7 +121,8 @@ class ChatMessageRepository extends ServiceEntityRepository
                 AND (m.author_id IS NULL OR m.author_id <> :user)
                 AND m.id > COALESCE(p.last_read_message_id, 0)
            GROUP BY m.conversation_id',
-            ['user' => $userId, 'ids' => $conversationIds],
+            // 1.24: in `doctrine.user_reference: id` the user columns hold the id as text.
+            ['user' => $this->refs->sqlValue($userId), 'ids' => $conversationIds],
             ['ids' => ArrayParameterType::INTEGER],
         );
         $counts = [];
@@ -151,10 +155,10 @@ class ChatMessageRepository extends ServiceEntityRepository
         if ($latestIds === []) {
             return [];
         }
+        $qb = $this->createQueryBuilder('m');
+        $this->refs->join($qb, 'm.author', 'a');
         /** @var list<ChatMessage> $messages */
-        $messages = $this->createQueryBuilder('m')
-            ->leftJoin('m.author', 'a')->addSelect('a')
-            ->where('m.id IN (:ids)')
+        $messages = $qb->where('m.id IN (:ids)')
             ->setParameter('ids', $latestIds)
             ->getQuery()
             ->getResult();

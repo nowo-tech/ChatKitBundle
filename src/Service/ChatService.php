@@ -11,6 +11,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
+use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -45,8 +46,10 @@ use function is_string;
  * Conversation lifecycle and messages. Authorization is the caller's job (ChatVoter); this service only keeps
  * the data consistent (one conversation per pair / channel / support owner, participant rows, read cursors,
  * support reopen on a new owner message) and notifies.
+ *
+ * 1.24: the default implementation of ChatServiceInterface (aliased to it); type-hint the interface in your code.
  */
-final readonly class ChatService
+final readonly class ChatService implements ChatServiceInterface
 {
     private const string CHANNEL_INSERT_SAVEPOINT = 'nowo_chat_channel_insert';
 
@@ -354,7 +357,7 @@ final readonly class ChatService
      */
     public function participant(ChatConversation $conversation, ChatUserInterface $user): ChatParticipant
     {
-        $participant = $this->participants->findOneBy(['conversation' => $conversation, 'user' => $user]);
+        $participant = $this->participants->findOneFor($conversation, $user);
         if (!$participant instanceof ChatParticipant) {
             $participant = new ChatParticipant($conversation, $user, $this->clock->now());
             $this->entityManager->persist($participant);

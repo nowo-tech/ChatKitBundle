@@ -11,6 +11,7 @@ use Nowo\ChatKitBundle\Contract\ChatChannelWritePolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
+use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -153,7 +154,8 @@ final class ChatAccess implements ResetInterface
      */
     public function isReachable(ChatUserInterface $user): bool
     {
-        return $user->getId() !== null && $this->policy->isReachable($user);
+        // 1.24: a placeholder for a user the directory no longer knows (`doctrine.user_reference: id`) never is.
+        return $user->getId() !== null && !$user instanceof UnresolvedChatUser && $this->policy->isReachable($user);
     }
 
     /**
