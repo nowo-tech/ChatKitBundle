@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.26.0](#to-1260)
 - [To 1.25.1](#to-1251)
 - [To 1.25.0](#to-1250)
   - [Target 1.25.0: sidebar sections](#target-1250-sidebar-sections)
@@ -59,6 +60,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.26.0
+
+From **1.25.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 From **1.25.1**:
 
