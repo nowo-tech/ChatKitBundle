@@ -5,6 +5,10 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.24.0](#to-1240)
+  - [Chat room channels (Symfony Beacon spec 184)](#chat-room-channels-symfony-beacon-spec-184)
+  - [DDD / hexagonal ports](#ddd--hexagonal-ports)
+  - [Optional: `doctrine.user_reference: id`](#optional-doctrineuser_reference-id)
 - [To 1.23.0](#to-1230)
 - [To 1.22.1](#to-1221)
 - [To 1.22.0](#to-1220)
@@ -52,6 +56,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.24.0
+
+From **1.23.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 Target **1.24.0** (from **1.23.x**): `composer update nowo-tech/chat-kit-bundle`.
 

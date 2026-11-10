@@ -223,7 +223,7 @@ context, not as part of your domain model.
 - 1.24: with **`doctrine.user_reference: id`** the chat tables keep the user id as a string, without foreign keys or
   `resolve_target_entities`: the class implementing `ChatUserInterface` can be a plain object of your infrastructure
   layer, loaded by your `ChatDirectoryInterface::findByIds()` ([CONFIGURATION](CONFIGURATION.md#user-references-124),
-  migration in [UPGRADING](UPGRADING.md#unreleased)).
+  migration in [UPGRADING](UPGRADING.md#to-1240)).
 - Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case, before the account is deleted
   (in id mode nothing cascades: `erase()` is how the rows go). For an account already gone, call
   `eraseFormerAccount($userId, $publicId, $displayName)` with what you kept of it: the public id scrubs the mention

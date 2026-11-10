@@ -215,7 +215,7 @@ In id mode the indexes the foreign keys gave are mapped explicitly (`idx_nowo_ch
 `idx_nowo_chat_conv_link_by`, `idx_nowo_chat_reaction_user`; renamed by `table_name_prefix` / `table_prefix`), and every
 entity exposes `get<Relation>Reference()` (e.g. `ChatMessage::getAuthorReference()`) to read the stored id without
 loading the user. User ids are still integers (`ChatUserInterface::getId(): ?int`); the columns are strings so a later
-version can accept other identifiers without another migration. [UPGRADING](UPGRADING.md#unreleased) has the migration.
+version can accept other identifiers without another migration. [UPGRADING](UPGRADING.md#to-1240) has the migration.
 
 ## Container parameters
 
