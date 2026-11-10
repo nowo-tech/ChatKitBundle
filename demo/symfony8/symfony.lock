@@ -25,6 +25,9 @@
     "nowo-tech/chat-kit-bundle": {
         "version": "dev-main"
     },
+    "nowo-tech/form-kit-bundle": {
+        "version": "v2.21.0"
+    },
     "nowo-tech/twig-inspector-bundle": {
         "version": "v1.1.3"
     },

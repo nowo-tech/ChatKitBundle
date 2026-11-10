@@ -21,6 +21,7 @@ use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 use Symfony\UX\Icons\IconRendererInterface;
 use Throwable;
+use UnexpectedValueException;
 
 use function array_chunk;
 use function array_keys;
@@ -29,6 +30,7 @@ use function array_slice;
 use function array_unique;
 use function array_values;
 use function count;
+use function get_debug_type;
 use function in_array;
 use function is_countable;
 use function is_string;
@@ -175,7 +177,8 @@ final class ChatSidebar
     }
 
     /**
-     * The sections of one provider; a provider that throws is logged and skipped (the others still show).
+     * The sections of one provider; a provider that throws (a section built with a wrong item or action included) or
+     * yields something that is not a ChatSidebarSection is logged and skipped (the others still show).
      *
      * @return list<ChatSidebarSection>
      */
@@ -184,6 +187,10 @@ final class ChatSidebar
         $sections = [];
         try {
             foreach ($provider->sections($viewer) as $section) {
+                // Audit KJ-I12: a provider that yields something else fails alone, like one that throws.
+                if (!$section instanceof ChatSidebarSection) {
+                    throw new UnexpectedValueException('A sidebar provider must yield ' . ChatSidebarSection::class . ' instances, got ' . get_debug_type($section) . '.');
+                }
                 $sections[] = $section;
             }
         } catch (Throwable $exception) {

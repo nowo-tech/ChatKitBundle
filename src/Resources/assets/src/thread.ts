@@ -119,6 +119,8 @@ export class ThreadView {
   private readUpTo = 0;
   /** 1.25: nothing is marked read until the viewer interacts (deferRead()). */
   private readHeld = false;
+  /** Listeners of the held read (deferRead()), removed when it is released. */
+  private heldRead: AbortController | null = null;
   /** Id of the first message that arrived while the user was scrolled up ("New messages" divider). */
   private firstUnseenId: number | null = null;
   private unseenBelow = 0;
@@ -665,16 +667,61 @@ export class ThreadView {
 
   /**
    * 1.25 (`web_ui.page.open_recent`, audit KJ-L2): the conversation was opened for the viewer, not by them — nothing is
-   * marked read until they interact with it (pointer, touch, wheel, key or focus inside the view).
+   * marked read until they interact with it: a pointer, touch, wheel or key inside the view, or a Tab that moves the
+   * focus into it. 1.25.1 (audit KJ-I11): focus alone does not count — a host script's programmatic `.focus()` into
+   * the thread fires a trusted `focusin` too, so a `focusin` releases the read only right after a Tab keydown (which
+   * arrives on the document while the focus is still outside the view). The bundle's own open() releases it when the
+   * viewer picks the conversation (releaseRead()).
    */
   deferRead(): void {
     this.readHeld = true;
-    const release = (): void => {
-      this.readHeld = false;
-      ['pointerdown', 'touchstart', 'wheel', 'keydown', 'focusin'].forEach((type) => this.element.removeEventListener(type, release));
-      this.maybeMarkRead();
-    };
-    ['pointerdown', 'touchstart', 'wheel', 'keydown', 'focusin'].forEach((type) => this.element.addEventListener(type, release, { passive: true }));
+    this.heldRead?.abort();
+    const controller = new AbortController();
+    const { signal } = controller;
+    this.heldRead = controller;
+    let tabbed = false;
+    const release = (): void => this.releaseRead();
+    ['pointerdown', 'touchstart', 'wheel', 'keydown'].forEach((type) => this.element.addEventListener(type, release, { passive: true, signal }));
+    document.addEventListener(
+      'keydown',
+      (event) => {
+        tabbed = event.key === 'Tab';
+      },
+      { capture: true, signal },
+    );
+    // Runs before the document's listener below: the focus that follows the Tab is the viewer's.
+    this.element.addEventListener(
+      'focusin',
+      () => {
+        if (tabbed) {
+          release();
+        }
+      },
+      { signal },
+    );
+    document.addEventListener(
+      'focusin',
+      () => {
+        tabbed = false;
+      },
+      { signal },
+    );
+  }
+
+  /** The viewer interacted with (or picked) the conversation: a read held by deferRead() goes ahead. */
+  releaseRead(): void {
+    if (this.heldRead === null) {
+      return;
+    }
+    this.discardHeldRead();
+    this.readHeld = false;
+    this.maybeMarkRead();
+  }
+
+  /** The window goes away: the listeners of a held read are removed, and nothing is marked read. */
+  discardHeldRead(): void {
+    this.heldRead?.abort();
+    this.heldRead = null;
   }
 
   /** Called when the tab becomes visible again: read what arrived meanwhile, if the user can see it. */

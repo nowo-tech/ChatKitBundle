@@ -47,6 +47,8 @@ test.describe('links', () => {
     await dialog.locator('[data-part="link-url"]').fill('https://meet.google.com/abc-defg-hij');
     await dialog.locator('[data-part="link-title"]').fill(`Retro ${title}`);
     await dialog.locator('[data-part="link-save"]').click();
+    // 1.22 (HW-L6): an Enter during the dialog's closing fade does nothing — send once it is gone.
+    await expect(dialog).toBeHidden();
     await window.locator('.nowo-chat-composer__input').press('Enter');
     const card = window.locator('.nowo-chat-linkcard', { hasText: `Retro ${title}` });
     await expect(card).toBeVisible();

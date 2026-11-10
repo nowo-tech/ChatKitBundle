@@ -1,9 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * 1.25 (audit KJ-M1): a UiKit dialog inside the dock root — where the sidebar's action dialogs live — takes mouse and
- * touch input although the root is `pointer-events: none`, and the floating dock does not hide under it. Real clicks in
- * a real browser: jsdom cannot tell.
+ * 1.25 (audit KJ-M1) / 1.25.1 (audit KJ-I13): the real sidebar action of the demo's section provider
+ * (App\Chat\DemoSidebarProvider, "Demo rooms" → "Create room") opens the bundle's UiKit remote form dialog in the dock
+ * root, which takes mouse and keyboard input although the root is `pointer-events: none`; an invalid post re-renders
+ * the fragment (422), a valid one follows `204` + `X-Nowo-Redirect`. Real clicks in a real browser: jsdom cannot tell.
  */
 async function signIn(page: Page, username: string): Promise<void> {
   await page.goto('/en/login');
@@ -13,45 +14,55 @@ async function signIn(page: Page, username: string): Promise<void> {
   await expect(page.locator('nav')).toContainText(username);
 }
 
-test('a dialog in the dock root is clickable and keeps the dock shown', async ({ page }) => {
+test('the sidebar action opens a clickable remote form dialog that posts and follows the redirect', async ({ page }) => {
   await signIn(page, 'alice');
-  await page.goto('/en');
-  const root = page.getByTestId('chat-dock');
-  await expect(root).toBeAttached();
-  await page.waitForFunction(() => typeof (window as unknown as { nowoUiOpenDialog?: unknown }).nowoUiOpenDialog === 'function');
+  await page.goto('/chat/');
+  const app = page.getByTestId('nowo-chat-page-mode');
+  const section = app.getByTestId('chat-sidebar-section-demo-rooms');
+  await expect(section).toBeVisible();
+  await expect(section.getByTestId('chat-sidebar-item-demo-rooms-home')).toContainText('Home');
+  const action = section.getByTestId('chat-sidebar-action-demo-rooms-create');
+  await expect(action).toHaveAttribute('data-nowo-ui-dialog-src', '/en/demo/rooms/new');
+  await expect(action).toHaveAttribute('aria-haspopup', 'dialog');
 
-  // The markup of the `dialog` partial the sidebar's remote form dialogs render (header ×, body, footer).
-  await page.evaluate(() => {
-    const host = document.querySelector('[data-testid="chat-dock"]') as HTMLElement;
-    host.insertAdjacentHTML(
-      'beforeend',
-      '<dialog id="kj-dialog" class="nowo-ui-dialog" data-nowo-ui-dialog aria-labelledby="kj-dialog-title">' +
-        '<header class="nowo-ui-dialog__header"><h2 class="nowo-ui-dialog__title" id="kj-dialog-title">Create channel</h2>' +
-        '<button type="button" class="nowo-ui-dialog__close" data-nowo-ui-dialog-close aria-label="Close">×</button></header>' +
-        '<div class="nowo-ui-dialog__body" data-nowo-ui-dialog-body><label>Name <input name="kj-name"></label></div>' +
-        '<footer class="nowo-ui-dialog__footer"><button type="button" id="kj-save">Create</button></footer></dialog>',
-    );
-    document.getElementById('kj-save')?.addEventListener('click', () => document.body.setAttribute('data-kj-saved', '1'));
-    (window as unknown as { nowoUiOpenDialog: (id: string) => void }).nowoUiOpenDialog('kj-dialog');
+  // The bundle's medium dialog (size md), filled by UiKit from the action's same-origin fragment.
+  const posts: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().includes('/demo/rooms/new')) {
+      posts.push(request.headers()['x-nowo-dialog'] ?? '');
+    }
   });
-
-  const dialog = page.locator('#kj-dialog');
+  await action.click();
+  const dialog = page.getByTestId('chat-sidebar-dialog-md');
   await expect(dialog).toBeVisible();
-  // Real pointer input (Playwright refuses an element another one covers, or one that takes no pointer events).
-  await dialog.getByRole('textbox').click();
-  await dialog.getByRole('textbox').fill('design');
-  await dialog.getByRole('button', { name: 'Create' }).click();
-  await expect(page.locator('body')).toHaveAttribute('data-kj-saved', '1');
-  const hit = await page.evaluate(() => {
-    const save = document.getElementById('kj-save') as HTMLElement;
-    const box = save.getBoundingClientRect();
-    return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.id ?? null;
-  });
-  expect(hit).toBe('kj-save');
-  // Its own dialog never suppresses the floating dock.
+  const name = dialog.getByLabel('Room name');
+  await expect(name).toBeVisible();
+  const root = page.getByTestId('chat-dock');
   await expect(root).not.toHaveAttribute('data-overlay', /.+/);
   await expect(root).not.toHaveAttribute('inert', /.*/);
 
-  await dialog.getByRole('button', { name: 'Close' }).click();
+  // Real pointer input (Playwright refuses an element another one covers, or one that takes no pointer events).
+  const hit = await name.evaluate((input) => {
+    const box = input.getBoundingClientRect();
+    return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === input;
+  });
+  expect(hit).toBe(true);
+
+  // Empty: the server answers 422 and the fragment is re-rendered inside the dialog.
+  await dialog.getByRole('button', { name: 'Create' }).click();
+  await expect(dialog.getByText(/should not be blank/)).toBeVisible();
+  await expect(dialog).toBeVisible();
+  expect(posts).toEqual(['1']);
+
+  // Escape closes; the action opens it again with a fresh form.
+  await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
+  await action.click();
+  await expect(dialog.getByLabel('Room name')).toBeVisible();
+
+  await dialog.getByLabel('Room name').click();
+  await dialog.getByLabel('Room name').fill('design');
+  await dialog.getByRole('button', { name: 'Create' }).click();
+  await expect(page).toHaveURL(/\/chat\/\?room=design$/);
+  expect(posts).toEqual(['1', '1']);
 });

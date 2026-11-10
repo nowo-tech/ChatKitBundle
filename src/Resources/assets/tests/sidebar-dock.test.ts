@@ -300,6 +300,57 @@ describe('ChatDock sidebar', () => {
     expect(window.location.pathname).toBe('/chat/');
   });
 
+  it('does not count programmatic focus as interaction, but a Tab into the view does (audit KJ-I11)', async () => {
+    api.messages.mockResolvedValue({ messages: [message({ id: 7 })], hasMore: false, readUpTo: null, readers: [] });
+    const { dock, page } = mountPage([summary('new', { lastMessageAt: '2026-10-20T10:00:00Z' })], { openRecent: true });
+    await dock.start();
+    await flush();
+    const view = page.querySelector('.nowo-chat-pagemode__thread .nowo-chat-window') as HTMLElement;
+    const input = view.querySelector('textarea') as HTMLElement;
+    // A host script focusing the thread on load: still held.
+    input.focus();
+    view.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(api.markRead).not.toHaveBeenCalled();
+    // A Tab that lands elsewhere does not arm the next focus.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' }));
+    document.body.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    view.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(api.markRead).not.toHaveBeenCalled();
+    // Another key, then focus: still held.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+    view.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(api.markRead).not.toHaveBeenCalled();
+    // The viewer tabs into the view.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab' }));
+    view.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+    expect(api.markRead).toHaveBeenCalledWith('new', 7);
+  });
+
+  it('releases a held read when the viewer picks the conversation, and drops it when the window goes', async () => {
+    api.messages.mockResolvedValue({ messages: [message({ id: 9 })], hasMore: false, readUpTo: null, readers: [] });
+    const recent = { lastMessageAt: '2026-10-20T10:00:00Z' };
+    const { dock } = mountPage([summary('a', { lastMessageAt: '2026-10-01T10:00:00Z' }), summary('b', recent)], { openRecent: true });
+    await dock.start();
+    await flush();
+    expect(window.location.pathname).toBe('/chat/b');
+    expect(api.markRead).not.toHaveBeenCalled();
+    // The same row in the list: the viewer chose it.
+    await dock.open(summary('b', recent));
+    expect(api.markRead).toHaveBeenCalledWith('b', 9);
+
+    // Held, then the page moves to another conversation: the old view's listeners are gone.
+    api.markRead.mockClear();
+    window.history.replaceState(null, '', '/chat/');
+    const again = mountPage([summary('a', { lastMessageAt: '2026-10-01T10:00:00Z' }), summary('b', recent)], { openRecent: true });
+    await again.dock.start();
+    await flush();
+    const held = again.page.querySelector('.nowo-chat-pagemode__thread .nowo-chat-window') as HTMLElement;
+    await again.dock.open(summary('a'), false);
+    await flush();
+    held.dispatchEvent(new Event('pointerdown'));
+    expect(api.markRead).not.toHaveBeenCalledWith('b', 9);
+  });
+
   it('shows the empty state only when there is no conversation', async () => {
     api.sidebar.mockResolvedValue([]);
     const { dock, page, list } = mountPage([], { openRecent: true });
