@@ -21,6 +21,8 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestLinkPreviewProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestReferenceProvider;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestSecondSidebarProvider;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestSidebarProvider;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCountingMiddleware;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
@@ -72,6 +74,7 @@ final class TestKernel extends Kernel
     public function __construct(
         private readonly array $chatKitConfig = [],
         private readonly bool $hostControllersRoutesOnly = false,
+        private readonly bool $sidebarProviders = false,
     ) {
         // Own environment for the routing.controllers-only host: its container class must not collide with the
         // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir).
@@ -117,7 +120,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference()])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference()])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -178,6 +181,11 @@ final class TestKernel extends Kernel
         }
         // #references: one provider, autoconfigured through the interface's tag.
         $services->set(TestReferenceProvider::class)->autoconfigure();
+        // 1.25: two sidebar section providers (autoconfigured; priority order), only for the tests that ask for them.
+        if ($this->sidebarProviders) {
+            $services->set(TestSidebarProvider::class)->autoconfigure();
+            $services->set(TestSecondSidebarProvider::class)->autoconfigure();
+        }
         // Query-count regression tests (N+1): every SQL statement of the connection is recorded.
         $services->set(QueryCounter::class);
         $services->set(QueryCountingMiddleware::class)->tag('doctrine.middleware');

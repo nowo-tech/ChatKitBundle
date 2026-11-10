@@ -2176,6 +2176,189 @@
   }
 }
 
+/* 1.25: the grouped sidebar (Slack-style): sections that fold, compact rows, the host's actions. The full-page chat
+   gives the list a wider column while it is grouped. */
+.nowo-chat-pagemode.has-sidebar {
+  grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+}
+.nowo-chat-list.is-sidebar {
+  padding-top: 4px;
+}
+.nowo-chat-sidebar__section {
+  margin: 0 0 6px;
+}
+.nowo-chat-sidebar__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 8px 0 4px;
+}
+.nowo-chat-sidebar__toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--nowo-chat-radius-control);
+  background: none;
+  color: var(--nowo-chat-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.nowo-chat-sidebar__toggle:hover,
+.nowo-chat-sidebar__toggle:focus-visible {
+  background: var(--nowo-chat-surface-muted);
+  color: var(--nowo-chat-text);
+}
+.nowo-chat-sidebar__toggle:focus-visible,
+.nowo-chat-sidebar__item:focus-visible,
+.nowo-chat-sidebar__action:focus-visible {
+  outline: 2px solid var(--nowo-chat-accent);
+  outline-offset: -2px;
+}
+.nowo-chat-sidebar__caret {
+  display: inline-grid;
+  flex: none;
+  transition: transform var(--nowo-ui-motion-small, 120ms) ease;
+}
+.nowo-chat-sidebar__section.is-collapsed .nowo-chat-sidebar__caret {
+  transform: rotate(-90deg);
+}
+.nowo-chat-sidebar__label,
+.nowo-chat-sidebar__text {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nowo-chat-sidebar__label {
+  flex: 1;
+}
+.nowo-chat-sidebar__heading {
+  flex: 1;
+  min-width: 0;
+  padding: 6px;
+  color: var(--nowo-chat-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.nowo-chat-sidebar__modes {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+.nowo-chat-sidebar__modes[hidden],
+.nowo-chat-sidebar__heading[hidden],
+.nowo-chat-sidebar__toggle[hidden],
+.nowo-chat-sidebar__actions[hidden],
+.nowo-chat-sidebar__items[hidden] {
+  display: none;
+}
+.nowo-chat-sidebar__items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nowo-chat-sidebar__item,
+.nowo-chat-sidebar__action {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  margin: 0 6px;
+  padding: 4px 8px 4px 10px;
+  border-radius: var(--nowo-chat-radius-control);
+  color: inherit;
+  cursor: pointer;
+}
+.nowo-chat-sidebar__item:hover,
+.nowo-chat-sidebar__action:hover {
+  background: var(--nowo-chat-surface-muted);
+}
+.nowo-chat-sidebar__item.is-current {
+  background: color-mix(in srgb, var(--nowo-chat-accent) 14%, transparent);
+  box-shadow: inset 3px 0 0 var(--nowo-chat-accent);
+}
+.nowo-chat-sidebar__item.is-unread .nowo-chat-sidebar__text {
+  font-weight: 700;
+}
+.nowo-chat-sidebar__item.is-muted {
+  color: var(--nowo-chat-muted);
+}
+.nowo-chat-sidebar__item.is-muted .nowo-chat-badge {
+  background: var(--nowo-chat-muted);
+}
+.nowo-chat-sidebar__text {
+  flex: 1;
+}
+.nowo-chat-sidebar__icon {
+  display: inline-grid;
+  flex: none;
+  width: 28px;
+  place-items: center;
+  color: var(--nowo-chat-muted);
+}
+.nowo-chat-sidebar__icon:empty {
+  display: none;
+}
+.nowo-chat-sidebar__muted {
+  display: inline-grid;
+  flex: none;
+  color: var(--nowo-chat-muted);
+}
+.nowo-chat-sidebar__muted[hidden],
+.nowo-chat-sidebar__mentions[hidden] {
+  display: none;
+}
+.nowo-chat-sidebar__mentions {
+  display: inline-grid;
+  flex: none;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: var(--nowo-chat-radius-pill);
+  background: var(--nowo-chat-accent);
+  color: var(--nowo-chat-on-accent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+.nowo-chat-sidebar__action {
+  color: var(--nowo-chat-muted);
+  text-decoration: none;
+}
+.nowo-chat-sidebar__action:hover {
+  color: var(--nowo-chat-text);
+}
+.nowo-chat-sidebar__empty {
+  margin: 0;
+  padding: 4px 16px 6px 40px;
+  color: var(--nowo-chat-muted);
+  font-size: 0.8125rem;
+}
+.nowo-chat-sidebar__empty[hidden] {
+  display: none;
+}
+/* Phones and touch screens: 44px rows and headers. */
+@media (max-width: 768px), (pointer: coarse) {
+  .nowo-chat-sidebar__toggle,
+  .nowo-chat-sidebar__item,
+  .nowo-chat-sidebar__action {
+    min-height: 44px;
+  }
+  .nowo-chat-sidebar__mode {
+    min-height: 32px;
+  }
+}
+
 /* @mentions (1.7): chips in messages, the highlighted message that mentions the viewer and the composer list. */
 .nowo-chat-mention {
   padding: 0 4px;

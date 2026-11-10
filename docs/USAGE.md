@@ -180,6 +180,12 @@ public function resolve(ChatReferenceScope $scope, array $ids): array;          
 
 See [References](#references).
 
+### `ChatSidebarSectionProviderInterface` (optional, 1.25)
+
+Your own sections in the chat sidebar (e.g. **Channels** with the rooms of the viewer and the actions **Browse
+channels** / **Create channel**). Autoconfigured (tag `nowo_chat_kit.sidebar_section_provider`); see
+[Sidebar sections](#sidebar-sections-125).
+
 ### `ChatDigestSenderInterface` (optional)
 
 ```php
@@ -451,6 +457,116 @@ parent and, under the UiKit bridge, the element around the host-page wrapper int
 24rem. Your content area has to end up with a bounded height (a child of a flex column with a fixed height, for example),
 or the page stays at that minimum. `--nowo-chat-page-height` does not apply on such a page.
 
+### Sidebar sections (1.25)
+
+The list becomes one grouped, collapsible sidebar (Slack-style) on the full-page chat as soon as one
+`ChatSidebarSectionProviderInterface` service exists, and in the floating dock too with
+`web_ui.dock.sidebar_sections: true` (both without a provider shows the bundle's own sections only):
+
+1. **Recent** — the five newest conversations, or with **Unread** every conversation with unread messages that is not
+   muted (`ChatSidebarSection::POSITION_RECENT`, −1000);
+2. your sections, ordered by `position` (default 0), then by provider priority and order;
+3. **Direct messages and groups** — every listed conversation none of your sections shows (`POSITION_CONVERSATIONS`,
+   1000).
+
+The search and the filters other than **All** keep listing flat, as in 1.24. Without any conversation and without any
+row or action of yours, the list shows its usual empty state. With `web_ui.page.open_recent: true`, `/chat/` also opens
+the most recent conversation beside the list on wide screens.
+
+```php
+use Nowo\ChatKitBundle\Contract\ChatSidebarSectionProviderInterface;
+use Nowo\ChatKitBundle\Model\ChatSidebarAction;
+use Nowo\ChatKitBundle\Model\ChatSidebarItem;
+use Nowo\ChatKitBundle\Model\ChatSidebarSection;
+use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
+use Symfony\Component\DependencyInjection\Attribute\AsTaggedItem;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
+
+/** Beacon-like: the room channels the viewer belongs to (spec 184), "Browse channels" and "Create channel". */
+#[AsTaggedItem(priority: 10)]
+final class RoomChannelsSidebar implements ChatSidebarSectionProviderInterface
+{
+    public function __construct(
+        private readonly RoomChannelAccess $rooms,                 // the host decides who sees which room (deny by default)
+        private readonly ChatConversationRepository $conversations,
+        private readonly UrlGeneratorInterface $urls,
+        private readonly TranslatorInterface $translator,
+    ) {
+    }
+
+    public function sections(ChatUserInterface $viewer): iterable
+    {
+        \assert($viewer instanceof User);
+        $rooms = $this->rooms->channelsOf($viewer);                // only rooms the viewer may read
+        // One query for the conversations of these rooms (a room's conversation is created when it is first opened).
+        $byKey = [];
+        foreach ($this->conversations->findBy(['channelKey' => array_map(static fn (ChatRoomChannel $room): string => 'room:' . $room->getUuid(), $rooms)]) as $conversation) {
+            $byKey[$conversation->getChannelKey()] = $conversation->getUuid();
+        }
+        $items = [];
+        foreach ($rooms as $room) {
+            $uuid    = $byKey['room:' . $room->getUuid()] ?? null;
+            $items[] = new ChatSidebarItem(
+                key: $room->getUuid(),
+                label: $room->getName(),
+                icon: $room->isPublic() ? 'channel' : 'private',
+                // Opened in the chat, with the chat's own unread / mentions / muted; before its first message, a link
+                // to the room's page (its "Open" creates the conversation).
+                conversationUuid: $uuid,
+                url: $uuid === null ? $this->urls->generate('chat_channel_show', ['uuid' => $room->getUuid()]) : null,
+                subtitle: $room->getTopic(),
+            );
+        }
+
+        yield new ChatSidebarSection('channels', $this->translator->trans('chat_channels.title'), position: 0, items: $items, actions: [
+            new ChatSidebarAction('browse', $this->translator->trans('chat_channels.browse'), 'search',
+                url: $this->urls->generate('chat_channels'), dialogUrl: $this->urls->generate('chat_channels_browse_dialog'), dialogSize: 'wide'),
+            new ChatSidebarAction('create', $this->translator->trans('chat_channels.create'), 'plus',
+                url: $this->urls->generate('chat_channels'), dialogUrl: $this->urls->generate('chat_channels_create_dialog')),
+        ]);
+    }
+}
+```
+
+**What the bundle checks.** The provider decides what each viewer sees; the bundle never adds anything to it. It does
+not trust it either: a row with a `conversationUuid` is shown only when that conversation exists and
+`ChatAccess::canView()` lets the viewer read it (the rule of opening it; otherwise it is left out silently), and its
+unread count, unread mentions and muted state always come from the chat — live, through the same Mercure / poll
+updates as the list. A row with a `url` is a link with the counts you give. Link URLs follow the `web_ui.channels_url`
+rule (a path or an absolute `http(s)` URL); anything else drops the row or the action. Texts are written with
+`textContent`; labels and subtitles lose control and bidirectional characters and are cut to 80 / 160 characters.
+Repeated section keys (the first provider wins), the reserved keys `recent` and `conversations`, and repeated row /
+action keys inside a section are left out. Caps: 20 sections, 200 rows and 6 actions per section. The provider runs on
+every sidebar load (each list refresh): keep it to one or two queries.
+
+**Icons.** `channel` (#), `private` (a lock), any dock icon name — including one you add under `nowo_chat_kit.icons`
+(`icons: {megaphone: 'tabler:speakerphone'}` → `icon: 'megaphone'`) — or a UX Icons name such as
+`tabler:speakerphone`, rendered on the server (`iconSvg`, from your icon set; the browser keeps plain SVG shapes only).
+
+**Actions and dialogs.** An action with `dialogUrl` opens a UiKit **remote form dialog** (the standard anatomy: header
+with ×, the body that scrolls, the footer outside it; `md` for forms, `wide` for lists). The fragment is fetched
+same-origin with credentials (`X-Nowo-Dialog: 1`), its form posts back inside the dialog, a `422` re-renders it, and a
+`204` + `X-Nowo-Redirect` (or a step with `X-Nowo-Dialog-Location`) is followed — serve it with UiKit's
+`RemoteDialogResponder`. Only same-origin `dialogUrl`s are accepted (checked on the server and again in the browser).
+Fragment scripts never run: UiKit drops `<script>`, inline `on*` handlers and `javascript:` URLs before inserting it
+(it is defence in depth, not a sanitizer: never print user HTML unescaped in it, and keep a `script-src` CSP). Behaviour
+in a fragment comes from delegated listeners or Stimulus controllers on your page. The dialogs need UiKit's
+`js/nowo-ui-dialog.js` (in UiKit's default scripts); without it the action is a plain link to `url` (else to
+`dialogUrl`, the same URL in its full-page mode). When a dialog closes the sidebar reloads (a channel just created or
+joined shows up) and the action gets the focus back.
+
+**Keyboard and screen readers.** Each section is a disclosure (`aria-expanded`, `aria-controls`) over a listbox
+(`role="option"`, `aria-selected` on the conversation shown); the sidebar is one tab stop: ↑ / ↓ move, ← folds a
+section or goes up to its header, → unfolds it or goes in, Home / End, Enter / Space open, Delete closes a conversation
+of the bundle's sections. Folded sections (`collapsedByDefault` until the viewer opens them) and the Recent / Unread
+choice are remembered per viewer on the device (`localStorage`, when available).
+
+**Testing.** `data-testid="chat-sidebar-section-<key>"`, `chat-sidebar-item-<section>-<key>` (the bundle's rows:
+`chat-sidebar-item-recent-<uuid>` / `chat-sidebar-item-conversations-<uuid>`), `chat-sidebar-action-<section>-<key>`,
+`chat-sidebar-dialog-md` / `chat-sidebar-dialog-wide`.
+
 ## Events
 
 | Event | When | Typical use |
@@ -703,8 +819,8 @@ application's copy always wins.
 
 | `<subpath>` | What it renders | Blocks |
 | --- | --- | --- |
-| `dock.html.twig` | Dock root (config attribute) and assets | `nowo_chat_assets`, `nowo_chat_root` |
-| `_templates.html.twig` | Every `<template>` the dock clones | `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`, `nowo_chat_icons` |
+| `dock.html.twig` | Dock root (config attribute) and assets | `nowo_chat_assets`, `nowo_chat_root`, `nowo_chat_sidebar_dialogs` (1.25) |
+| `_templates.html.twig` | Every `<template>` the dock clones | `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`, `_sidebar` (1.25), `nowo_chat_icons` |
 | `page.html.twig` | Full-page chat (list + thread + composer form), UiKit layout | `nowo_ui_document_title`, `nowo_ui_styles`, `nowo_ui_scripts`, `nowo_chat_page_script` (the `nowo-chat.js` tag), `nowo_ui_page_header`, `nowo_ui_content`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
 | `page_legacy.html.twig` | Deprecated 1.x page (only with the deprecated `page_layout`) | `title`, `stylesheets`, `javascripts`, `body`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
 | `page_layout.html.twig` | Deprecated 1.x default layout of `page_legacy.html.twig` | `title`, `stylesheets`, `javascripts`, `body` |
@@ -1296,6 +1412,7 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | Method | Path | |
 | --- | --- | --- |
 | GET | `/api/conversations` | list with unread counts and presence |
+| GET | `/api/sidebar` | the caller's host sidebar sections (1.25, [Sidebar sections](#sidebar-sections-125)) |
 | GET | `/api/contacts?q=` | people picker |
 | POST | `/api/direct` `{userUuid}` · `/api/channel` `{channelKey}` · `/api/support` `{context?}` | open (support: the active ticket or the intake draft, whose summary carries `intake`) |
 | GET | `/api/conversations/{uuid}` | one conversation |

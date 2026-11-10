@@ -188,6 +188,14 @@ describe('chat api client', () => {
     await old.saveSetting('volume', 5);
     expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('', expect.anything());
 
+    // 1.25: the host sections of the sidebar (none without an endpoint, no request).
+    vi.stubGlobal('fetch', respond({ sections: [{ key: 'channels' }] }));
+    expect(await old.sidebar()).toEqual([]);
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    const sided = new ChatApi({ ...config, sidebar: { page: true, dock: false, endpoint: '/chat/api/sidebar', dialogs: { md: 'a', wide: 'b' } } } as unknown as ChatConfig);
+    expect(await sided.sidebar()).toEqual([{ key: 'channels' }]);
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith('/chat/api/sidebar', expect.objectContaining({ credentials: 'same-origin' }));
+
     // Closing conversations and pins (1.10).
     const full = new ChatApi({ ...config, endpoints: { ...config.endpoints, archive: '/c/__uuid__/archive', archiveRead: '/c/archive-read', pins: '/c/__uuid__/pins', pin: '/c/__uuid__/m/__message__/pin' } } as unknown as ChatConfig);
     vi.stubGlobal('fetch', respond({ conversations: [], unreadTotal: 0, archived: 3, pins: [], canPin: true }));

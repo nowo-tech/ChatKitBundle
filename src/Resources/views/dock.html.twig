@@ -12,6 +12,8 @@
  # Host-mounted dock (1.5.2): {{ include('@NowoChatKitBundle/dock.html.twig', {nowo_chat_manual: true}) }} marks the
  # root data-nowo-chat-manual, so the automatic start of nowo-chat.js skips it and the host mounts it itself
  # (NowoChat.mount(root) or its own bundler / Stimulus controller) — one dock, never two.
+ # 1.25: with a sidebar (a section provider or web_ui.dock.sidebar_sections) the root also holds the two UiKit remote
+ # form dialogs of the sidebar actions (block nowo_chat_sidebar_dialogs); UiKit's js/nowo-ui-dialog.js opens them.
  # Bundler hosts (1.6): nowo_chat_assets: false leaves out the <link> / <script> (the host ships nowo-chat.css / the
  # script itself), and nowo_chat_root_attr adds attributes to the root (`class` is appended; the dock's own
  # attributes cannot be replaced), e.g. a Stimulus controller that mounts the dock — no template override needed:
@@ -37,6 +39,15 @@
             {%- endfor -%}
         >
             {{ include('@NowoChatKitBundle/_templates.html.twig', {nowo_chat_locale: nowo_chat_config.locale, nowo_chat_channels_url: nowo_chat_config.channelsUrl ?? null}) }}
+            {% block nowo_chat_sidebar_dialogs %}
+                {# 1.25: the dialogs of the sidebar actions (dialogUrl): UiKit remote form dialogs, medium and wide; the
+                   opener's label is the title, the host's fragment the body, its form actions move to the footer. #}
+                {% if nowo_chat_config.sidebar is defined %}
+                    {% for nowo_chat_size, nowo_chat_dialog_id in nowo_chat_config.sidebar.dialogs %}
+                        {{ include(nowo_ui_partial('remote_form_dialog', 'NowoChatKitBundle'), {id: nowo_chat_dialog_id, size: nowo_chat_size == 'wide' ? 'wide' : 'md', attr: {'data-testid': 'chat-sidebar-dialog-' ~ nowo_chat_size}, bundle: 'NowoChatKitBundle'}, false) }}
+                    {% endfor %}
+                {% endif %}
+            {% endblock %}
         </div>
     {% endblock %}
 {% endif %}

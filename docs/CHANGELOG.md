@@ -56,6 +56,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.25.0: the Slack-style sidebar (owner request via Symfony Beacon). Additive; defaults keep 1.24 behaviour (no
+provider and both options off: the same dock configuration, markup and list).
+
+### Added
+
+- **`ChatSidebarSectionProviderInterface`** (tag `nowo_chat_kit.sidebar_section_provider`, autoconfigured, priority
+  order): `sections(ChatUserInterface $viewer): iterable<ChatSidebarSection>`. Value objects
+  **`ChatSidebarSection`** (`key`, `label`, `position`, `collapsible`, `collapsedByDefault`, `items`, `actions`;
+  `POSITION_RECENT` −1000 / `POSITION_CONVERSATIONS` 1000 for the bundle's own sections, reserved keys `recent` and
+  `conversations`), **`ChatSidebarItem`** (`key`, `label`, `icon` = `channel` | `private` | a dock icon name | a UX
+  Icons name, `conversationUuid` or `url`, `unread`, `mentions`, `muted`, `subtitle`) and **`ChatSidebarAction`**
+  (`key`, `label`, `icon`, `url` and / or `dialogUrl`, `dialogSize` `md` | `wide`). Structural mistakes throw
+  `InvalidArgumentException`.
+- **`GET /api/sidebar`** (`nowo_chat_api_sidebar`, `ChatSidebarController`, service `Sidebar\ChatSidebar`): the
+  viewer's host sections ordered by position (stable), at most 20 sections, 200 rows and 6 actions each; signed in
+  (401), read budget (429), `no-store`. Rows with a `conversationUuid` are kept only when the conversation exists and
+  `ChatAccess::canView()` lets the viewer read it (dropped silently otherwise), and get their unread count, unread
+  mentions and muted state from the chat (three queries for all rows); the provider's counts are ignored for them.
+  Link URLs follow the `web_ui.channels_url` rule; a `dialogUrl` must be same-origin (a path, or an absolute URL on the
+  request's origin, reduced to its path). Labels and subtitles are cleaned like channel subtitles (control and
+  bidirectional characters dropped, 80 / 160 characters). UX Icons names are rendered on the server (`iconSvg`).
+- **Grouped sidebar in the dock script** (`sidebar.ts`): one list of collapsible sections — **Recent** with a
+  **Recent / Unread** toggle (the five newest, or every unread conversation that is not muted), the host sections, and
+  **Direct messages and groups** (every listed conversation no host section shows). Sections are disclosures
+  (`aria-expanded`, `aria-controls`) over listboxes (`role="option"`, `aria-selected` = the conversation shown); the
+  sidebar is one tab stop (↑ / ↓, ← / →, Home / End, Enter / Space, Delete closes a conversation). Folded sections and
+  the toggle are remembered per viewer in `localStorage` (inside `try` / `catch`). Host rows follow the Mercure / poll
+  updates: unread and muted from the conversation summaries when the list holds them, new messages and @mentions
+  counted live, cleared when read here, in another tab or on another device, and the sections reload with every list
+  refresh. `data-testid`: `chat-sidebar-section-<key>`, `chat-sidebar-item-<section>-<key>` (bundle rows:
+  `<section>-<uuid>`), `chat-sidebar-action-<section>-<key>`.
+- **Action dialogs:** an action with `dialogUrl` is a UiKit remote form dialog opener (`data-nowo-ui-dialog-open` /
+  `-src` / `-form` / `-title`) on one of two dialogs rendered in the dock root, `nowo-chat-sidebar-dialog` (medium) and
+  `nowo-chat-sidebar-dialog-wide` (UiKit anatomy: header with ×, scrolling body, footer outside it). UiKit fetches the
+  fragment same-origin with credentials, posts its forms back in the dialog and filters it (no `<script>`, no `on*`);
+  the browser checks the origin again before setting the opener. Without UiKit's dialog script the action is a plain
+  link (`url`, else `dialogUrl`). When the dialog closes the sidebar reloads and the action gets the focus back.
+- **`web_ui.dock.sidebar_sections`** (default `false`): the floating dock shows the grouped sidebar too. The full-page
+  chat is grouped whenever a section provider exists (or this option is on); the dock configuration then carries
+  `sidebar: {page, dock, endpoint, dialogs}`.
+- **`web_ui.page.open_recent`** (default `false`): `/chat/` opens the most recent conversation beside the list on wide
+  screens (`openRecent` in the dock configuration); with no conversation at all the thread column shows the empty
+  state.
+- Wider page-mode list column while grouped (`.nowo-chat-pagemode.has-sidebar`), 44px rows on phones and touch screens.
+- Translations `chat.sidebar_*` in the seven locales; dock icons `lock` and `plus`;
+  `ChatConversationRepository::findByUuids()`.
+
+### Changed
+
+- Requires `nowo-tech/ui-kit-bundle` **^2.33** (remote form dialogs).
+
 ## [1.24.0] - 2026-11-10
 
 Target 1.24.0: chat room channels (Symfony Beacon spec 184) together with the DDD / hexagonal ports, so hosts migrate

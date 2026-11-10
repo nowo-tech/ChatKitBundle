@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, LinkPreview, LinksPage, Member, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SupportContext, SupportStatus, SupportTicket } from './types';
+import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, LinkPreview, LinksPage, Member, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SidebarSection, SupportContext, SupportStatus, SupportTicket } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -68,6 +68,19 @@ export class ChatApi {
    */
   async conversations(archived = false): Promise<{ conversations: ConversationSummary[]; unreadTotal: number }> {
     return this.get(archived ? `${this.config.endpoints.conversations}?archived=1` : this.config.endpoints.conversations);
+  }
+
+  /**
+   * 1.25: the host sections of the sidebar (`GET sidebar.endpoint`).
+   *
+   * @returns The sections, ordered by position (none without an endpoint).
+   */
+  async sidebar(): Promise<SidebarSection[]> {
+    const endpoint = this.config.sidebar?.endpoint ?? null;
+    if (endpoint === null) {
+      return [];
+    }
+    return (await this.get<{ sections: SidebarSection[] }>(endpoint)).sections;
   }
 
   /**

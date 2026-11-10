@@ -13,6 +13,7 @@ import { PREFS_EVENT } from './prefs';
 import { playOnce } from './sounds';
 import { ActivityTracker, currentStatus, customStatus, StatusMenu, statusLabel } from './status';
 import { clearChatStorage, DockStore, DraftStore, type SyncEvent, ThreadCache } from './state';
+import { ChatSidebarView } from './sidebar';
 import { part, Templates, text } from './templates';
 import { isMuted, plain, ThreadView, type ThreadHost } from './thread';
 import type { ChatConfig, ChatMessage, ChatPrefs, Contact, ConversationSummary, LinkPreview, PeerStatus, RealtimeEvent, SoundName, SupportContext } from './types';
@@ -143,6 +144,10 @@ export class ChatDock implements ThreadHost {
   private readonly mobileQuery: MediaQueryList;
   /** 1.13: page mode (the full-page chat), or null for the floating dock. */
   private readonly page: PageMode | null;
+  /** 1.25: the grouped sidebar (page mode with `sidebar.page`, the dock with `sidebar.dock`), or null: the 1.24 list. */
+  private readonly sidebar: ChatSidebarView | null;
+  /** 1.25: the sidebar action that opened the dialog last (its focus comes back after the sidebar reloads). */
+  private sidebarOpener: string | null = null;
 
   /**
    * Builds the dock markup from the templates and binds its events (call start() to load and connect).
@@ -188,6 +193,7 @@ export class ChatDock implements ThreadHost {
     this.activity = new ActivityTracker(config.userUuid, this.abort.signal);
     this.statusMenu = this.buildStatusMenu();
     this.page = options.page === undefined || options.page === null ? null : this.attachPage(options.page);
+    this.sidebar = this.buildSidebar();
     this.bind();
     this.store.subscribe((event) => this.onSync(event));
   }
@@ -213,6 +219,32 @@ export class ChatDock implements ThreadHost {
     // In the panel's flow under its header (the panel clips anything outside it).
     (trigger.parentElement ?? this.panel).after(popover);
     return new StatusMenu(this, trigger, popover, (status) => (this.config.status = status), this.abort.signal);
+  }
+
+  /**
+   * 1.25: the grouped sidebar when the configuration asks for it here (`sidebar.page` in page mode, `sidebar.dock` for
+   * the floating dock) and the templates have its markup.
+   *
+   * @returns The sidebar, or null for the 1.24 list.
+   */
+  private buildSidebar(): ChatSidebarView | null {
+    const settings = this.config.sidebar;
+    if (settings === undefined || !(this.page === null ? settings.dock : settings.page) || this.root.querySelector('template[data-nowo-chat-template="sidebar-section"]') === null) {
+      return null;
+    }
+    this.panel.classList.add('has-sidebar');
+    this.page?.app.classList.add('has-sidebar');
+    return new ChatSidebarView({
+      config: this.config,
+      templates: this.templates,
+      listed: () => [...this.conversations.values()],
+      current: () => this.page?.active ?? null,
+      openConversation: (uuid) => {
+        const known = this.conversations.get(uuid);
+        void (known === undefined ? this.api.conversation(uuid).then((summary) => this.open(summary)) : this.open(known)).catch((error: unknown) => this.showOpenError(error));
+      },
+      archive: (summary) => void this.setArchived(summary, true),
+    });
   }
 
   /**
@@ -305,7 +337,9 @@ export class ChatDock implements ThreadHost {
     const view = page.active === null ? undefined : this.windows.get(page.active);
     const shown = view?.element ?? page.empty;
     // A conversation on its way (deep link before the list loads): "Loading", not "Pick a conversation".
-    page.empty.textContent = t(this.config.i18n, page.active === null ? 'page_select' : 'loading');
+    // 1.25 (`openRecent`): with nothing to open, the empty state of a viewer without conversations.
+    const none = this.config.openRecent === true && this.listLoaded && this.conversations.size === 0;
+    page.empty.textContent = t(this.config.i18n, page.active !== null ? 'loading' : none ? 'empty_title' : 'page_select');
     if (page.thread.firstElementChild !== shown) {
       page.thread.replaceChildren(shown);
     }
@@ -372,6 +406,7 @@ export class ChatDock implements ThreadHost {
       await this.loadArchived();
     }
     this.openFromUrl();
+    this.openRecent();
     this.schedulePoll();
     this.realtime = new ChatRealtime(
       this.api,
@@ -399,6 +434,23 @@ export class ChatDock implements ThreadHost {
     );
     void this.realtime.connect();
     this.startPresence();
+  }
+
+  /**
+   * 1.25 (`web_ui.page.open_recent`): the full-page chat without a conversation in its address shows the most recent
+   * one beside the list — on wide screens only (a phone shows the list first), never under the "Closed" filter.
+   */
+  private openRecent(): void {
+    const page = this.page;
+    if (page === null || this.config.openRecent !== true || page.active !== null || this.filter === 'archived' || this.isMobile()) {
+      return;
+    }
+    const recent = [...this.conversations.values()]
+      .filter((summary) => summary.kind !== 'direct' || summary.lastMessage !== null)
+      .sort((a, b) => (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''))[0];
+    if (recent !== undefined) {
+      void this.open(recent, false, true);
+    }
   }
 
   /**
@@ -793,6 +845,7 @@ export class ChatDock implements ThreadHost {
    */
   read(uuid: string, messageId: number): void {
     const summary = this.conversations.get(uuid);
+    this.sidebar?.markRead(uuid);
     if (summary !== undefined) {
       summary.unread = 0;
       this.renderList();
@@ -866,6 +919,7 @@ export class ChatDock implements ThreadHost {
       });
     });
     this.panel.querySelector('[data-part="archive-read"]')?.addEventListener('click', () => void this.archiveRead());
+    this.bindSidebar(signal);
     this.searchInput.addEventListener('input', () => {
       this.query = this.searchInput.value.trim().toLowerCase();
       this.renderList();
@@ -1012,6 +1066,43 @@ export class ChatDock implements ThreadHost {
       },
       { signal },
     );
+  }
+
+  /**
+   * 1.25: the sidebar's keyboard, and its dialogs: once one closes (saved or not) the sidebar and the list reload and the
+   * action that opened it gets the focus back (the floating dock may have been hidden under the dialog).
+   *
+   * @param signal Removes the listeners.
+   */
+  private bindSidebar(signal: AbortSignal): void {
+    const sidebar = this.sidebar;
+    if (sidebar === null) {
+      return;
+    }
+    sidebar.bindKeys(this.listEl, signal);
+    this.listEl.addEventListener(
+      'click',
+      (event) => {
+        this.sidebarOpener = (event.target as Element).closest<HTMLElement>('[data-nowo-ui-dialog-open]')?.dataset.navKey ?? this.sidebarOpener;
+      },
+      { signal },
+    );
+    Object.values(this.config.sidebar?.dialogs ?? {}).forEach((id) => {
+      document.getElementById(id)?.addEventListener(
+        'close',
+        () => {
+          const key = this.sidebarOpener;
+          this.sidebarOpener = null;
+          void this.refreshList().then(() => {
+            const active = document.activeElement;
+            if (key !== null && (active === null || active === document.body || !active.isConnected)) {
+              this.listEl.querySelector<HTMLElement>(`[data-nav-key="${CSS.escape(key)}"]`)?.focus();
+            }
+          });
+        },
+        { signal },
+      );
+    });
   }
 
   /**
@@ -1179,6 +1270,10 @@ export class ChatDock implements ThreadHost {
         return;
       }
       this.listTyping.delete(event.conversationUuid);
+      if (!message.mine) {
+        // 1.25: the host rows of the sidebar count it too (a window that reads it clears them again).
+        this.sidebar?.received(event.conversationUuid, message.mentionAll !== undefined || (message.mentions ?? []).some((mention) => mention.uuid === this.config.userUuid));
+      }
       const view = this.windows.get(event.conversationUuid);
       const summary = this.conversations.get(event.conversationUuid);
       if (view !== undefined) {
@@ -1202,6 +1297,7 @@ export class ChatDock implements ThreadHost {
     if (event.type === 'read') {
       if (event.userUuid === this.config.userUuid) {
         // Read on another device / tab.
+        this.sidebar?.markRead(event.conversationUuid);
         const summary = this.conversations.get(event.conversationUuid);
         if (summary !== undefined) {
           summary.unread = 0;
@@ -1645,6 +1741,8 @@ export class ChatDock implements ThreadHost {
    * toggles the offline state, then renders the list and the layout.
    */
   private async refreshList(prune = false): Promise<void> {
+    // 1.25: the host sections of the sidebar load beside the list (a failed load keeps the last ones).
+    const sections = this.sidebar !== null && (this.config.sidebar?.endpoint ?? null) !== null ? this.api.sidebar().catch(() => null) : Promise.resolve(null);
     try {
       const { conversations } = await this.api.conversations();
       if (prune) {
@@ -1668,6 +1766,10 @@ export class ChatDock implements ThreadHost {
       this.root.classList.remove('is-offline');
     } catch {
       this.root.classList.add('is-offline');
+    }
+    const loaded = await sections;
+    if (loaded !== null) {
+      this.sidebar?.setSections(loaded);
     }
     this.renderList();
     this.applyState();
@@ -1740,10 +1842,21 @@ export class ChatDock implements ThreadHost {
       })
       .sort((a, b) => (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''));
 
+    // 1.25: the grouped sidebar under the "All" filter without a search (any filter or search lists as before).
+    const grouped = this.sidebar !== null && this.filter === 'all' && this.query === '';
+    this.listEl.classList.toggle('is-sidebar', grouped && this.listLoaded);
     if (!this.listLoaded) {
       this.listEl.replaceChildren(this.listState(t(i18n, 'loading')));
       return;
     }
+    if (grouped && (rows.length > 0 || (this.sidebar as ChatSidebarView).hasHostContent())) {
+      const sidebar = this.sidebar as ChatSidebarView;
+      this.listEl.replaceChildren(...sidebar.render());
+      sidebar.restoreTabStop(this.listEl);
+      this.renderBadge();
+      return;
+    }
+    this.listEl.classList.remove('is-sidebar');
     if (rows.length === 0 && archivedFilter) {
       this.listEl.replaceChildren(this.listState(t(i18n, 'archived_empty')));
       return;
@@ -2082,6 +2195,7 @@ export class ChatDock implements ThreadHost {
       }
       return;
     }
+    this.sidebar?.markRead(event.uuid);
     if (summary !== undefined) {
       summary.unread = 0;
       this.renderList();

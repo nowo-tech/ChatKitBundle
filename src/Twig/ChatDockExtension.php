@@ -25,6 +25,7 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
+use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
@@ -56,6 +57,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
 {
     private const string PLACEHOLDER = '00000000-0000-0000-0000-000000000000';
 
+    /** 1.25: ids of the two sidebar dialogs (UiKit remote form dialogs, `dock.html.twig`), by size. */
+    public const array SIDEBAR_DIALOGS = ['md' => 'nowo-chat-sidebar-dialog', 'wide' => 'nowo-chat-sidebar-dialog-wide'];
+
     /**
      * Builds the extension from security, routing, CSRF, translation, access checks and the dock settings.
      *
@@ -75,6 +79,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param ChatLinks|null $links 1.19: pinned links, link cards and the Links panel (`links`); null or disabled hides them
      * @param string|null $channelsUrl 1.24: host page to browse or create channels (`web_ui.channels_url`); null: no link
      * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
+     * @param bool $openRecent 1.25: the full-page chat opens the most recent conversation (`web_ui.page.open_recent`)
+     * @param bool $dockSidebar 1.25: the dock shows the grouped sidebar (`web_ui.dock.sidebar_sections`)
+     * @param ChatSidebar|null $sidebar 1.25: the host sections (the full-page chat is grouped when a provider exists)
      */
     public function __construct(
         private readonly Security $security,
@@ -103,6 +110,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly ?ChatLinks $links = null,
         private readonly ?string $channelsUrl = null,
         private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly bool $openRecent = false,
+        private readonly bool $dockSidebar = false,
+        private readonly ?ChatSidebar $sidebar = null,
     ) {
     }
 
@@ -236,7 +246,32 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             // 1.19: links (absent when the feature is off).
             'links' => $this->linksConfig(),
             'i18n'  => $this->strings($locale),
-        ] + ($this->channelsUrl === null || preg_match(Configuration::CHANNELS_URL_PATTERN, $this->channelsUrl) !== 1 ? [] : ['channelsUrl' => $this->channelsUrl]);
+        ] + ($this->channelsUrl === null || preg_match(Configuration::CHANNELS_URL_PATTERN, $this->channelsUrl) !== 1 ? [] : ['channelsUrl' => $this->channelsUrl])
+            + $this->sidebarConfig();
+    }
+
+    /**
+     * 1.25: `openRecent` (only when set) and `sidebar` (only with a section provider or `web_ui.dock.sidebar_sections`):
+     * the full-page chat is then grouped, the dock when the option is on, the endpoint of the host sections (null
+     * without a provider) and the ids of the two dialogs.
+     *
+     * @return array<string, mixed>
+     */
+    private function sidebarConfig(): array
+    {
+        $config    = $this->openRecent ? ['openRecent' => true] : [];
+        $providers = $this->sidebar?->hasProviders() ?? false;
+        if (!$providers && !$this->dockSidebar) {
+            return $config;
+        }
+
+        return $config + ['sidebar' => [
+            // The full-page chat is grouped with a provider, or when the dock is.
+            'page'     => true,
+            'dock'     => $this->dockSidebar,
+            'endpoint' => $providers ? $this->urls->generate('nowo_chat_api_sidebar') : null,
+            'dialogs'  => self::SIDEBAR_DIALOGS,
+        ]];
     }
 
     /**

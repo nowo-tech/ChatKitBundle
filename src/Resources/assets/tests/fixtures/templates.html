@@ -362,6 +362,38 @@
         </button>
     </template>
 
+        <template data-nowo-chat-template="sidebar-section">
+        <li class="nowo-chat-sidebar__section" data-part="section">
+            <div class="nowo-chat-sidebar__header">
+                <button type="button" class="nowo-chat-sidebar__toggle" data-part="toggle" aria-expanded="true">
+                    <span class="nowo-chat-sidebar__caret" data-icon="chevronDown" data-icon-size="14"></span>
+                    <span class="nowo-chat-sidebar__label" data-part="label"></span>
+                    <span class="nowo-chat-badge" data-part="badge" hidden></span>
+                </button>
+                <span class="nowo-chat-sidebar__heading" data-part="heading" hidden></span>
+                <div class="nowo-chat-sidebar__modes" role="group" aria-label="Show" data-part="modes" hidden>
+                    <button type="button" class="nowo-chat-chip nowo-chat-sidebar__mode" data-mode="recent" aria-pressed="true" tabindex="-1">Recent</button>
+                    <button type="button" class="nowo-chat-chip nowo-chat-sidebar__mode" data-mode="unread" aria-pressed="false" tabindex="-1">Unread</button>
+                </div>
+            </div>
+            <ul class="nowo-chat-sidebar__items" role="listbox" data-part="items"></ul>
+            <p class="nowo-chat-sidebar__empty" data-part="empty" hidden></p>
+            <div class="nowo-chat-sidebar__actions" data-part="actions" hidden></div>
+        </li>
+    </template>
+    <template data-nowo-chat-template="sidebar-item">
+        <li class="nowo-chat-sidebar__item" role="option" aria-selected="false" tabindex="-1">
+            <span class="nowo-chat-sidebar__icon" data-part="icon" aria-hidden="true"></span>
+            <span class="nowo-chat-sidebar__text" data-part="label"></span>
+            <span class="nowo-chat-sidebar__muted" data-part="muted" role="img" hidden><span data-icon="bellOff" data-icon-size="14"></span></span>
+            <span class="nowo-chat-sidebar__mentions" data-part="mentions" role="img" hidden></span>
+            <span class="nowo-chat-badge" data-part="badge" hidden></span>
+        </li>
+    </template>
+    <template data-nowo-chat-template="sidebar-action">
+        <a class="nowo-chat-sidebar__action" tabindex="-1"><span class="nowo-chat-sidebar__icon" data-part="icon" aria-hidden="true"></span><span data-part="label"></span></a>
+    </template>
+
                 <template data-nowo-chat-icon="close"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"></path></svg></template>
             <template data-nowo-chat-icon="send"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M4 12 20 4l-6 16-3-7z"></path></svg></template>
     
