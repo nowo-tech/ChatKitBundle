@@ -196,6 +196,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         // 1.25: the sidebar.
         $container->setParameter(Configuration::ALIAS . '.web_ui.page.open_recent', $profile['web_ui']['page']['open_recent']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.dock.sidebar_sections', $profile['web_ui']['dock']['sidebar_sections']);
+        $container->setParameter(Configuration::ALIAS . '.web_ui.dock.dialog_runtime', $profile['web_ui']['dock']['dialog_runtime']);
     }
 
     /**

@@ -27,6 +27,8 @@ use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\Asset\Exception\InvalidArgumentException;
+use Symfony\Component\Asset\Packages;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Form\FormFactoryInterface;
@@ -60,6 +62,12 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
     /** 1.25: ids of the two sidebar dialogs (UiKit remote form dialogs, `dock.html.twig`), by size. */
     public const array SIDEBAR_DIALOGS = ['md' => 'nowo-chat-sidebar-dialog', 'wide' => 'nowo-chat-sidebar-dialog-wide'];
 
+    /** 1.26: UiKit's remote-dialog runtime, in UiKit's asset package (`web_ui.dock.dialog_runtime`). */
+    public const string DIALOG_RUNTIME = 'js/nowo-ui-dialog.js';
+
+    /** 1.26: name of UiKit's asset package. */
+    public const string UI_KIT_PACKAGE = 'nowo_ui_kit';
+
     /**
      * Builds the extension from security, routing, CSRF, translation, access checks and the dock settings.
      *
@@ -82,6 +90,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param bool $openRecent 1.25: the full-page chat opens the most recent conversation (`web_ui.page.open_recent`)
      * @param bool $dockSidebar 1.25: the dock shows the grouped sidebar (`web_ui.dock.sidebar_sections`)
      * @param ChatSidebar|null $sidebar 1.25: the host sections (the full-page chat is grouped when a provider exists)
+     * @param bool $dialogRuntime 1.26: the dock loads UiKit's dialog runtime for the sidebar actions (`web_ui.dock.dialog_runtime`)
+     * @param Packages|null $packages 1.26: asset packages (the URL of UiKit's js/nowo-ui-dialog.js); null without symfony/asset
      */
     public function __construct(
         private readonly Security $security,
@@ -113,6 +123,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly bool $openRecent = false,
         private readonly bool $dockSidebar = false,
         private readonly ?ChatSidebar $sidebar = null,
+        private readonly bool $dialogRuntime = false,
+        private readonly ?Packages $packages = null,
     ) {
     }
 
@@ -224,6 +236,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'pin'            => $this->pattern('nowo_chat_api_pin', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 // 1.24: mute / unmute a conversation for the user.
                 'mute' => $this->pattern('nowo_chat_api_mute'),
+                // 1.26: the session's current CSRF token (asked for once when the page's token is refused).
+                'csrf' => $this->urls->generate('nowo_chat_api_csrf'),
             ] + $this->linkEndpoints(),
             // Sounds per event, volume, buzz, opening, send key … (ChatUserSettings::preferences()).
             'prefs' => $settings->preferences(),
@@ -271,7 +285,26 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'dock'     => $this->dockSidebar,
             'endpoint' => $providers ? $this->urls->generate('nowo_chat_api_sidebar') : null,
             'dialogs'  => self::SIDEBAR_DIALOGS,
-        ]];
+        ] + $this->dialogRuntimeConfig()];
+    }
+
+    /**
+     * 1.26 (`web_ui.dock.dialog_runtime`): the address of UiKit's remote-dialog runtime, which the dock loads unless the
+     * page already has it. Configuration only: computed on each call, nothing kept between requests.
+     *
+     * @return array{dialogRuntime?: string}
+     */
+    private function dialogRuntimeConfig(): array
+    {
+        if (!$this->dialogRuntime || !$this->packages instanceof Packages) {
+            return [];
+        }
+        try {
+            return ['dialogRuntime' => $this->packages->getUrl(self::DIALOG_RUNTIME, self::UI_KIT_PACKAGE)];
+        } catch (InvalidArgumentException) {
+            // UiKit's asset package is not registered (UiKit not enabled): the host loads the runtime, or the actions stay links.
+            return [];
+        }
     }
 
     /**

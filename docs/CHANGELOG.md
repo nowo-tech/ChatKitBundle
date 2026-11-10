@@ -58,6 +58,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Grouped sidebar rows regain the 1.24 row details** (Symfony Beacon request after adopting the 1.25 sidebar): a
+  conversation row of the grouped sidebar (Recent / Unread, Direct messages and groups) carries `data-peer-status`, a
+  screen-reader status label, the peer's custom status after the name and the last-message preview (who wrote it, buzz,
+  deleted… as in the flat list), plus a Close button on hover (it closes the conversation for the viewer — archived,
+  Undo in the notice — never deletes it; a pointer shortcut of the Delete key, out of the tab order). Host rows of a
+  listed conversation show its preview (and a direct peer's status) too. A presence change (realtime `status` event or
+  the heartbeat's answer) repaints the rows in place: the status dot, `data-peer-status` and the custom status follow,
+  and the focus, hover and folded sections stay. Templates overridden before 1.26 (no `status` / `preview` / `close`
+  hooks in `sidebar-item`) keep working with the 1.25 look.
+- **`web_ui.dock.dialog_runtime`** (default `false`): `true` makes the dock load UiKit's remote-dialog runtime
+  (`js/nowo-ui-dialog.js`, UiKit's asset package) itself, so the sidebar actions (Browse / Create channel…) open as
+  dialogs on every page, not only where the layout loads it. Idempotent: nothing is loaded when the runtime already runs
+  (`window.nowoUiOpenRemoteForm`), when the page has a `<script>` for `nowo-ui-dialog.js` or when it was requested once;
+  the script takes the CSP nonce of the page's scripts. The dock configuration carries `sidebar.dialogRuntime`.
+- **`GET /api/csrf`** (`nowo_chat_api_csrf`, `endpoints.csrf` in the dock configuration): the session's current CSRF
+  token of the chat and the caller's public id, never cached.
+
+### Fixed
+
+- **A refused CSRF token no longer ends the chat's writes for the page when the session still has a valid one.** When a
+  write gets `403 invalid_csrf` (the session lost the page's token: a new sign-in, or a parallel request that saved an
+  older copy of an unlocked session, e.g. Redis sessions), the dock fetches the session's current token once
+  (`GET /api/csrf`, shared by every write refused meanwhile) and sends the write again. Only when no new token can be had
+  (another person signed in in this browser, the same token, a failed request) or the new one is refused too does it
+  stop the heartbeat and every write and keep the "reload the page" notice (1.22.1 behaviour).
+- **Phones keep one column on the grouped full-page chat**: the two-column rule of `.nowo-chat-pagemode.has-sidebar`
+  now applies from 769px only, so it no longer overrides the one-column phone rule (hosts can drop their workaround).
+
 ## [1.25.1] - 2026-11-10
 
 Target 1.25.1: follow-ups of audit KJ on the 1.25 sidebar. No schema, configuration or template change.

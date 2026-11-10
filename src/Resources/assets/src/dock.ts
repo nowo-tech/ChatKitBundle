@@ -244,6 +244,8 @@ export class ChatDock implements ThreadHost {
         void (known === undefined ? this.api.conversation(uuid).then((summary) => this.open(summary)) : this.open(known)).catch((error: unknown) => this.showOpenError(error));
       },
       archive: (summary) => void this.setArchived(summary, true),
+      // 1.26: the rows show the last message as the 1.24 list does.
+      preview: (summary) => this.previewOf(summary),
     });
   }
 
@@ -1409,7 +1411,7 @@ export class ChatDock implements ThreadHost {
    * @param online Public ids online (presence answer); undefined = derive from the statuses.
    */
   private applyPeerStatuses(statuses: Record<string, PeerStatus>, online?: Set<string>): void {
-    let changed = false;
+    const changed: ConversationSummary[] = [];
     for (const summary of this.conversations.values()) {
       if (summary.kind !== 'direct' || summary.peerUuid === null) {
         continue;
@@ -1432,12 +1434,19 @@ export class ChatDock implements ThreadHost {
       ) {
         Object.assign(summary, next);
         this.windows.get(summary.uuid)?.applySummary(summary);
-        changed = true;
+        changed.push(summary);
       }
     }
-    if (changed) {
-      this.renderList();
+    if (changed.length === 0) {
+      return;
     }
+    if (this.sidebar !== null && this.listEl.classList.contains('is-sidebar')) {
+      // 1.26: the grouped sidebar repaints the dots and statuses in place (focus, hover and folds stay).
+      const sidebar = this.sidebar;
+      changed.forEach((summary) => sidebar.repaintPeer(this.listEl, summary));
+      return;
+    }
+    this.renderList();
   }
 
   /**

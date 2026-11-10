@@ -469,6 +469,11 @@ The list becomes one grouped, collapsible sidebar (Slack-style) on the full-page
 3. **Direct messages and groups** — every listed conversation none of your sections shows (`POSITION_CONVERSATIONS`,
    1000).
 
+**Rows (1.26).** A conversation row shows what the flat list does: the avatar with its status dot, `data-peer-status`
+on the row (`available`, `busy`, `away`, `dnd`, `offline`), the peer's custom status after the name, the last message
+under it and, on hover, a Close button (archives the conversation for the viewer, Undo in the notice). Your rows of a
+listed conversation keep your icon and show its last message. Presence changes repaint the rows in place.
+
 The search and the filters other than **All** keep listing flat, as in 1.24. Without any conversation and without any
 row or action of yours, the list shows its usual empty state. With `web_ui.page.open_recent: true`, `/chat/` also opens
 the most recent conversation beside the list on wide screens; it is shown, not read: nothing is marked read (no read
@@ -578,13 +583,15 @@ So serve only your own markup: never user-controlled HTML unescaped, and never a
 do) and answer with `RemoteDialogResponder`. Behaviour in a fragment comes from delegated listeners or Stimulus
 controllers on your page. The dialogs need UiKit's
 `js/nowo-ui-dialog.js` (in UiKit's default scripts); without it the action is a plain link to `url` (else to
-`dialogUrl`, the same URL in its full-page mode). When a dialog closes the sidebar reloads (a channel just created or
+`dialogUrl`, the same URL in its full-page mode). On pages whose layout does not load it, set
+`web_ui.dock.dialog_runtime: true` (1.26): the dock then loads it once (never a second copy, with the page's CSP nonce). When a dialog closes the sidebar reloads (a channel just created or
 joined shows up) and the action gets the focus back.
 
 **Keyboard and screen readers.** Each section is a disclosure (`aria-expanded`, `aria-controls`) over a listbox
 (`role="option"`, `aria-selected` on the conversation shown); the sidebar is one tab stop: ↑ / ↓ move, ← folds a
 section or goes up to its header, → unfolds it or goes in, Home / End, Enter / Space open, Delete closes a conversation
-of the bundle's sections. Folded sections (`collapsedByDefault` until the viewer opens them) and the Recent / Unread
+of the bundle's sections (1.26: also the row's Close button on hover — a pointer shortcut out of the tab order; the
+option announces `aria-keyshortcuts="Delete"`). Folded sections (`collapsedByDefault` until the viewer opens them) and the Recent / Unread
 choice are remembered per viewer on the device (`localStorage`, when available).
 
 **Counts.** A channel row whose conversation the viewer has never opened (no participant row) counts its whole
@@ -1460,6 +1467,7 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/support/{uuid}/assign` `{assignee}` | agents: an agent's public id, or null |
 | GET | `/api/link-previews?url[]=…` | previews from your provider, per viewer |
 | GET | `/api/realtime` | hub URL + subscriber token for the caller's topic |
+| GET | `/api/csrf` | the session's current `nowo_chat` CSRF token and the caller's public id (1.26; the dock asks once after a `403 invalid_csrf`, then retries the write; never cached) |
 | POST | `/api/presence` `{visible, idle?}` | heartbeat; online direct contacts, their `statuses`, the caller's own status (`me`) |
 | POST | `/api/status` `{status, text?, emoji?, clearAfter?}` | set the caller's chat status (1.10) |
 | POST | `/api/settings` `{key, value}` | save one chat preference (1.10); answers every preference |

@@ -52,6 +52,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 use function array_slice;
 use function assert;
@@ -888,6 +889,25 @@ final class ChatApiController extends AbstractController
             'topic'     => $topic,
             'expiresAt' => $expiresAt->format(DATE_ATOM),
         ]);
+    }
+
+    /**
+     * 1.26: the session's current CSRF token for the chat's writes. The dock asks for it once when the server refused
+     * the page's token (the session lost it: a new sign-in, or a parallel request that saved an older copy of an
+     * unlocked session) and retries; `userUuid` lets the page see that someone else signed in meanwhile (it must
+     * reload). Read from the current request's session on every call, never kept: nothing survives the request in a
+     * long-running worker. Same-origin JSON (a cross-site page cannot read it), never cached.
+     *
+     * @return JsonResponse `{csrf, userUuid}`
+     */
+    #[Route('/csrf', name: 'csrf', methods: ['GET'])]
+    public function csrf(): JsonResponse
+    {
+        $user    = $this->reader();
+        $manager = $this->container->get('security.csrf.token_manager');
+        assert($manager instanceof CsrfTokenManagerInterface);
+
+        return new JsonResponse(['csrf' => $manager->getToken(self::CSRF_ID)->getValue(), 'userUuid' => $user->getChatPublicId()], Response::HTTP_OK, ['Cache-Control' => 'no-store, private']);
     }
 
     /**

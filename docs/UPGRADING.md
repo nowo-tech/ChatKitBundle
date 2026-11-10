@@ -61,6 +61,28 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+From **1.25.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+php bin/console assets:install   # nowo-chat.css and nowo-chat.js changed
+```
+
+No schema change. Everything is backward compatible:
+
+- **Sidebar rows.** The `sidebar-item` template (block `nowo_chat_template_sidebar`) gained the `status`, `preview` and
+  `close` hooks. A host that overrides it may add them (see `_templates.html.twig`); an override without them keeps the
+  1.25 look (no custom status, preview or Close button). Bundlers that import the TypeScript rebuild as usual.
+- **Phone layout.** `.nowo-chat-pagemode.has-sidebar { grid-template-columns: … }` now sits inside
+  `@media (min-width: 769px)`. A host workaround that forced one column on phones (e.g.
+  `@media (max-width: 768px) { .nowo-chat-pagemode.has-sidebar { grid-template-columns: minmax(0, 1fr); } }`) can go.
+- **Dialog runtime (opt-in).** To have the sidebar actions open as dialogs on every page without adding UiKit's
+  `js/nowo-ui-dialog.js` to your layout, set `web_ui.dock.dialog_runtime: true`. Pages that already load it are
+  untouched (the dock never loads a second copy).
+- **CSRF refresh.** The new `GET /api/csrf` route sits under the bundle's route import like the rest of the API; if
+  your `security.yaml` lists the chat API paths one by one, add it (same access as `/api/conversations`). The 1.22.1
+  `chat.session_stale` notice now shows only when the token cannot be refreshed.
+
 ## To 1.25.1
 
 From **1.25.0**:
