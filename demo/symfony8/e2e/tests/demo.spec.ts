@@ -155,7 +155,9 @@ test.describe('chat kit demo', () => {
     await expect(app.locator('.nowo-chat-chip[data-filter="archived"]')).toBeVisible();
     await expect(app.locator('.nowo-chat-search').first()).toBeVisible();
     await expect(app.locator('.nowo-chat-pagemode__empty')).toHaveText('Pick a conversation.');
-    await app.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    // 1.25.1: the demo registers a sidebar section provider, so the page lists in the grouped sidebar.
+    await expect(app.getByTestId('chat-sidebar-section-demo-rooms')).toBeVisible();
+    await app.getByTestId('chat-sidebar-section-conversations').locator('.nowo-chat-sidebar__item', { hasText: 'Bob Lee' }).click();
     await expect(page).toHaveURL(/\/chat\/[0-9a-f-]{36}$/);
     const thread = app.locator('.nowo-chat-window[role="region"]');
     await expect(thread.locator('.nowo-chat-window__title')).toHaveText('Bob Lee');

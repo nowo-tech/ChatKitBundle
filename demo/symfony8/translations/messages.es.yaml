@@ -32,3 +32,8 @@ demo:
     password: Contraseña
     submit: 'Iniciar sesión'
     signed_in: 'Sesión iniciada como %user%.'
+  rooms:
+    section: 'Salas de demo'
+    create: 'Crear sala'
+    name: 'Nombre de la sala'
+    submit: 'Crear'

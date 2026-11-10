@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Model;
 
 use InvalidArgumentException;
 
+use function get_debug_type;
 use function preg_match;
 use function trim;
 
@@ -48,7 +49,8 @@ final readonly class ChatSidebarSection
      * @param iterable<ChatSidebarItem> $items Rows: conversations (by uuid) or links
      * @param iterable<ChatSidebarAction> $actions Links or dialogs under the rows (e.g. "Browse channels")
      *
-     * @throws InvalidArgumentException When the key does not match KEY_PATTERN or the label is empty
+     * @throws InvalidArgumentException When the key does not match KEY_PATTERN, the label is empty, or an item / action
+     *                                  is not a ChatSidebarItem / ChatSidebarAction
      */
     public function __construct(
         public string $key,
@@ -65,13 +67,20 @@ final readonly class ChatSidebarSection
         if (trim($label) === '') {
             throw new InvalidArgumentException('A sidebar section needs a label.');
         }
+        // 1.25.1 (audit KJ-I12): checked here, inside the provider, so a wrong row fails that provider only.
         $list = [];
         foreach ($items as $item) {
+            if (!$item instanceof ChatSidebarItem) {
+                throw new InvalidArgumentException('The items of sidebar section "' . $key . '" must be ' . ChatSidebarItem::class . ' instances, got ' . get_debug_type($item) . '.');
+            }
             $list[] = $item;
         }
         $this->items = $list;
         $list        = [];
         foreach ($actions as $action) {
+            if (!$action instanceof ChatSidebarAction) {
+                throw new InvalidArgumentException('The actions of sidebar section "' . $key . '" must be ' . ChatSidebarAction::class . ' instances, got ' . get_debug_type($action) . '.');
+            }
             $list[] = $action;
         }
         $this->actions = $list;

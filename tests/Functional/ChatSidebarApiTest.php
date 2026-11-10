@@ -225,6 +225,38 @@ final class ChatSidebarApiTest extends DatabaseTestCase
         self::assertStringContainsString(TestSidebarProvider::class, implode(' ', $logger->lines));
     }
 
+    public function testAProviderWithAWrongRowOrSectionIsLoggedAndSkipped(): void
+    {
+        $ana                      = $this->user('Ana');
+        $this->second()->sections = [new ChatSidebarSection('kept', 'Kept')];
+        $this->client->loginUser($ana);
+        $direct = fn (RecordingLogger $logger): ChatSidebar => new ChatSidebar([$this->first(), $this->second()], $this->get(ChatAccess::class), $this->get(ChatConversationRepository::class), $this->get(ChatMessageRepository::class), $this->get(ChatMessageMentionRepository::class), $this->get(ChatParticipantRepository::class), logger: $logger);
+
+        // Audit KJ-I12: a string among the items (or an item among the actions) fails in the section's constructor,
+        // inside the provider: that provider is skipped, the endpoint still answers with the others.
+        $wrong = [
+            // @phpstan-ignore argument.type (on purpose)
+            'item' => static fn (): iterable => [new ChatSidebarSection('bad', 'Bad', 0, true, false, ['nope'])],
+            // @phpstan-ignore argument.type (on purpose)
+            'action'  => static fn (): iterable => [new ChatSidebarSection('bad', 'Bad', 0, true, false, [], [new ChatSidebarItem('x', 'x', 'channel', null, '/x')])],
+            'section' => static fn (): iterable => [new ChatSidebarSection('half', 'Half'), 'not a section'],
+        ];
+        $expected = [
+            'item'    => 'must be ' . ChatSidebarItem::class . ' instances, got string',
+            'action'  => 'must be ' . ChatSidebarAction::class . ' instances, got ' . ChatSidebarItem::class,
+            'section' => 'must yield ' . ChatSidebarSection::class . ' instances, got string',
+        ];
+        foreach ($wrong as $case => $build) {
+            $this->first()->build = $build;
+            self::assertSame(['kept'], array_column($this->sections(), 'key'), $case . ': the endpoint answers with the other providers');
+            $logger = new RecordingLogger();
+            self::assertSame(['kept'], array_column($direct($logger)->view($ana, 'http://localhost'), 'key'), $case);
+            self::assertCount(1, $logger->lines, $case);
+            self::assertStringContainsString(TestSidebarProvider::class, $logger->lines[0], $case);
+            self::assertStringContainsString($expected[$case], $logger->lines[0], $case);
+        }
+    }
+
     public function testProvidersAreCountedWithoutBeingCreatedAndUuidsLookedUpByChunks(): void
     {
         $ana  = $this->user('Ana');

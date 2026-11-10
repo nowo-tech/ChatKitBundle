@@ -32,3 +32,8 @@ demo:
     password: Password
     submit: 'Sign in'
     signed_in: 'Signed in as %user%.'
+  rooms:
+    section: 'Demo rooms'
+    create: 'Create room'
+    name: 'Room name'
+    submit: 'Create'

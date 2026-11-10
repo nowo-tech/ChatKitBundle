@@ -49,6 +49,10 @@ final class ChatSidebarModelTest extends TestCase
         yield 'action key' => [static fn (): object => new ChatSidebarAction('-x', 'x', null, '/x'), 'action key'];
         yield 'action label' => [static fn (): object => new ChatSidebarAction('ok', ' ', null, '/x'), 'needs a label'];
         yield 'action without url' => [static fn (): object => new ChatSidebarAction('ok', 'x'), 'url or a dialogUrl'];
+        // @phpstan-ignore argument.type (a wrong row, on purpose: audit KJ-I12)
+        yield 'item type' => [static fn (): object => new ChatSidebarSection('ok', 'x', 0, true, false, ['nope']), 'must be ' . ChatSidebarItem::class . ' instances, got string'];
+        // @phpstan-ignore argument.type (a wrong action, on purpose)
+        yield 'action type' => [static fn (): object => new ChatSidebarSection('ok', 'x', 0, true, false, [], [null]), 'must be ' . ChatSidebarAction::class . ' instances, got null'];
         yield 'action size' => [static fn (): object => new ChatSidebarAction('ok', 'x', null, '/x', null, 'lg'), 'dialogSize'];
     }
 

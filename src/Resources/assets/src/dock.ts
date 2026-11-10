@@ -897,6 +897,8 @@ export class ChatDock implements ThreadHost {
     this.closePicker();
     this.applyState();
     if (focus) {
+      // The viewer picked it (list, picker, link): a read held by `open_recent` goes ahead (audit KJ-I11).
+      this.windows.get(summary.uuid)?.releaseRead();
       this.windows.get(summary.uuid)?.focusComposer();
     }
   }
@@ -1623,6 +1625,7 @@ export class ChatDock implements ThreadHost {
     const created: ThreadView[] = [];
     for (const [uuid, view] of this.windows) {
       if (!wantedIds.has(uuid)) {
+        view.discardHeldRead();
         this.removeWindow(view.element, page === null && (!mobile || single === null));
         this.windows.delete(uuid);
       }

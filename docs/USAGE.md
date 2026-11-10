@@ -472,7 +472,9 @@ The list becomes one grouped, collapsible sidebar (Slack-style) on the full-page
 The search and the filters other than **All** keep listing flat, as in 1.24. Without any conversation and without any
 row or action of yours, the list shows its usual empty state. With `web_ui.page.open_recent: true`, `/chat/` also opens
 the most recent conversation beside the list on wide screens; it is shown, not read: nothing is marked read (no read
-receipt for its people) until the viewer interacts with it (pointer, touch, wheel, key or focus).
+receipt for its people) until the viewer interacts with it: a pointer, touch, wheel or key inside it, or a Tab that
+moves the focus into it. 1.25.1: focus alone does not count, so a host script that calls `.focus()` in the thread on
+load does not mark it read.
 
 ```php
 use Nowo\ChatKitBundle\Contract\ChatSidebarSectionProviderInterface;
@@ -542,7 +544,9 @@ Repeated section keys (the first provider wins), the reserved keys `recent` and 
 action keys inside a section are left out. Caps: 20 sections, 200 rows and 6 actions per section (rows past the 200th are
 never looked up; the conversations are read 1 000 uuids per query, 4 000 at most). The provider runs on every sidebar
 load (each list refresh): keep it to one or two queries, and return only what the viewer sees. A provider that throws
-is logged (`error`) and skipped; the other sections still show. The bundle counts the tagged providers without creating
+is logged (`error`) and skipped; the other sections still show. 1.25.1: the same happens when a section gets a row
+that is not a `ChatSidebarItem` or an action that is not a `ChatSidebarAction` (its constructor throws), or when the
+provider yields something that is not a `ChatSidebarSection`. The bundle counts the tagged providers without creating
 them, so a provider is only built when the sidebar loads — still, keep its constructor light.
 
 **Icons.** `channel` (#), `private` (a lock), any dock icon name — including one you add under `nowo_chat_kit.icons`

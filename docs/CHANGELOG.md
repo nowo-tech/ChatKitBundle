@@ -57,6 +57,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.25.1: follow-ups of audit KJ on the 1.25 sidebar. No schema, configuration or template change.
+
+### Fixed
+
+- **Sidebar: a wrong row fails its provider only (audit KJ-I12).** `ChatSidebarSection` now checks its rows and actions
+  when it is built: anything that is not a `ChatSidebarItem` / `ChatSidebarAction` throws `InvalidArgumentException`
+  (inside the provider, while it builds the section). A provider that yields something that is not a
+  `ChatSidebarSection` fails the same way. Both are logged (`error`) and that provider is skipped, as for a provider
+  that throws. Before, a string among the items was a `TypeError` outside the provider's error handling, so
+  `GET …/api/sidebar` answered 500 and the other providers' sections were lost.
+
+### Changed
+
+- **Deferred read of `web_ui.page.open_recent`: focus alone no longer counts (audit KJ-I11).** The conversation the
+  page opens for the viewer is marked read after a pointer, touch, wheel or key event inside it, or after a Tab that
+  moves the focus into it. A programmatic `.focus()` from a host script (a skip link, a "focus main" handler, an
+  `autofocus` in a copied template) no longer marks it read. Picking the conversation again in the list, the picker
+  or a link still marks it read.
+
+### Demo
+
+- **Demo lock refreshed (audit KJ-I13):** `composer update nowo-tech/ui-kit-bundle nowo-tech/chat-kit-bundle -W` in
+  `demo/symfony8`. The demo now installs UiKit 2.44.0 (was 2.29.0, below the `^2.33.1` floor) and records
+  chat-kit-bundle's current requirements. The update also moved FormKit 2.17.0 → 2.21.0 and Doctrine ORM 3.7.5 → 3.7.6,
+  DoctrineBundle 3.3.3 → 3.3.4 and Collections 2.6.0 → 3.1.0.
+- **Demo sidebar section:** `App\Chat\DemoSidebarProvider` (a temporary fixture) adds **Demo rooms** with a link row
+  and a **Create room** action. `DemoRoomController` serves the action as a UiKit remote form dialog (`422` when the
+  name is empty, then `204` + `X-Nowo-Redirect`). The full-page chat of the demo is therefore grouped.
+- **E2E:** `sidebar-dialog.spec.ts` drives that real action: the bundle's dialog, real clicks, the `422` re-render,
+  Escape, and the redirect. It no longer builds its own dialog markup. `demo.spec.ts` and `screenshots.spec.ts` pick
+  Bob Lee in the grouped list. `links.spec.ts` waits for the link dialog to close before it presses Enter (an Enter
+  during the closing fade does nothing since 1.22, HW-L6); `demo-smoke` had failed on it since 1.22.0.
+
 ## [1.25.0] - 2026-11-10
 
 Target 1.25.0: the Slack-style sidebar (owner request via Symfony Beacon). Additive; defaults keep 1.24 behaviour (no

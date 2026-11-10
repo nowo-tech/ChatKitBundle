@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.25.1](#to-1251)
 - [To 1.25.0](#to-1250)
   - [Target 1.25.0: sidebar sections](#target-1250-sidebar-sections)
 - [To 1.24.0](#to-1240)
@@ -58,6 +59,19 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.25.1
+
+From **1.25.0**: `composer update nowo-tech/chat-kit-bundle`. No schema change, no migration, no configuration change.
+
+- **Section providers:** `ChatSidebarSection` throws `InvalidArgumentException` when an item is not a
+  `ChatSidebarItem` or an action is not a `ChatSidebarAction`. A provider yielding something that is not a
+  `ChatSidebarSection` is refused too. Either way, the bundle logs the error and leaves that provider's sections out;
+  the other sections still show. If your logs show `Chat sidebar provider … failed`, fix the provider: it was already
+  breaking the whole sidebar endpoint in 1.25.0.
+- **`web_ui.page.open_recent`:** focus alone no longer marks the opened conversation read. A pointer, touch, wheel or
+  key inside it, or a Tab into it, still does. A host script that moves focus into the chat thread on load no longer
+  sends the read receipt for the viewer. Nothing to change.
 
 ## To 1.25.0
 
