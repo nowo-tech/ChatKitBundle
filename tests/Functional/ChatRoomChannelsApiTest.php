@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use DateTimeImmutable;
 use InvalidArgumentException;
+use LogicException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -82,6 +83,11 @@ final class ChatRoomChannelsApiTest extends DatabaseTestCase
         $this->em->clear();
         $stored = $this->em->find(ChatMessage::class, $line->getId());
         self::assertSame(['actor' => '…', 'name' => 'Acme'], $stored?->getMeta()['params'] ?? null, 'audit KC-M1');
+
+        // Audit KC-L6: in relation mode the by-id erasure does not exist.
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('relation mode call erase()');
+        $this->get(ChatPersonalData::class)->eraseFormerAccount(999, 'p', 'N');
     }
 
     public function testTheWritePolicyKeepsReadersReading(): void

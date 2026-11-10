@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Tests\Integration\Doctrine;
 
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Tools\SchemaTool;
+use LogicException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
@@ -201,6 +202,21 @@ final class UserReferenceIdModeTest extends DatabaseTestCase
         self::assertSame([(int) $hi->getId()], $erasure->messageIds);
         self::assertStringNotContainsString($publicId, (string) $this->em->find(ChatMessage::class, $hi->getId())?->getBody());
         self::assertSame(['actor' => '…'], $this->em->find(ChatMessage::class, $line->getId())?->getMeta()['params'] ?? null, 'audit KC-M1 in id mode');
+        // Audit KC-L5: a living account is never erased by id.
+        try {
+            $this->get(ChatPersonalData::class)->eraseFormerAccount((int) $ana->getId(), $ana->getChatPublicId(), 'Ana');
+            self::fail('a living account is refused');
+        } catch (LogicException $exception) {
+            self::assertStringContainsString('still exists', $exception->getMessage());
+        }
+        self::assertSame(1, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE author_id = ? AND deleted_at IS NULL', [(string) $ana->getId()]));
+        $bare = new ChatPersonalData($this->em, $this->get(ChatUserSettingsRepository::class), $this->get(ChatConversationRepository::class), refs: new ChatUserReferences(ChatUserReferences::ID));
+        try {
+            $bare->eraseFormerAccount($goneId, $publicId);
+            self::fail('no directory, no check');
+        } catch (LogicException $exception) {
+            self::assertStringContainsString('ChatDirectoryInterface', $exception->getMessage());
+        }
         $former = new ErasedChatUser(7, 'p', 'N');
         self::assertSame([7, 'p', 'N', '?', null, null], [$former->getId(), $former->getChatPublicId(), $former->getChatDisplayName(), $former->getChatInitials(), $former->getChatEmail(), $former->getChatLocale()]);
     }

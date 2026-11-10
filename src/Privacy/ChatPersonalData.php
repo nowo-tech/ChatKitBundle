@@ -9,6 +9,8 @@ use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
 use InvalidArgumentException;
+use LogicException;
+use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
@@ -106,6 +108,7 @@ final readonly class ChatPersonalData
         private ?EventDispatcherInterface $events = null,
         private ?LoggerInterface $logger = null,
         private ChatUserReferences $refs = new ChatUserReferences(),
+        private ?ChatDirectoryInterface $directory = null,
     ) {
     }
 
@@ -324,14 +327,30 @@ final readonly class ChatPersonalData
      * system lines). Same as erase() with an ErasedChatUser; without the public id the mention tokens stay, without the
      * name the lines keep it. Prefer calling erase() before the account is deleted.
      *
+     * Server side only (an account-cleanup job, a console command), for accounts your user store no longer has; never
+     * wire it to request input. It refuses (audit KC-L5) an id the directory still knows — a living account is erased
+     * with erase() and its user — and (KC-L6) the default `relation` mode, where erase() takes the user entity.
+     *
      * @param int $userId The account's user id (the stored reference)
      * @param string $publicId The account's former chat public id
      * @param string $displayName The account's former display name; '' skips the lines
+     *
+     * @throws LogicException In `relation` mode, without a directory, or when the directory still returns the user
      *
      * @return ChatMentionErasure What the mention part rewrote and skipped
      */
     public function eraseFormerAccount(int $userId, string $publicId, string $displayName = ''): ChatMentionErasure
     {
+        if (!$this->refs->isIdMode()) {
+            throw new LogicException('eraseFormerAccount() works with doctrine.user_reference: id only; in relation mode call erase() with the user entity (before deleting it).');
+        }
+        if (!$this->directory instanceof ChatDirectoryInterface) {
+            throw new LogicException('eraseFormerAccount() needs the ChatDirectoryInterface to check that the account is gone.');
+        }
+        if ($this->directory->findByIds([$userId]) !== []) {
+            throw new LogicException(sprintf('User %d still exists: eraseFormerAccount() is for accounts that are gone; call erase() with the user.', $userId));
+        }
+
         return $this->erase(new ErasedChatUser($userId, $publicId, $displayName));
     }
 

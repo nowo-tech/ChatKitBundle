@@ -118,7 +118,9 @@ the user id as text, and users come from your `ChatDirectoryInterface`. Steps:
    auto-increment reset) would inherit the old account's direct threads, tickets, settings and quick replies. For an
    account that is already gone, call `ChatPersonalData::eraseFormerAccount($userId, $publicId, $displayName)`: the
    id removes its rows, the former chat public id scrubs `@[Name](publicId)` tokens in other people's messages, the
-   former display name scrubs bot and system lines. An object that only returns the id (such as `UnresolvedChatUser`)
+   former display name scrubs bot and system lines. Run it server side only (a cleanup job, a console command), never
+   from request input; it refuses an id the directory still returns, and it does not exist in `relation` mode. An
+   object that only returns the id (such as `UnresolvedChatUser`)
    leaves the mention tokens and the names behind.
    User ids must be integers (`ChatUserInterface::getId(): ?int`); UUID-keyed users are not supported yet.
 4. Code that queried the chat entities with DQL on `author`, `user`, `supportOwner`, … must use the reference fields

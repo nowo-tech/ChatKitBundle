@@ -106,6 +106,8 @@ once. Defaults keep 1.23 behaviour; no schema change in the default mode.
 - **KC-L3** `UnresolvedChatUser` public ids are an HMAC keyed with `kernel.secret` (not a plain hash of the id), and
   unresolved users are left out of reaction summaries.
 - **KC-L4** muted conversations send no e-mail digest; unmuting a conversation without a participant row creates none.
+- **KC-L5 / KC-L6** `eraseFormerAccount()` refuses an id the directory still returns (a living account) and the
+  `relation` mode, with a `LogicException`; documented as server side only.
 - **KC-L1** deleting one's own message within the edit window stays allowed in read-only channels (documented, tested).
 - **KC-I3** group mentions leave out members who muted the conversation; **KC-I4** `web_ui.channels_url` is checked
   again at runtime (an `%env()%` value that fails the pattern drops the link).

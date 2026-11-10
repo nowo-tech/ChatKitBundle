@@ -227,7 +227,8 @@ context, not as part of your domain model.
 - Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case, before the account is deleted
   (in id mode nothing cascades: `erase()` is how the rows go). For an account already gone, call
   `eraseFormerAccount($userId, $publicId, $displayName)` with what you kept of it: the public id scrubs the mention
-  tokens in other people's messages, the name the bot and system lines.
+  tokens in other people's messages, the name the bot and system lines. Server side only (a cleanup job), never wired
+  to request input; it refuses an id your directory still returns, and works in id mode only.
 
 ```php
 // src/Infrastructure/Chat/CurrentParticipant.php — the security user is a DTO, the participant comes from the directory.
