@@ -7,9 +7,11 @@ namespace Nowo\ChatKitBundle\Security;
 use Closure;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatChannelWritePolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
+use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -97,7 +99,8 @@ final class ChatAccess implements ResetInterface
         }
         $channel = $this->channel((string) $conversation->getChannelKey());
 
-        return $this->policy instanceof ChatPinPolicyInterface && $channel instanceof ChatChannel && $this->policy->canPinInChannel($user, $channel);
+        return $this->policy instanceof ChatPinPolicyInterface && $channel instanceof ChatChannel && $this->canWriteChannel($user, $channel->key)
+            && $this->policy->canPinInChannel($user, $channel);
     }
 
     /**
@@ -123,6 +126,10 @@ final class ChatAccess implements ResetInterface
         if ($conversation->isSupport()) {
             return $this->isSupportAgent($user);
         }
+        // 1.24: nobody changes the links of a read-only channel.
+        if (!$this->canWriteChannel($user, (string) $conversation->getChannelKey())) {
+            return false;
+        }
         if ($channelMembers) {
             return true;
         }
@@ -147,7 +154,8 @@ final class ChatAccess implements ResetInterface
      */
     public function isReachable(ChatUserInterface $user): bool
     {
-        return $user->getId() !== null && $this->policy->isReachable($user);
+        // 1.24: a placeholder for a user the directory no longer knows (`doctrine.user_reference: id`) never is.
+        return $user->getId() !== null && !$user instanceof UnresolvedChatUser && $this->policy->isReachable($user);
     }
 
     /**
@@ -217,6 +225,24 @@ final class ChatAccess implements ResetInterface
         return (bool) $this->memo('access:' . $user->getId() . ':' . $key, fn (): bool => $this->isReachable($user)
             && ($channel = $this->channel($key)) instanceof ChatChannel
             && $this->channelProvider->canUse($user, $channel));
+    }
+
+    /**
+     * 1.24: whether the user may write in the channel — they can use it, it is not `ChatChannel::$readOnly`, and the
+     * provider's ChatChannelWritePolicyInterface (when it implements it) allows it (memoized for the request). Sending,
+     * editing, reacting, typing, pinning and changing links in a channel all need it.
+     *
+     * @param ChatUserInterface $user The user to check
+     * @param string $key Channel key
+     *
+     * @return bool True when the user may write
+     */
+    public function canWriteChannel(ChatUserInterface $user, string $key): bool
+    {
+        return (bool) $this->memo('write:' . $user->getId() . ':' . $key, fn (): bool => $this->canUseChannel($user, $key)
+            && ($channel = $this->channel($key)) instanceof ChatChannel
+            && !$channel->readOnly
+            && (!$this->channelProvider instanceof ChatChannelWritePolicyInterface || $this->channelProvider->canWrite($user, $channel)));
     }
 
     /**

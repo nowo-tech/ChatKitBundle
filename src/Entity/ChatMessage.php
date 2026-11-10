@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Entity;
 
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 
@@ -40,6 +41,17 @@ class ChatMessage
     /** 1.11: an automatic reply of its author (shown with an "Automatic reply" marker; never answered automatically). */
     public const string KIND_AUTO = 'auto';
 
+    /**
+     * 1.24: a system line posted by the application (no author; e.g. "Ana renamed the channel"), shown as a centered
+     * line. Only the server posts it (ChatServiceInterface::postSystemLine()); no API route creates one.
+     */
+    public const string KIND_SYSTEM = 'system';
+
+    /** 1.24: `meta.mentionAll` of a channel message that mentioned the whole channel (`@channel`) or its online members (`@here`). */
+    public const string MENTION_CHANNEL = 'channel';
+
+    public const string MENTION_HERE = 'here';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
@@ -57,7 +69,9 @@ class ChatMessage
      * pinned `message`; any deleted message: `moderated` (1.15.3) when someone other than the author removed it, so
      * the state survives the deleter's erasure or account deletion (the moderator is never stored here).
      *
-     * @var array{domain?: string|null, params?: array<string, string>, topic?: string|null, message?: string, moderated?: bool}|null
+     * 1.24: system lines use `domain` and `params` like bot messages; a channel message may carry `mentionAll`.
+     *
+     * @var array{domain?: string|null, params?: array<string, string>, topic?: string|null, message?: string, moderated?: bool, mentionAll?: string}|null
      */
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $meta = null;
@@ -72,6 +86,9 @@ class ChatMessage
     #[ORM\JoinColumn(name: 'deleted_by_id', nullable: true, onDelete: 'SET NULL')]
     private ?ChatUserInterface $deletedBy = null;
 
+    /** 1.24: `deletedBy` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $deletedByRef = null;
+
     /** 1.10: pinned to the top of its conversation since then (shared by every participant); null = not pinned. */
     #[ORM\Column(name: 'pinned_at', nullable: true)]
     private ?DateTimeImmutable $pinnedAt = null;
@@ -79,6 +96,12 @@ class ChatMessage
     #[ORM\ManyToOne(targetEntity: ChatUserInterface::class)]
     #[ORM\JoinColumn(name: 'pinned_by_id', nullable: true, onDelete: 'SET NULL')]
     private ?ChatUserInterface $pinnedBy = null;
+
+    /** 1.24: `pinnedBy` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $pinnedByRef = null;
+
+    /** 1.24: `author` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $authorRef;
 
     /**
      * Creates a text message, stamped with a new public uuid.
@@ -105,6 +128,7 @@ class ChatMessage
     ) {
         $this->initUuid();
         $this->createdAt = $createdAt ?? new DateTimeImmutable();
+        $this->authorRef = ChatUserReferences::reference($author);
     }
 
     /**
@@ -203,6 +227,8 @@ class ChatMessage
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->pinnedBy = $at instanceof DateTimeImmutable ? $by : null;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->pinnedByRef = ChatUserReferences::reference($this->pinnedBy);
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->pinnedAt = $at;
     }
 
@@ -224,6 +250,17 @@ class ChatMessage
     public function getPinnedBy(): ?ChatUserInterface
     {
         return $this->pinnedBy;
+    }
+
+    /**
+     * 1.24: the stored reference of `pinnedBy` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getPinnedByReference(): ?string
+    {
+        return $this->pinnedByRef ?? ChatUserReferences::reference($this->pinnedBy);
     }
 
     /**
@@ -261,6 +298,65 @@ class ChatMessage
     }
 
     /**
+     * 1.24: creates a system line (no author): `$body` is a translation key in `$domain` rendered for each reader, or
+     * plain text when `$domain` is null; `$params` fill its `%name%` placeholders. Always shown as text (escaped).
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param string $body Translation key (or plain text when `$domain` is null)
+     * @param string|null $domain Translation domain of the key; null for plain text
+     * @param array<string, string> $params Translation parameters (`%name%` => value)
+     * @param DateTimeImmutable|null $createdAt Creation time; null for now
+     *
+     * @return self The new, unpersisted message
+     */
+    public static function system(ChatConversation $conversation, string $body, ?string $domain = null, array $params = [], ?DateTimeImmutable $createdAt = null): self
+    {
+        $message       = new self($conversation, null, $body, '', $createdAt);
+        $message->kind = self::KIND_SYSTEM;
+        $message->meta = ['domain' => $domain, 'params' => $params];
+
+        return $message;
+    }
+
+    /**
+     * 1.24: whether this is a system line.
+     *
+     * @return bool True for a system line
+     */
+    public function isSystem(): bool
+    {
+        return $this->kind === self::KIND_SYSTEM;
+    }
+
+    /**
+     * 1.24: records that the message mentions the whole channel (`channel`), its online members (`here`), or neither.
+     *
+     * @param string|null $mentionAll MENTION_CHANNEL, MENTION_HERE or null
+     */
+    public function mentionAll(?string $mentionAll): void
+    {
+        $meta = $this->meta ?? [];
+        unset($meta['mentionAll']);
+        if ($mentionAll !== null) {
+            $meta['mentionAll'] = $mentionAll;
+        }
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->meta = $meta === [] ? null : $meta;
+    }
+
+    /**
+     * 1.24: the group mention of a channel message.
+     *
+     * @return string|null `channel`, `here`, or null
+     */
+    public function getMentionAll(): ?string
+    {
+        $all = $this->meta['mentionAll'] ?? null;
+
+        return is_string($all) ? $all : null;
+    }
+
+    /**
      * Whether the message comes from the support assistant.
      *
      * @return bool True for a bot message
@@ -274,7 +370,7 @@ class ChatMessage
      * Stored data: bot rendering data (`domain`, `params`, `topic`), a pin line's `message`, a deleted message's
      * `moderated` flag.
      *
-     * @return array{domain?: string|null, params?: array<string, string>, topic?: string|null, message?: string, moderated?: bool}|null The data; null when none
+     * @return array{domain?: string|null, params?: array<string, string>, topic?: string|null, message?: string, moderated?: bool, mentionAll?: string}|null The data; null when none
      */
     public function getMeta(): ?array
     {
@@ -294,7 +390,7 @@ class ChatMessage
     /**
      * Kind of the message.
      *
-     * @return string `text`, `buzz` or `bot`
+     * @return string `text`, `buzz`, `bot`, `pin`, `auto` or `system` (1.24)
      */
     public function getKind(): string
     {
@@ -329,6 +425,17 @@ class ChatMessage
     public function getAuthor(): ?ChatUserInterface
     {
         return $this->author;
+    }
+
+    /**
+     * 1.24: the stored reference of `author` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getAuthorReference(): ?string
+    {
+        return $this->authorRef ?? ChatUserReferences::reference($this->author);
     }
 
     /**
@@ -468,6 +575,17 @@ class ChatMessage
     }
 
     /**
+     * 1.24: the stored reference of `deletedBy` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getDeletedByReference(): ?string
+    {
+        return $this->deletedByRef ?? ChatUserReferences::reference($this->deletedBy);
+    }
+
+    /**
      * Tombstone: the text is gone, the row stays so the thread keeps its shape.
      *
      * @param ChatUserInterface $by The user who deletes it
@@ -481,6 +599,8 @@ class ChatMessage
         $this->bodyHtml = '';
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->deletedBy = $by;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->deletedByRef = ChatUserReferences::reference($by);
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->deletedAt = $at ?? new DateTimeImmutable();
         if (!$this->isAuthoredBy($by)) {

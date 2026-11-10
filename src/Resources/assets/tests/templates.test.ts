@@ -12,6 +12,15 @@ describe('Templates', () => {
     expect(() => templates.clone('nope')).toThrow('missing <template data-nowo-chat-template="nope">');
   });
 
+  it('shows a channel icon as text (1.24) and the built-in # otherwise', () => {
+    const templates = new Templates(templatesRoot());
+    const icon = templates.avatar('📦', 'channel');
+    expect(icon.textContent).toBe('📦');
+    expect(icon.querySelector('svg')).toBeNull();
+    expect(templates.avatar('#', 'channel').querySelector('svg')).not.toBeNull();
+    expect(templates.avatar('', 'channel').querySelector('svg')).not.toBeNull();
+  });
+
   it('gives the form controls of every copy a unique id and moves their labels along', () => {
     const root = templatesRoot();
     const labelled = document.createElement('template');

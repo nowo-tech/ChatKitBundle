@@ -6,6 +6,8 @@ namespace Nowo\ChatKitBundle\Controller;
 
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -21,7 +23,6 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
-use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\View\ChatPage;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Clock\Clock;
@@ -62,9 +63,10 @@ final class ChatPageController extends AbstractController
      * @param ChatParticipantRepository|null $participants Conversations the viewer closed (1.10)
      * @param bool $assets Whether the page prints the nowo-chat.css and nowo-chat.js tags (`web_ui.assets`, 1.21)
      * @param bool $fullHeight Whether the page fills the host content area (`web_ui.page.full_height`, 1.21)
+     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      */
     public function __construct(
-        private readonly ChatService $chat,
+        private readonly ChatServiceInterface $chat,
         private readonly ChatPresenter $presenter,
         private readonly ChatAccess $access,
         private readonly ChatChannelProviderInterface $channels,
@@ -88,6 +90,7 @@ final class ChatPageController extends AbstractController
         private readonly bool $assets = true,
         #[Autowire(param: 'nowo_chat_kit.web_ui.page.full_height')]
         private readonly bool $fullHeight = false,
+        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
     ) {
     }
 
@@ -283,6 +286,7 @@ final class ChatPageController extends AbstractController
     private function chatUser(): ChatUserInterface
     {
         $user = $this->getUser();
+        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
         if (!$user instanceof ChatUserInterface || !$this->access->isReachable($user)) {
             throw $this->createAccessDeniedException();
         }

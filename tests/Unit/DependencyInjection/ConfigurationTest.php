@@ -33,9 +33,9 @@ final class ConfigurationTest extends TestCase
             'push_url'                  => '/?chat={uuid}',
             'push_icon'                 => null,
             'push_preview'              => false,
-            'doctrine'                  => ['table_name_prefix' => 'nowo_chat_', 'table_prefix' => ''],
+            'doctrine'                  => ['table_name_prefix' => 'nowo_chat_', 'table_prefix' => '', 'user_reference' => 'relation'],
             'digest'                    => ['enabled' => false, 'delay_minutes' => 15, 'interval_minutes' => 60],
-            'web_ui'                    => ['layout_template' => null, 'assets' => true, 'page' => ['full_height' => false], 'templates' => ['page' => '@NowoChatKitBundle/page.html.twig']],
+            'web_ui'                    => ['layout_template' => null, 'assets' => true, 'channels_url' => null, 'page' => ['full_height' => false], 'templates' => ['page' => '@NowoChatKitBundle/page.html.twig']],
             'page_layout'               => null,
             'cache_pool'                => 'cache.app',
             'reactions'                 => ['👍', '❤️', '😂', '😮', '😢', '🎉'],
@@ -65,6 +65,7 @@ final class ConfigurationTest extends TestCase
                 'references_per_minute' => 120,
                 'buzz_interval_seconds' => 15,
                 'buzz_per_minute'       => 10,
+                'mention_all_per_hour'  => 6,
             ],
         ], $config['profiles']['default']);
     }
@@ -94,7 +95,7 @@ final class ConfigurationTest extends TestCase
     {
         $config = $this->process([['profiles' => ['default' => ['doctrine' => ['table_name_prefix' => 'chat_', 'table_prefix' => 'app_']]]]]);
 
-        self::assertSame(['table_name_prefix' => 'chat_', 'table_prefix' => 'app_'], $config['profiles']['default']['doctrine']);
+        self::assertSame(['table_name_prefix' => 'chat_', 'table_prefix' => 'app_', 'user_reference' => 'relation'], $config['profiles']['default']['doctrine']);
     }
 
     /**

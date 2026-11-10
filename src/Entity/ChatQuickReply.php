@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatQuickReplyRepository;
 
@@ -43,6 +44,9 @@ class ChatQuickReply
     #[ORM\Column(name: 'created_at')]
     private DateTimeImmutable $createdAt;
 
+    /** 1.24: `user` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $userRef;
+
     /**
      * Creates a snippet of the user.
      *
@@ -61,6 +65,8 @@ class ChatQuickReply
         string $body,
         ?DateTimeImmutable $createdAt = null,
     ) {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->userRef = ChatUserReferences::reference($user);
         $this->change($title, $body);
         $this->createdAt = $createdAt ?? new DateTimeImmutable();
     }
@@ -104,6 +110,17 @@ class ChatQuickReply
     public function getUser(): ChatUserInterface
     {
         return $this->user;
+    }
+
+    /**
+     * 1.24: the stored reference of `user` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getUserReference(): ?string
+    {
+        return $this->userRef ?? ChatUserReferences::reference($this->user);
     }
 
     /**

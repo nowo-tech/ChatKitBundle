@@ -55,7 +55,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.24.0: chat room channels (Symfony Beacon spec 184) together with the DDD / hexagonal ports, so hosts migrate
+once. Defaults keep 1.23 behaviour; no schema change in the default mode.
+
+### Added
+
+- **Read-only channels (spec 184 item 1).** `ChatChannel` gains `readOnly` (default `false`), and the optional
+  `ChatChannelWritePolicyInterface::canWrite(user, channel)` (implemented by your channel provider) decides who may
+  write in a channel they can read. Enforced on the server in `ChatVoter` / `ChatAccess::canWriteChannel()`: send (403
+  `read_only`), edit, reaction and typing (404), pins and pinned-link changes are refused; the summary says
+  `canSend: false` and the dock shows "This channel is read only." (`chat.channel_read_only`, 7 locales).
+- **Channel subtitle and icon (item 2).** `ChatChannel` gains `subtitle` (shown under the title instead of "Channel")
+  and `icon` (short text in the avatar bubble instead of `#`); trimmed, stripped of control / bidirectional / zero-width
+  characters and cut to 160 / 8 characters by the API, written with `textContent` by the dock.
+- **System lines (item 3).** `ChatMessage::system()` (kind `system`, no author) and `ChatService::postSystemLine()`:
+  translated for each reader, always escaped text, shown centered; no reactions, edits, deletes or pins, no sound, no
+  Web Push. Server only — no API route posts one. The email digest previews it as text.
+- **Dock hooks (item 4).** `web_ui.channels_url` (path or absolute http(s) URL, validated) adds a **Browse or create
+  channels** link to the people picker (block `nowo_chat_template_picker_channels`) and `channelsUrl` to the dock
+  configuration; empty header-action blocks `nowo_chat_dock_header_actions` and `nowo_chat_window_header_actions`; the
+  window carries `data-kind` and `data-channel-key`.
+- **@channel / @here (item 5)** behind the optional `ChatChannelMentionPolicyInterface::canMentionAll(user, channel,
+  memberCount)` and a per-writer budget `limits.mention_all_per_hour` (6, limiter `nowo_chat_mention_all`): mention rows
+  and `ChatMentionEvent` for every member (or every online member), at most 500; `mentionAll` on the message payload
+  (only when set) and `ChatMessage::getMentionAll()`. Without the policy, or over the budget, the words stay text.
+- **Mute (item 6).** `POST` / `DELETE /api/conversations/{uuid}/mute` (`{minutes?}`, CSRF, VIEW access, action
+  budget) and `ChatService::mute()` for the existing `nowo_chat_participant.muted_until`; a bell in the window header
+  (icons `bell` / `bellOff`); muted conversations leave `unreadTotal` and ring nothing; summaries of the list and of
+  `GET /api/conversations/{uuid}` carry `mutedUntil`.
+- **`doctrine.user_reference: id` (DDD, opt-in).** No `resolve_target_entities` and no foreign keys to the host user
+  table: the eight user columns hold the user id as `VARCHAR(64)` (indexed), `UserReferenceListener` maps them and loads
+  the users through `ChatDirectoryInterface::findByIds()` in one call per batch; `user_class` becomes optional and the
+  chat user need not be a Doctrine entity. A user the directory no longer knows reads null (nullable relations) or an
+  `UnresolvedChatUser` (never reachable). Every entity gains `get<Relation>Reference()`. Default `relation` unchanged
+  (same mapping, same schema). Documented migration in UPGRADING.
+- **`CurrentChatUserResolverInterface`** (default `SecurityChatUserResolver`): maps the security user to the chat
+  participant for the voter, the dock and every controller.
+- **Event DTOs**: `ChatMessageView`, `ChatConversationView`, `ChatLinkView` through `messageView()`,
+  `conversationView()` / `ticketView()`, `linkView()` and public-id accessors on every event (entity properties kept).
+- **`ChatServiceInterface`**, aliased to `ChatService`; the controllers and `ChatSupportTickets` depend on it.
+- `ChatParticipantRepository::findOneFor()` / `findForUserIds()` / `mutedUserIds()`.
+- `ChatPersonalData::eraseFormerAccount($userId, $publicId, $displayName)` and the `ErasedChatUser` model, to erase an
+  account that is already gone (id mode).
+
+### Security / privacy (audit KC, before the tag)
+
+- **KC-M1** `erase()` scrubs the erased user's name from system lines too (bot and system line parameters).
+- **KC-L2** an account already gone is erased with what the host kept of it (`eraseFormerAccount()`); UPGRADING says
+  why `erase()` is mandatory in id mode.
+- **KC-L3** `UnresolvedChatUser` public ids are an HMAC keyed with `kernel.secret` (not a plain hash of the id), and
+  unresolved users are left out of reaction summaries.
+- **KC-L4** muted conversations send no e-mail digest; unmuting a conversation without a participant row creates none.
+- **KC-L5 / KC-L6** `eraseFormerAccount()` refuses an id the directory still returns (a living account) and the
+  `relation` mode, with a `LogicException`; documented as server side only.
+- **KC-L1** deleting one's own message within the edit window stays allowed in read-only channels (documented, tested).
+- **KC-I3** group mentions leave out members who muted the conversation; **KC-I4** `web_ui.channels_url` is checked
+  again at runtime (an `%env()%` value that fails the pattern drops the link).
+
 ### Documentation
+
+- USAGE "Using it from a DDD / hexagonal application": the new ports, the id mode, and what is left.
 
 - USAGE: new section "Using it from a DDD / hexagonal application" (where the bundle sits in a hexagonal host, the ports, events and DTOs to build an anti-corruption layer on, and the known limitations).
 

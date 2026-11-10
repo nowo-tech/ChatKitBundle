@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -25,8 +26,10 @@ class ChatParticipantRepository extends ServiceEntityRepository
      *
      * @param ManagerRegistry $registry Doctrine manager registry
      */
-    public function __construct(ManagerRegistry $registry)
-    {
+    public function __construct(
+        ManagerRegistry $registry,
+        private readonly ChatUserReferences $refs = new ChatUserReferences(),
+    ) {
         parent::__construct($registry, ChatParticipant::class);
     }
 
@@ -41,14 +44,70 @@ class ChatParticipantRepository extends ServiceEntityRepository
      */
     public function findReaders(ChatConversation $conversation, ChatUserInterface $except, int $limit = 50): array
     {
-        /** @var list<ChatParticipant> $rows */
-        $rows = $this->createQueryBuilder('p')
-            ->innerJoin('p.user', 'u')->addSelect('u')
-            ->where('p.conversation = :conversation AND p.user <> :except AND p.lastReadMessageId IS NOT NULL')
+        $qb = $this->createQueryBuilder('p');
+        $this->refs->join($qb, 'p.user', 'u', true);
+
+        return $qb->where('p.conversation = :conversation AND ' . $this->refs->field('p', 'user') . ' <> :except AND p.lastReadMessageId IS NOT NULL')
             ->setParameter('conversation', $conversation)
-            ->setParameter('except', $except)
+            ->setParameter('except', $this->refs->value($except))
             ->orderBy('p.lastReadMessageId', 'DESC')
             ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * 1.24: ids of the users who muted the conversation now (left out of group mentions).
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param DateTimeImmutable $now Current time
+     *
+     * @return list<int> User ids
+     */
+    public function mutedUserIds(ChatConversation $conversation, DateTimeImmutable $now): array
+    {
+        $ids = $this->createQueryBuilder('p')
+            ->select($this->refs->identity('p', 'user'))
+            ->where('p.conversation = :conversation AND p.mutedUntil > :now')
+            ->setParameter('conversation', $conversation)
+            ->setParameter('now', $now)
+            ->getQuery()
+            ->getSingleColumnResult();
+
+        return array_values(array_map(intval(...), $ids));
+    }
+
+    /**
+     * 1.24: the user's participant row of the conversation, if any (both `doctrine.user_reference` modes).
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $user The user
+     *
+     * @return ChatParticipant|null The row, or null
+     */
+    public function findOneFor(ChatConversation $conversation, ChatUserInterface $user): ?ChatParticipant
+    {
+        return $this->findOneBy(['conversation' => $conversation] + $this->refs->criteria('user', $user));
+    }
+
+    /**
+     * 1.24: the participant rows of these users in the conversation (both `doctrine.user_reference` modes).
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param list<int> $userIds User ids
+     *
+     * @return list<ChatParticipant> The rows
+     */
+    public function findForUserIds(ChatConversation $conversation, array $userIds): array
+    {
+        if ($userIds === []) {
+            return [];
+        }
+        /** @var list<ChatParticipant> $rows */
+        $rows = $this->createQueryBuilder('p')
+            ->where('p.conversation = :conversation AND ' . $this->refs->identity('p', 'user') . ' IN (:ids)')
+            ->setParameter('conversation', $conversation)
+            ->setParameter('ids', $this->refs->ids($userIds))
             ->getQuery()
             ->getResult();
 
@@ -70,8 +129,8 @@ class ChatParticipantRepository extends ServiceEntityRepository
         }
         /** @var list<ChatParticipant> $rows */
         $rows = $this->createQueryBuilder('p')
-            ->where('p.user = :user AND IDENTITY(p.conversation) IN (:ids)')
-            ->setParameter('user', $user)
+            ->where($this->refs->field('p', 'user') . ' = :user AND IDENTITY(p.conversation) IN (:ids)')
+            ->setParameter('user', $this->refs->value($user))
             ->setParameter('ids', $conversationIds)
             ->getQuery()
             ->getResult();

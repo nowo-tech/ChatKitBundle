@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Support;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
@@ -22,7 +23,6 @@ use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
-use Nowo\ChatKitBundle\Service\ChatService;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
@@ -46,7 +46,7 @@ final readonly class ChatSupportTickets
      * @param EntityManagerInterface $entityManager Persists drafts, bot messages and ticket changes
      * @param ChatConversationRepository $conversations Drafts and the requester's tickets
      * @param ChatMessageRepository $messages Moves a draft's messages into the continued ticket
-     * @param ChatService $chat Participant rows
+     * @param ChatServiceInterface $chat Participant rows
      * @param ChatSupportTopics $topics The topics
      * @param ChatSupportPolicy $policy Resume and read-only rules
      * @param ChatTicketNumbers $numbers Sequential ticket numbers
@@ -61,7 +61,7 @@ final readonly class ChatSupportTickets
         private EntityManagerInterface $entityManager,
         private ChatConversationRepository $conversations,
         private ChatMessageRepository $messages,
-        private ChatService $chat,
+        private ChatServiceInterface $chat,
         private ChatSupportTopics $topics,
         private ChatSupportPolicy $policy,
         private ChatTicketNumbers $numbers,

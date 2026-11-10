@@ -149,6 +149,8 @@ export class ThreadView {
   private readonly typingEl: HTMLElement;
   private readonly buzzBtn: HTMLButtonElement;
   private readonly resolveBtn: HTMLButtonElement;
+  /** 1.24: mute / unmute (absent from templates that predate it). */
+  private readonly muteBtn: HTMLButtonElement | null;
   private readonly emojiBtn: HTMLButtonElement;
   private readonly mention: MentionAutocomplete;
   private readonly reference: ReferenceAutocomplete | null;
@@ -175,6 +177,7 @@ export class ThreadView {
     this.minimiseBtn = part<HTMLButtonElement>(this.element, 'minimise');
     this.buzzBtn = part<HTMLButtonElement>(this.element, 'buzz');
     this.resolveBtn = part<HTMLButtonElement>(this.element, 'resolve');
+    this.muteBtn = this.element.querySelector<HTMLButtonElement>('[data-part="mute"]');
     this.body = part(this.element, 'body');
     this.log = part(this.element, 'log');
     this.jumpBtn = part<HTMLButtonElement>(this.element, 'jump');
@@ -253,6 +256,8 @@ export class ThreadView {
           this.resolveBtn.disabled = false;
         });
     });
+    const muteBtn = this.muteBtn;
+    muteBtn?.addEventListener('click', () => void this.toggleMute(muteBtn));
     this.emojiBtn.addEventListener('click', () => this.toggleEmoji());
     this.bindComposerTools(i18n);
     this.support = new SupportPanel(
@@ -529,6 +534,11 @@ export class ThreadView {
     if (summary.kind === 'direct') {
       this.element.dataset.peerStatus = status;
     }
+    // 1.24: hooks for the host's header actions (nowo_chat_window_header_actions).
+    this.element.dataset.kind = summary.kind;
+    if (summary.channelKey !== null) {
+      this.element.dataset.channelKey = summary.channelKey;
+    }
     this.element.setAttribute('aria-label', t(i18n, 'conversation_label', { name: summary.title }));
     if (summary.canPin !== undefined) {
       this.canPin = summary.canPin;
@@ -542,10 +552,54 @@ export class ThreadView {
     this.setUnread(this.minimised ? summary.unread : 0);
     this.input.disabled = !summary.canSend;
     this.notice.hidden = summary.canSend;
-    this.notice.textContent = summary.canSend ? '' : t(i18n, 'read_only');
+    // 1.24: a read-only channel says so (hosts that override the strings without the new key keep the old text).
+    this.notice.textContent = summary.canSend ? '' : t(i18n, summary.kind === 'channel' && i18n.channel_read_only !== undefined ? 'channel_read_only' : 'read_only');
+    this.applyMute();
     this.composer.hidden = !summary.canSend;
     this.updateComposerState();
     this.support.render(summary);
+  }
+
+  /**
+   * 1.24: whether the conversation is muted for the viewer now.
+   *
+   * @returns True while muted.
+   */
+  get isMuted(): boolean {
+    return isMuted(this.summary);
+  }
+
+  /** 1.24: the mute button's icon, label and pressed state (hidden without the mute endpoint). */
+  private applyMute(): void {
+    const button = this.muteBtn;
+    if (button === null) {
+      return;
+    }
+    button.hidden = this.host.config.endpoints.mute === undefined;
+    const muted = this.isMuted;
+    const label = t(this.host.config.i18n, muted ? 'unmute' : 'mute');
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    button.title = label;
+    button.replaceChildren(this.host.templates.icon(muted ? 'bellOff' : 'bell'));
+    this.element.classList.toggle('is-muted', muted);
+  }
+
+  /**
+   * 1.24: mutes the conversation until the viewer unmutes it, or unmutes it.
+   *
+   * @param button The mute button (disabled while the request runs).
+   */
+  private async toggleMute(button: HTMLButtonElement): Promise<void> {
+    button.disabled = true;
+    try {
+      const mutedUntil = await this.host.api.mute(this.summary.uuid, !this.isMuted);
+      this.host.conversationChanged({ ...this.summary, mutedUntil });
+    } catch {
+      this.flashNotice(t(this.host.config.i18n, 'error'));
+    } finally {
+      button.disabled = false;
+    }
   }
 
   /**
@@ -1294,7 +1348,7 @@ export class ThreadView {
     let previousAny: ChatMessage | undefined;
     for (const message of this.messages) {
       fragment.append(...this.messageNodes(message, previous, previousAny));
-      previous = message.kind === 'buzz' || message.kind === 'pin' ? undefined : message;
+      previous = isLine(message) ? undefined : message;
       previousAny = message;
     }
     const seen = this.seenLine();
@@ -1344,6 +1398,15 @@ export class ThreadView {
       nodes.push(line);
       return nodes;
     }
+    if (message.kind === 'system') {
+      // 1.24: a line the application posted (e.g. "Ana renamed the channel"), always as text.
+      const line = templates.clone('buzz-line');
+      line.classList.add('nowo-chat-system-line');
+      line.querySelector('[data-icon], svg')?.remove();
+      text(line, 'text', `${plain(message.html)} · ${timeLabel(message.createdAt, locale)}`);
+      nodes.push(line);
+      return nodes;
+    }
     if (message.kind === 'buzz') {
       const line = templates.clone('buzz-line');
       line.classList.toggle('is-new', this.paintedUpTo > 0 && message.id > this.paintedUpTo);
@@ -1377,10 +1440,10 @@ export class ThreadView {
     }
     this.log.querySelector('.nowo-chat-seen')?.remove();
     let previousAny: ChatMessage = previousLast;
-    let previous: ChatMessage | undefined = previousLast.kind === 'buzz' || previousLast.kind === 'pin' ? undefined : previousLast;
+    let previous: ChatMessage | undefined = isLine(previousLast) ? undefined : previousLast;
     for (const message of fresh) {
       this.log.append(...this.messageNodes(message, isNewDay(previousAny, message) ? undefined : previous, previousAny));
-      previous = message.kind === 'buzz' || message.kind === 'pin' ? undefined : message;
+      previous = isLine(message) ? undefined : message;
       previousAny = message;
     }
     const seen = this.seenLine();
@@ -1737,6 +1800,27 @@ export class ThreadView {
       this.counterBand = band;
     }
   }
+}
+
+/**
+ * 1.24: whether the viewer muted the conversation (and the mute has not ended).
+ *
+ * @param summary The conversation.
+ * @returns True while muted.
+ */
+export function isMuted(summary: ConversationSummary): boolean {
+  const until = summary.mutedUntil ?? null;
+  return until !== null && Date.parse(until) > Date.now();
+}
+
+/**
+ * 1.24: whether the message is shown as a centered line (buzz, pin line, system line), outside author groups.
+ *
+ * @param message The message.
+ * @returns True for a line.
+ */
+export function isLine(message: ChatMessage): boolean {
+  return message.kind === 'buzz' || message.kind === 'pin' || message.kind === 'system';
 }
 
 /**

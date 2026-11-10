@@ -57,7 +57,9 @@ final class ChatAccessLinksTest extends TestCase
     public function testAChannelThatDisappearsIsDenied(): void
     {
         $provider = $this->createStub(ChatChannelProviderInterface::class);
-        $provider->method('find')->willReturnOnConsecutiveCalls(new ChatChannel('project:acme', 'Acme'), null);
+        // Read access, then (1.24) the write check (use + channel), then gone.
+        $channel = new ChatChannel('project:acme', 'Acme');
+        $provider->method('find')->willReturnOnConsecutiveCalls($channel, $channel, $channel, null);
         $provider->method('canUse')->willReturn(true);
         $policy = $this->createStub(ChatAccessPolicyInterface::class);
         $policy->method('isReachable')->willReturn(true);

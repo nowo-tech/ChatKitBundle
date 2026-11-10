@@ -11,6 +11,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
+use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -45,8 +46,10 @@ use function is_string;
  * Conversation lifecycle and messages. Authorization is the caller's job (ChatVoter); this service only keeps
  * the data consistent (one conversation per pair / channel / support owner, participant rows, read cursors,
  * support reopen on a new owner message) and notifies.
+ *
+ * 1.24: the default implementation of ChatServiceInterface (aliased to it); type-hint the interface in your code.
  */
-final readonly class ChatService
+final readonly class ChatService implements ChatServiceInterface
 {
     private const string CHANNEL_INSERT_SAVEPOINT = 'nowo_chat_channel_insert';
 
@@ -158,12 +161,13 @@ final readonly class ChatService
      */
     public function send(ChatUserInterface $author, ChatConversation $conversation, string $body): ChatMessage
     {
-        $body               = $this->normalize($body);
-        $body               = $this->links?->normalizeCards($body) ?? $body;
-        $body               = $this->references?->validate($conversation, $author, $body) ?? $body;
-        [$body, $mentioned] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, []];
-        $now                = $this->clock->now();
-        $message            = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
+        $body                       = $this->normalize($body);
+        $body                       = $this->links?->normalizeCards($body) ?? $body;
+        $body                       = $this->references?->validate($conversation, $author, $body) ?? $body;
+        [$body, $mentioned, $group] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, [], null];
+        $now                        = $this->clock->now();
+        $message                    = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
+        $message->mentionAll($group);
         $this->entityManager->persist($message);
         // 1.19: the message's links go to the index of the Links panel (flushed with the message).
         $this->links?->index($message);
@@ -219,11 +223,12 @@ final readonly class ChatService
         $body   = $this->links?->normalizeCards($body) ?? $body;
         $author = $message->getAuthor();
         // A reference the author may no longer open (or a forged one) is kept as plain text.
-        $body               = $author instanceof ChatUserInterface ? ($this->references?->validate($message->getConversation(), $author, $body) ?? $body) : $body;
-        [$body, $mentioned] = $author instanceof ChatUserInterface && $this->mentions instanceof ChatMentions
-            ? $this->mentions->resolve($message->getConversation(), $author, $body)
-            : [$body, []];
+        $body                       = $author instanceof ChatUserInterface ? ($this->references?->validate($message->getConversation(), $author, $body) ?? $body) : $body;
+        [$body, $mentioned, $group] = $author instanceof ChatUserInterface && $this->mentions instanceof ChatMentions
+            ? $this->mentions->resolve($message->getConversation(), $author, $body, $message->getMentionAll())
+            : [$body, [], null];
         $message->edit($body, $this->markdown->render($body), $this->clock->now());
+        $message->mentionAll($group);
         $added = $this->mentions?->sync($message, $mentioned) ?? [];
         $this->links?->index($message);
         $this->entityManager->flush();
@@ -352,7 +357,7 @@ final readonly class ChatService
      */
     public function participant(ChatConversation $conversation, ChatUserInterface $user): ChatParticipant
     {
-        $participant = $this->participants->findOneBy(['conversation' => $conversation, 'user' => $user]);
+        $participant = $this->participants->findOneFor($conversation, $user);
         if (!$participant instanceof ChatParticipant) {
             $participant = new ChatParticipant($conversation, $user, $this->clock->now());
             $this->entityManager->persist($participant);
@@ -397,6 +402,57 @@ final readonly class ChatService
             $this->notifier->botMessage($line);
         }
         $this->notifier->pinsChanged($conversation);
+    }
+
+    /**
+     * 1.24: posts a system line in the conversation (no author: e.g. "Ana renamed the channel"), bumps its activity and
+     * tells its readers. Server only: no API route posts one, so call it from your own use cases after your own access
+     * checks. `$body` is a translation key of `$domain` translated for each reader (plain text when `$domain` is null);
+     * `$params` fill its `%name%` placeholders. The dock shows it as text, never as HTML.
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param string $body Translation key, or plain text when `$domain` is null (at most ChatMessage::MAX_LENGTH characters)
+     * @param string|null $domain Translation domain of the key; null for plain text
+     * @param array<string, string> $params Translation parameters (`name` => value, without the `%`)
+     *
+     * @throws InvalidArgumentException `empty` or `too_long`
+     *
+     * @return ChatMessage The stored system line
+     */
+    public function postSystemLine(ChatConversation $conversation, string $body, ?string $domain = null, array $params = []): ChatMessage
+    {
+        $body = $this->normalize($body);
+        $now  = $this->clock->now();
+        $line = ChatMessage::system($conversation, $body, $domain, $params, $now);
+        $this->entityManager->persist($line);
+        $conversation->touch($now);
+        $this->entityManager->flush();
+        $this->notifier->botMessage($line);
+
+        return $line;
+    }
+
+    /**
+     * 1.24: mutes the conversation for the user until the given time (no Web Push, no e-mail digest, left out of
+     * group mentions, not counted in the dock's total badge, no sound; its own unread count stays), or unmutes it with
+     * null. Unmuting a conversation the user has no participant row in changes nothing (audit KC-L4: no row is created). Access is the caller's job (ChatVoter::VIEW).
+     *
+     * @param ChatUserInterface $user The user
+     * @param ChatConversation $conversation The conversation
+     * @param DateTimeImmutable|null $until Mute end; null to unmute
+     *
+     * @return ChatParticipant|null The user's participant row; null when unmuting without one
+     */
+    public function mute(ChatUserInterface $user, ChatConversation $conversation, ?DateTimeImmutable $until): ?ChatParticipant
+    {
+        $participant = $until instanceof DateTimeImmutable ? $this->participant($conversation, $user) : $this->participants->findOneFor($conversation, $user);
+        if (!$participant instanceof ChatParticipant) {
+            return null;
+        }
+        $participant->muteUntil($until);
+        $this->entityManager->flush();
+
+        return $participant;
     }
 
     /**

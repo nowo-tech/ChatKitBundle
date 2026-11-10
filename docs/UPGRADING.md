@@ -53,6 +53,82 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Target **1.24.0** (from **1.23.x**): `composer update nowo-tech/chat-kit-bundle`.
+
+### Chat room channels (Symfony Beacon spec 184)
+
+No schema change: system lines use the existing nullable `author_id` and the `kind` column, the mute uses the existing
+`muted_until` column. Nothing changes until you use the new options, except:
+
+- **New route** `nowo_chat_api_mute` (`POST` / `DELETE /api/conversations/{uuid}/mute`), loaded by the bundle's
+  `routes.php` import like the others; the dock configuration's `endpoints` gains `mute`.
+- **A bell button in each conversation's header** (`data-part="mute"`, class `nowo-chat-window__mute`). A host that
+  copied `nowo_chat_template_window` keeps working without it (the script skips a missing bell); add the button from the
+  bundle's block to offer muting. With `icon_set: ux_icon` the icons are `tabler:bell` / `tabler:bell-off`: make sure
+  your UX Icons setup can serve them (or map `icons.bell` / `icons.bellOff`).
+- **JSON**: list rows and `GET /api/conversations/{uuid}` gain `mutedUntil` (null unless the person muted it); a message
+  gains `mentionAll` only when it has one. Clients that compare key lists exactly must allow them.
+- **Muted conversations** (rows whose `muted_until` lies in the future, e.g. set by your own code before 1.24) no
+  longer count in `unreadTotal` / the launcher badge and ring no sound.
+- **New limiter** `nowo_chat_mention_all` (`limits.mention_all_per_hour`), prepended like the others.
+
+Optional, to adopt spec 184:
+
+- Replace a `ChatVoter` decorator that blocks writes in archived rooms with `new ChatChannel(..., readOnly: true)` or
+  `ChatChannelWritePolicyInterface` on your channel provider (both enforced server side by the bundle).
+- Replace system lines posted as `ChatMessage::bot()` (shown as the support assistant) with
+  `ChatService::postSystemLine()`.
+- Implement `ChatChannelMentionPolicyInterface` on your channel provider to offer `@channel` / `@here`.
+- Set `web_ui.channels_url` for the **Browse or create channels** link; put your own buttons in the
+  `nowo_chat_dock_header_actions` / `nowo_chat_window_header_actions` blocks.
+- Templates: a copy of `nowo_chat_template_dock` / `nowo_chat_template_window` / the picker misses the new blocks;
+  re-copy them from the bundle if you want the hooks.
+
+### DDD / hexagonal ports
+
+Additive; nothing to change unless you adopt them:
+
+- **`ChatServiceInterface`** (alias of `ChatService`): the bundle's controllers and `ChatSupportTickets` now depend on
+  the interface. Type-hint it in your code; decorate it to audit or project chat activity. A decorator of the concrete
+  `ChatService` service id keeps working but no longer reaches the bundle's controllers — decorate the interface.
+- **`CurrentChatUserResolverInterface`** (default `SecurityChatUserResolver`: the security user when it implements
+  `ChatUserInterface`, as before). Alias it to your own to map a security user that is a DTO / wrapper to its chat
+  participant; the voter, the dock and every chat controller use it.
+- **Event DTOs**: every event keeps its entity properties and gains read-only views — `messageView()`
+  (`ChatMessageView`), `conversationView()` / `ticketView()` (`ChatConversationView`), `linkView()` (`ChatLinkView`)
+  and public-id accessors (`byPublicId()`, `mentionedPublicIds()`, `requesterPublicId()`, `assigneePublicId()`).
+- New private `*Ref` properties on the entities (unmapped in the default mode; no schema change) and the getters
+  `get<Relation>Reference()`.
+
+### Optional: `doctrine.user_reference: id`
+
+The chat tables stop pointing at your user table: no `resolve_target_entities`, no foreign keys; each user column holds
+the user id as text, and users come from your `ChatDirectoryInterface`. Steps:
+
+1. Set `nowo_chat_kit.profiles.<default>.doctrine.user_reference: id` (`user_class` may go).
+2. Generate the migration: `bin/console doctrine:migrations:diff`. It drops the foreign keys from the chat tables to
+   your user table, changes the eight user columns (`author_id`, `deleted_by_id`, `pinned_by_id` on messages;
+   `support_owner_id`, `resolved_by_id`, `assignee_id` on conversations; `created_by_id` on pinned links; `user_id` on
+   participants, reactions, mentions, quick replies and user settings) to `VARCHAR(64)` and adds the six indexes listed
+   in [CONFIGURATION](CONFIGURATION.md#user-references-124). The values stay the same ids, now as text. Review it:
+   on PostgreSQL the type change may need `USING <column>::varchar`; on MySQL the foreign keys must be dropped before
+   the columns change (the generated order does that).
+3. Call `ChatPersonalData::erase($user)` from your account deletion, **before** the account goes (nothing cascades any
+   more). It is mandatory, not only for privacy: without foreign keys, a user id reused later (a manual import, an
+   auto-increment reset) would inherit the old account's direct threads, tickets, settings and quick replies. For an
+   account that is already gone, call `ChatPersonalData::eraseFormerAccount($userId, $publicId, $displayName)`: the
+   id removes its rows, the former chat public id scrubs `@[Name](publicId)` tokens in other people's messages, the
+   former display name scrubs bot and system lines. Run it server side only (a cleanup job, a console command), never
+   from request input; it refuses an id the directory still returns, and it does not exist in `relation` mode. An
+   object that only returns the id (such as `UnresolvedChatUser`)
+   leaves the mention tokens and the names behind.
+   User ids must be integers (`ChatUserInterface::getId(): ?int`); UUID-keyed users are not supported yet.
+4. Code that queried the chat entities with DQL on `author`, `user`, `supportOwner`, … must use the reference fields
+   (`authorRef`, `userRef`, …) in this mode, or the bundle's repositories.
+
+Back to `relation`: the reverse migration (integer columns, foreign keys) only works if every stored id still exists
+in your user table; erase or delete the orphaned rows first.
+
 ## To 1.23.0
 
 From **1.22.1**:

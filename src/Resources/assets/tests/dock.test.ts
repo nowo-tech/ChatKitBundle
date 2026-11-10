@@ -471,6 +471,22 @@ describe('ChatDock', () => {
     expect(q<HTMLElement>('.nowo-chat-picker').hidden).toBe(true);
   });
 
+  it('1.24: muted conversations leave the total badge and ring nothing; system lines ring nothing', async () => {
+    const future = '9999-12-31T23:59:59+00:00';
+    const { dock, q } = mount([summary('a', { unread: 2 }), summary('m', { unread: 5, mutedUntil: future })]);
+    await dock.start();
+    expect(q('.nowo-chat-launcher .nowo-chat-badge [aria-hidden]').textContent).toBe('2');
+    const rt = realtimeHandlers as NonNullable<typeof realtimeHandlers>;
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    rt.onEvent({ type: 'message', conversationUuid: 'm', message: message() });
+    rt.onEvent({ type: 'message', conversationUuid: 'm', message: message({ kind: 'buzz', html: '' }) });
+    rt.onEvent({ type: 'message', conversationUuid: 'a', message: message({ kind: 'system', authorUuid: null, html: '<p>Renamed</p>' }) });
+    expect(playOnce).not.toHaveBeenCalled();
+    expect(q('.nowo-chat-launcher .nowo-chat-badge [aria-hidden]').textContent).toBe('3');
+    rt.onEvent({ type: 'message', conversationUuid: 'a', message: message() });
+    expect(playOnce).toHaveBeenCalledTimes(1);
+  });
+
   it('reacts to realtime events: messages, reads, typing, conversation changes, buzz and sounds', async () => {
     const { dock, q, root } = mount([summary('a'), summary('b'), summary('sup', { kind: 'support' })]);
     await dock.start();

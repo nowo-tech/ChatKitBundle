@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Controller;
 
+use DateInterval;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use JsonException;
@@ -11,6 +12,8 @@ use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -38,7 +41,6 @@ use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatChannelDeniedException;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
-use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatSupportInbox;
 use Nowo\ChatKitBundle\Support\ChatSupportTickets;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -55,6 +57,7 @@ use function array_slice;
 use function assert;
 use function count;
 use function is_array;
+use function is_int;
 use function is_string;
 use function strlen;
 
@@ -77,14 +80,21 @@ final class ChatApiController extends AbstractController
     private const int CONTACTS_LIMIT      = 30;
     private const int MEMBERS_LIMIT       = 20;
 
+    /** 1.24: longest timed mute (one year); a mute without `minutes` lasts until the user unmutes. */
+    private const int MAX_MUTE_MINUTES = 525_600;
+
+    /** 1.24: end of a mute "until I unmute". */
+    private const string MUTED_FOREVER = '9999-12-31T23:59:59+00:00';
+
     /**
      * Builds the API controller from the chat services, repositories, realtime helpers and the rate limiters
      * (send, action, typing, buzz per conversation, buzz per minute, read, reference search).
      *
      * @param ClockInterface $clock Clock for the realtime token expiry
+     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      */
     public function __construct(
-        private readonly ChatService $chat,
+        private readonly ChatServiceInterface $chat,
         private readonly ChatPresenter $presenter,
         private readonly ChatAccess $access,
         private readonly ChatDirectoryInterface $directory,
@@ -118,6 +128,7 @@ final class ChatApiController extends AbstractController
         private readonly ChatReferences $references,
         private readonly ClockInterface $clock = new Clock(),
         private readonly ?ChatQuickReplyRepository $quickReplies = null,
+        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
     ) {
     }
 
@@ -141,12 +152,12 @@ final class ChatApiController extends AbstractController
             $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT),
             fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
         ));
-        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
-        $closed = $this->closedIds($user, $ids);
-        $list   = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => isset($closed[(int) $conversation->getId()]) === $archived));
-        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $latest = $this->messages->findLatestByConversationIds($ids);
+        $ids              = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $unread           = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        [$closed, $muted] = $this->participantStates($user, $ids);
+        $list             = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => isset($closed[(int) $conversation->getId()]) === $archived));
+        $ids              = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $latest           = $this->messages->findLatestByConversationIds($ids);
         // Peers of direct threads in one query (memoized in ChatAccess, so the per-row SEND vote reuses them) and
         // their presence and status in one cache round trip (the custom text shows even to viewers who hide presence).
         $peerIds = [];
@@ -168,10 +179,12 @@ final class ChatApiController extends AbstractController
         foreach ($list as $conversation) {
             $id     = (int) $conversation->getId();
             $peerId = $conversation->peerIdOf($user);
-            $rows[] = ['archived' => $archived] + $this->present($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $unread[$id] ?? 0, $latest[$id] ?? null, $presence);
+            $rows[] = ['archived' => $archived] + $this->present($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $unread[$id] ?? 0, $latest[$id] ?? null, $presence)
+                + ['mutedUntil' => isset($muted[$id]) ? $muted[$id]->format(DATE_ATOM) : null];
         }
 
-        return $this->json(['conversations' => $rows, 'unreadTotal' => array_sum($unread)]);
+        // 1.24: a muted conversation keeps its own unread count but leaves the total badge.
+        return $this->json(['conversations' => $rows, 'unreadTotal' => array_sum(array_diff_key($unread, $muted))]);
     }
 
     /**
@@ -261,10 +274,10 @@ final class ChatApiController extends AbstractController
             $this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT),
             fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
         ));
-        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
-        $closed = $this->closedIds($user, $ids);
-        $read   = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => ($unread[(int) $conversation->getId()] ?? 0) === 0 && !isset($closed[(int) $conversation->getId()])));
+        $ids      = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
+        $unread   = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        [$closed] = $this->participantStates($user, $ids);
+        $read     = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => ($unread[(int) $conversation->getId()] ?? 0) === 0 && !isset($closed[(int) $conversation->getId()])));
         $this->chat->archive($user, $read, true);
         $this->notifier->listChanged($user);
 
@@ -565,13 +578,42 @@ final class ChatApiController extends AbstractController
         $conversation = $this->find($uuid, ChatVoter::VIEW);
         $id           = (int) $conversation->getId();
 
+        $mutedUntil = ($this->participants->findForUser($user, [$id])[$id] ?? null)?->getMutedUntil();
+
         return $this->json(['conversation' => $this->present(
             $conversation,
             $user,
             $this->access->directPeer($conversation, $user),
             $this->messages->countUnreadByConversation((int) $user->getId(), [$id])[$id] ?? 0,
             $this->messages->findLatest($conversation),
-        )]);
+        ) + ['mutedUntil' => $mutedUntil instanceof DateTimeImmutable && $mutedUntil > $this->clock->now() ? $mutedUntil->format(DATE_ATOM) : null]]);
+    }
+
+    /**
+     * 1.24: mutes the conversation for the caller (`POST`, JSON `{minutes}`: 1 to 525600; without it, until they
+     * unmute) or unmutes it (`DELETE`). Only the caller's own row changes; same access as reading the conversation
+     * (unknown or foreign → 404); CSRF header and the action budget as every write. The caller's other tabs refresh.
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request The request (CSRF header, JSON body `{minutes?}`)
+     *
+     * @return JsonResponse `{mutedUntil}` (ISO 8601, or null when not muted)
+     */
+    #[Route('/conversations/{uuid}/mute', name: 'mute', requirements: ['uuid' => self::UUID], methods: ['POST', 'DELETE'])]
+    public function mute(string $uuid, Request $request): JsonResponse
+    {
+        $user         = $this->writer($request);
+        $conversation = $this->find($uuid, ChatVoter::VIEW);
+        $until        = null;
+        if ($request->isMethod('POST')) {
+            $minutes = $this->payload($request)['minutes'] ?? null;
+            $this->deny($minutes !== null && (!is_int($minutes) || $minutes < 1 || $minutes > self::MAX_MUTE_MINUTES), 'invalid_mute', Response::HTTP_UNPROCESSABLE_ENTITY);
+            $until = is_int($minutes) ? $this->clock->now()->add(new DateInterval('PT' . $minutes . 'M')) : new DateTimeImmutable(self::MUTED_FOREVER);
+        }
+        $this->chat->mute($user, $conversation, $until);
+        $this->notifier->listChanged($user);
+
+        return $this->json(['mutedUntil' => $until?->format(DATE_ATOM)]);
     }
 
     /**
@@ -605,7 +647,7 @@ final class ChatApiController extends AbstractController
         return $this->json([
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, $reactions[(int) $message->getId()] ?? []), $page),
             'hasMore'  => $hasMore,
-            'readUpTo' => $this->participants->findOneBy(['conversation' => $conversation, 'user' => $user])?->getLastReadMessageId(),
+            'readUpTo' => $this->participants->findOneFor($conversation, $user)?->getLastReadMessageId(),
             // Other people's read cursors (✓✓ / "Seen by N").
             'readers' => array_map(static fn (ChatParticipant $participant): array => [
                 'userUuid'  => $participant->getUser()->getChatPublicId(),
@@ -1207,23 +1249,28 @@ final class ChatApiController extends AbstractController
     }
 
     /**
-     * Conversations of the list the user closed and that stay closed now.
+     * Conversations of the list the user closed and that stay closed now, and (1.24) those muted now, in one query.
      *
      * @param list<int> $ids Conversation ids
      *
-     * @return array<int, true> conversation id => closed
+     * @return array{array<int, true>, array<int, DateTimeImmutable>} conversation id => closed, conversation id => mute end
      */
-    private function closedIds(ChatUserInterface $user, array $ids): array
+    private function participantStates(ChatUserInterface $user, array $ids): array
     {
         $now    = $this->clock->now();
         $closed = [];
+        $muted  = [];
         foreach ($this->participants->findForUser($user, $ids) as $id => $participant) {
             if ($participant->isArchived($now)) {
                 $closed[$id] = true;
             }
+            $mutedUntil = $participant->getMutedUntil();
+            if ($mutedUntil instanceof DateTimeImmutable && $participant->isMuted($now)) {
+                $muted[$id] = $mutedUntil;
+            }
         }
 
-        return $closed;
+        return [$closed, $muted];
     }
 
     /**
@@ -1274,6 +1321,7 @@ final class ChatApiController extends AbstractController
     private function chatUser(): ChatUserInterface
     {
         $user = $this->getUser();
+        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
         $this->deny(!$user instanceof ChatUserInterface || !$this->access->isReachable($user), 'unauthorized', Response::HTTP_UNAUTHORIZED);
         assert($user instanceof ChatUserInterface);
 

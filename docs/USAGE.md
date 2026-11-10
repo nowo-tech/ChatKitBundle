@@ -79,6 +79,64 @@ public function members(ChatChannel $channel): array;               // realtime 
 `ChatChannel($key, $label)`: a stable key up to 120 characters, e.g. `project:<uuid>`. The channel of the page being
 viewed is offered first in the people picker.
 
+#### Room channels (1.24)
+
+`ChatChannel` takes three optional arguments (Symfony Beacon spec 184, chat room channels):
+
+```php
+new ChatChannel('channel:' . $room->getUuid(), $room->getName(),
+    readOnly: $room->isArchived(),     // members read; nobody writes, edits, reacts, types, pins or changes links
+    subtitle: $room->getTopic(),       // under the title instead of "Channel"
+    icon: '📣',                        // short text in the avatar bubble instead of #
+);
+```
+
+The dock writes the subtitle and the icon with `textContent`; the API also trims them, drops control characters, line
+separators, bidirectional overrides and zero-width spaces, and cuts them to `ChatChannel::SUBTITLE_MAX_LENGTH` (160) /
+`ICON_MAX_LENGTH` (8) characters.
+
+Two optional interfaces, implemented **by your channel provider** (the class aliased to `ChatChannelProviderInterface`):
+
+```php
+// Who may write in a channel they can read (e.g. only admins in an announcements room). Asked on the server for every
+// send, edit, reaction, typing ping, pin and link change; read-only channels never ask it.
+final class RoomChannels implements ChatChannelProviderInterface, ChatChannelWritePolicyInterface, ChatChannelMentionPolicyInterface
+{
+    public function canWrite(ChatUserInterface $user, ChatChannel $channel): bool { /* … */ }
+
+    // @channel (every member) and @here (every member online now). Without this interface nobody may.
+    public function canMentionAll(ChatUserInterface $user, ChatChannel $channel, int $memberCount): bool
+    {
+        return $memberCount <= 20 || $this->rooms->isAdmin($user, $channel->key);
+    }
+}
+```
+
+Read-only rules live in `ChatVoter` / `ChatAccess::canWriteChannel()`, so the API answers `403 read_only` to a send and
+`404` to an edit, a reaction or a typing ping, whatever the dock shows (deleting one's own message within the 15-minute
+edit window stays allowed, so people can remove what they wrote, as Beacon's archived rooms did); the conversation summary has `canSend: false`
+and the dock shows "This channel is read only." (`chat.channel_read_only`) instead of the composer. A decorator of
+`ChatVoter` written only for this (Beacon's `ArchivedChannelVoter`) can be removed.
+
+`@channel` / `@here` are plain words in the message (outside code, e-mail addresses and longer words). When the
+policy allows the writer, the members (or the online members) get a mention row and `ChatMentionEvent` like any
+@mention, at most `ChatMentions::MAX_GROUP_MENTIONS` (500) people, the message payload gains `mentionAll: "channel" |
+"here"` and every reader but the writer gets `mentionsMe: true`. Each writer has a budget,
+`limits.mention_all_per_hour` (6); over it, or without the policy, the message is sent as written and nobody is
+notified. Members who muted the conversation are left out of group mentions (a direct @mention still reaches them). An edit that keeps the group mention spends nothing; one that drops it removes the rows.
+
+#### System lines (1.24)
+
+`ChatServiceInterface::postSystemLine($conversation, $body, $domain = null, $params = [])` posts a line without an
+author ("Ana renamed the channel"), shown centered in the thread and as the list preview, translated for each reader
+(`$body` is a key of `$domain`, or plain text when `$domain` is null; `$params` are `name => value` for `%name%`). It
+is always escaped text, never HTML or Markdown; nobody can react to, edit, delete or pin it, and it rings no sound and
+sends no Web Push. **No API route creates one**: call it from your own use cases, after your own access checks.
+
+```php
+$this->chat->postSystemLine($conversation, 'rooms.line.renamed', 'messages', ['actor' => $actor->getName(), 'name' => $room->getName()]);
+```
+
 ### `ChatRealtimeInterface` (optional)
 
 `MercureChatRealtime` is used when `symfony/mercure-bundle` has a hub; otherwise `NullChatRealtime` (polling). Implement
@@ -144,15 +202,51 @@ context, not as part of your domain model.
   `ChatDirectoryInterface` and `ChatAccessPolicyInterface` (required), and optionally
   `ChatChannelProviderInterface`, `ChatLinkPolicyInterface`, `ChatPinPolicyInterface`,
   `ChatPushSenderInterface`, `ChatLinkPreviewProviderInterface`, `ChatDigestSenderInterface`,
-  `ChatSupportTopicProviderInterface`, `ChatAvatarUrlResolverInterface`, `ChatReferenceProviderInterface`.
+  `ChatSupportTopicProviderInterface`, `ChatAvatarUrlResolverInterface`, `ChatReferenceProviderInterface`, and (1.24)
+  `CurrentChatUserResolverInterface`, `ChatChannelWritePolicyInterface`, `ChatChannelMentionPolicyInterface`.
   They take `ChatUserInterface` and the value objects in `Nowo\ChatKitBundle\Model` (`ChatContact`,
   `ChatChannel`, `ChatReference`, `ChatReferenceScope`, ...), so the adapter translates from your own
   repositories and policies.
 - React to chat activity with event listeners in your application layer: `ChatMessageSentEvent`,
   `ChatMessageDeletedEvent`, `ChatMentionEvent`, `ChatChannelOpeningEvent` (veto), `ChatSupportStatusChangedEvent`,
-  `SupportTicket*Event`, `ChatLink*Event`, `ChatMentionsErasedEvent`. Copy what you need (uuids, public ids,
-  text) into your own commands; do not keep the entities.
-- Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case.
+  `SupportTicket*Event`, `ChatLink*Event`, `ChatMentionsErasedEvent`. 1.24: read their DTOs, never the entities —
+  `messageView()` (`ChatMessageView`: ids, uuids, kind, author public id, body, mentioned public ids, `mentionAll`),
+  `conversationView()` / `ticketView()` (`ChatConversationView`), `linkView()` (`ChatLinkView`) and the public-id
+  accessors (`byPublicId()`, `mentionedPublicIds()`, `requesterPublicId()`, `assigneePublicId()`). They are snapshots
+  of scalars; copy what you need into your own commands.
+- 1.24: call the chat through **`ChatServiceInterface`** (aliased to `ChatService`), so your application layer can
+  wrap it behind its own port, decorate it (audit, projections) or replace it in tests; the bundle's controllers use
+  the interface too, so a decorator sees every API call.
+- 1.24: when your Symfony security user is not the chat participant (a DTO, a wrapper around your domain user), alias
+  **`CurrentChatUserResolverInterface`** to an adapter that maps one to the other; the voter, the dock and every chat
+  controller ask it (default: the security user when it implements `ChatUserInterface`).
+- 1.24: with **`doctrine.user_reference: id`** the chat tables keep the user id as a string, without foreign keys or
+  `resolve_target_entities`: the class implementing `ChatUserInterface` can be a plain object of your infrastructure
+  layer, loaded by your `ChatDirectoryInterface::findByIds()` ([CONFIGURATION](CONFIGURATION.md#user-references-124),
+  migration in [UPGRADING](UPGRADING.md#unreleased)).
+- Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case, before the account is deleted
+  (in id mode nothing cascades: `erase()` is how the rows go). For an account already gone, call
+  `eraseFormerAccount($userId, $publicId, $displayName)` with what you kept of it: the public id scrubs the mention
+  tokens in other people's messages, the name the bot and system lines. Server side only (a cleanup job), never wired
+  to request input; it refuses an id your directory still returns, and works in id mode only.
+
+```php
+// src/Infrastructure/Chat/CurrentParticipant.php — the security user is a DTO, the participant comes from the directory.
+final readonly class CurrentParticipant implements CurrentChatUserResolverInterface
+{
+    public function __construct(private ChatDirectoryInterface $directory) {}
+
+    public function resolve(?UserInterface $user): ?ChatUserInterface
+    {
+        return $user instanceof SecurityAccount ? $this->directory->findByPublicId($user->accountUuid()) : null;
+    }
+}
+```
+
+```yaml
+# config/services.yaml
+Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface: '@App\Infrastructure\Chat\CurrentParticipant'
+```
 
 ```php
 // src/Infrastructure/Chat/DirectoryAdapter.php
@@ -187,13 +281,14 @@ final readonly class DirectoryAdapter implements ChatDirectoryInterface
 
 **Known limitations.**
 
-- The chat tables have foreign keys to your user table: `user_class` is mapped to `ChatUserInterface` through
-  `doctrine.orm.resolve_target_entities`, so the class implementing `ChatUserInterface` must be a Doctrine
-  entity with an integer id, and deleting a user cascades into chat rows.
-- The Symfony security user must be that same `ChatUserInterface` object (the voter, the dock and the
-  controllers read `getUser()`).
-- Events and `ChatService` methods expose the bundle's Doctrine entities, and `ChatService` is a final class
-  without an interface; wrap it behind your own port if your application layer must not see it.
+- User ids are integers: `ChatUserInterface::getId(): ?int` and `ChatDirectoryInterface::findByIds(list<int>)` stay
+  (UUID-keyed domain users need an integer surrogate). In id mode the columns are strings already, so a later version
+  can accept other identifiers without another migration.
+- The default `relation` mode still maps `user_class` through `resolve_target_entities` with foreign keys to your user
+  table (choose `doctrine.user_reference: id` to avoid it).
+- `ChatServiceInterface` methods still take and return the bundle's entities (`ChatConversation`, `ChatMessage`,
+  `ChatParticipant`); the DTOs are on the events. `ChatSupportTickets`, `ChatLinks` and `ChatPersonalData` have no
+  interface yet.
 - There are no events yet for message edits, reactions, pins, read cursors or conversations being opened.
 
 ## Conversations and permissions
@@ -585,7 +680,17 @@ Change part of it — e.g. add a class to the message bubble — by extending th
 ```
 
 Blocks: `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`,
-`nowo_chat_icons`. In `dock.html.twig`: `nowo_chat_assets` (the `<link>` / `<script>`; empty it when your bundler
+`nowo_chat_icons`. 1.24 hooks for channels: `nowo_chat_dock_header_actions` (empty, before **New message** in the
+panel header) and `nowo_chat_window_header_actions` (empty, first in a conversation's header; the window carries
+`data-kind` and, for channels, `data-channel-key`, so your script knows which channel a button is for), and
+`nowo_chat_template_picker_channels`: the **Browse or create channels** link of the people picker, shown when
+`web_ui.channels_url` is set ([CONFIGURATION](CONFIGURATION.md#reference)).
+
+```twig
+{% block nowo_chat_window_header_actions %}
+    <button type="button" class="nowo-chat-icon-btn" data-app-channel-settings aria-label="Channel settings"><span data-icon="hash"></span></button>
+{% endblock %}
+``` In `dock.html.twig`: `nowo_chat_assets` (the `<link>` / `<script>`; empty it when your bundler
 ships them) and `nowo_chat_root`.
 
 Rules: keep every `data-part` (the script throws a clear error naming a missing one), `data-filter` on the filter chips
@@ -974,6 +1079,15 @@ filter lists them, each with **Reopen**; the archive button next to the filters 
 unread messages ("Close all read"). The full-page chat has a *Closed* link and a Close / Reopen button per row
 (`data-nowo-chat-archive` / `data-nowo-chat-unarchive="<uuid>"`, handled by the dock's script).
 
+**Mute (1.24).** The bell in a conversation's header mutes it for the person until they unmute it: no Web Push, no
+e-mail digest, no `@channel` / `@here`, no sound, no window opened by a buzz, not counted in the launcher's total
+(`unreadTotal`); `ChatMentionEvent` still fires for direct @mentions, so filter muted users in your own notification
+listeners if you want the same; the row keeps its own unread
+count and the `mutedUntil` of the summaries says until when. API: `POST /api/conversations/{uuid}/mute` (JSON
+`{minutes}`, 1 to 525600, for a timed mute; without it until unmuted) and `DELETE` to unmute; same access as reading it
+(404 otherwise), CSRF header and the action budget; the person's other tabs get a `list` event. From PHP:
+`ChatServiceInterface::mute($user, $conversation, $until)`.
+
 Nothing is deleted and nobody else is affected (`nowo_chat_participant.archived_at`). A closed conversation is back in
 the list as soon as a new message arrives — unless the person muted it, and except a resolved or closed support
 ticket, which stays closed. API: `POST` / `DELETE /api/conversations/{uuid}/archive`, `POST
@@ -1204,6 +1318,7 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/status` `{status, text?, emoji?, clearAfter?}` | set the caller's chat status (1.10) |
 | POST | `/api/settings` `{key, value}` | save one chat preference (1.10); answers every preference |
 | POST / DELETE | `/api/conversations/{uuid}/archive` · POST `/api/conversations/archive-read` | close / reopen in the caller's list, close all read (1.10) |
+| POST / DELETE | `/api/conversations/{uuid}/mute` `{minutes?}` | mute / unmute for the caller (1.24, `{mutedUntil}`) |
 | POST | `/api/auto-reply` `{enabled, text, when, from?, until?, mentions}` | the caller's automatic reply (1.11) |
 | GET / POST | `/api/quick-replies` · PATCH / DELETE `/api/quick-replies/{id}` | the caller's quick replies (1.11) |
 | GET | `/api/conversations/{uuid}/pins` · POST / DELETE `/api/conversations/{uuid}/messages/{messageUuid}/pin` | pinned messages, pin / unpin (1.10) |

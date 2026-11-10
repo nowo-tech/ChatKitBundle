@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Security;
 
+use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -42,11 +43,13 @@ final class ChatVoter extends Voter
      * @param ChatAccess $access Reachability, agent and channel checks
      * @param ClockInterface $clock Clock used for the edit / delete window
      * @param ChatSupportPolicy|null $support Read-only rule of support tickets; null: tickets never turn read-only
+     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: maps the token's user to the chat participant; null: the user itself when it implements ChatUserInterface
      */
     public function __construct(
         private readonly ChatAccess $access,
         private readonly ClockInterface $clock = new Clock(),
         private readonly ?ChatSupportPolicy $support = null,
+        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
     ) {
     }
 
@@ -59,6 +62,7 @@ final class ChatVoter extends Voter
     protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
     {
         $user = $token->getUser();
+        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
         if (!$user instanceof ChatUserInterface || !$this->access->isReachable($user)) {
             return false;
         }
@@ -87,7 +91,8 @@ final class ChatVoter extends Voter
             self::EDIT => $ownInWindow && !$message->isBuzz() && $this->canSend($conversation, $user),
             // Only the author, within the edit window: nobody deletes someone else's message.
             self::DELETE => $ownInWindow && $this->canView($conversation, $user),
-            default      => !$message->isBuzz() && $this->canSend($conversation, $user), // REACT
+            // 1.24: system lines take no reactions either.
+            default => !$message->isBuzz() && !$message->isSystem() && $this->canSend($conversation, $user), // REACT
         };
     }
 
@@ -102,6 +107,11 @@ final class ChatVoter extends Voter
             $peer = $this->access->directPeer($conversation, $user);
 
             return $peer instanceof ChatUserInterface && $this->access->canWriteDirect($user, $peer);
+        }
+
+        if ($conversation->isChannel()) {
+            // 1.24: a read-only channel (ChatChannel::$readOnly, ChatChannelWritePolicyInterface) is read, never written.
+            return $this->access->canWriteChannel($user, (string) $conversation->getChannelKey());
         }
 
         // A closed ticket (or one resolved long ago) is read-only for everyone; agents change its status instead.

@@ -12,11 +12,15 @@ use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Contract\ChatSupportTopicProviderInterface;
+use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
+use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Link\ChatLinks;
 use Nowo\ChatKitBundle\Link\ChatLinkUrls;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
@@ -27,6 +31,9 @@ use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Realtime\ChatRecipients;
 use Nowo\ChatKitBundle\Realtime\MercureChatRealtime;
 use Nowo\ChatKitBundle\Realtime\NullChatRealtime;
+use Nowo\ChatKitBundle\Security\ChatAccess;
+use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
+use Nowo\ChatKitBundle\Service\ChatMentions;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
@@ -37,6 +44,7 @@ use Symfony\UX\Icons\IconRendererInterface;
 
 use function Symfony\Component\DependencyInjection\Loader\Configurator\param;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
+use function Symfony\Component\DependencyInjection\Loader\Configurator\service_closure;
 
 /*
  * Service definitions for NowoChatKitBundle. The application aliases ChatDirectoryInterface and
@@ -60,6 +68,7 @@ return static function (ContainerConfigurator $container): void {
             '../../Service/ChatChannelDeniedException.php',
             '../../Realtime/ChatTopics.php',
             '../../Avatar/AvatarUrlPolicy.php',
+            '../../Doctrine/UnresolvedChatUser.php',
         ]);
     // REQ-SF-004 rule 7: controllers are NOT autoconfigured. On Symfony >= 7.3 autoconfiguration tags every #[Route]
     // class with routing.controller, and the host's default `routing.controllers` import would then register the chat
@@ -76,7 +85,17 @@ return static function (ContainerConfigurator $container): void {
     $services->get(TablePrefixListener::class)
         ->arg('$prefix', param('nowo_chat_kit.doctrine.table_prefix'))
         ->arg('$tableNamePrefix', param('nowo_chat_kit.doctrine.table_name_prefix'));
+    // 1.24: `doctrine.user_reference` (the extension removes the listener in the default `relation` mode).
+    $services->get(ChatUserReferences::class)
+        ->arg('$mode', param('nowo_chat_kit.doctrine.user_reference'));
+    $services->get(UserReferenceListener::class)
+        ->arg('$access', service_closure(ChatAccess::class))
+        ->arg('$secret', param('kernel.secret'));
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
+    // 1.24: the application service as a port (decorate or replace the interface).
+    $services->alias(ChatServiceInterface::class, ChatService::class);
+    // 1.24: who the signed-in user is in the chat (default: the security user when it implements ChatUserInterface).
+    $services->alias(CurrentChatUserResolverInterface::class, SecurityChatUserResolver::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);
     $services->alias(ChatLinkPreviewProviderInterface::class, NullLinkPreviewProvider::class);
     $services->alias(ChatDigestSenderInterface::class, NullChatDigestSender::class);
@@ -121,6 +140,9 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$intervalMinutes', param('nowo_chat_kit.digest.interval_minutes'));
     $services->get(ChatAutoReplier::class)
         ->arg('$intervalHours', param('nowo_chat_kit.auto_reply_interval_hours'));
+    // 1.24: @channel / @here budget per writer (no limiter without framework.rate_limiter: no budget).
+    $services->get(ChatMentions::class)
+        ->arg('$mentionAllLimiter', service('limiter.nowo_chat_mention_all')->nullOnInvalid());
     $services->get(ChatService::class)
         ->arg('$reactions', param('nowo_chat_kit.reactions'))
         ->arg('$maxPins', param('nowo_chat_kit.max_pins'));
@@ -141,7 +163,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$supportEmojis', param('nowo_chat_kit.support.emojis'))
         ->arg('$autoAwayMinutes', param('nowo_chat_kit.auto_away_minutes'))
         ->arg('$statusPresets', param('nowo_chat_kit.status_presets'))
-        ->arg('$dock', param('nowo_chat_kit.dock'));
+        ->arg('$dock', param('nowo_chat_kit.dock'))
+        ->arg('$channelsUrl', param('nowo_chat_kit.web_ui.channels_url'));
     $services->get(ChatPurgeCommand::class)
         ->arg('$retentionDays', param('nowo_chat_kit.retention_days'));
 };

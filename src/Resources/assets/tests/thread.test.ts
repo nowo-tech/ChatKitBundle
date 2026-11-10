@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { ChatApiError, type ChatApi } from '../src/api';
-import { ThreadView, plain, type ThreadHost } from '../src/thread';
+import { ThreadView, isLine, isMuted, plain, type ThreadHost } from '../src/thread';
 import type { ChatConfig, ChatMessage, ConversationSummary } from '../src/types';
-import { templates } from './support';
+import { Templates } from '../src/templates';
+import { templates, templatesRoot } from './support';
 
 const i18n: Record<string, string> = {
   conversation_label: 'Conversation with %name%', online: 'Online', support_resolved: 'Resolved', read_only: 'Read only',
@@ -23,7 +24,7 @@ const msg = (over: Partial<ChatMessage> = {}): ChatMessage => ({
   createdAt: '2026-10-15T10:00:00Z', edited: false, deleted: false, moderated: false, ...over,
 });
 
-type ApiMock = Record<'messages' | 'send' | 'typing' | 'buzz' | 'resolve' | 'edit' | 'remove' | 'react' | 'members' | 'references' | 'pins' | 'pin', Mock>;
+type ApiMock = Record<'messages' | 'send' | 'typing' | 'buzz' | 'resolve' | 'edit' | 'remove' | 'react' | 'members' | 'references' | 'pins' | 'pin' | 'mute', Mock>;
 
 function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock> = {}, configOver: Partial<ChatConfig> = {}) {
   const api: ApiMock = {
@@ -38,6 +39,7 @@ function setup(over: Partial<ConversationSummary> = {}, apiOver: Partial<ApiMock
     members: vi.fn().mockResolvedValue([{ uuid: 'u-luis', name: 'Luis', initials: 'LU' }]),
     pins: vi.fn().mockResolvedValue({ pins: [], canPin: false }),
     pin: vi.fn(),
+    mute: vi.fn(),
     references: vi.fn().mockImplementation(async (_uuid: string, type: string) =>
       type === ''
         ? { types: [{ key: 'task', label: 'Task', icon: 'task' }], references: [] }
@@ -1073,6 +1075,72 @@ describe('ThreadView', () => {
   });
 });
 
+describe('ThreadView 1.24 channels', () => {
+  const future = '9999-12-31T23:59:59+00:00';
+
+  it('mutes and unmutes from the header, and hides the button without the endpoint', async () => {
+    const { view, host, api, q } = setup({}, { mute: vi.fn().mockResolvedValueOnce(future).mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('down')) }, { endpoints: { page: '/chat/__uuid__', mute: '/m/__uuid__' } as ChatConfig['endpoints'], i18n: { ...i18n, mute: 'Mute', unmute: 'Unmute' } });
+    const button = q<HTMLButtonElement>('[data-part="mute"]');
+    expect(button.hidden).toBe(false);
+    expect(button.getAttribute('aria-pressed')).toBe('false');
+    expect(button.title).toBe('Mute');
+
+    button.click();
+    await vi.waitFor(() => expect(host.conversationChanged).toHaveBeenCalledWith(expect.objectContaining({ uuid: 'c1', mutedUntil: future })));
+    expect(api.mute).toHaveBeenLastCalledWith('c1', true);
+    view.applySummary(summary({ mutedUntil: future }));
+    expect(view.isMuted).toBe(true);
+    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.getAttribute('aria-label')).toBe('Unmute');
+    expect(view.element.classList.contains('is-muted')).toBe(true);
+
+    button.click();
+    await vi.waitFor(() => expect(api.mute).toHaveBeenLastCalledWith('c1', false));
+    await vi.waitFor(() => expect(button.disabled).toBe(false));
+    button.click();
+    await vi.waitFor(() => expect(q('.nowo-chat-notice').textContent).toBe('Error'));
+
+    const without = setup();
+    expect(without.q<HTMLButtonElement>('[data-part="mute"]').hidden).toBe(true);
+  });
+
+  it('works with a window template without the mute button', () => {
+    const { host } = setup();
+    const root = templatesRoot();
+    root.querySelector<HTMLTemplateElement>('template[data-nowo-chat-template="window"]')?.content.querySelector('[data-part="mute"]')?.remove();
+    const view = new ThreadView({ ...host, templates: new Templates(root) }, summary());
+    expect(view.element.querySelector('[data-part="mute"]')).toBeNull();
+    view.applySummary(summary({ mutedUntil: future }));
+    expect(view.isMuted).toBe(true);
+  });
+
+  it('says a channel is read only, tags the window for header actions and renders system lines as text', async () => {
+    const { view, api, q } = setup({ kind: 'channel', channelKey: 'room:a', canSend: false }, {}, { i18n: { ...i18n, channel_read_only: 'This channel is read only.' } });
+    expect(q('.nowo-chat-notice').textContent).toBe('This channel is read only.');
+    expect(view.element.dataset.kind).toBe('channel');
+    expect(view.element.dataset.channelKey).toBe('room:a');
+
+    api.messages.mockResolvedValueOnce({
+      messages: [msg({ kind: 'system', authorUuid: null, authorName: '', html: '<p>Ana renamed &lt;b&gt;the channel&lt;/b&gt;</p>' }), msg(), msg()],
+      hasMore: false, readUpTo: null, readers: [],
+    });
+    await view.load();
+    const line = q('.nowo-chat-system-line');
+    expect(line.textContent).toContain('Ana renamed <b>the channel</b>');
+    expect(line.querySelector('b, svg')).toBeNull();
+    view.merge([msg({ kind: 'system', html: '<p>Later</p>' })], true);
+    expect(view.element.querySelectorAll('.nowo-chat-system-line')).toHaveLength(2);
+  });
+
+  it('knows lines and mutes', () => {
+    expect(isLine(msg({ kind: 'system' }))).toBe(true);
+    expect(isLine(msg({ kind: 'pin' }))).toBe(true);
+    expect(isLine(msg())).toBe(false);
+    expect(isMuted(summary())).toBe(false);
+    expect(isMuted(summary({ mutedUntil: '2000-01-01T00:00:00Z' }))).toBe(false);
+    expect(isMuted(summary({ mutedUntil: future }))).toBe(true);
+  });
+});
 
 describe('plain', () => {
   it('keeps one line for previews and paragraphs for the editor', () => {

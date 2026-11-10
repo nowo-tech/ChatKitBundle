@@ -9,6 +9,9 @@ use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
 use InvalidArgumentException;
+use LogicException;
+use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -21,6 +24,7 @@ use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Event\ChatLinkRemovedEvent;
 use Nowo\ChatKitBundle\Event\ChatMentionsErasedEvent;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Model\ErasedChatUser;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
@@ -103,6 +107,8 @@ final readonly class ChatPersonalData
         private ChatMarkdownRenderer $markdown = new ChatMarkdownRenderer(),
         private ?EventDispatcherInterface $events = null,
         private ?LoggerInterface $logger = null,
+        private ChatUserReferences $refs = new ChatUserReferences(),
+        private ?ChatDirectoryInterface $directory = null,
     ) {
     }
 
@@ -118,8 +124,8 @@ final readonly class ChatPersonalData
         /** @var list<ChatMessage> $messages */
         $messages = $this->entityManager->createQueryBuilder()
             ->select('m', 'c')->from(ChatMessage::class, 'm')->innerJoin('m.conversation', 'c')
-            ->where('m.author = :user AND m.deletedAt IS NULL')
-            ->setParameter('user', $user)
+            ->where($this->refs->field('m', 'author') . ' = :user AND m.deletedAt IS NULL')
+            ->setParameter('user', $this->refs->value($user))
             ->orderBy('m.id', 'ASC')
             ->getQuery()->getResult();
         $settings = $this->settings->forUser($user);
@@ -127,8 +133,8 @@ final readonly class ChatPersonalData
         /** @var list<ChatMessage> $pins */
         $pins = $this->entityManager->createQueryBuilder()
             ->select('m', 'c')->from(ChatMessage::class, 'm')->innerJoin('m.conversation', 'c')
-            ->where('m.pinnedBy = :user AND m.pinnedAt IS NOT NULL')
-            ->setParameter('user', $user)
+            ->where($this->refs->field('m', 'pinnedBy') . ' = :user AND m.pinnedAt IS NOT NULL')
+            ->setParameter('user', $this->refs->value($user))
             ->orderBy('m.pinnedAt', 'ASC')
             ->getQuery()->getResult();
 
@@ -157,7 +163,7 @@ final readonly class ChatPersonalData
             ],
             'quick_replies' => array_map(
                 static fn (ChatQuickReply $reply): array => ['title' => $reply->getTitle(), 'text' => $reply->getBody()],
-                $this->entityManager->getRepository(ChatQuickReply::class)->findBy(['user' => $user], ['id' => 'ASC']),
+                $this->entityManager->getRepository(ChatQuickReply::class)->findBy($this->refs->criteria('user', $user), ['id' => 'ASC']),
             ),
             'messages' => array_map(static fn (ChatMessage $message): array => [
                 'conversation_uuid' => $message->getConversation()->getUuid(),
@@ -180,7 +186,7 @@ final readonly class ChatPersonalData
                 'title'             => $link->getTitle(),
                 'created_at'        => $link->getCreatedAt()->format(DATE_ATOM),
                 'updated_at'        => $link->getUpdatedAt()?->format(DATE_ATOM),
-            ], $this->entityManager->getRepository(ChatConversationLink::class)->findBy(['createdBy' => $user], ['id' => 'ASC'])),
+            ], $this->entityManager->getRepository(ChatConversationLink::class)->findBy($this->refs->criteria('createdBy', $user), ['id' => 'ASC'])),
         ];
     }
 
@@ -210,16 +216,16 @@ final readonly class ChatPersonalData
             $erasure = $this->scrubMentions($user, self::ERASED_MENTION);
             $this->keepModeratedState($user);
             foreach ([[ChatMessage::class, 'pinnedBy'], [ChatMessage::class, 'deletedBy'], [ChatConversation::class, 'assignee'], [ChatConversation::class, 'resolvedBy']] as [$entity, $field]) {
-                $qb()->update($entity, 'x')->set('x.' . $field, ':none')->where('x.' . $field . ' = :user')
-                    ->setParameter('none', null)->setParameter('user', $user)->getQuery()->execute();
+                $qb()->update($entity, 'x')->set($this->refs->field('x', $field), ':none')->where($this->refs->field('x', $field) . ' = :user')
+                    ->setParameter('none', null)->setParameter('user', $this->refs->value($user))->getQuery()->execute();
             }
             $this->eraseBotNames($user);
             // 1.19 (audit FZ-L1): the links the user pinned go, in every conversation (their URL and title may be personal).
             $removedLinks = $this->removePinnedLinks($user);
 
             // The mention rows of the messages the user wrote (they become tombstones below).
-            $authored = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where('m.author = :user')
-                ->setParameter('user', $user)->getQuery()->getSingleColumnResult();
+            $authored = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where($this->refs->field('m', 'author') . ' = :user')
+                ->setParameter('user', $this->refs->value($user))->getQuery()->getSingleColumnResult();
             if ($authored !== []) {
                 $qb()->delete(ChatMessageMention::class, 'n')->where('IDENTITY(n.message) IN (:ids)')
                     ->setParameter('ids', $authored)->getQuery()->execute();
@@ -229,18 +235,18 @@ final readonly class ChatPersonalData
             }
             $qb()->update(ChatMessage::class, 'm')
                 ->set('m.body', ':empty')->set('m.bodyHtml', ':empty')
-                ->set('m.author', ':none')->set('m.deletedAt', ':now')
-                ->where('m.author = :user')
+                ->set($this->refs->field('m', 'author'), ':none')->set('m.deletedAt', ':now')
+                ->where($this->refs->field('m', 'author') . ' = :user')
                 ->setParameter('empty', '')->setParameter('none', null)->setParameter('now', $this->clock->now())
-                ->setParameter('user', $user)
+                ->setParameter('user', $this->refs->value($user))
                 ->getQuery()->execute();
-            $qb()->delete(ChatReaction::class, 'r')->where('r.user = :user')->setParameter('user', $user)->getQuery()->execute();
-            $qb()->delete(ChatParticipant::class, 'p')->where('p.user = :user')->setParameter('user', $user)->getQuery()->execute();
-            $qb()->delete(ChatUserSettings::class, 's')->where('s.user = :user')->setParameter('user', $user)->getQuery()->execute();
-            $qb()->delete(ChatQuickReply::class, 'q')->where('q.user = :user')->setParameter('user', $user)->getQuery()->execute();
+            $qb()->delete(ChatReaction::class, 'r')->where($this->refs->field('r', 'user') . ' = :user')->setParameter('user', $this->refs->value($user))->getQuery()->execute();
+            $qb()->delete(ChatParticipant::class, 'p')->where($this->refs->field('p', 'user') . ' = :user')->setParameter('user', $this->refs->value($user))->getQuery()->execute();
+            $qb()->delete(ChatUserSettings::class, 's')->where($this->refs->field('s', 'user') . ' = :user')->setParameter('user', $this->refs->value($user))->getQuery()->execute();
+            $qb()->delete(ChatQuickReply::class, 'q')->where($this->refs->field('q', 'user') . ' = :user')->setParameter('user', $this->refs->value($user))->getQuery()->execute();
 
             // Every support ticket of the user (and the intake draft), with its messages.
-            foreach ($this->conversations->findBy(['supportOwner' => $user]) as $support) {
+            foreach ($this->conversations->findBy($this->refs->criteria('supportOwner', $user)) as $support) {
                 $messageIds = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->getSingleColumnResult();
                 if ($messageIds !== []) {
                     $qb()->delete(ChatReaction::class, 'r')->where('IDENTITY(r.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
@@ -277,8 +283,8 @@ final readonly class ChatPersonalData
         /** @var list<ChatConversationLink> $links */
         $links = $this->entityManager->createQueryBuilder()
             ->select('l', 'c')->from(ChatConversationLink::class, 'l')->innerJoin('l.conversation', 'c')
-            ->where('l.createdBy = :user')
-            ->setParameter('user', $user)
+            ->where($this->refs->field('l', 'createdBy') . ' = :user')
+            ->setParameter('user', $this->refs->value($user))
             ->orderBy('l.id', 'ASC')
             ->getQuery()->getResult();
         $events = [];
@@ -288,8 +294,8 @@ final readonly class ChatPersonalData
                 $events[] = new ChatLinkRemovedEvent($conversation, $link->getUuid(), $link->getUrl(), $link->getTitle(), $user);
             }
         }
-        $this->entityManager->createQueryBuilder()->delete(ChatConversationLink::class, 'l')->where('l.createdBy = :user')
-            ->setParameter('user', $user)->getQuery()->execute();
+        $this->entityManager->createQueryBuilder()->delete(ChatConversationLink::class, 'l')->where($this->refs->field('l', 'createdBy') . ' = :user')
+            ->setParameter('user', $this->refs->value($user))->getQuery()->execute();
         foreach ($links as $link) {
             $this->entityManager->detach($link);
         }
@@ -313,6 +319,39 @@ final readonly class ChatPersonalData
         foreach ($conversations as $conversation) {
             $this->notifier?->linksChanged($conversation);
         }
+    }
+
+    /**
+     * 1.24 (`doctrine.user_reference: id`): erases an account the directory no longer knows, from what the host kept of
+     * it — its user id, its chat public id (mention tokens in other people's messages) and its display name (bot and
+     * system lines). Same as erase() with an ErasedChatUser; without the public id the mention tokens stay, without the
+     * name the lines keep it. Prefer calling erase() before the account is deleted.
+     *
+     * Server side only (an account-cleanup job, a console command), for accounts your user store no longer has; never
+     * wire it to request input. It refuses (audit KC-L5) an id the directory still knows — a living account is erased
+     * with erase() and its user — and (KC-L6) the default `relation` mode, where erase() takes the user entity.
+     *
+     * @param int $userId The account's user id (the stored reference)
+     * @param string $publicId The account's former chat public id
+     * @param string $displayName The account's former display name; '' skips the lines
+     *
+     * @throws LogicException In `relation` mode, without a directory, or when the directory still returns the user
+     *
+     * @return ChatMentionErasure What the mention part rewrote and skipped
+     */
+    public function eraseFormerAccount(int $userId, string $publicId, string $displayName = ''): ChatMentionErasure
+    {
+        if (!$this->refs->isIdMode()) {
+            throw new LogicException('eraseFormerAccount() works with doctrine.user_reference: id only; in relation mode call erase() with the user entity (before deleting it).');
+        }
+        if (!$this->directory instanceof ChatDirectoryInterface) {
+            throw new LogicException('eraseFormerAccount() needs the ChatDirectoryInterface to check that the account is gone.');
+        }
+        if ($this->directory->findByIds([$userId]) !== []) {
+            throw new LogicException(sprintf('User %d still exists: eraseFormerAccount() is for accounts that are gone; call erase() with the user.', $userId));
+        }
+
+        return $this->erase(new ErasedChatUser($userId, $publicId, $displayName));
     }
 
     /**
@@ -427,7 +466,7 @@ final readonly class ChatPersonalData
 
         $skipped = array_keys(array_filter($rows, static fn (bool $rewritten): bool => !$rewritten));
         $delete  = $this->entityManager->createQueryBuilder()->delete(ChatMessageMention::class, 'n')
-            ->where('n.user = :user')->setParameter('user', $user);
+            ->where($this->refs->field('n', 'user') . ' = :user')->setParameter('user', $this->refs->value($user));
         if ($skipped !== []) {
             $delete->andWhere('IDENTITY(n.message) NOT IN (:skipped)')->setParameter('skipped', $skipped);
         }
@@ -450,10 +489,10 @@ final readonly class ChatPersonalData
     private function mentionBatch(ChatUserInterface $user, string $publicId, ?int $after): array
     {
         $mentioned = $this->entityManager->createQueryBuilder()->select('IDENTITY(n.message)')
-            ->from(ChatMessageMention::class, 'n')->where('n.user = :user')->getDQL();
+            ->from(ChatMessageMention::class, 'n')->where($this->refs->field('n', 'user') . ' = :user')->getDQL();
         $query = $this->entityManager->createQueryBuilder()->select('m.id')->from(ChatMessage::class, 'm')
             ->where('m.deletedAt IS NULL')
-            ->setParameter('user', $user)
+            ->setParameter('user', $this->refs->value($user))
             ->orderBy('m.id', 'ASC')
             ->setMaxResults(self::ERASE_BATCH);
         if (preg_match('/^[A-Za-z0-9_-]{1,64}$/', $publicId) === 1) {
@@ -552,8 +591,8 @@ final readonly class ChatPersonalData
         /** @var iterable<array{id: int, meta: array<string, mixed>|null}> $rows */
         $rows = $this->entityManager->createQueryBuilder()
             ->select('m.id', 'm.meta')->from(ChatMessage::class, 'm')
-            ->where('m.deletedBy = :user')->andWhere('m.author IS NULL OR m.author <> :user')
-            ->setParameter('user', $user)
+            ->where($this->refs->field('m', 'deletedBy') . ' = :user')->andWhere($this->refs->field('m', 'author') . ' IS NULL OR ' . $this->refs->field('m', 'author') . ' <> :user')
+            ->setParameter('user', $this->refs->value($user))
             ->getQuery()->toIterable([], AbstractQuery::HYDRATE_ARRAY);
         foreach ($rows as $row) {
             $meta = $row['meta'] ?? [];
@@ -570,8 +609,8 @@ final readonly class ChatPersonalData
 
     /**
      * Support bot lines copy display names into their translation parameters (`assigned`: `name`; `unassigned`,
-     * `status_*`, `topic_changed`, `continued`: `by`). Every parameter equal to the user's display name becomes `…`
-     * (a namesake is over-scrubbed, which is harmless).
+     * `status_*`, `topic_changed`, `continued`: `by`), and so do the application's system lines (1.24, e.g. `actor`).
+     * Every parameter equal to the user's display name becomes `…` (a namesake is over-scrubbed, which is harmless).
      *
      * @param ChatUserInterface $user The user whose data is erased
      */
@@ -584,7 +623,8 @@ final readonly class ChatPersonalData
         /** @var iterable<array{id: int, meta: array<string, mixed>|null}> $rows */
         $rows = $this->entityManager->createQueryBuilder()
             ->select('m.id', 'm.meta')->from(ChatMessage::class, 'm')
-            ->where('m.kind = :bot')->setParameter('bot', ChatMessage::KIND_BOT)
+            // 1.24 (audit KC-M1): system lines keep their parameters the same way as bot lines.
+            ->where('m.kind IN (:kinds)')->setParameter('kinds', [ChatMessage::KIND_BOT, ChatMessage::KIND_SYSTEM])
             ->getQuery()->toIterable([], AbstractQuery::HYDRATE_ARRAY);
         foreach ($rows as $row) {
             $meta   = $row['meta'] ?? [];

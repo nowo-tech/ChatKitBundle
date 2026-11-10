@@ -81,6 +81,17 @@ export class ChatApi {
   }
 
   /**
+   * Mutes the conversation for the user until they unmute it, or unmutes it (1.24).
+   *
+   * @param uuid Conversation uuid.
+   * @param muted True to mute, false to unmute.
+   * @returns The end of the mute (ISO 8601), or null when unmuted.
+   */
+  async mute(uuid: string, muted: boolean): Promise<string | null> {
+    return (await this.request<{ mutedUntil: string | null }>(muted ? 'POST' : 'DELETE', this.url('mute', uuid), {})).mutedUntil;
+  }
+
+  /**
    * Saves the automatic reply (1.11).
    *
    * @param reply The automatic reply.
@@ -540,7 +551,7 @@ export class ChatApi {
    * @returns The URL.
    */
   private url(
-    kind: 'conversation' | 'messages' | 'members' | 'references' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign' | 'archive' | 'pins' | 'pinnedLinks' | 'links',
+    kind: 'conversation' | 'messages' | 'members' | 'references' | 'read' | 'typing' | 'buzz' | 'resolve' | 'supportTopic' | 'supportResume' | 'supportStatus' | 'supportAssign' | 'archive' | 'pins' | 'pinnedLinks' | 'links' | 'mute',
     uuid: string,
   ): string {
     return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid));

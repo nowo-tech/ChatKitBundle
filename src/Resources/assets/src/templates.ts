@@ -68,7 +68,7 @@ export class Templates {
   /**
    * Avatar bubble: initials for people, an icon for channels and the support inbox.
    *
-   * @param initials Initials shown for a person (ignored for channels and support).
+   * @param initials Initials shown for a person; for a channel (1.24) its icon text (`#`: the built-in icon); ignored for support.
    * @param kind Conversation kind.
    * @param size Avatar size.
    * @param online Adds the online dot.
@@ -83,6 +83,9 @@ export class Templates {
     if (kind === 'direct') {
       element.textContent = initials;
       attachAvatarImage(element, imageUrl, size === 'sm' ? 28 : 40);
+    } else if (kind === 'channel' && initials !== '' && initials !== '#') {
+      // 1.24: the channel's own icon (a short text such as an emoji), always as text.
+      element.textContent = initials;
     } else {
       element.append(this.icon(kind === 'channel' ? 'hash' : 'lifebuoy', size === 'sm' ? 14 : 16));
     }

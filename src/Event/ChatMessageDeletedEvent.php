@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Event;
 
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Model\ChatMessageView;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
 /**
@@ -24,5 +25,25 @@ final readonly class ChatMessageDeletedEvent
         public ChatUserInterface $by,
         public bool $moderated,
     ) {
+    }
+
+    /**
+     * 1.24: the message as a read-only snapshot (scalars and public ids), for listeners that must not keep the entity.
+     *
+     * @return ChatMessageView The snapshot
+     */
+    public function messageView(): ChatMessageView
+    {
+        return ChatMessageView::of($this->message);
+    }
+
+    /**
+     * 1.24: public id of who deleted it.
+     *
+     * @return string The public id
+     */
+    public function byPublicId(): string
+    {
+        return $this->by->getChatPublicId();
     }
 }

@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -32,8 +33,10 @@ class ChatConversationRepository extends ServiceEntityRepository
      *
      * @param ManagerRegistry $registry Doctrine manager registry
      */
-    public function __construct(ManagerRegistry $registry)
-    {
+    public function __construct(
+        ManagerRegistry $registry,
+        private readonly ChatUserReferences $refs = new ChatUserReferences(),
+    ) {
         parent::__construct($registry, ChatConversation::class);
     }
 
@@ -83,7 +86,7 @@ class ChatConversationRepository extends ServiceEntityRepository
      */
     public function findSupportFor(ChatUserInterface $owner): ?ChatConversation
     {
-        return $this->findOneBy(['supportOwner' => $owner], ['lastMessageAt' => 'DESC', 'id' => 'DESC']);
+        return $this->findOneBy($this->refs->criteria('supportOwner', $owner), ['lastMessageAt' => 'DESC', 'id' => 'DESC']);
     }
 
     /**
@@ -95,7 +98,7 @@ class ChatConversationRepository extends ServiceEntityRepository
      */
     public function findSupportDraft(ChatUserInterface $owner): ?ChatConversation
     {
-        return $this->findOneBy(['supportOwner' => $owner, 'ticketNumber' => null], ['id' => 'DESC']);
+        return $this->findOneBy($this->refs->criteria('supportOwner', $owner) + ['ticketNumber' => null], ['id' => 'DESC']);
     }
 
     /**
@@ -110,8 +113,8 @@ class ChatConversationRepository extends ServiceEntityRepository
     {
         /** @var list<ChatConversation> $rows */
         $rows = $this->createQueryBuilder('c')
-            ->where('c.supportOwner = :owner AND c.ticketNumber IS NOT NULL')
-            ->setParameter('owner', $owner)
+            ->where($this->refs->field('c', 'supportOwner') . ' = :owner AND c.ticketNumber IS NOT NULL')
+            ->setParameter('owner', $this->refs->value($owner))
             ->orderBy('c.lastMessageAt', 'DESC')
             ->addOrderBy('c.id', 'DESC')
             ->setMaxResults($limit)
@@ -138,8 +141,8 @@ class ChatConversationRepository extends ServiceEntityRepository
     public function findListForUser(ChatUserInterface $user, array $channelKeys, bool $isSupportAgent, int $limit, ?DateTimeImmutable $before = null): array
     {
         $branch = function (callable $shape) use ($limit, $before): array {
-            $qb = $this->createQueryBuilder('c')
-                ->leftJoin('c.supportOwner', 'owner')->addSelect('owner');
+            $qb = $this->createQueryBuilder('c');
+            $this->refs->join($qb, 'c.supportOwner', 'owner');
             $shape($qb);
             if ($before instanceof DateTimeImmutable) {
                 $qb->andWhere('c.lastMessageAt < :before')->setParameter('before', $before);
@@ -151,10 +154,11 @@ class ChatConversationRepository extends ServiceEntityRepository
             return $rows;
         };
 
-        $rows = $branch(static function ($qb) use ($user): void {
-            $qb->innerJoin(ChatParticipant::class, 'p', 'WITH', 'p.conversation = c AND p.user = :user')
+        $refs = $this->refs;
+        $rows = $branch(static function ($qb) use ($user, $refs): void {
+            $qb->innerJoin(ChatParticipant::class, 'p', 'WITH', 'p.conversation = c AND ' . $refs->field('p', 'user') . ' = :user')
                 ->andWhere('c.kind IN (:kinds)')
-                ->setParameter('user', $user)
+                ->setParameter('user', $refs->value($user))
                 ->setParameter('kinds', [ConversationKind::Direct, ConversationKind::Support]);
         });
         if ($channelKeys !== []) {
@@ -190,12 +194,12 @@ class ChatConversationRepository extends ServiceEntityRepository
     public function findDirectPeerIds(ChatUserInterface $user, int $limit = 200): array
     {
         $ids = $this->getEntityManager()->createQueryBuilder()
-            ->select('IDENTITY(other.user)')
+            ->select($this->refs->identity('other', 'user'))
             ->from(ChatParticipant::class, 'mine')
             ->innerJoin('mine.conversation', 'c')
-            ->innerJoin(ChatParticipant::class, 'other', 'WITH', 'other.conversation = c AND other.user <> mine.user')
-            ->where('mine.user = :user AND c.kind = :direct')
-            ->setParameter('user', $user)
+            ->innerJoin(ChatParticipant::class, 'other', 'WITH', 'other.conversation = c AND ' . $this->refs->field('other', 'user') . ' <> ' . $this->refs->field('mine', 'user'))
+            ->where($this->refs->field('mine', 'user') . ' = :user AND c.kind = :direct')
+            ->setParameter('user', $this->refs->value($user))
             ->setParameter('direct', ConversationKind::Direct)
             ->setMaxResults($limit)
             ->getQuery()
@@ -220,10 +224,10 @@ class ChatConversationRepository extends ServiceEntityRepository
      */
     public function findSupportInbox(?string $filter, ChatUserInterface $agent, int $limit, ?string $topic = null, ?DateTimeImmutable $closeCutoff = null): array
     {
-        $qb = $this->createQueryBuilder('c')
-            ->leftJoin('c.supportOwner', 'owner')->addSelect('owner')
-            ->leftJoin('c.assignee', 'assignee')->addSelect('assignee')
-            ->where('c.kind = :support')
+        $qb = $this->createQueryBuilder('c');
+        $this->refs->join($qb, 'c.supportOwner', 'owner');
+        $this->refs->join($qb, 'c.assignee', 'assignee');
+        $qb->where('c.kind = :support')
             ->andWhere(self::HAS_MESSAGES)
             ->setParameter('support', ConversationKind::Support)
             ->orderBy('c.lastMessageAt', 'DESC')
@@ -234,8 +238,8 @@ class ChatConversationRepository extends ServiceEntityRepository
             'open', 'waiting' => $qb->andWhere('c.supportStatus = :status')->setParameter('status', SupportStatus::from($filter)),
             'resolved'        => $qb->andWhere('c.supportStatus = :resolved' . $resolved('>='))->setParameter('resolved', SupportStatus::Resolved),
             'closed'          => $qb->andWhere('c.supportStatus = :closed OR (c.supportStatus = :resolved' . $resolved('<') . ')')->setParameter('closed', SupportStatus::Closed)->setParameter('resolved', SupportStatus::Resolved),
-            'mine'            => $qb->andWhere('c.assignee = :agent')->setParameter('agent', $agent),
-            'unassigned'      => $qb->andWhere('c.assignee IS NULL AND c.supportStatus IN (:active)')->setParameter('active', [SupportStatus::Open, SupportStatus::Waiting]),
+            'mine'            => $qb->andWhere($this->refs->field('c', 'assignee') . ' = :agent')->setParameter('agent', $this->refs->value($agent)),
+            'unassigned'      => $qb->andWhere($this->refs->field('c', 'assignee') . ' IS NULL AND c.supportStatus IN (:active)')->setParameter('active', [SupportStatus::Open, SupportStatus::Waiting]),
             default           => null,
         };
         if (in_array($filter, ['resolved', 'closed'], true) && $closeCutoff instanceof DateTimeImmutable) {
@@ -267,10 +271,10 @@ class ChatConversationRepository extends ServiceEntityRepository
         }
         /** @var list<array{owner: int|string, total: int|string}> $rows */
         $rows = $this->createQueryBuilder('c')
-            ->select('IDENTITY(c.supportOwner) AS owner, COUNT(c.id) AS total')
-            ->where('c.supportOwner IN (:owners) AND c.ticketNumber IS NOT NULL')
-            ->setParameter('owners', $ownerIds)
-            ->groupBy('c.supportOwner')
+            ->select($this->refs->identity('c', 'supportOwner') . ' AS owner, COUNT(c.id) AS total')
+            ->where($this->refs->field('c', 'supportOwner') . ' IN (:owners) AND c.ticketNumber IS NOT NULL')
+            ->setParameter('owners', $this->refs->ids($ownerIds))
+            ->groupBy($this->refs->field('c', 'supportOwner'))
             ->getQuery()
             ->getArrayResult();
         $counts = [];
@@ -318,8 +322,8 @@ class ChatConversationRepository extends ServiceEntityRepository
     {
         /** @var list<ChatConversation> $rows */
         $rows = $this->createQueryBuilder('c')
-            ->innerJoin(ChatParticipant::class, 'p', 'WITH', 'p.conversation = c AND p.user = :user')
-            ->setParameter('user', $user)
+            ->innerJoin(ChatParticipant::class, 'p', 'WITH', 'p.conversation = c AND ' . $this->refs->field('p', 'user') . ' = :user')
+            ->setParameter('user', $this->refs->value($user))
             ->orderBy('c.lastMessageAt', 'DESC')
             ->addOrderBy('c.id', 'DESC')
             ->setMaxResults($limit)

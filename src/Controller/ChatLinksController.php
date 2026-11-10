@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Controller;
 
 use InvalidArgumentException;
 use JsonException;
+use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
 use Nowo\ChatKitBundle\Entity\ChatMessageLink;
@@ -63,6 +64,7 @@ final class ChatLinksController extends AbstractController
      * @param ChatConversationLinkRepository $pinned Finds a pinned link of the conversation
      * @param RateLimiterFactoryInterface $actionLimiter Budget of the changes
      * @param RateLimiterFactoryInterface $readLimiter Budget of the reads
+     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      */
     public function __construct(
         private readonly ChatLinks $links,
@@ -73,6 +75,7 @@ final class ChatLinksController extends AbstractController
         private readonly RateLimiterFactoryInterface $actionLimiter,
         #[Autowire(service: 'limiter.nowo_chat_read')]
         private readonly RateLimiterFactoryInterface $readLimiter,
+        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
     ) {
     }
 
@@ -242,6 +245,7 @@ final class ChatLinksController extends AbstractController
     private function chatUser(): ChatUserInterface
     {
         $user = $this->getUser();
+        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
         $this->deny(!$user instanceof ChatUserInterface || !$this->access->isReachable($user), 'unauthorized', Response::HTTP_UNAUTHORIZED);
         assert($user instanceof ChatUserInterface);
 

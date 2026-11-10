@@ -6,7 +6,9 @@ namespace Nowo\ChatKitBundle\DependencyInjection;
 
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatReferenceProviderInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
+use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
@@ -49,10 +51,10 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      */
     public function prepend(ContainerBuilder $container): void
     {
-        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>}>} $config */
+        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>, doctrine: array{user_reference: string}}>} $config */
         $config  = (new Processor())->processConfiguration(new Configuration(), $this->prependableConfigs($container));
         $profile = $config['profiles'][$config['default_profile']];
-        $this->prependDoctrine($container, $config['default_profile'], $profile['user_class']);
+        $this->prependDoctrine($container, $config['default_profile'], $profile['user_class'], $profile['doctrine']['user_reference']);
         $this->prependFormKitProfile($container);
 
         if (!$container->hasExtension('framework')) {
@@ -70,6 +72,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 'nowo_chat_reference'   => $limiter($limits['references_per_minute'], '1 minute'),
                 'nowo_chat_buzz'        => $limiter(1, $limits['buzz_interval_seconds'] . ' seconds'),
                 'nowo_chat_buzz_global' => $limiter($limits['buzz_per_minute'], '1 minute'),
+                'nowo_chat_mention_all' => $limiter($limits['mention_all_per_hour'], '1 hour'),
             ],
         ]);
 
@@ -165,6 +168,11 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         }
         $container->setParameter(Configuration::ALIAS . '.doctrine.table_prefix', $profile['doctrine']['table_prefix']);
         $container->setParameter(Configuration::ALIAS . '.doctrine.table_name_prefix', $profile['doctrine']['table_name_prefix']);
+        // 1.24: users referenced by id — the listener exists only then (the default mode costs nothing).
+        $container->setParameter(Configuration::ALIAS . '.doctrine.user_reference', $profile['doctrine']['user_reference']);
+        if ($profile['doctrine']['user_reference'] !== ChatUserReferences::ID) {
+            $container->removeDefinition(UserReferenceListener::class);
+        }
         $this->registerTableNames($container, $configs, $config['default_profile'], $profile['doctrine']);
         foreach ($profile['links'] as $key => $value) {
             $container->setParameter(Configuration::ALIAS . '.links.' . $key, $value);
@@ -180,11 +188,12 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.web_ui.layout_template', $profile['web_ui']['layout_template']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.templates.page', $profile['web_ui']['templates']['page']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.assets', $profile['web_ui']['assets']);
+        $container->setParameter(Configuration::ALIAS . '.web_ui.channels_url', $profile['web_ui']['channels_url']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.page.full_height', $profile['web_ui']['page']['full_height']);
     }
 
     /**
-     * The raw configs with only what prepend() needs (user class, limits): other keys may hold %env()% values,
+     * The raw configs with only what prepend() needs (user class, limits, 1.24 `doctrine.user_reference`): other keys may hold %env()% values,
      * which are resolved later, in load(), never at prepend time.
      *
      * @return list<array<string, mixed>>
@@ -194,7 +203,13 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $configs = [];
         foreach ($container->getExtensionConfig(Configuration::ALIAS) as $config) {
             foreach ($config['profiles'] ?? [] as $name => $profile) {
-                $config['profiles'][$name] = array_intersect_key(is_array($profile) ? $profile : [], ['user_class' => true, 'limits' => true]);
+                $kept = array_intersect_key(is_array($profile) ? $profile : [], ['user_class' => true, 'limits' => true]);
+                // 1.24: only `doctrine.user_reference` (an enum, never an %env()%) is read here.
+                $doctrine = is_array($profile) && is_array($profile['doctrine'] ?? null) ? $profile['doctrine'] : [];
+                if (array_key_exists('user_reference', $doctrine)) {
+                    $kept['doctrine'] = ['user_reference' => $doctrine['user_reference']];
+                }
+                $config['profiles'][$name] = $kept;
             }
             $configs[] = $config;
         }
@@ -203,21 +218,22 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     }
 
     /**
-     * Entity mapping plus `resolve_target_entities` (ChatUserInterface → default profile `user_class`).
+     * Entity mapping plus `resolve_target_entities` (ChatUserInterface → default profile `user_class`); 1.24: in
+     * `doctrine.user_reference: id` mode no target is resolved (UserReferenceListener maps the user columns as strings).
      */
-    private function prependDoctrine(ContainerBuilder $container, string $profileName, ?string $userClass): void
+    private function prependDoctrine(ContainerBuilder $container, string $profileName, ?string $userClass, string $userReference): void
     {
         if (!$container->hasExtension('doctrine')) {
             return;
         }
-        if ($userClass === null || $userClass === '') {
+        $byId = $userReference === ChatUserReferences::ID;
+        if (!$byId && ($userClass === null || $userClass === '')) {
             throw new InvalidArgumentException(sprintf('The "nowo_chat_kit.profiles.%s.user_class" configuration value is required.', $profileName));
         }
 
         $container->prependExtensionConfig('doctrine', [
-            'orm' => [
-                'resolve_target_entities' => [ChatUserInterface::class => $userClass],
-                'mappings'                => [
+            'orm' => ($byId ? [] : ['resolve_target_entities' => [ChatUserInterface::class => $userClass]]) + [
+                'mappings' => [
                     'NowoChatKitBundle' => [
                         'type'      => 'attribute',
                         'is_bundle' => false,
@@ -247,7 +263,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      *
      * @param array<array<string, mixed>> $configs Raw `nowo_chat_kit` configs
      * @param string $defaultProfile Name of the active profile
-     * @param array{table_name_prefix: string, table_prefix: string} $doctrine Processed `doctrine` options of the active profile
+     * @param array{table_name_prefix: string, table_prefix: string, user_reference: string} $doctrine Processed `doctrine` options of the active profile
      */
     private function registerTableNames(ContainerBuilder $container, array $configs, string $defaultProfile, array $doctrine): void
     {

@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Entity;
 
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
@@ -46,6 +47,9 @@ class ChatParticipant
     #[ORM\Column(name: 'joined_at')]
     private DateTimeImmutable $joinedAt;
 
+    /** 1.24: `user` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
+    private ?string $userRef;
+
     /**
      * Creates the participant row of a user in a conversation.
      *
@@ -62,6 +66,8 @@ class ChatParticipant
         private ChatUserInterface $user,
         ?DateTimeImmutable $joinedAt = null,
     ) {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->userRef  = ChatUserReferences::reference($user);
         $this->joinedAt = $joinedAt ?? new DateTimeImmutable();
     }
 
@@ -93,6 +99,17 @@ class ChatParticipant
     public function getUser(): ChatUserInterface
     {
         return $this->user;
+    }
+
+    /**
+     * 1.24: the stored reference of `user` (its id as a string) — what `doctrine.user_reference: id` keeps instead of a
+     * relation, readable without loading the user; null when there is none.
+     *
+     * @return string|null The reference
+     */
+    public function getUserReference(): ?string
+    {
+        return $this->userRef ?? ChatUserReferences::reference($this->user);
     }
 
     /**
