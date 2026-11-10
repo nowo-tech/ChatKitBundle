@@ -30,6 +30,7 @@ use Nowo\FormKitBundle\NowoFormKitBundle;
 use Nowo\UiKitBundle\NowoUiKitBundle;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Bundle\SecurityBundle\SecurityBundle;
 use Symfony\Bundle\TwigBundle\TwigBundle;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
@@ -215,6 +216,16 @@ final class TestKernel extends Kernel
         $routes->add('test_page', '/page')->controller([self::class, 'page']);
         $routes->add('test_project_page', '/projects/acme/page')->controller([self::class, 'page']);
         $routes->add('test_bundler_page', '/bundler-page')->controller([self::class, 'bundlerPage']);
+        $routes->add('test_signed_in', '/signed-in')->controller([self::class, 'signedIn']);
+    }
+
+    /**
+     * 1.26: a signed-in host route with no bundle code (loads the user from the session): the framework's own cost of a
+     * request, the baseline of the worker memory tests.
+     */
+    public function signedIn(Security $security): Response
+    {
+        return new Response((string) $security->getUser()?->getUserIdentifier());
     }
 
     /** A signed-in page of the host application: renders the dock. */

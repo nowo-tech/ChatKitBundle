@@ -14,6 +14,7 @@ use Symfony\Component\HttpFoundation\Request;
 use function assert;
 use function gc_collect_cycles;
 use function memory_get_usage;
+use function sprintf;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -104,32 +105,49 @@ final class ChatCsrfRefreshTest extends DatabaseTestCase
         $csrf     = $this->login($this->user('Ana'))['csrf'];
         $realtime = $this->get(RecordingRealtime::class);
         $queries  = $this->get(QueryCounter::class);
-        $beat     = function () use ($csrf, $realtime, $queries): void {
-            $this->presence($csrf);
-            self::assertSame(200, $this->client->getResponse()->getStatusCode());
-            $this->client->request(Request::METHOD_GET, '/chat/api/csrf');
-            self::assertSame(200, $this->client->getResponse()->getStatusCode());
+        $clean    = function () use ($realtime, $queries): void {
             // The test doubles' own records and the test browser's history are not the kernel's memory.
             $realtime->published = [];
             $queries->clear();
             $this->client->getHistory()->clear();
         };
-        $run = static function (int $times) use ($beat): int {
+        // One heartbeat of the dock: presence, then a token refresh.
+        $beat = function () use ($csrf, $clean): void {
+            $this->presence($csrf);
+            self::assertSame(200, $this->client->getResponse()->getStatusCode());
+            $this->client->request(Request::METHOD_GET, '/chat/api/csrf');
+            self::assertSame(200, $this->client->getResponse()->getStatusCode());
+            $clean();
+        };
+        // The same number of signed-in host requests with no bundle code: what the framework itself keeps per request
+        // (nothing on Symfony 7.4 / 8.1; Symfony 8.2.0-BETA1 keeps about 0.6-1.3 KB per signed-in request).
+        $baseline = function () use ($clean): void {
+            for ($i = 0; $i < 2; ++$i) {
+                $this->client->request(Request::METHOD_GET, '/signed-in');
+                self::assertSame(200, $this->client->getResponse()->getStatusCode());
+            }
+            $clean();
+        };
+        $growth = static function (callable $step, int $times): int {
+            for ($i = 0; $i < 100; ++$i) {
+                $step();
+            }
+            gc_collect_cycles();
+            $before = memory_get_usage();
             for ($i = 0; $i < $times; ++$i) {
-                $beat();
+                $step();
             }
             gc_collect_cycles();
 
-            return memory_get_usage();
+            return memory_get_usage() - $before;
         };
-        $run(100);
-        $first  = $run(500);
-        $second = $run(500);
-        $third  = $run(500);
 
-        // A leak grows with every request; warm caches do not. 500 more heartbeats, twice: under 256 KiB each time.
-        self::assertLessThan(256 * 1024, $second - $first, 'heartbeats 600-1,100 must not grow the memory');
-        self::assertLessThan(256 * 1024, $third - $second, 'heartbeats 1,100-1,600 must not grow the memory');
+        $framework = $growth($baseline, 500);
+        $bundle    = $growth($beat, 500);
+
+        // A leak in the bundle's path grows with every request beyond the framework's own: under 256 KiB for 500
+        // heartbeats (about 0.5 KB per heartbeat) in one kernel that is never reset.
+        self::assertLessThan(256 * 1024, $bundle - $framework, sprintf('500 heartbeats grew the memory by %d bytes (framework baseline: %d)', $bundle, $framework));
     }
 
     /**
