@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.25.0](#to-1250)
   - [Target 1.25.0: sidebar sections](#target-1250-sidebar-sections)
 - [To 1.24.0](#to-1240)
   - [Chat room channels (Symfony Beacon spec 184)](#chat-room-channels-symfony-beacon-spec-184)
@@ -57,6 +58,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.25.0
+
+From **1.24.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 ### Target 1.25.0: sidebar sections
 
