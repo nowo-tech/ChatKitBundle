@@ -113,8 +113,14 @@ the user id as text, and users come from your `ChatDirectoryInterface`. Steps:
    in [CONFIGURATION](CONFIGURATION.md#user-references-124). The values stay the same ids, now as text. Review it:
    on PostgreSQL the type change may need `USING <column>::varchar`; on MySQL the foreign keys must be dropped before
    the columns change (the generated order does that).
-3. Call `ChatPersonalData::erase($user)` from your account deletion (nothing cascades any more). For an account that
-   is already gone, pass any `ChatUserInterface` whose `getId()` returns its id.
+3. Call `ChatPersonalData::erase($user)` from your account deletion, **before** the account goes (nothing cascades any
+   more). It is mandatory, not only for privacy: without foreign keys, a user id reused later (a manual import, an
+   auto-increment reset) would inherit the old account's direct threads, tickets, settings and quick replies. For an
+   account that is already gone, call `ChatPersonalData::eraseFormerAccount($userId, $publicId, $displayName)`: the
+   id removes its rows, the former chat public id scrubs `@[Name](publicId)` tokens in other people's messages, the
+   former display name scrubs bot and system lines. An object that only returns the id (such as `UnresolvedChatUser`)
+   leaves the mention tokens and the names behind.
+   User ids must be integers (`ChatUserInterface::getId(): ?int`); UUID-keyed users are not supported yet.
 4. Code that queried the chat entities with DQL on `author`, `user`, `supportOwner`, … must use the reference fields
    (`authorRef`, `userRef`, …) in this mode, or the bundle's repositories.
 

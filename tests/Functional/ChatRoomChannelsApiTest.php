@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
+use DateTimeImmutable;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
@@ -65,6 +67,21 @@ final class ChatRoomChannelsApiTest extends DatabaseTestCase
         $this->send(Request::METHOD_PATCH, $base . '/messages/' . $old->getUuid(), $csrf, 404, ['body' => 'edited']);
         $this->send(Request::METHOD_POST, $base . '/messages/' . $old->getUuid() . '/reactions', $csrf, 404, ['emoji' => '👍']);
         self::assertSame(['ok' => false, 'error' => 'pin_forbidden'], $this->send(Request::METHOD_POST, $base . '/messages/' . $old->getUuid() . '/pin', $csrf, 403));
+
+        // Audit KC-L1 (decision): the author still removes their own message within the edit window.
+        self::assertTrue($this->send(Request::METHOD_DELETE, $base . '/messages/' . $old->getUuid(), $csrf, 200)['message']['deleted']);
+    }
+
+    public function testEraseScrubsTheNameInSystemLines(): void
+    {
+        $ana  = $this->user('Ana Secretname');
+        $chat = $this->get(ChatService::class);
+        $acme = $chat->openChannel($ana, $this->channel(TestChannelProvider::KEY));
+        $line = $chat->postSystemLine($acme, '%actor% renamed the channel', null, ['actor' => 'Ana Secretname', 'name' => 'Acme']);
+        $this->get(ChatPersonalData::class)->erase($ana);
+        $this->em->clear();
+        $stored = $this->em->find(ChatMessage::class, $line->getId());
+        self::assertSame(['actor' => '…', 'name' => 'Acme'], $stored?->getMeta()['params'] ?? null, 'audit KC-M1');
     }
 
     public function testTheWritePolicyKeepsReadersReading(): void
@@ -162,6 +179,11 @@ final class ChatRoomChannelsApiTest extends DatabaseTestCase
             self::assertSame(['ok' => false, 'error' => 'invalid_mute'], $this->send(Request::METHOD_POST, $url, $csrf, 422, ['minutes' => $minutes]));
         }
         self::assertSame(['mutedUntil' => null], $this->send(Request::METHOD_DELETE, $url, $csrf));
+        // Audit KC-L4: unmuting a conversation one has no row in creates none.
+        $acmeUrl = '/chat/api/conversations/' . $acme->getUuid() . '/mute';
+        self::assertNull($this->get(ChatParticipantRepository::class)->findOneFor($acme, $ana));
+        self::assertSame(['mutedUntil' => null], $this->send(Request::METHOD_DELETE, $acmeUrl, $csrf));
+        self::assertNull($this->get(ChatParticipantRepository::class)->findOneFor($acme, $ana));
         self::assertSame(3, $this->getJson('/chat/api/conversations')['unreadTotal']);
         $this->em->clear();
         $participant = $this->get(ChatParticipantRepository::class)->findOneFor($this->em->find(ChatConversation::class, $dm->getId()) ?? $dm, $ana);
@@ -192,6 +214,11 @@ final class ChatRoomChannelsApiTest extends DatabaseTestCase
         self::assertNull($plain->getMentionAll());
         $this->assertMentioned([], $plain);
 
+        // Audit KC-I3: a member who muted the channel is left out of group mentions.
+        $bea = $this->user('Bea');
+        $chat->mute($bea, $acme, new DateTimeImmutable('+1 hour'));
+        $this->assertMentioned([$ana, $luis], $chat->send($lead, $acme, '@channel muted test'));
+
         // @here: the members online now.
         $this->get(ChatPresence::class)->heartbeat($luis, true);
         $here = $chat->send($lead, $acme, '@here quick one');
@@ -212,8 +239,8 @@ final class ChatRoomChannelsApiTest extends DatabaseTestCase
         self::assertNull($all->getMentionAll());
         $this->assertMentioned([], $all);
 
-        // The budget (6 per hour): two spent above, four more, then plain text.
-        for ($i = 0; $i < 4; ++$i) {
+        // The budget (6 per hour): three spent above, three more, then plain text.
+        for ($i = 0; $i < 3; ++$i) {
             self::assertSame(ChatMessage::MENTION_CHANNEL, $chat->send($lead, $acme, '@channel ' . $i)->getMentionAll());
         }
         $over = $chat->send($lead, $acme, '@channel again');

@@ -184,16 +184,17 @@ interface ChatServiceInterface
     public function postSystemLine(ChatConversation $conversation, string $body, ?string $domain = null, array $params = []): ChatMessage;
 
     /**
-     * 1.24: mutes the conversation for the user until the given time (no Web Push, not counted in the dock's total
-     * badge, no sound; its own unread count stays), or unmutes it with null. Access is the caller's job (ChatVoter::VIEW).
+     * 1.24: mutes the conversation for the user until the given time (no Web Push, no e-mail digest, left out of
+     * group mentions, not counted in the dock's total badge, no sound; its own unread count stays), or unmutes it with
+     * null. Unmuting a conversation the user has no participant row in changes nothing (audit KC-L4: no row is created). Access is the caller's job (ChatVoter::VIEW).
      *
      * @param ChatUserInterface $user The user
      * @param ChatConversation $conversation The conversation
      * @param DateTimeImmutable|null $until Mute end; null to unmute
      *
-     * @return ChatParticipant The user's participant row
+     * @return ChatParticipant|null The user's participant row; null when unmuting without one
      */
-    public function mute(ChatUserInterface $user, ChatConversation $conversation, ?DateTimeImmutable $until): ChatParticipant;
+    public function mute(ChatUserInterface $user, ChatConversation $conversation, ?DateTimeImmutable $until): ?ChatParticipant;
 
     /**
      * Closes (archives) conversations in the user's list, or reopens them; only for that user, nothing is deleted.

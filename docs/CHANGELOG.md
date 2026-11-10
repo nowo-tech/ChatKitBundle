@@ -94,7 +94,21 @@ once. Defaults keep 1.23 behaviour; no schema change in the default mode.
 - **Event DTOs**: `ChatMessageView`, `ChatConversationView`, `ChatLinkView` through `messageView()`,
   `conversationView()` / `ticketView()`, `linkView()` and public-id accessors on every event (entity properties kept).
 - **`ChatServiceInterface`**, aliased to `ChatService`; the controllers and `ChatSupportTickets` depend on it.
-- `ChatParticipantRepository::findOneFor()` / `findForUserIds()`.
+- `ChatParticipantRepository::findOneFor()` / `findForUserIds()` / `mutedUserIds()`.
+- `ChatPersonalData::eraseFormerAccount($userId, $publicId, $displayName)` and the `ErasedChatUser` model, to erase an
+  account that is already gone (id mode).
+
+### Security / privacy (audit KC, before the tag)
+
+- **KC-M1** `erase()` scrubs the erased user's name from system lines too (bot and system line parameters).
+- **KC-L2** an account already gone is erased with what the host kept of it (`eraseFormerAccount()`); UPGRADING says
+  why `erase()` is mandatory in id mode.
+- **KC-L3** `UnresolvedChatUser` public ids are an HMAC keyed with `kernel.secret` (not a plain hash of the id), and
+  unresolved users are left out of reaction summaries.
+- **KC-L4** muted conversations send no e-mail digest; unmuting a conversation without a participant row creates none.
+- **KC-L1** deleting one's own message within the edit window stays allowed in read-only channels (documented, tested).
+- **KC-I3** group mentions leave out members who muted the conversation; **KC-I4** `web_ui.channels_url` is checked
+  again at runtime (an `%env()%` value that fails the pattern drops the link).
 
 ### Documentation
 

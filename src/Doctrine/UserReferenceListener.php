@@ -22,6 +22,7 @@ use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use ReflectionProperty;
+use SensitiveParameter;
 use Symfony\Contracts\Service\ResetInterface;
 use WeakMap;
 
@@ -74,9 +75,12 @@ final class UserReferenceListener implements ResetInterface
 
     /**
      * @param Closure(): ChatAccess $access Lazy ChatAccess (it depends on the host's directory, which may need the entity manager)
+     * @param string $secret Key of the UnresolvedChatUser public ids (`kernel.secret`)
      */
     public function __construct(
         private readonly Closure $access,
+        #[SensitiveParameter]
+        private readonly string $secret = '',
     ) {
         $this->resolved = new WeakMap();
     }
@@ -150,7 +154,7 @@ final class UserReferenceListener implements ResetInterface
                 $reference = $this->property($entity::class, $relation . 'Ref')->getValue($entity);
                 $user      = is_string($reference) ? ($users[(int) $reference] ?? null) : null;
                 if (!$user instanceof ChatUserInterface && is_string($reference) && !$nullable) {
-                    $user = new UnresolvedChatUser($reference);
+                    $user = new UnresolvedChatUser($reference, $this->secret);
                 }
                 $this->property($entity::class, $relation)->setValue($entity, $user);
             }

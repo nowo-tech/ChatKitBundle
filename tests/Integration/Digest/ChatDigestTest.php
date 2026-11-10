@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Integration\Digest;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
@@ -12,6 +13,7 @@ use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
@@ -149,7 +151,23 @@ final class ChatDigestTest extends DatabaseTestCase
         self::assertSame(['ship #Deploy the API now', 'ship [Content not visible] now'], [$sender->sent[0]['items'][0]->preview, $sender->sent[1]['items'][0]->preview]);
     }
 
-    private function dispatcher(RecordingDigestSender $sender, ArrayAdapter $cache, ?ChatReferences $references = null): ChatDigestDispatcher
+    public function testMutedConversationsSendNoEmail(): void
+    {
+        $chat = $this->get(ChatService::class);
+        $ana  = $this->user('Ana');
+        $luis = $this->user('Luis');
+        $bea  = $this->user('Bea');
+        $dm   = $chat->openDirect($ana, $luis);
+        $chat->send($luis, $dm, 'muted one');
+        $chat->send($bea, $chat->openDirect($ana, $bea), 'loud one');
+        $chat->mute($ana, $dm, new DateTimeImmutable('+1 day'));
+
+        $sender = new RecordingDigestSender();
+        $this->dispatcher($sender, new ArrayAdapter(), null, true)(new SendChatDigestMessage((int) $ana->getId()));
+        self::assertSame(['Bea'], array_map(static fn ($item): string => $item->title, $sender->sent[0]['items'] ?? []), 'audit KC-L4');
+    }
+
+    private function dispatcher(RecordingDigestSender $sender, ArrayAdapter $cache, ?ChatReferences $references = null, bool $participants = false): ChatDigestDispatcher
     {
         return new ChatDigestDispatcher(
             $this->get(TestDirectory::class),
@@ -165,6 +183,7 @@ final class ChatDigestTest extends DatabaseTestCase
             '/inbox?chat={uuid}',
             60,
             $references,
+            $participants ? $this->get(ChatParticipantRepository::class) : null,
         );
     }
 }

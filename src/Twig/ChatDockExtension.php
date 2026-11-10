@@ -236,7 +236,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             // 1.19: links (absent when the feature is off).
             'links' => $this->linksConfig(),
             'i18n'  => $this->strings($locale),
-        ] + ($this->channelsUrl === null ? [] : ['channelsUrl' => $this->channelsUrl]);
+        ] + ($this->channelsUrl === null || preg_match(Configuration::CHANNELS_URL_PATTERN, $this->channelsUrl) !== 1 ? [] : ['channelsUrl' => $this->channelsUrl]);
     }
 
     /**

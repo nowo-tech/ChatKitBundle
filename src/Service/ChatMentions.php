@@ -15,7 +15,10 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Realtime\ChatRecipients;
 use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
+use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
+use Symfony\Component\Clock\Clock;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\RateLimiter\LimiterInterface;
 use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 
@@ -46,7 +49,7 @@ final readonly class ChatMentions
     /** 1.24: a group mention (`@channel`, `@here`) outside a word, an e-mail address or a mention token. */
     public const string GROUP_TOKEN = '/(?<![\pL\pN_@.\[])@(channel|here)(?![\pL\pN_-])/u';
 
-    /** 1.24: at most this many people are notified by one group mention (the first ones by name). */
+    /** 1.24: at most this many people are notified by one group mention (the first ones in ChatRecipients order). */
     public const int MAX_GROUP_MENTIONS = 500;
 
     /**
@@ -60,6 +63,8 @@ final readonly class ChatMentions
         private ?ChatChannelProviderInterface $channels = null,
         private ?ChatPresence $presence = null,
         private ?RateLimiterFactoryInterface $mentionAllLimiter = null,
+        private ?ChatParticipantRepository $participants = null,
+        private ClockInterface $clock = new Clock(),
     ) {
     }
 
@@ -163,7 +168,7 @@ final readonly class ChatMentions
 
     /**
      * Members a group mention notifies: everyone who may read the channel now (`here`: only those online), never the
-     * writer, at most MAX_GROUP_MENTIONS.
+     * writer nor (audit KC-I3) members who muted the conversation, at most MAX_GROUP_MENTIONS in recipients order.
      *
      * @param array<string, ChatUserInterface> $members public id => member
      *
@@ -171,7 +176,9 @@ final readonly class ChatMentions
      */
     private function groupMembers(ChatConversation $conversation, ChatUserInterface $author, string $group, array $members): array
     {
-        $members = array_filter($members, fn (ChatUserInterface $member): bool => $member->getId() !== $author->getId() && $this->access->canView($conversation, $member));
+        $muted   = array_flip($this->participants?->mutedUserIds($conversation, $this->clock->now()) ?? []);
+        $members = array_filter($members, fn (ChatUserInterface $member): bool => $member->getId() !== $author->getId() && !isset($muted[(int) $member->getId()])
+            && $this->access->canView($conversation, $member));
         if ($group === ChatMessage::MENTION_HERE) {
             $online  = $this->presence?->statusOf(array_values($members)) ?? [];
             $members = array_filter($members, static fn (ChatUserInterface $member): bool => ($online[$member->getChatPublicId()]['online'] ?? false) === true);

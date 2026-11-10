@@ -89,7 +89,8 @@ return static function (ContainerConfigurator $container): void {
     $services->get(ChatUserReferences::class)
         ->arg('$mode', param('nowo_chat_kit.doctrine.user_reference'));
     $services->get(UserReferenceListener::class)
-        ->arg('$access', service_closure(ChatAccess::class));
+        ->arg('$access', service_closure(ChatAccess::class))
+        ->arg('$secret', param('kernel.secret'));
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).
     $services->alias(ChatServiceInterface::class, ChatService::class);

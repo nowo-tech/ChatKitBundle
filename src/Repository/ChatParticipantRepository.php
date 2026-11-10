@@ -57,6 +57,27 @@ class ChatParticipantRepository extends ServiceEntityRepository
     }
 
     /**
+     * 1.24: ids of the users who muted the conversation now (left out of group mentions).
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param DateTimeImmutable $now Current time
+     *
+     * @return list<int> User ids
+     */
+    public function mutedUserIds(ChatConversation $conversation, DateTimeImmutable $now): array
+    {
+        $ids = $this->createQueryBuilder('p')
+            ->select($this->refs->identity('p', 'user'))
+            ->where('p.conversation = :conversation AND p.mutedUntil > :now')
+            ->setParameter('conversation', $conversation)
+            ->setParameter('now', $now)
+            ->getQuery()
+            ->getSingleColumnResult();
+
+        return array_values(array_map(intval(...), $ids));
+    }
+
+    /**
      * 1.24: the user's participant row of the conversation, if any (both `doctrine.user_reference` modes).
      *
      * @param ChatConversation $conversation The conversation

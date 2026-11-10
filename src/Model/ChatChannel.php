@@ -7,7 +7,8 @@ namespace Nowo\ChatKitBundle\Model;
 /**
  * A group conversation defined by the application (e.g. one per project): a stable key and a label.
  *
- * 1.24: optionally read only (archived rooms: members read, nobody writes, edits, reacts, pins or changes links), a
+ * 1.24: optionally read only (archived rooms: members read, nobody writes, edits, reacts, pins or changes links; an
+ * author may still delete their own message within the edit window), a
  * subtitle (a topic, shown under the title instead of "Channel") and an icon (a short text such as an emoji, shown in
  * the avatar bubble instead of `#`). The dock writes both through `textContent`; the API trims them, drops control
  * and bidirectional-override characters and cuts them to SUBTITLE_MAX_LENGTH / ICON_MAX_LENGTH characters.

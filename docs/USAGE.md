@@ -113,7 +113,8 @@ final class RoomChannels implements ChatChannelProviderInterface, ChatChannelWri
 ```
 
 Read-only rules live in `ChatVoter` / `ChatAccess::canWriteChannel()`, so the API answers `403 read_only` to a send and
-`404` to an edit, a reaction or a typing ping, whatever the dock shows; the conversation summary has `canSend: false`
+`404` to an edit, a reaction or a typing ping, whatever the dock shows (deleting one's own message within the 15-minute
+edit window stays allowed, so people can remove what they wrote, as Beacon's archived rooms did); the conversation summary has `canSend: false`
 and the dock shows "This channel is read only." (`chat.channel_read_only`) instead of the composer. A decorator of
 `ChatVoter` written only for this (Beacon's `ArchivedChannelVoter`) can be removed.
 
@@ -122,7 +123,7 @@ policy allows the writer, the members (or the online members) get a mention row 
 @mention, at most `ChatMentions::MAX_GROUP_MENTIONS` (500) people, the message payload gains `mentionAll: "channel" |
 "here"` and every reader but the writer gets `mentionsMe: true`. Each writer has a budget,
 `limits.mention_all_per_hour` (6); over it, or without the policy, the message is sent as written and nobody is
-notified. An edit that keeps the group mention spends nothing; one that drops it removes the rows.
+notified. Members who muted the conversation are left out of group mentions (a direct @mention still reaches them). An edit that keeps the group mention spends nothing; one that drops it removes the rows.
 
 #### System lines (1.24)
 
@@ -223,8 +224,10 @@ context, not as part of your domain model.
   `resolve_target_entities`: the class implementing `ChatUserInterface` can be a plain object of your infrastructure
   layer, loaded by your `ChatDirectoryInterface::findByIds()` ([CONFIGURATION](CONFIGURATION.md#user-references-124),
   migration in [UPGRADING](UPGRADING.md#unreleased)).
-- Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case (in id mode nothing cascades:
-  `erase()` is how the rows go).
+- Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case, before the account is deleted
+  (in id mode nothing cascades: `erase()` is how the rows go). For an account already gone, call
+  `eraseFormerAccount($userId, $publicId, $displayName)` with what you kept of it: the public id scrubs the mention
+  tokens in other people's messages, the name the bot and system lines.
 
 ```php
 // src/Infrastructure/Chat/CurrentParticipant.php — the security user is a DTO, the participant comes from the directory.
@@ -1076,7 +1079,9 @@ unread messages ("Close all read"). The full-page chat has a *Closed* link and a
 (`data-nowo-chat-archive` / `data-nowo-chat-unarchive="<uuid>"`, handled by the dock's script).
 
 **Mute (1.24).** The bell in a conversation's header mutes it for the person until they unmute it: no Web Push, no
-sound, no window opened by a buzz, not counted in the launcher's total (`unreadTotal`); the row keeps its own unread
+e-mail digest, no `@channel` / `@here`, no sound, no window opened by a buzz, not counted in the launcher's total
+(`unreadTotal`); `ChatMentionEvent` still fires for direct @mentions, so filter muted users in your own notification
+listeners if you want the same; the row keeps its own unread
 count and the `mutedUntil` of the summaries says until when. API: `POST /api/conversations/{uuid}/mute` (JSON
 `{minutes}`, 1 to 525600, for a timed mute; without it until unmuted) and `DELETE` to unmute; same access as reading it
 (404 otherwise), CSRF header and the action budget; the person's other tabs get a `list` event. From PHP:

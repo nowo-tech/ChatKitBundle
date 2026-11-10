@@ -16,6 +16,7 @@ use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Model\ErasedChatUser;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
@@ -136,9 +137,12 @@ final class UserReferenceIdModeTest extends DatabaseTestCase
         self::assertInstanceOf(UnresolvedChatUser::class, $former);
         self::assertSame($goneId, $former->getId());
         self::assertStringStartsWith('former-', $former->getChatPublicId());
-        self::assertStringNotContainsString((string) $goneId, substr($former->getChatPublicId(), 7), 'the public id never shows the reference');
         self::assertSame(['', '?', null, null], [$former->getChatDisplayName(), $former->getChatInitials(), $former->getChatEmail(), $former->getChatLocale()]);
-        self::assertNull((new UnresolvedChatUser('abc'))->getId());
+        // Audit KC-L3: an HMAC keyed with kernel.secret, and left out of reaction summaries.
+        self::assertSame('former-' . substr(hash_hmac('sha256', 'nowo_chat_former_user|' . $goneId, 'chat-kit-test'), 0, 24), $former->getChatPublicId());
+        self::assertNotSame($former->getChatPublicId(), (new UnresolvedChatUser((string) $goneId, 'other'))->getChatPublicId());
+        self::assertSame([], $this->get(ChatReactionRepository::class)->summaryFor([(int) $page[1]->getId()]));
+        self::assertNull((new UnresolvedChatUser('abc', 's'))->getId());
         self::assertFalse($this->get(ChatAccess::class)->isReachable($former), 'never reachable');
 
         // Erasing by id cleans the rows that point at it.
@@ -171,5 +175,33 @@ final class UserReferenceIdModeTest extends DatabaseTestCase
         self::assertNull($conversations->findSupportFor($ana));
         self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_participant WHERE user_id = ?', [(string) $ana->getId()]));
         self::assertNull($this->em->getRepository(ChatMessageMention::class)->findOneBy(['message' => $mention->getId()]));
+    }
+
+    public function testErasingAnAccountThatIsAlreadyGone(): void
+    {
+        $chat                = $this->get(ChatService::class);
+        $ana                 = $this->user('Ana');
+        $gone                = $this->user('Luis Hidden');
+        $dm                  = $chat->openDirect($ana, $gone);
+        $hi                  = $chat->send($ana, $dm, 'hi @[Luis Hidden](' . $gone->getChatPublicId() . ')');
+        $acme                = $chat->openChannel($gone, new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+        $line                = $chat->postSystemLine($acme, '%actor% joined', null, ['actor' => 'Luis Hidden']);
+        [$goneId, $publicId] = [(int) $gone->getId(), $gone->getChatPublicId()];
+        $this->em->getConnection()->executeStatement('DELETE FROM test_user WHERE id = ?', [$goneId]);
+        $this->em->clear();
+
+        // The placeholder alone knows only the id: rows by reference go, the mention token stays (audit KC-L2).
+        $this->get(ChatPersonalData::class)->erase(new UnresolvedChatUser((string) $goneId, 's'));
+        $this->em->clear();
+        self::assertStringContainsString($publicId, (string) $this->em->find(ChatMessage::class, $hi->getId())?->getBody());
+
+        // What the host kept (id, public id, name) erases the rest.
+        $erasure = $this->get(ChatPersonalData::class)->eraseFormerAccount($goneId, $publicId, 'Luis Hidden');
+        $this->em->clear();
+        self::assertSame([(int) $hi->getId()], $erasure->messageIds);
+        self::assertStringNotContainsString($publicId, (string) $this->em->find(ChatMessage::class, $hi->getId())?->getBody());
+        self::assertSame(['actor' => '…'], $this->em->find(ChatMessage::class, $line->getId())?->getMeta()['params'] ?? null, 'audit KC-M1 in id mode');
+        $former = new ErasedChatUser(7, 'p', 'N');
+        self::assertSame([7, 'p', 'N', '?', null, null], [$former->getId(), $former->getChatPublicId(), $former->getChatDisplayName(), $former->getChatInitials(), $former->getChatEmail(), $former->getChatLocale()]);
     }
 }

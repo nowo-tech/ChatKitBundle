@@ -12,12 +12,15 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Psr\Cache\CacheItemPoolInterface;
+use Symfony\Component\Clock\Clock;
+use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 
 /**
@@ -35,6 +38,8 @@ final readonly class ChatDigestDispatcher
      *
      * @param string $urlTemplate Link of each conversation; `{uuid}` is replaced by the conversation id
      * @param int $intervalMinutes Minimum minutes between two digests to the same user
+     * @param ChatParticipantRepository|null $participants 1.24: the user's participant rows (muted conversations are left out); null: none is
+     * @param ClockInterface $clock 1.24: clock of the mute check
      * @param ChatReferences|null $references Shows #references as the recipient may see them
      */
     public function __construct(
@@ -51,6 +56,8 @@ final readonly class ChatDigestDispatcher
         private string $urlTemplate = '/?chat={uuid}',
         private int $intervalMinutes = 60,
         private ?ChatReferences $references = null,
+        private ?ChatParticipantRepository $participants = null,
+        private ClockInterface $clock = new Clock(),
     ) {
     }
 
@@ -78,7 +85,14 @@ final readonly class ChatDigestDispatcher
             $this->conversations->findParticipating($user, 50),
             fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
         ));
-        $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $conversations);
+        $ids = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $conversations);
+        // 1.24 (audit KC-L4): conversations the user muted send no e-mail either.
+        $now = $this->clock->now();
+        foreach ($this->participants?->findForUser($user, $ids) ?? [] as $id => $participant) {
+            if ($participant->isMuted($now)) {
+                $ids = array_values(array_diff($ids, [$id]));
+            }
+        }
         $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
         $latest = $this->messages->findLatestByConversationIds($ids);
         $items  = [];

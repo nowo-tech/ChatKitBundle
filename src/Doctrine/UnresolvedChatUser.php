@@ -5,21 +5,26 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Doctrine;
 
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use SensitiveParameter;
 
 /**
  * 1.24, `doctrine.user_reference: id` only: stands in for a user the directory no longer knows, on rows that need one
  * (participants, reactions, mentions, settings, quick replies) — rows the relation mode would have removed with the
- * account (foreign key `ON DELETE CASCADE`). Never reachable (ChatAccess), so it receives and sees nothing; its public
- * id is a hash of the reference, never the reference itself. Call ChatPersonalData::erase() when you delete an account
- * so these rows do not stay behind.
+ * account (foreign key `ON DELETE CASCADE`). Never reachable (ChatAccess), so it receives and sees nothing, and it is
+ * left out of reaction summaries. Its public id is an HMAC of the reference keyed with `kernel.secret` (audit KC-L3), so
+ * the former user id cannot be recovered by hashing candidate ids. Call ChatPersonalData::erase() when you delete an
+ * account so these rows do not stay behind.
  */
 final readonly class UnresolvedChatUser implements ChatUserInterface
 {
     /**
      * @param string $reference The stored reference (the former user's id)
+     * @param string $secret Key of the public id HMAC (`kernel.secret`)
      */
     public function __construct(
         public string $reference,
+        #[SensitiveParameter]
+        private string $secret,
     ) {
     }
 
@@ -40,7 +45,7 @@ final readonly class UnresolvedChatUser implements ChatUserInterface
      */
     public function getChatPublicId(): string
     {
-        return 'former-' . substr(hash('sha256', 'nowo_chat_former_user|' . $this->reference), 0, 24);
+        return 'former-' . substr(hash_hmac('sha256', 'nowo_chat_former_user|' . $this->reference, $this->secret), 0, 24);
     }
 
     /**

@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
+use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -66,6 +67,10 @@ class ChatReactionRepository extends ServiceEntityRepository
             ->getResult();
         $summary = [];
         foreach ($rows as $reaction) {
+            if ($reaction->getUser() instanceof UnresolvedChatUser) {
+                // 1.24 (audit KC-L3): an account the directory no longer knows is not listed.
+                continue;
+            }
             $summary[(int) $reaction->getMessage()->getId()][$reaction->getEmoji()][] = $reaction->getUser()->getChatPublicId();
         }
 

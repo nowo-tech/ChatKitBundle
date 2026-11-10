@@ -22,6 +22,7 @@ use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Event\ChatLinkRemovedEvent;
 use Nowo\ChatKitBundle\Event\ChatMentionsErasedEvent;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Model\ErasedChatUser;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
@@ -318,6 +319,23 @@ final readonly class ChatPersonalData
     }
 
     /**
+     * 1.24 (`doctrine.user_reference: id`): erases an account the directory no longer knows, from what the host kept of
+     * it — its user id, its chat public id (mention tokens in other people's messages) and its display name (bot and
+     * system lines). Same as erase() with an ErasedChatUser; without the public id the mention tokens stay, without the
+     * name the lines keep it. Prefer calling erase() before the account is deleted.
+     *
+     * @param int $userId The account's user id (the stored reference)
+     * @param string $publicId The account's former chat public id
+     * @param string $displayName The account's former display name; '' skips the lines
+     *
+     * @return ChatMentionErasure What the mention part rewrote and skipped
+     */
+    public function eraseFormerAccount(int $userId, string $publicId, string $displayName = ''): ChatMentionErasure
+    {
+        return $this->erase(new ErasedChatUser($userId, $publicId, $displayName));
+    }
+
+    /**
      * Privacy erasure of a user's mentions (1.15.2, public since 1.18, DATA-CHAT-MENTION-ERASE; same design as WikiBundle
      * 1.17 `WikiCommentService::eraseMentions()`): every `@[Name](publicId)` token of the user in a message that is not
      * deleted becomes `$label` in the body, the HTML is rendered again from the cleaned body (a token inside code is
@@ -572,8 +590,8 @@ final readonly class ChatPersonalData
 
     /**
      * Support bot lines copy display names into their translation parameters (`assigned`: `name`; `unassigned`,
-     * `status_*`, `topic_changed`, `continued`: `by`). Every parameter equal to the user's display name becomes `…`
-     * (a namesake is over-scrubbed, which is harmless).
+     * `status_*`, `topic_changed`, `continued`: `by`), and so do the application's system lines (1.24, e.g. `actor`).
+     * Every parameter equal to the user's display name becomes `…` (a namesake is over-scrubbed, which is harmless).
      *
      * @param ChatUserInterface $user The user whose data is erased
      */
@@ -586,7 +604,8 @@ final readonly class ChatPersonalData
         /** @var iterable<array{id: int, meta: array<string, mixed>|null}> $rows */
         $rows = $this->entityManager->createQueryBuilder()
             ->select('m.id', 'm.meta')->from(ChatMessage::class, 'm')
-            ->where('m.kind = :bot')->setParameter('bot', ChatMessage::KIND_BOT)
+            // 1.24 (audit KC-M1): system lines keep their parameters the same way as bot lines.
+            ->where('m.kind IN (:kinds)')->setParameter('kinds', [ChatMessage::KIND_BOT, ChatMessage::KIND_SYSTEM])
             ->getQuery()->toIterable([], AbstractQuery::HYDRATE_ARRAY);
         foreach ($rows as $row) {
             $meta   = $row['meta'] ?? [];
