@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChatConfig, ChatMessage, ConversationSummary, RealtimeEvent, SidebarSection } from '../src/types';
 import { templatesRoot } from './support';
+import { readFileSync } from 'node:fs';
 
 /** 1.25: the grouped sidebar inside the dock (page mode and, with `sidebar.dock`, the floating dock). */
 const api = {
@@ -268,10 +269,21 @@ describe('ChatDock sidebar', () => {
     expect(api.archive).toHaveBeenCalledWith('a', true);
   });
 
-  it('opens the most recent conversation when asked to', async () => {
-    const { dock } = mountPage([summary('old', { lastMessageAt: '2026-10-01T10:00:00Z' }), summary('empty', { lastMessage: null, lastMessageAt: '2026-11-01T10:00:00Z' }), summary('new', { lastMessageAt: '2026-10-20T10:00:00Z' })], { openRecent: true });
+  it('opens the most recent conversation when asked to, unread until the viewer interacts', async () => {
+    api.messages.mockResolvedValue({ messages: [message({ id: 42 })], hasMore: false, readUpTo: null, readers: [] });
+    const { dock, page } = mountPage([summary('old', { lastMessageAt: '2026-10-01T10:00:00Z' }), summary('empty', { lastMessage: null, lastMessageAt: '2026-11-01T10:00:00Z' }), summary('new', { lastMessageAt: '2026-10-20T10:00:00Z' })], { openRecent: true });
     await dock.start();
+    await flush();
     expect(window.location.pathname).toBe('/chat/new');
+    // Audit KJ-L2: shown, not read, until the viewer touches it.
+    expect(api.markRead).not.toHaveBeenCalled();
+    const view = page.querySelector('.nowo-chat-pagemode__thread .nowo-chat-window') as HTMLElement;
+    view.dispatchEvent(new Event('pointerdown'));
+    expect(api.markRead).toHaveBeenCalledWith('new', 42);
+    api.markRead.mockClear();
+    view.dispatchEvent(new Event('keydown'));
+    expect(api.markRead).not.toHaveBeenCalled();
+    api.messages.mockResolvedValue({ messages: [], hasMore: false, readUpTo: null, readers: [] });
 
     // Not when the address names a conversation, nor on phones, nor without the option.
     window.history.replaceState(null, '', '/chat/old');
@@ -325,5 +337,42 @@ describe('ChatDock sidebar', () => {
     const none = mountDock([summary('a')], { sidebar: undefined });
     await none.dock.start();
     expect(none.list.classList.contains('is-sidebar')).toBe(false);
+  });
+
+  it('never hides the floating dock under its own dialogs (audit KJ-M1)', async () => {
+    const { dock, root } = mountDock([summary('a')], { sidebar: sidebarSettings({ dock: true }) });
+    await dock.start();
+    const own = document.createElement('dialog');
+    root.append(own);
+    const outside = document.createElement('dialog');
+    document.body.append(outside);
+    const fire = (type: string, detail: Record<string, unknown> | null) => document.dispatchEvent(new CustomEvent(type, { detail }));
+    fire('nowo:overlay-open', { depth: 1, owner: own });
+    expect(root.hasAttribute('data-overlay')).toBe(false);
+    fire('nowo:overlay-open', { depth: 2, owner: outside });
+    expect(root.getAttribute('data-overlay')).toBe('hidden');
+    fire('nowo:overlay-close', { depth: 1, owner: outside });
+    expect(root.hasAttribute('data-overlay')).toBe(false);
+    fire('nowo:overlay-close', { depth: 0, owner: own });
+    expect(root.hasAttribute('data-overlay')).toBe(false);
+    // Without a depth: its own dialog is ignored, another one hides the dock.
+    fire('nowo:overlay-open', { owner: own });
+    expect(root.hasAttribute('data-overlay')).toBe(false);
+    fire('nowo:overlay-open', { owner: outside });
+    expect(root.getAttribute('data-overlay')).toBe('hidden');
+    fire('nowo:overlay-close', null);
+    expect(root.hasAttribute('data-overlay')).toBe(false);
+  });
+
+  it('gives the pointer back to dialogs inside the dock root (audit KJ-M1)', () => {
+    // jsdom cannot cascade this stylesheet: read its two rules (the real click runs in the demo e2e, sidebar-dialog.spec.ts).
+    const CSS = readFileSync('src/Resources/public/css/nowo-chat.css', 'utf8');
+    const rule = (selector: string): string => new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{([^}]*)\\}`).exec(CSS)?.[1] ?? '';
+    expect(rule('.nowo-chat')).toMatch(/pointer-events: none;/);
+    expect(rule('.nowo-chat .nowo-ui-dialog')).toMatch(/pointer-events: auto;/);
+    const root = document.createElement('div');
+    root.className = 'nowo-chat';
+    root.innerHTML = '<div class="nowo-chat-dock"></div><dialog class="nowo-ui-dialog nowo-ui-dialog--remote-form"></dialog>';
+    expect(root.querySelector('dialog')?.matches('.nowo-chat .nowo-ui-dialog')).toBe(true);
   });
 });

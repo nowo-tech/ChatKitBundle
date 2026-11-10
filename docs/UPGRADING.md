@@ -62,12 +62,16 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 From **1.24.x**: `composer update nowo-tech/chat-kit-bundle`. Additive; no schema change, no migration.
 
-- **Requirement:** `nowo-tech/ui-kit-bundle` **^2.33** (was ^2.2). The sidebar's action dialogs are UiKit remote form
-  dialogs (`remote_form_dialog` partial, multi-step answers and the fragment filter of 2.33).
-- **Nothing changes by default.** Without a `ChatSidebarSectionProviderInterface` service and with
-  `web_ui.dock.sidebar_sections` and `web_ui.page.open_recent` off (their defaults), the dock configuration, the dock
-  markup and the full-page chat are the 1.24 ones: no `sidebar` / `openRecent` keys, no dialogs, the flat list with its
-  filters.
+- **Requirement:** `nowo-tech/ui-kit-bundle` **^2.33.1** (was ^2.2). The sidebar's action dialogs are UiKit remote form
+  dialogs (`remote_form_dialog` partial, multi-step answers and the shared fragment filter of 2.33.1). A host on an
+  older UiKit gets a Composer conflict and must upgrade UiKit too; read UiKit's UPGRADING from your version, in
+  particular **2.28** (every dialog announces `nowo:overlay-open` / `-close`, and drawers make the shell `inert`).
+- **Behaviour unchanged by default.** Without a `ChatSidebarSectionProviderInterface` service and with
+  `web_ui.dock.sidebar_sections` and `web_ui.page.open_recent` off (their defaults), the dock configuration keys and the
+  behaviour are the 1.24 ones: no `sidebar` / `openRecent` keys, no dialogs, the flat list with its filters. The markup
+  is not byte-identical: `_templates.html.twig` always prints the three new inert `<template>`s (block
+  `nowo_chat_template_sidebar`), and the `i18n` strings of the dock configuration carry the 8 new `chat.sidebar_*`
+  keys.
 - **Deliberate layout change once a section provider exists:** the full-page chat (page mode) shows the grouped,
   collapsible sidebar instead of the flat list under **All** without a search: **Recent** (toggle **Unread**), your
   sections, **Direct messages and groups** (every listed conversation none of your sections shows), compact Slack-style

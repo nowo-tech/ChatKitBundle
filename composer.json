@@ -41,7 +41,7 @@
         "doctrine/doctrine-bundle": "^2.13 || ^3.0",
         "doctrine/orm": "^3.3",
         "nowo-tech/form-kit-bundle": "^2.17",
-        "nowo-tech/ui-kit-bundle": "^2.33",
+        "nowo-tech/ui-kit-bundle": "^2.33.1",
         "psr/cache": "^3.0",
         "psr/log": "^3.0",
         "symfony/asset": "^7.4 || ^8.0",

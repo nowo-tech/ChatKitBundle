@@ -68,7 +68,7 @@ provider and both options off: the same dock configuration, markup and list).
   `conversations`), **`ChatSidebarItem`** (`key`, `label`, `icon` = `channel` | `private` | a dock icon name | a UX
   Icons name, `conversationUuid` or `url`, `unread`, `mentions`, `muted`, `subtitle`) and **`ChatSidebarAction`**
   (`key`, `label`, `icon`, `url` and / or `dialogUrl`, `dialogSize` `md` | `wide`). Structural mistakes throw
-  `InvalidArgumentException`.
+  `InvalidArgumentException` (at the endpoint: that provider is logged and skipped).
 - **`GET /api/sidebar`** (`nowo_chat_api_sidebar`, `ChatSidebarController`, service `Sidebar\ChatSidebar`): the
   viewer's host sections ordered by position (stable), at most 20 sections, 200 rows and 6 actions each; signed in
   (401), read budget (429), `no-store`. Rows with a `conversationUuid` are kept only when the conversation exists and
@@ -105,7 +105,24 @@ provider and both options off: the same dock configuration, markup and list).
 
 ### Changed
 
-- Requires `nowo-tech/ui-kit-bundle` **^2.33** (remote form dialogs).
+- Requires `nowo-tech/ui-kit-bundle` **^2.33.1** (remote form dialogs, shared fragment filter).
+
+### Security / robustness (audit KJ, before the tag)
+
+- **KJ-M1** the sidebar dialogs inside the dock root took its `pointer-events: none`: fields, Save and × could not be
+  clicked or touched. `.nowo-chat .nowo-ui-dialog` takes the pointer back, and the floating dock no longer hides
+  (`inert`) under an overlay it opened itself (an owner inside its root). Real-browser test in the demo e2e
+  (`sidebar-dialog.spec.ts`).
+- **KJ-L1** only the rows that can be shown are looked up (first of each key, 200 per section, 4 000 uuids at most),
+  1 000 uuids per `IN` query.
+- **KJ-L2** `open_recent` shows the conversation without marking it read until the viewer interacts with it
+  (`ThreadView::deferRead()`).
+- **KJ-I5** a provider that throws is logged and skipped; `hasProviders()` counts the tagged services without creating
+  them.
+- **KJ-I6** link and dialog URLs with Unicode spaces are refused on the server too. **KJ-I7** list ids by position and
+  focus keys with `/`, so keys such as `a.b` / `a-b` never share them.
+- Docs: what a dialog fragment can still do after UiKit's filter and the CSP that bounds it (KJ-I1), CSRF of fragment
+  forms (KJ-I2), unread counts of never-opened channels (KJ-I4), the exact default-markup difference (KJ-I8).
 
 ## [1.24.0] - 2026-11-10
 

@@ -2176,6 +2176,11 @@
   }
 }
 
+/* 1.25 (audit KJ-M1): the sidebar's UiKit dialogs live in the dock root, whose pointer-events: none (the floating
+   dock's click-through) they would inherit — they take the pointer back, like the links dialog. */
+.nowo-chat .nowo-ui-dialog {
+  pointer-events: auto;
+}
 /* 1.25: the grouped sidebar (Slack-style): sections that fold, compact rows, the host's actions. The full-page chat
    gives the list a wider column while it is grouped. */
 .nowo-chat-pagemode.has-sidebar {

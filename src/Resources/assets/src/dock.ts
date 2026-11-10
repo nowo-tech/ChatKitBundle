@@ -450,6 +450,8 @@ export class ChatDock implements ThreadHost {
       .sort((a, b) => (b.lastMessageAt ?? '').localeCompare(a.lastMessageAt ?? ''))[0];
     if (recent !== undefined) {
       void this.open(recent, false, true);
+      // Audit KJ-L2: shown, not read — the read cursor (and the peer's read receipt) waits for the viewer.
+      this.windows.get(recent.uuid)?.deferRead();
     }
   }
 
@@ -522,10 +524,22 @@ export class ChatDock implements ThreadHost {
     };
     let fromEvents = marker();
     let fromWatch = false;
+    // 1.25 (audit KJ-M1): overlays the dock opened itself (its sidebar dialogs, in the root) never hide the dock.
+    const own = new Set<Element>();
     const apply = (): void => this.setOverlaySuppressed(fromEvents || fromWatch, mode);
     const onEvent = (event: Event): void => {
-      const depth = (event as CustomEvent<{ depth?: unknown } | null>).detail?.depth;
-      fromEvents = typeof depth === 'number' ? depth > 0 : event.type === 'nowo:overlay-open' || marker();
+      const detail = (event as CustomEvent<{ depth?: unknown; owner?: unknown } | null>).detail;
+      const owner = detail?.owner;
+      const open = event.type === 'nowo:overlay-open';
+      if (owner instanceof Element && this.root.contains(owner)) {
+        if (open) {
+          own.add(owner);
+        } else {
+          own.delete(owner);
+        }
+      }
+      const depth = detail?.depth;
+      fromEvents = typeof depth === 'number' ? depth > own.size : (open && !(owner instanceof Element && this.root.contains(owner))) || marker();
       apply();
     };
     document.addEventListener('nowo:overlay-open', onEvent, { signal });

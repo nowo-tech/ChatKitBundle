@@ -206,7 +206,8 @@ describe('ChatSidebarView', () => {
     const root = draw(view);
     const toggle = q(root, 'chat-sidebar-section-conversations').querySelector<HTMLButtonElement>('[data-part="toggle"]') as HTMLButtonElement;
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(toggle.getAttribute('aria-controls')).toBe('nowo-chat-sidebar-conversations');
+    expect(toggle.getAttribute('aria-controls')).toMatch(/^nowo-chat-sidebar-list-\d+$/);
+    expect(document.getElementById(toggle.getAttribute('aria-controls') ?? '')?.getAttribute('role')).toBe('listbox');
     toggle.focus();
     toggle.click();
     const folded = q(root, 'chat-sidebar-section-conversations');
@@ -300,36 +301,36 @@ describe('ChatSidebarView', () => {
     view.bindKeys(root, signal.signal);
     const stops = () => [...root.querySelectorAll<HTMLElement>('[data-nav-key]')].filter((element) => element.closest('[hidden]') === null);
     // The current conversation holds the tab stop.
-    expect(stops().filter((stop) => stop.tabIndex === 0).map((stop) => stop.dataset.navKey)).toEqual(['item:recent-b']);
+    expect(stops().filter((stop) => stop.tabIndex === 0).map((stop) => stop.dataset.navKey)).toEqual(['item/recent/b']);
     const key = (key: string) => (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
     const at = () => (document.activeElement as HTMLElement).dataset.navKey;
 
     q(root, 'chat-sidebar-item-recent-b').focus();
     key('Home');
-    expect(at()).toBe('section:recent');
+    expect(at()).toBe('section/recent');
     key('ArrowUp');
-    expect(at()).toBe('section:recent');
+    expect(at()).toBe('section/recent');
     key('ArrowDown');
-    expect(at()).toBe('mode:recent');
+    expect(at()).toBe('mode/recent');
     key('ArrowDown');
     key('ArrowDown');
-    expect(at()).toBe('item:recent-a');
+    expect(at()).toBe('item/recent/a');
     // ← on a row goes up to its header; ← on an open header folds it; → unfolds; → again goes in.
     key('ArrowLeft');
-    expect(at()).toBe('section:recent');
+    expect(at()).toBe('section/recent');
     key('ArrowLeft');
     expect(q(root, 'chat-sidebar-section-recent').classList.contains('is-collapsed')).toBe(true);
-    expect(at()).toBe('section:recent');
+    expect(at()).toBe('section/recent');
     key('ArrowRight');
     expect(q(root, 'chat-sidebar-section-recent').classList.contains('is-collapsed')).toBe(false);
     key('ArrowRight');
-    expect(at()).toBe('mode:recent');
+    expect(at()).toBe('mode/recent');
     key('ArrowRight');
-    expect(at()).toBe('mode:recent');
+    expect(at()).toBe('mode/recent');
     key('End');
-    expect(at()).toBe('item:conversations-b');
+    expect(at()).toBe('item/conversations/b');
     key('ArrowDown');
-    expect(at()).toBe('item:conversations-b');
+    expect(at()).toBe('item/conversations/b');
     // Enter / Space open a row; other keys do nothing.
     const opened = vi.fn();
     (document.activeElement as HTMLElement).addEventListener('click', opened);
@@ -352,7 +353,7 @@ describe('ChatSidebarView', () => {
     root.classList.remove('is-sidebar');
     q(root, 'chat-sidebar-item-recent-a').focus();
     key('ArrowDown');
-    expect(at()).toBe('item:recent-a');
+    expect(at()).toBe('item/recent/a');
     signal.abort();
   });
 

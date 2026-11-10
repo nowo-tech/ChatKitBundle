@@ -117,6 +117,8 @@ export class ThreadView {
   private minimised = false;
   private minimisedApplied = false;
   private readUpTo = 0;
+  /** 1.25: nothing is marked read until the viewer interacts (deferRead()). */
+  private readHeld = false;
   /** Id of the first message that arrived while the user was scrolled up ("New messages" divider). */
   private firstUnseenId: number | null = null;
   private unseenBelow = 0;
@@ -659,6 +661,20 @@ export class ThreadView {
   /** Moves focus to the header button (keyboard navigation between windows). */
   focusHeader(): void {
     this.identity.focus({ preventScroll: true });
+  }
+
+  /**
+   * 1.25 (`web_ui.page.open_recent`, audit KJ-L2): the conversation was opened for the viewer, not by them — nothing is
+   * marked read until they interact with it (pointer, touch, wheel, key or focus inside the view).
+   */
+  deferRead(): void {
+    this.readHeld = true;
+    const release = (): void => {
+      this.readHeld = false;
+      ['pointerdown', 'touchstart', 'wheel', 'keydown', 'focusin'].forEach((type) => this.element.removeEventListener(type, release));
+      this.maybeMarkRead();
+    };
+    ['pointerdown', 'touchstart', 'wheel', 'keydown', 'focusin'].forEach((type) => this.element.addEventListener(type, release, { passive: true }));
   }
 
   /** Called when the tab becomes visible again: read what arrived meanwhile, if the user can see it. */
@@ -1724,7 +1740,7 @@ export class ThreadView {
   /** Marks the thread read when the user can see its newest message (expanded, visible tab, scrolled to the bottom). */
   private maybeMarkRead(): void {
     const last = this.messages.at(-1);
-    if (last === undefined || this.minimised || document.visibilityState !== 'visible' || !this.isNearBottom() || last.id <= this.readUpTo) {
+    if (last === undefined || this.readHeld || this.minimised || document.visibilityState !== 'visible' || !this.isNearBottom() || last.id <= this.readUpTo) {
       return;
     }
     this.readUpTo = last.id;

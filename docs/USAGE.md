@@ -471,7 +471,8 @@ The list becomes one grouped, collapsible sidebar (Slack-style) on the full-page
 
 The search and the filters other than **All** keep listing flat, as in 1.24. Without any conversation and without any
 row or action of yours, the list shows its usual empty state. With `web_ui.page.open_recent: true`, `/chat/` also opens
-the most recent conversation beside the list on wide screens.
+the most recent conversation beside the list on wide screens; it is shown, not read: nothing is marked read (no read
+receipt for its people) until the viewer interacts with it (pointer, touch, wheel, key or focus).
 
 ```php
 use Nowo\ChatKitBundle\Contract\ChatSidebarSectionProviderInterface;
@@ -538,8 +539,11 @@ updates as the list. A row with a `url` is a link with the counts you give. Link
 rule (a path or an absolute `http(s)` URL); anything else drops the row or the action. Texts are written with
 `textContent`; labels and subtitles lose control and bidirectional characters and are cut to 80 / 160 characters.
 Repeated section keys (the first provider wins), the reserved keys `recent` and `conversations`, and repeated row /
-action keys inside a section are left out. Caps: 20 sections, 200 rows and 6 actions per section. The provider runs on
-every sidebar load (each list refresh): keep it to one or two queries.
+action keys inside a section are left out. Caps: 20 sections, 200 rows and 6 actions per section (rows past the 200th are
+never looked up; the conversations are read 1 000 uuids per query, 4 000 at most). The provider runs on every sidebar
+load (each list refresh): keep it to one or two queries, and return only what the viewer sees. A provider that throws
+is logged (`error`) and skipped; the other sections still show. The bundle counts the tagged providers without creating
+them, so a provider is only built when the sidebar loads — still, keep its constructor light.
 
 **Icons.** `channel` (#), `private` (a lock), any dock icon name — including one you add under `nowo_chat_kit.icons`
 (`icons: {megaphone: 'tabler:speakerphone'}` → `icon: 'megaphone'`) — or a UX Icons name such as
@@ -550,9 +554,25 @@ with ×, the body that scrolls, the footer outside it; `md` for forms, `wide` fo
 same-origin with credentials (`X-Nowo-Dialog: 1`), its form posts back inside the dialog, a `422` re-renders it, and a
 `204` + `X-Nowo-Redirect` (or a step with `X-Nowo-Dialog-Location`) is followed — serve it with UiKit's
 `RemoteDialogResponder`. Only same-origin `dialogUrl`s are accepted (checked on the server and again in the browser).
-Fragment scripts never run: UiKit drops `<script>`, inline `on*` handlers and `javascript:` URLs before inserting it
-(it is defence in depth, not a sanitizer: never print user HTML unescaped in it, and keep a `script-src` CSP). Behaviour
-in a fragment comes from delegated listeners or Stimulus controllers on your page. The dialogs need UiKit's
+Fragment scripts never run: UiKit drops `<script>`, `iframe[srcdoc]`, non-http(s) iframes, `meta[http-equiv]`,
+`<base>`, `<object>` / `<embed>`, SVG `animate` / `set` of `href`, inline `on*` handlers and `javascript:` /
+`vbscript:` URLs before inserting it. It is defence in depth, **not a sanitizer**. What a fragment can still do once
+inserted (it has the trust of your page), and the CSP directive that bounds each:
+
+- `<style>` / `<link rel="stylesheet">`: restyle or cover the page, CSS attribute-selector exfiltration — `style-src`;
+- a form with a cross-origin action, or any `method="get"` form: a native submission that leaves the page — `form-action`;
+- `<input form="…">` / `<button form formaction>`: add fields to, or redirect, a form of the host page while the dialog
+  is open;
+- `<iframe src="https://…">` — `frame-src`; `<img>`, `<a ping>` beacons — `img-src`, `connect-src`;
+- `<meta name="referrer">` loosens the referrer policy;
+- `popovertarget` / `commandfor`, Stimulus `data-controller`, the chat's own `data-nowo-chat-open` links, and DOM
+  clobbering by `id` / `name`.
+
+So serve only your own markup: never user-controlled HTML unescaped, and never a user-chosen URL as `dialogUrl`; keep a
+`script-src` without `'unsafe-inline'`. **CSRF:** the fragment's forms post with the session cookie (same-origin fetch,
+`credentials: 'same-origin'`); `X-Nowo-Dialog` is not CSRF protection, so keep the form's own CSRF token (Symfony forms
+do) and answer with `RemoteDialogResponder`. Behaviour in a fragment comes from delegated listeners or Stimulus
+controllers on your page. The dialogs need UiKit's
 `js/nowo-ui-dialog.js` (in UiKit's default scripts); without it the action is a plain link to `url` (else to
 `dialogUrl`, the same URL in its full-page mode). When a dialog closes the sidebar reloads (a channel just created or
 joined shows up) and the action gets the focus back.
@@ -563,9 +583,14 @@ section or goes up to its header, → unfolds it or goes in, Home / End, Enter /
 of the bundle's sections. Folded sections (`collapsedByDefault` until the viewer opens them) and the Recent / Unread
 choice are remembered per viewer on the device (`localStorage`, when available).
 
+**Counts.** A channel row whose conversation the viewer has never opened (no participant row) counts its whole
+history as unread, as the list does.
+
 **Testing.** `data-testid="chat-sidebar-section-<key>"`, `chat-sidebar-item-<section>-<key>` (the bundle's rows:
 `chat-sidebar-item-recent-<uuid>` / `chat-sidebar-item-conversations-<uuid>`), `chat-sidebar-action-<section>-<key>`,
-`chat-sidebar-dialog-md` / `chat-sidebar-dialog-wide`.
+`chat-sidebar-dialog-md` / `chat-sidebar-dialog-wide`. Keys may contain `-`, which also joins section and row in the
+test id: keep keys that cannot meet (`a` + `b-c` and `a-b` + `c` give the same test id). The focus keys use `/`, so the
+focus never moves to the wrong row.
 
 ## Events
 

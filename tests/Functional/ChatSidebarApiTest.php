@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatSidebarAction;
 use Nowo\ChatKitBundle\Model\ChatSidebarItem;
@@ -16,6 +17,7 @@ use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
+use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingLogger;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestSecondSidebarProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestSidebarProvider;
@@ -25,8 +27,12 @@ use Symfony\Component\HttpFoundation\Request;
 
 use function array_column;
 use function array_intersect_key;
+use function array_map;
 use function assert;
+use function implode;
 use function mb_strlen;
+use function range;
+use function sprintf;
 use function str_repeat;
 
 use const JSON_THROW_ON_ERROR;
@@ -202,6 +208,62 @@ final class ChatSidebarApiTest extends DatabaseTestCase
 
         $plain = new ChatSidebar([$this->first()], $this->get(ChatAccess::class), $this->get(ChatConversationRepository::class), $this->get(ChatMessageRepository::class), $this->get(ChatMessageMentionRepository::class), $this->get(ChatParticipantRepository::class), iconSet: 'svg_inline');
         self::assertArrayNotHasKey('iconSvg', $plain->view($ana, 'http://localhost')[0]['items'][0], 'svg_inline never renders UX icons');
+    }
+
+    public function testAThrowingProviderIsLoggedAndSkipped(): void
+    {
+        $ana                      = $this->user('Ana');
+        $this->first()->failure   = new InvalidArgumentException('A sidebar item conversationUuid must be a lowercase uuid');
+        $this->second()->sections = [new ChatSidebarSection('kept', 'Kept')];
+        $this->client->loginUser($ana);
+        self::assertSame(['kept'], array_column($this->sections(), 'key'), 'the other providers still show');
+
+        $logger = new RecordingLogger();
+        $direct = new ChatSidebar([$this->first(), $this->second()], $this->get(ChatAccess::class), $this->get(ChatConversationRepository::class), $this->get(ChatMessageRepository::class), $this->get(ChatMessageMentionRepository::class), $this->get(ChatParticipantRepository::class), logger: $logger);
+        self::assertSame(['kept'], array_column($direct->view($ana, 'http://localhost'), 'key'));
+        self::assertCount(1, $logger->lines);
+        self::assertStringContainsString(TestSidebarProvider::class, implode(' ', $logger->lines));
+    }
+
+    public function testProvidersAreCountedWithoutBeingCreatedAndUuidsLookedUpByChunks(): void
+    {
+        $ana  = $this->user('Ana');
+        $chat = $this->get(ChatService::class);
+        $acme = $chat->openChannel($ana, $this->channel(TestChannelProvider::KEY));
+        $deps = [$this->get(ChatAccess::class), $this->get(ChatConversationRepository::class), $this->get(ChatMessageRepository::class), $this->get(ChatMessageMentionRepository::class), $this->get(ChatParticipantRepository::class)];
+        self::assertTrue($this->get(ChatSidebar::class)->hasProviders(), 'the tagged iterator counts');
+        self::assertTrue((new ChatSidebar((function (): iterable {
+            yield $this->first();
+        })(), ...$deps))->hasProviders());
+        self::assertFalse((new ChatSidebar((static function (): iterable {
+            yield from [];
+        })(), ...$deps))->hasProviders());
+
+        self::assertSame([], $this->get(ChatConversationRepository::class)->findByUuids([]));
+
+        // 8 sections × 200 unknown uuids, the readable conversation last: two IN queries, and it is found.
+        $sections = [];
+        for ($s = 0; $s < 8; ++$s) {
+            $items = [];
+            for ($i = 0; $i < 200; ++$i) {
+                $items[] = new ChatSidebarItem('i' . $i, 'I', 'channel', sprintf('00000000-0000-4000-8000-%012d', $s * 1000 + $i));
+            }
+            $sections[] = new ChatSidebarSection('s' . $s, 'S', 0, true, false, $items);
+        }
+        $sections[]              = new ChatSidebarSection('last', 'Last', 1, true, false, [new ChatSidebarItem('acme', 'acme', 'channel', $acme->getUuid())]);
+        $this->first()->sections = $sections;
+        $this->client->loginUser($ana);
+        $view = $this->sections();
+        self::assertSame([], $view[0]['items']);
+        self::assertSame(['acme'], array_column($view[8]['items'], 'key'));
+
+        // A row beyond the 200 shown is never looked up (nor shown), and Unicode spaces never pass (audit KJ-I6).
+        $over                    = array_map(static fn (int $i): ChatSidebarItem => new ChatSidebarItem('u' . $i, 'U', 'channel', null, '/u/' . $i), range(0, 199));
+        $over[]                  = new ChatSidebarItem('late', 'Late', 'channel', $acme->getUuid());
+        $this->first()->sections = [new ChatSidebarSection('over', 'Over', 0, true, false, $over), new ChatSidebarSection('space', 'Space', 0, true, false, [new ChatSidebarItem('ideo', 'Ideo', 'channel', null, "/a\u{3000}b")], [new ChatSidebarAction('ideo', 'Ideo', null, null, "/a\u{3000}b")])];
+        $view                    = $this->sections();
+        self::assertNotContains('late', array_column($view[0]['items'], 'key'));
+        self::assertSame([[], []], [$view[1]['items'], $view[1]['actions']]);
     }
 
     public function testGuestsAndTheDockConfiguration(): void

@@ -15,18 +15,22 @@ use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 use Symfony\UX\Icons\IconRendererInterface;
 use Throwable;
 
+use function array_chunk;
 use function array_keys;
+use function array_map;
 use function array_slice;
 use function array_unique;
 use function array_values;
 use function count;
 use function in_array;
+use function is_countable;
 use function is_string;
 use function mb_substr;
 use function parse_url;
@@ -64,8 +68,17 @@ final class ChatSidebar
     /** Longest subtitle (characters). */
     public const int SUBTITLE_MAX_LENGTH = 160;
 
+    /** Conversation uuids looked up per request at most (MAX_SECTIONS × MAX_ITEMS). */
+    public const int MAX_UUIDS = self::MAX_SECTIONS * self::MAX_ITEMS;
+
+    /** Uuids per `IN (…)` query. */
+    private const int UUID_CHUNK = 1000;
+
     /** A dock icon name (`channel`, `private`, `hash`, a host name under `nowo_chat_kit.icons` …). */
     private const string DOCK_ICON_PATTERN = '/^[A-Za-z][A-Za-z0-9_-]{0,39}$/';
+
+    /** Unicode spaces and separators (the browser refuses them too, so both sides agree; audit KJ-I6). */
+    private const string UNICODE_SPACE = '/[\p{Z}]/u';
 
     /** A UX Icons name (`prefix:name`). */
     private const string UX_ICON_PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/';
@@ -82,6 +95,7 @@ final class ChatSidebar
      * @param ClockInterface $clock Clock of the mute check
      * @param IconRendererInterface|null $iconRenderer UX Icons renderer (UX icon names); null without symfony/ux-icons
      * @param string $iconSet `ux_icon` renders UX icon names; `svg_inline` never does
+     * @param LoggerInterface|null $logger Where a provider that throws is reported (it is skipped)
      */
     public function __construct(
         #[AutowireIterator(ChatSidebarSectionProviderInterface::TAG)]
@@ -94,6 +108,7 @@ final class ChatSidebar
         private readonly ClockInterface $clock = new Clock(),
         private readonly ?IconRendererInterface $iconRenderer = null,
         private readonly string $iconSet = 'ux_icon',
+        private readonly ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -104,6 +119,10 @@ final class ChatSidebar
      */
     public function hasProviders(): bool
     {
+        // The tagged iterator counts its services without creating them.
+        if (is_countable($this->providers)) {
+            return count($this->providers) > 0;
+        }
         foreach ($this->providers as $provider) {
             return true;
         }
@@ -124,7 +143,7 @@ final class ChatSidebar
         $sections = [];
         $seen     = [];
         foreach ($this->providers as $provider) {
-            foreach ($provider->sections($viewer) as $section) {
+            foreach ($this->sectionsOf($provider, $viewer) as $section) {
                 if (in_array($section->key, ChatSidebarSection::RESERVED_KEYS, true) || isset($seen[$section->key])) {
                     continue;
                 }
@@ -135,17 +154,19 @@ final class ChatSidebar
         // Stable: sections with the same position keep the providers' order.
         usort($sections, static fn (ChatSidebarSection $a, ChatSidebarSection $b): int => $a->position <=> $b->position);
         $sections = array_slice($sections, 0, self::MAX_SECTIONS);
+        // Only the rows that can be shown (first of each key, at most MAX_ITEMS per section) are looked up.
+        $rows = array_map($this->candidates(...), $sections);
 
-        $states = $this->conversationStates($viewer, $sections);
+        $states = $this->conversationStates($viewer, $rows);
         $view   = [];
-        foreach ($sections as $section) {
+        foreach ($sections as $index => $section) {
             $view[] = [
                 'key'                => $section->key,
                 'label'              => $this->clip($section->label, self::LABEL_MAX_LENGTH) ?? $section->key,
                 'position'           => $section->position,
                 'collapsible'        => $section->collapsible,
                 'collapsedByDefault' => $section->collapsible && $section->collapsedByDefault,
-                'items'              => $this->items($section, $states),
+                'items'              => $this->items($rows[$index], $states),
                 'actions'            => $this->actions($section, $origin),
             ];
         }
@@ -154,24 +175,70 @@ final class ChatSidebar
     }
 
     /**
-     * Unread, mentions and muted of every readable conversation row, in three queries.
+     * The sections of one provider; a provider that throws is logged and skipped (the others still show).
      *
-     * @param list<ChatSidebarSection> $sections
+     * @return list<ChatSidebarSection>
+     */
+    private function sectionsOf(ChatSidebarSectionProviderInterface $provider, ChatUserInterface $viewer): array
+    {
+        $sections = [];
+        try {
+            foreach ($provider->sections($viewer) as $section) {
+                $sections[] = $section;
+            }
+        } catch (Throwable $exception) {
+            $this->logger?->error('Chat sidebar provider {provider} failed: {message}', ['provider' => $provider::class, 'message' => $exception->getMessage(), 'exception' => $exception]);
+
+            return [];
+        }
+
+        return $sections;
+    }
+
+    /**
+     * The rows of a section that can be shown: the first one of each key, at most MAX_ITEMS (a later row of a key
+     * never takes the place of a dropped one).
+     *
+     * @return list<ChatSidebarItem>
+     */
+    private function candidates(ChatSidebarSection $section): array
+    {
+        $rows = [];
+        foreach ($section->items as $item) {
+            if (!isset($rows[$item->key])) {
+                $rows[$item->key] = $item;
+                if (count($rows) === self::MAX_ITEMS) {
+                    break;
+                }
+            }
+        }
+
+        return array_values($rows);
+    }
+
+    /**
+     * Unread, mentions and muted of every readable conversation row, in three queries (uuids looked up by chunks).
+     *
+     * @param list<list<ChatSidebarItem>> $sections The rows of each section
      *
      * @return array<string, array{unread: int, mentions: int, muted: bool}> uuid => state (unreadable and unknown uuids are absent)
      */
     private function conversationStates(ChatUserInterface $viewer, array $sections): array
     {
         $uuids = [];
-        foreach ($sections as $section) {
-            foreach ($section->items as $item) {
+        foreach ($sections as $rows) {
+            foreach ($rows as $item) {
                 if ($item->conversationUuid !== null) {
                     $uuids[] = $item->conversationUuid;
                 }
             }
         }
+        $found = [];
+        foreach (array_chunk(array_slice(array_values(array_unique($uuids)), 0, self::MAX_UUIDS), self::UUID_CHUNK) as $chunk) {
+            $found = [...$found, ...array_values($this->conversations->findByUuids($chunk))];
+        }
         $readable = [];
-        foreach ($this->conversations->findByUuids(array_values(array_unique($uuids))) as $conversation) {
+        foreach ($found as $conversation) {
             // Never trust the provider for what the chat then shows: the same rule as opening the conversation.
             if ($this->access->canView($conversation, $viewer)) {
                 $readable[(int) $conversation->getId()] = $conversation;
@@ -195,27 +262,18 @@ final class ChatSidebar
     }
 
     /**
+     * @param list<ChatSidebarItem> $rows The section's candidate rows
      * @param array<string, array{unread: int, mentions: int, muted: bool}> $states
      *
      * @return list<array<string, mixed>>
      */
-    private function items(ChatSidebarSection $section, array $states): array
+    private function items(array $rows, array $states): array
     {
         $items = [];
-        $keys  = [];
-        foreach ($section->items as $item) {
-            if (isset($keys[$item->key])) {
-                continue;
-            }
-            // The first row of a key decides, even when it is left out (a later one never takes its place).
-            $keys[$item->key] = true;
-            $row              = $this->item($item, $states);
-            if ($row === null) {
-                continue;
-            }
-            $items[] = $row;
-            if (count($items) === self::MAX_ITEMS) {
-                break;
+        foreach ($rows as $item) {
+            $row = $this->item($item, $states);
+            if ($row !== null) {
+                $items[] = $row;
             }
         }
 
@@ -304,7 +362,7 @@ final class ChatSidebar
      */
     private function linkUrl(?string $url): ?string
     {
-        return is_string($url) && preg_match(Configuration::CHANNELS_URL_PATTERN, $url) === 1 ? $url : null;
+        return is_string($url) && preg_match(Configuration::CHANNELS_URL_PATTERN, $url) === 1 && preg_match(self::UNICODE_SPACE, $url) !== 1 ? $url : null;
     }
 
     /**
@@ -312,7 +370,7 @@ final class ChatSidebar
      */
     private function dialogUrl(?string $url, string $origin): ?string
     {
-        if (!is_string($url) || preg_match(Configuration::CHANNELS_URL_PATTERN, $url) !== 1) {
+        if (!is_string($url) || $this->linkUrl($url) === null) {
             return null;
         }
         if ($url[0] === '/') {

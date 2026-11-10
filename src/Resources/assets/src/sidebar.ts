@@ -63,6 +63,9 @@ interface DrawnSection {
   recent: boolean;
 }
 
+/** Serial of the list ids (unique in the document, whatever the keys). */
+let serial = 0;
+
 /** Follows a URL (separate so tests can observe it). */
 export const navigation = {
   assign(url: string): void {
@@ -370,7 +373,9 @@ export class ChatSidebarView {
     element.setAttribute('data-testid', `chat-sidebar-section-${section.key}`);
     const collapsed = section.collapsible && (this.prefs.collapsed[section.key] ?? section.collapsedByDefault);
     const items = part(element, 'items');
-    const listId = `nowo-chat-sidebar-${section.key.replace(/[^a-z0-9_-]/g, '-')}`;
+    // Audit KJ-I7: an id by position (keys such as `a.b` and `a-b` would meet in a mapped one).
+    serial += 1;
+    const listId = `nowo-chat-sidebar-list-${serial}`;
     items.id = listId;
     items.setAttribute('aria-label', section.label);
     items.replaceChildren(...section.rows);
@@ -384,7 +389,7 @@ export class ChatSidebarView {
       text(toggle, 'label', section.label);
       toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
       toggle.setAttribute('aria-controls', listId);
-      toggle.dataset.navKey = `section:${section.key}`;
+      toggle.dataset.navKey = `section/${section.key}`;
       setBadge(part(toggle, 'badge'), collapsed ? section.unread : 0, t(i18n, 'unread', { count: section.unread }));
       toggle.addEventListener('click', () => this.setCollapsed(element, section, !collapsed));
     } else {
@@ -399,7 +404,7 @@ export class ChatSidebarView {
       modes.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((button) => {
         const mode = button.dataset.mode === 'unread' ? 'unread' : 'recent';
         button.setAttribute('aria-pressed', mode === this.prefs.mode ? 'true' : 'false');
-        button.dataset.navKey = `mode:${mode}`;
+        button.dataset.navKey = `mode/${mode}`;
         button.addEventListener('click', () => {
           this.prefs.mode = mode;
           this.savePrefs();
@@ -424,7 +429,7 @@ export class ChatSidebarView {
   private setCollapsed(element: HTMLElement, section: DrawnSection, collapsed: boolean): void {
     this.prefs.collapsed[section.key] = collapsed;
     this.savePrefs();
-    this.focusKey = `section:${section.key}`;
+    this.focusKey = `section/${section.key}`;
     this.rerender(element);
   }
 
@@ -456,7 +461,7 @@ export class ChatSidebarView {
    * @returns The option.
    */
   private conversationRow(section: string, summary: ConversationSummary): HTMLElement {
-    const row = this.itemElement(`${section}-${summary.uuid}`, summary.title, summary.unread, isMuted(summary), 0, summary.uuid);
+    const row = this.itemElement(section, summary.uuid, summary.title, summary.unread, isMuted(summary), 0, summary.uuid);
     part(row, 'icon').replaceChildren(this.host.templates.avatar(summary.initials, summary.kind, 'sm', summary.peerOnline, summary.kind === 'direct' ? summary.peerStatus : undefined, summary.avatarUrl));
     row.title = summary.subtitle;
     row.addEventListener('click', () => this.host.openConversation(summary.uuid));
@@ -479,7 +484,7 @@ export class ChatSidebarView {
    * @returns The option.
    */
   private hostRow(section: string, item: SidebarItem, unread: number, muted: boolean): HTMLElement {
-    const row = this.itemElement(`${section}-${item.key}`, item.label, unread, muted, item.mentions, item.conversationUuid);
+    const row = this.itemElement(section, item.key, item.label, unread, muted, item.mentions, item.conversationUuid);
     part(row, 'icon').replaceChildren(this.iconOf(item.icon ?? 'channel', item.iconSvg));
     if (item.subtitle !== null && item.subtitle !== '') {
       row.title = item.subtitle;
@@ -498,7 +503,8 @@ export class ChatSidebarView {
   /**
    * The shared part of every row.
    *
-   * @param key Unique key in the sidebar (data-testid `chat-sidebar-item-<key>`).
+   * @param section Section key.
+   * @param key Row key in the section (data-testid `chat-sidebar-item-<section>-<key>`; the focus key uses `/`, outside the key alphabet).
    * @param label Row text.
    * @param unread Unread count.
    * @param muted Muted look.
@@ -506,11 +512,11 @@ export class ChatSidebarView {
    * @param uuid Conversation shown by the row (the page's current one is selected).
    * @returns The option.
    */
-  private itemElement(key: string, label: string, unread: number, muted: boolean, mentions: number, uuid: string | null): HTMLElement {
+  private itemElement(section: string, key: string, label: string, unread: number, muted: boolean, mentions: number, uuid: string | null): HTMLElement {
     const i18n = this.host.config.i18n;
     const row = this.host.templates.clone('sidebar-item');
-    row.setAttribute('data-testid', `chat-sidebar-item-${key}`);
-    row.dataset.navKey = `item:${key}`;
+    row.setAttribute('data-testid', `chat-sidebar-item-${section}-${key}`);
+    row.dataset.navKey = `item/${section}/${key}`;
     if (uuid !== null) {
       row.dataset.uuid = uuid;
     }
@@ -544,7 +550,7 @@ export class ChatSidebarView {
     const link = this.host.templates.clone<HTMLAnchorElement>('sidebar-action');
     link.href = href;
     link.setAttribute('data-testid', `chat-sidebar-action-${section}-${action.key}`);
-    link.dataset.navKey = `action:${section}:${action.key}`;
+    link.dataset.navKey = `action/${section}/${action.key}`;
     text(link, 'label', action.label);
     const icon = part(link, 'icon');
     if (action.icon === null && action.iconSvg === undefined) {
