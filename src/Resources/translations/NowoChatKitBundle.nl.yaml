@@ -231,6 +231,15 @@ chat:
   channel: 'Kanaal'
   # 1.24: channels (Beacon spec 184): browse link, read-only notice, mute.
   browse_channels: 'Kanalen bekijken of aanmaken'
+  # 1.25: the grouped sidebar.
+  sidebar_recent: 'Recent'
+  sidebar_unread: 'Ongelezen'
+  sidebar_show: 'Toon'
+  sidebar_conversations: 'Directe berichten en groepen'
+  sidebar_empty: 'Nog geen gesprekken.'
+  sidebar_no_unread: 'Je bent helemaal bij.'
+  sidebar_muted: 'Gedempt'
+  sidebar_mentions: 'Ongelezen vermeldingen: %count%'
   channel_read_only: 'Dit kanaal is alleen-lezen.'
   mute: 'Gesprek dempen'
   unmute: 'Dempen opheffen'

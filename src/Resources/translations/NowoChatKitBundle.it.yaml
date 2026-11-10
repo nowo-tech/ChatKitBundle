@@ -231,6 +231,15 @@ chat:
   channel: 'Canale'
   # 1.24: channels (Beacon spec 184): browse link, read-only notice, mute.
   browse_channels: 'Sfoglia o crea canali'
+  # 1.25: the grouped sidebar.
+  sidebar_recent: 'Recenti'
+  sidebar_unread: 'Non letti'
+  sidebar_show: 'Mostra'
+  sidebar_conversations: 'Messaggi diretti e gruppi'
+  sidebar_empty: 'Ancora nessuna conversazione.'
+  sidebar_no_unread: 'Sei in pari.'
+  sidebar_muted: 'Silenziato'
+  sidebar_mentions: 'Menzioni non lette: %count%'
   channel_read_only: 'Questo canale è di sola lettura.'
   mute: 'Silenzia conversazione'
   unmute: 'Riattiva le notifiche'

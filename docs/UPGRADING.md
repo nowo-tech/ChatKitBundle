@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [Target 1.25.0: sidebar sections](#target-1250-sidebar-sections)
 - [To 1.24.0](#to-1240)
   - [Chat room channels (Symfony Beacon spec 184)](#chat-room-channels-symfony-beacon-spec-184)
   - [DDD / hexagonal ports](#ddd--hexagonal-ports)
@@ -56,6 +57,40 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+### Target 1.25.0: sidebar sections
+
+From **1.24.x**: `composer update nowo-tech/chat-kit-bundle`. Additive; no schema change, no migration.
+
+- **Requirement:** `nowo-tech/ui-kit-bundle` **^2.33.1** (was ^2.2). The sidebar's action dialogs are UiKit remote form
+  dialogs (`remote_form_dialog` partial, multi-step answers and the shared fragment filter of 2.33.1). A host on an
+  older UiKit gets a Composer conflict and must upgrade UiKit too; read UiKit's UPGRADING from your version, in
+  particular **2.28** (every dialog announces `nowo:overlay-open` / `-close`, and drawers make the shell `inert`).
+- **Behaviour unchanged by default.** Without a `ChatSidebarSectionProviderInterface` service and with
+  `web_ui.dock.sidebar_sections` and `web_ui.page.open_recent` off (their defaults), the dock configuration keys and the
+  behaviour are the 1.24 ones: no `sidebar` / `openRecent` keys, no dialogs, the flat list with its filters. The markup
+  is not byte-identical: `_templates.html.twig` always prints the three new inert `<template>`s (block
+  `nowo_chat_template_sidebar`), and the `i18n` strings of the dock configuration carry the 8 new `chat.sidebar_*`
+  keys.
+- **Deliberate layout change once a section provider exists:** the full-page chat (page mode) shows the grouped,
+  collapsible sidebar instead of the flat list under **All** without a search: **Recent** (toggle **Unread**), your
+  sections, **Direct messages and groups** (every listed conversation none of your sections shows), compact Slack-style
+  rows (icon or avatar, name, muted, `@`, unread count) instead of the two-line rows with preview and time, and a wider
+  list column (`minmax(280px, 380px)` instead of `minmax(260px, 340px)`). The other filters (Unread, Projects, Support,
+  Closed) and the search still list flat, exactly as before. The floating dock keeps the 1.24 list unless you set
+  `web_ui.dock.sidebar_sections: true`.
+- **Templates:** `_templates.html.twig` gains the block `nowo_chat_template_sidebar` (templates `sidebar-section`,
+  `sidebar-item`, `sidebar-action`) and `dock.html.twig` the block `nowo_chat_sidebar_dialogs` (the two dialogs). A
+  host that copied `_templates.html.twig` whole keeps the flat list (the script needs `sidebar-section`); one that
+  extends it and overrides blocks gets them.
+- **Icons:** `nowo_chat_kit.icons` gains `lock` (`tabler:lock`) and `plus` (`tabler:plus`). With `icon_set: ux_icon`
+  and a local icon set, add them (or the built-in SVG is used).
+- **Browser storage:** folded sections and the Recent / Unread choice are kept per viewer in `localStorage`
+  (`nowo-chat-sidebar:<public id>`), cleared with the other chat keys on logout; unavailable storage only means they
+  are not remembered.
+- **Beacon:** register your Channels section as a provider (see [USAGE](USAGE.md#sidebar-sections-125)); the
+  temporary `/dashboard/chat/channels` tabs (`chat/layout.html.twig`) can then go. "Browse channels" and "Create
+  channel" are two `ChatSidebarAction`s with a `dialogUrl` served by your `RemoteDialogResponder` controllers.
 
 ## To 1.24.0
 

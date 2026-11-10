@@ -35,6 +35,7 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Nowo\ChatKitBundle\Service\ChatMentions;
 use Nowo\ChatKitBundle\Service\ChatService;
+use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
 use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
@@ -164,7 +165,13 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$autoAwayMinutes', param('nowo_chat_kit.auto_away_minutes'))
         ->arg('$statusPresets', param('nowo_chat_kit.status_presets'))
         ->arg('$dock', param('nowo_chat_kit.dock'))
-        ->arg('$channelsUrl', param('nowo_chat_kit.web_ui.channels_url'));
+        ->arg('$channelsUrl', param('nowo_chat_kit.web_ui.channels_url'))
+        ->arg('$openRecent', param('nowo_chat_kit.web_ui.page.open_recent'))
+        ->arg('$dockSidebar', param('nowo_chat_kit.web_ui.dock.sidebar_sections'));
+    // 1.25: the host sections of the sidebar (UX icon names rendered with the dock's icon set).
+    $services->get(ChatSidebar::class)
+        ->arg('$iconRenderer', service(IconRendererInterface::class)->nullOnInvalid())
+        ->arg('$iconSet', param('nowo_chat_kit.icon_set'));
     $services->get(ChatPurgeCommand::class)
         ->arg('$retentionDays', param('nowo_chat_kit.retention_days'));
 };

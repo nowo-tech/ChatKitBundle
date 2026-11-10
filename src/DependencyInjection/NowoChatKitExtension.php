@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\DependencyInjection;
 
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatReferenceProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatSidebarSectionProviderInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
@@ -160,6 +161,8 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
 
         // #references: every application service implementing the contract is a provider.
         $container->registerForAutoconfiguration(ChatReferenceProviderInterface::class)->addTag(ChatReferenceProviderInterface::TAG);
+        // 1.25: sidebar sections, likewise (priority through #[AsTaggedItem] or the tag's `priority`).
+        $container->registerForAutoconfiguration(ChatSidebarSectionProviderInterface::class)->addTag(ChatSidebarSectionProviderInterface::TAG);
 
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.php');
@@ -190,6 +193,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.web_ui.assets', $profile['web_ui']['assets']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.channels_url', $profile['web_ui']['channels_url']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.page.full_height', $profile['web_ui']['page']['full_height']);
+        // 1.25: the sidebar.
+        $container->setParameter(Configuration::ALIAS . '.web_ui.page.open_recent', $profile['web_ui']['page']['open_recent']);
+        $container->setParameter(Configuration::ALIAS . '.web_ui.dock.sidebar_sections', $profile['web_ui']['dock']['sidebar_sections']);
     }
 
     /**

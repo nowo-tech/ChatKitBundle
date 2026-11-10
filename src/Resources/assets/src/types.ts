@@ -311,7 +311,63 @@ export interface ChatConfig {
   dock?: { overlay?: DockOverlayMode; watchAriaModal?: boolean };
   /** 1.19: pinned links and the links panel (absent or `enabled: false`: no links UI). */
   links?: LinksSettings;
+  /** 1.25: the full-page chat opens the most recent conversation (`web_ui.page.open_recent`; absent = no). */
+  openRecent?: boolean;
+  /** 1.25: the grouped sidebar (absent: the 1.24 list everywhere). */
+  sidebar?: SidebarSettings;
   i18n: Record<string, string>;
+}
+
+/** 1.25: the `sidebar` section of the dock configuration. */
+export interface SidebarSettings {
+  /** The full-page chat shows the grouped list. */
+  page: boolean;
+  /** The floating dock shows it too (`web_ui.dock.sidebar_sections`). */
+  dock: boolean;
+  /** `GET` the host sections; null without a section provider. */
+  endpoint: string | null;
+  /** Ids of the UiKit remote form dialogs of the actions, by size. */
+  dialogs: Record<SidebarDialogSize, string>;
+}
+
+export type SidebarDialogSize = 'md' | 'wide';
+
+/** 1.25: a host section of the sidebar (ChatSidebarSectionProviderInterface). */
+export interface SidebarSection {
+  key: string;
+  label: string;
+  position: number;
+  collapsible: boolean;
+  collapsedByDefault: boolean;
+  items: SidebarItem[];
+  actions: SidebarAction[];
+}
+
+/** 1.25: a row of a host section: a conversation (counts from the chat) or a link. */
+export interface SidebarItem {
+  key: string;
+  label: string;
+  subtitle: string | null;
+  /** `channel`, `private` or a dock icon name; with `iconSvg`, the name used when the SVG cannot be shown. */
+  icon: string | null;
+  /** A UX Icons SVG rendered by the server (sanitised again before it is inserted). */
+  iconSvg?: string;
+  conversationUuid: string | null;
+  url: string | null;
+  unread: number;
+  mentions: number;
+  muted: boolean;
+}
+
+/** 1.25: an action of a host section: a link, or a same-origin fragment shown in a UiKit dialog. */
+export interface SidebarAction {
+  key: string;
+  label: string;
+  icon: string | null;
+  iconSvg?: string;
+  url: string | null;
+  dialogUrl: string | null;
+  dialogSize: SidebarDialogSize;
 }
 
 /** A link provider of the configuration (Teams, Meet, Zoom …): the hosts it matches (and their subdomains). */

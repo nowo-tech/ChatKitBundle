@@ -53,6 +53,26 @@ class ChatConversationRepository extends ServiceEntityRepository
     }
 
     /**
+     * 1.25: the conversations of these public uuids in one query (the sidebar's host items); unknown uuids are left out.
+     *
+     * @param list<string> $uuids Public conversation ids
+     *
+     * @return array<string, ChatConversation> uuid => conversation
+     */
+    public function findByUuids(array $uuids): array
+    {
+        if ($uuids === []) {
+            return [];
+        }
+        $byUuid = [];
+        foreach ($this->findBy(['uuid' => $uuids]) as $conversation) {
+            $byUuid[$conversation->getUuid()] = $conversation;
+        }
+
+        return $byUuid;
+    }
+
+    /**
      * Finds the direct conversation between two users (order does not matter).
      *
      * @param ChatUserInterface $a One person

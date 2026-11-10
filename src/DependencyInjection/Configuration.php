@@ -86,6 +86,9 @@ final class Configuration implements ConfigurationInterface
         // 1.24: mute / unmute a conversation.
         'bell'    => 'tabler:bell',
         'bellOff' => 'tabler:bell-off',
+        // 1.25: sidebar rows of private channels and the "add" actions.
+        'lock' => 'tabler:lock',
+        'plus' => 'tabler:plus',
     ];
 
     /**
@@ -281,6 +284,20 @@ final class Configuration implements ConfigurationInterface
                                         ->children()
                                             ->booleanNode('full_height')
                                                 ->info('1.21: true = the chat page fills the host content area (class nowo-chat-page--fill).')
+                                                ->defaultFalse()
+                                            ->end()
+                                            ->booleanNode('open_recent')
+                                                ->info('1.25: true = /chat (no conversation in the address) opens the most recent conversation beside the list on wide screens; false (default) = "Pick a conversation". Needs JavaScript.')
+                                                ->defaultFalse()
+                                            ->end()
+                                        ->end()
+                                    ->end()
+                                    ->arrayNode('dock')
+                                        ->info('1.25: the floating dock\'s conversation list.')
+                                        ->addDefaultsIfNotSet()
+                                        ->children()
+                                            ->booleanNode('sidebar_sections')
+                                                ->info('1.25: true = the dock lists conversations in the grouped sidebar of the full-page chat (Recent / Unread, the host sections of ChatSidebarSectionProviderInterface, Direct messages and groups); false (default) = the 1.24 list.')
                                                 ->defaultFalse()
                                             ->end()
                                         ->end()
