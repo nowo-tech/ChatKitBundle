@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.26.2] - 2026-11-11](#1262---2026-11-11)
 - [[1.26.1] - 2026-11-11](#1261---2026-11-11)
 - [[1.26.0] - 2026-11-10](#1260---2026-11-10)
 - [[1.25.1] - 2026-11-10](#1251---2026-11-10)
@@ -60,8 +61,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.26.2] - 2026-11-11
+
 Follow-ups of the 1.26.1 audit (LN): edits and deletions made while the realtime connection was down now show after
-the reconnection, and two edge cases of the cache paint and the inline editor are closed. Target: 1.26.2 (patch).
+the reconnection, and two edge cases of the cache paint and the inline editor are closed. Audit: Appendix LP and Delta LP, Pass.
 
 ### Fixed
 
@@ -103,7 +106,6 @@ the reconnection, and two edge cases of the cache paint and the inline editor ar
 ## [1.26.1] - 2026-11-11
 
 Open dock windows and the page-mode thread catch up after a realtime drop or a missed event, without duplicates or losing an edit in progress. See [UPGRADING](https://github.com/nowo-tech/ChatKitBundle/blob/v1.26.1/docs/UPGRADING.md#to-1261).
-
 
 ### Fixed
 
@@ -1257,7 +1259,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.26.1...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.26.2...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
