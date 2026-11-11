@@ -13,7 +13,8 @@ use Symfony\Contracts\Service\ResetInterface;
 
 /**
  * Loads per-user chat settings, falling back to unsaved defaults. `forUser()` is memoized per user id until
- * `reset()` (tag `kernel.reset`, so a FrankenPHP worker / Messenger consumer never carries it to the next request):
+ * `reset()`, called at every request / command / message boundary by ChatRequestBoundaryListener (1.26.3) and on
+ * `kernel.reset`, so a FrankenPHP worker with kernel reset false never carries it to the next request:
  * per-row checks such as the API's presence visibility read the table once per request, not once per row.
  *
  * @extends ServiceEntityRepository<ChatUserSettings>

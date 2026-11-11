@@ -38,6 +38,7 @@ use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
 use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
+use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -92,6 +93,10 @@ return static function (ContainerConfigurator $container): void {
     $services->get(UserReferenceListener::class)
         ->arg('$access', service_closure(ChatAccess::class))
         ->arg('$secret', param('kernel.secret'));
+    // 1.26.3 (REQ-RUNTIME-002): the memos are cleared at every request / command / message boundary, not only by
+    // `kernel.reset` (FrankenPHP worker with FRANKENPHP_RESET_KERNEL=false). The id-mode listener may be removed.
+    $services->get(ChatRequestBoundaryListener::class)
+        ->arg('$userReferences', service(UserReferenceListener::class)->nullOnInvalid());
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).
     $services->alias(ChatServiceInterface::class, ChatService::class);

@@ -30,7 +30,8 @@ use const PREG_SET_ORDER;
  * conversation's audience may open (ChatReferenceScope); on send and edit a token is kept only when its provider
  * resolves it for that audience, anything else is stored as plain text. Reading: the stored HTML holds an empty
  * slot per token (no type, id or title); each slot is filled for the viewer at read time — a card, or the neutral
- * "Content not visible" chip. Resolutions are cached per viewer for the current request (reset between requests).
+ * "Content not visible" chip. Resolutions are cached per viewer for the current request, emptied at every request boundary
+ * (ChatRequestBoundaryListener) and by `kernel.reset`.
  */
 final class ChatReferences implements ResetInterface
 {

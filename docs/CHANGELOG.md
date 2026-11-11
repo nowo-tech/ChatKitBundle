@@ -61,6 +61,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Next version: **1.26.3** (patch).
+
+### Security
+
+- **A revoked reference kept its card inside a FrankenPHP worker with the kernel not reset** (REQ-RUNTIME-002;
+  affects 1.9.0 to 1.26.2). `ChatReferences` memoises, per viewer, the reference cards a viewer may open (the
+  access-filtered result of the application's `ChatReferenceProviderInterface::resolve()`). The memo was emptied only by
+  `kernel.reset`. With `FRANKENPHP_RESET_KERNEL=false` (no `services_resetter` between requests), once the
+  application revoked a person's access to an item (or deleted it), that worker kept showing them the item's title,
+  subtitle, badge and URL in every message that references it, until the worker restarted. The memo also grew with
+  every viewer. A new `ChatRequestBoundaryListener` (registered by the bundle, nothing to wire) now empties the
+  bundle's memos at the main `kernel.request` (before the firewall), `kernel.terminate`, `console.terminate` and the
+  Messenger `WorkerMessageHandledEvent` / `WorkerMessageFailedEvent`, in addition to `kernel.reset`: the reference cards
+  of `ChatReferences`, the avatar URLs of `ChatAvatars` (a changed or removed picture stayed, since 1.16.0), the
+  managed settings rows of `ChatUserSettingsRepository` (since 1.5.1) and the resolved-entity map of
+  `UserReferenceListener` (`doctrine.user_reference: id`). Sub-requests keep their main request's memos. Regression
+  tests: `ChatWorkerAccessMemoTest` (one kernel, `http_kernel` called directly with no services resetter: Luis is
+  served a card, his grant is deleted with SQL, the next request shows the "Content not visible" chip; then 200 rounds
+  of two people in turn while Luis is granted and revoked every round and Ana's picture changes) and
+  `ChatRequestBoundaryListenerTest` (every boundary empties every memo; a sub-request does not).
+
 ## [1.26.2] - 2026-11-11
 
 Follow-ups of the 1.26.1 audit (LN): edits and deletions made while the realtime connection was down now show after
