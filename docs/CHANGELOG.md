@@ -70,9 +70,12 @@ the reconnection, and two edge cases of the cache paint and the inline editor ar
   newer messages: a change to a line already shown stayed stale until the window was reopened. After a reconnection (or
   a replaced connection) each open window and the full-page thread now also reads again the pages it shows (the newest
   page, then `?before=` pages back to the oldest line shown, at most 10 per pass) and applies what changed on those
-  lines in place; lines it does not hold are never added that way, and unchanged lines are not repainted. One re-read
-  runs per window at a time; a 429 pauses it (and the catch-up) for `Retry-After`. The 60 s safety-net tick does not
-  re-read (one extra request per open window per reconnection only).
+  lines in place; lines it does not hold are never added that way, and unchanged lines are not repainted. A page copy
+  never undoes a newer state shown: a deletion stays deleted, and a line changed live while the re-read is on its way
+  (an edit, a deletion, a reaction or a pin, the viewer's own included) keeps that change (audit LP-L1). One re-read
+  runs per window at a time, at most one every 30 s per window (a flapping connection reopens often, audit LP-I3); a
+  429 pauses it (and the catch-up) for `Retry-After`. The 60 s safety-net tick does not re-read. Cost per reconnection:
+  one extra request per open window showing up to 30 lines, plus one per older page shown (up to 10 in all).
 - **A cache paint no longer keeps a hole of more than one page** (audit LN-D2-I1). After a paint from the per-tab
   cache the server's newest page was merged with the cache whenever it started at or before the cache's newest id, so
   a cache holding a live message beyond a gap longer than one page (`[1, 2, 3, 50]` against the page `[48, 49, 50]`)
@@ -84,6 +87,8 @@ the reconnection, and two edge cases of the cache paint and the inline editor ar
 
 ### Tests
 
+- Vitest: audit probes LP-1 / LP-2 (a live deletion or edit during the re-read is kept), the viewer's own reaction
+  and pin and a merge from another tab during the re-read, the 30 s re-read cooldown.
 - Vitest: the cache case of probe P5 (`[1, 2, 3, 50]` / `[48, 49, 50]`), the editor of a line deleted in a full
   repaint, and the re-read after a reconnection (edit, deletion, reaction and a missed message each shown once; older
   pages shown; the 10-page cap; one re-read per window; 429 pause; no re-read on the 60 s tick).
@@ -93,7 +98,7 @@ the reconnection, and two edge cases of the cache paint and the inline editor ar
 ### CI
 
 - The CI workflow runs the demo's realtime resync spec (`make -C demo/symfony8 test-e2e-resync`, Chromium) on every
-  push and pull request (audit LN-I4); the full e2e suite stays in the Demo smoke workflow.
+  push and pull request (audit LN-I4); the full e2e suite stays in the Demo smoke workflow; the job has `permissions: contents: read` (audit LP-I4).
 
 ## [1.26.1] - 2026-11-11
 

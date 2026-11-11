@@ -2099,14 +2099,16 @@ describe('ChatDock', () => {
         const reread = api.messages.mock.calls.filter(([, cursor]) => cursor?.after === undefined);
         expect(reread).toHaveLength(10);
 
-        // Two resyncs at once share one re-read.
+        // Two resyncs at once share one re-read (after the 30 s cooldown, audit LP-I3).
         paged(threads, 30);
+        vi.advanceTimersByTime(30_000);
         api.messages.mockClear();
         await Promise.all([view?.resync(), view?.resync()]);
         expect(api.messages.mock.calls.filter(([, cursor]) => cursor === undefined)).toHaveLength(1);
 
         // A 429 on the re-read pauses both the re-read and the catch-up.
         const { ChatApiError } = await import('../src/api');
+        vi.advanceTimersByTime(30_000);
         api.messages.mockClear();
         api.messages
           .mockResolvedValueOnce(page([]))
@@ -2119,6 +2121,7 @@ describe('ChatDock', () => {
         await view?.resync();
         expect(api.messages).toHaveBeenCalledTimes(2);
         // Another failure is passed on as it is.
+        vi.advanceTimersByTime(30_000);
         api.messages.mockResolvedValueOnce(page([])).mockRejectedValueOnce(new Error('offline'));
         await expect(view?.resync()).rejects.toThrow('offline');
       });

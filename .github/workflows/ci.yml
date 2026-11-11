@@ -394,6 +394,8 @@ jobs:
   resync-e2e:
     name: Realtime resync e2e (demo)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     timeout-minutes: 30
     steps:
       - name: Checkout code
