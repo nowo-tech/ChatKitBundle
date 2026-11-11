@@ -8,6 +8,8 @@ export class ChatApiError extends Error {
   readonly code: string;
   /** Text for the person from the JSON body (`message`), when the server gave one; printed as text, never as HTML. */
   readonly reason: string;
+  /** 1.26.1: seconds from the `Retry-After` header (a 429), or null without a usable one. */
+  readonly retryAfter: number | null;
 
   /**
    * Creates the error; its message is the error code.
@@ -15,12 +17,14 @@ export class ChatApiError extends Error {
    * @param status HTTP status of the response (401, 403, 422, 429…).
    * @param code Machine-readable error code from the JSON body (`error`), or "error" when it has none.
    * @param reason Text for the person from the JSON body (`message`).
+   * @param retryAfter Seconds from the `Retry-After` header, or null.
    */
-  constructor(status: number, code: string, reason = '') {
+  constructor(status: number, code: string, reason = '', retryAfter: number | null = null) {
     super(code);
     this.status = status;
     this.code = code;
     this.reason = reason;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -739,7 +743,9 @@ export class ChatApi {
       const code =
         typeof payload === 'object' && payload !== null && 'error' in payload ? String(payload.error) : 'error';
       const reason = typeof payload === 'object' && payload !== null && 'message' in payload && typeof payload.message === 'string' ? payload.message : '';
-      throw new ChatApiError(response.status, code, reason);
+      // Retry-After in seconds when a host or proxy sends it (an HTTP date counts as unknown).
+      const retry = Number(response.headers?.get('Retry-After') ?? '');
+      throw new ChatApiError(response.status, code, reason, Number.isFinite(retry) && retry > 0 ? retry : null);
     }
     return payload as T;
   }

@@ -341,7 +341,13 @@ describe('chat api client', () => {
 
   it('raises a typed error with the server code, or "error" without a body', async () => {
     vi.stubGlobal('fetch', respond({ error: 'rate_limited' }, false, 429));
-    await expect(new ChatApi(config).send('c', 'x')).rejects.toMatchObject({ status: 429, code: 'rate_limited' });
+    await expect(new ChatApi(config).send('c', 'x')).rejects.toMatchObject({ status: 429, code: 'rate_limited', retryAfter: null });
+    // 1.26.1: Retry-After in seconds is kept for the catch-up backoff; an HTTP date or garbage is not.
+    const limited = (value: string) => vi.fn().mockResolvedValue({ ok: false, status: 429, headers: new Headers({ 'Retry-After': value }), json: () => Promise.resolve({ error: 'rate_limited' }) });
+    vi.stubGlobal('fetch', limited('12'));
+    await expect(new ChatApi(config).messages('c', { after: 3 })).rejects.toMatchObject({ status: 429, retryAfter: 12 });
+    vi.stubGlobal('fetch', limited('Wed, 21 Oct 2026 07:28:00 GMT'));
+    await expect(new ChatApi(config).messages('c', { after: 3 })).rejects.toMatchObject({ status: 429, retryAfter: null });
     vi.stubGlobal('fetch', respond(new Error('no json'), false, 500));
     const error = await new ChatApi(config).conversations().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ChatApiError);

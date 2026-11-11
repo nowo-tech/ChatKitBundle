@@ -26,7 +26,7 @@ const api = {
   linkPreviews: vi.fn(),
   message: vi.fn(),
 };
-let realtimeHandlers: { onEvent: (event: RealtimeEvent) => void; onState: (connected: boolean) => void } | null = null;
+let realtimeHandlers: { onEvent: (event: RealtimeEvent) => void; onState: (connected: boolean) => void; onResumed: (() => void) | null } | null = null;
 let apiHooks: { onCsrfRejected?: () => void } = {};
 const playOnce = vi.fn();
 
@@ -44,8 +44,8 @@ vi.mock('../src/api', async (importOriginal) => {
 });
 vi.mock('../src/realtime', () => ({
   ChatRealtime: class {
-    constructor(_api: unknown, onEvent: (event: RealtimeEvent) => void, onState: (connected: boolean) => void) {
-      realtimeHandlers = { onEvent, onState };
+    constructor(_api: unknown, onEvent: (event: RealtimeEvent) => void, onState: (connected: boolean) => void, onResumed: (() => void) | null = null) {
+      realtimeHandlers = { onEvent, onState, onResumed };
     }
     connect = vi.fn().mockResolvedValue(undefined);
     stop = vi.fn();
@@ -1563,6 +1563,439 @@ describe('ChatDock', () => {
       });
       expect((dock as unknown as { modalOutside(): boolean }).modalOutside()).toBe(false);
       expect(root.hasAttribute('data-overlay')).toBe(false);
+    });
+  });
+  describe('1.26.1: open windows catch up after a dropped live connection', () => {
+    const page = (messages: ChatMessage[], hasMore = false) => ({ messages, hasMore, readUpTo: null, readers: [] });
+    /** Lines of message `id` in the windows (never more than one). */
+    const shown = (root: HTMLElement, id: number) => root.querySelectorAll(`.nowo-chat-window [data-id="${id}"]`).length;
+    /** Lets every pending promise chain (list, sections, catch-up pages) settle. */
+    const settle = async (): Promise<void> => {
+      for (let i = 0; i < 40; i += 1) {
+        await Promise.resolve();
+      }
+    };
+    /** `?after=` answers per conversation: what arrived after the given id. */
+    const server = (threads: Record<string, ChatMessage[]>) =>
+      api.messages.mockImplementation((uuid: string, cursor: { after?: number } = {}) =>
+        Promise.resolve(page((threads[uuid] ?? []).filter((item) => item.id > (cursor.after ?? 0)))),
+      );
+    const afterCalls = (uuid: string) => api.messages.mock.calls.filter(([id, cursor]) => id === uuid && cursor?.after !== undefined);
+
+    it('shows the message a window missed while the connection was down, exactly once, and reads it', async () => {
+      // Same second as the message shown: the list time does not change (DATE_ATOM), only the message id does.
+      const first = message({ createdAt: '2026-10-15T10:00:00Z' });
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root, q } = mount([summary('a', { lastMessageId: first.id })]);
+      await dock.start();
+      await dock.open(summary('a', { lastMessageId: first.id }));
+      await settle();
+      expect(shown(root, first.id)).toBe(1);
+      realtimeHandlers?.onState(true);
+      realtimeHandlers?.onState(false);
+      expect(q('.nowo-chat-status').textContent).toBe('reconnecting');
+
+      const missed = message({ createdAt: '2026-10-15T10:00:00Z', html: '<p>missed</p>' });
+      threads.a = [first, missed];
+      api.conversations.mockResolvedValue({ conversations: [summary('a', { unread: 1, lastMessageId: missed.id })], unreadTotal: 1 });
+      api.markRead.mockClear();
+      realtimeHandlers?.onState(true);
+      await settle();
+      expect(q('.nowo-chat-status').textContent).toBe('reconnected');
+      expect(api.messages).toHaveBeenCalledWith('a', { after: first.id });
+      expect(shown(root, missed.id)).toBe(1);
+      expect(q(`.nowo-chat-window [data-id="${missed.id}"]`).textContent).toContain('missed');
+      // Seen at the bottom of a visible window: read, as a live message would be.
+      expect(api.markRead).toHaveBeenLastCalledWith('a', missed.id);
+
+      // The late realtime event and the next ticks never add it twice.
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: missed });
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(shown(root, missed.id)).toBe(1);
+      expect(root.querySelectorAll('.nowo-chat-window .nowo-chat-msg[data-id]')).toHaveLength(2);
+    });
+
+    it('catches up every open window (minimised included) without counting a missed message twice', async () => {
+      const a1 = message();
+      const b1 = message();
+      const c1 = message();
+      const threads: Record<string, ChatMessage[]> = { a: [a1], b: [b1], c: [c1] };
+      server(threads);
+      const { dock, root } = mount([summary('a'), summary('b'), summary('c')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await dock.open(summary('b'));
+      await dock.open(summary('c'));
+      await settle();
+      dock.minimise('b', true);
+      realtimeHandlers?.onState(true);
+      realtimeHandlers?.onState(false);
+
+      const a2 = message({ html: '<p>to a</p>' });
+      const a3 = message({ html: '<p>again a</p>' });
+      const b2 = message({ html: '<p>to b</p>' });
+      threads.a = [a1, a2, a3];
+      threads.b = [b1, b2];
+      // An older server: no lastMessageId and an unchanged list time. Reconnecting catches up anyway.
+      api.conversations.mockResolvedValue({ conversations: [summary('a', { unread: 2 }), summary('b', { unread: 1, lastMessageId: b2.id }), summary('c')], unreadTotal: 3 });
+      realtimeHandlers?.onState(true);
+      await settle();
+      for (const id of [a1.id, a2.id, a3.id, b1.id, b2.id, c1.id]) {
+        expect(shown(root, id), `message ${id}`).toBe(1);
+      }
+      expect(afterCalls('a')).toHaveLength(1);
+      expect(afterCalls('b')).toHaveLength(1);
+      expect(afterCalls('c')).toHaveLength(1);
+      // The minimised window keeps the server count (it already includes b2): one unread, not two.
+      const internals = dock as unknown as { conversations: Map<string, ConversationSummary> };
+      expect(internals.conversations.get('b')?.unread).toBe(1);
+      // A live message after the catch-up still counts.
+      const b3 = message();
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'b', message: b3 });
+      expect(internals.conversations.get('b')?.unread).toBe(2);
+      expect(shown(root, b3.id)).toBe(1);
+    });
+
+    it('catches up a window when the live safety-net tick finds a newer message id than the one shown', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a', { lastMessageId: first.id })]);
+      await dock.start();
+      await dock.open(summary('a', { lastMessageId: first.id }));
+      await settle();
+      realtimeHandlers?.onState(true);
+
+      // Nothing new: the tick refreshes the list only.
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a')).toHaveLength(0);
+
+      // An event lost while "live" (no drop seen): the next tick sees the id, same second as before.
+      const lost = message({ html: '<p>lost</p>' });
+      threads.a = [first, lost];
+      api.conversations.mockResolvedValue({ conversations: [summary('a', { unread: 1, lastMessageId: lost.id })], unreadTotal: 1 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a')).toHaveLength(1);
+      expect(shown(root, lost.id)).toBe(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a'), 'caught up: no further request').toHaveLength(1);
+      expect(shown(root, lost.id)).toBe(1);
+    });
+
+    it('catches up when the connection was replaced (token refresh) and pages through a long gap in one chain', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      realtimeHandlers?.onState(true);
+
+      const gap = Array.from({ length: 5 }, () => message());
+      threads.a = [first, ...gap];
+      // The server answers two messages per page here (30 in production).
+      api.messages.mockImplementation((uuid: string, cursor: { after?: number } = {}) => {
+        const newer = (threads[uuid] ?? []).filter((item) => item.id > (cursor.after ?? 0));
+        return Promise.resolve(page(newer.slice(0, 2), newer.length > 2));
+      });
+      realtimeHandlers?.onResumed?.();
+      await settle();
+      expect(afterCalls('a').map(([, cursor]) => cursor.after)).toEqual([first.id, gap[1]?.id, gap[3]?.id]);
+      for (const item of gap) {
+        expect(shown(root, item.id)).toBe(1);
+      }
+    });
+
+    it('runs one catch-up chain per window: a call made meanwhile waits for it and asks once more', async () => {
+      const first = message();
+      const { dock, root } = mount([summary('a')]);
+      api.messages.mockResolvedValue(page([first]));
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+
+      let release: () => void = () => undefined;
+      const late = message();
+      api.messages.mockReset();
+      api.messages
+        .mockImplementationOnce(() => new Promise((resolve) => (release = () => resolve(page([late])))))
+        .mockResolvedValue(page([]));
+      const internals = dock as unknown as { windows: Map<string, { catchUp(): Promise<void>; resync(): Promise<void> }> };
+      const view = internals.windows.get('a');
+      const one = view?.catchUp();
+      const two = view?.resync();
+      const three = view?.catchUp();
+      expect(api.messages).toHaveBeenCalledTimes(1);
+      release();
+      await Promise.all([one, two, three]);
+      // The request on its way, then one more after it (it may have left before the newest message existed).
+      expect(api.messages.mock.calls.map(([, cursor]) => cursor.after)).toEqual([first.id, late.id]);
+      expect(shown(root, late.id)).toBe(1);
+
+      // A failed chain is not stuck: the next call sends again.
+      api.messages.mockRejectedValueOnce(new Error('offline'));
+      await expect(view?.catchUp()).rejects.toThrow('offline');
+      await view?.catchUp();
+      expect(api.messages).toHaveBeenCalledTimes(4);
+    });
+
+    it('loads again a window whose first load failed, and leaves one still loading alone', async () => {
+      api.messages.mockRejectedValueOnce(new Error('offline'));
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      expect(root.querySelector('.nowo-chat-window')?.textContent).toContain('error');
+      realtimeHandlers?.onState(true);
+      realtimeHandlers?.onState(false);
+
+      const arrived = message();
+      api.messages.mockResolvedValue(page([arrived]));
+      realtimeHandlers?.onState(true);
+      await settle();
+      expect(shown(root, arrived.id)).toBe(1);
+
+      // A load on its way is not doubled by a resync.
+      let release: () => void = () => undefined;
+      api.messages.mockReset();
+      api.messages.mockImplementationOnce(() => new Promise((resolve) => (release = () => resolve(page([arrived])))));
+      const view = (dock as unknown as { windows: Map<string, { reload(): Promise<void>; resync(): Promise<void> }> }).windows.get('a');
+      const reloading = view?.reload();
+      await view?.resync();
+      expect(api.messages).toHaveBeenCalledTimes(1);
+      release();
+      await reloading;
+      expect(shown(root, arrived.id)).toBe(1);
+    });
+
+    it('catches up the open windows even when the list fails to load on reconnect', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      realtimeHandlers?.onState(true);
+      realtimeHandlers?.onState(false);
+      const missed = message();
+      threads.a = [first, missed];
+      api.conversations.mockRejectedValue(new Error('list down'));
+      realtimeHandlers?.onState(true);
+      await settle();
+      expect(root.classList.contains('is-offline')).toBe(true);
+      expect(shown(root, missed.id)).toBe(1);
+    });
+    it('LN-1 (audit): a live message during the reconnect list request does not hide the missed one', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      realtimeHandlers?.onState(true);
+      realtimeHandlers?.onState(false);
+      const missed = message({ html: '<p>missed</p>' });
+      const live = message({ html: '<p>live</p>' });
+      threads.a = [first, missed, live];
+      let releaseList: () => void = () => undefined;
+      api.conversations.mockImplementation(
+        () => new Promise((resolve) => (releaseList = () => resolve({ conversations: [summary('a', { lastMessageId: live.id })], unreadTotal: 0 }))),
+      );
+      realtimeHandlers?.onState(true);
+      await settle();
+      // The live connection is open again: the next event arrives before the list answers.
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: live });
+      expect(shown(root, live.id)).toBe(1);
+      releaseList();
+      await settle();
+      expect(afterCalls('a').map(([, cursor]) => cursor.after)).toEqual([first.id]);
+      expect(shown(root, missed.id)).toBe(1);
+      expect(shown(root, live.id)).toBe(1);
+      const ids = [...root.querySelectorAll<HTMLElement>('.nowo-chat-window .nowo-chat-msg[data-id]')].map((node) => Number(node.dataset.id));
+      expect(ids).toEqual([first.id, missed.id, live.id]);
+    });
+
+    it('LN-1 (audit): the live tick repairs a gap a live message hid while connected', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a', { lastMessageId: first.id })]);
+      await dock.start();
+      await dock.open(summary('a', { lastMessageId: first.id }));
+      await settle();
+      realtimeHandlers?.onState(true);
+      // One event lost while "live", the next one delivered: the newest id shown equals the list's lastMessageId.
+      const lost = message();
+      const live = message();
+      threads.a = [first, lost, live];
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: live });
+      api.conversations.mockResolvedValue({ conversations: [summary('a', { lastMessageId: live.id })], unreadTotal: 0 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a').map(([, cursor]) => cursor.after)).toEqual([first.id]);
+      expect(shown(root, lost.id)).toBe(1);
+      expect(shown(root, live.id)).toBe(1);
+      // Held in full now: the next tick asks nothing.
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a')).toHaveLength(1);
+    });
+
+    it('LN-2 (audit): a live message between two catch-up pages does not skip the rest of the gap', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      realtimeHandlers?.onState(true);
+      const gap = Array.from({ length: 4 }, () => message());
+      const live = message();
+      threads.a = [first, ...gap, live];
+      let calls = 0;
+      api.messages.mockImplementation((uuid: string, cursor: { after?: number } = {}) => {
+        calls += 1;
+        const newer = (threads[uuid] ?? []).filter((item) => item.id > (cursor.after ?? 0));
+        if (calls === 1) {
+          // Delivered while the first catch-up page is on its way.
+          queueMicrotask(() => realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: live }));
+        }
+        return Promise.resolve(page(newer.slice(0, 2), newer.length > 2));
+      });
+      realtimeHandlers?.onResumed?.();
+      await settle();
+      expect(afterCalls('a').map(([, cursor]) => cursor.after)).toEqual([first.id, gap[1]?.id, gap[3]?.id]);
+      for (const item of [...gap, live]) {
+        expect(shown(root, item.id), `message ${item.id}`).toBe(1);
+      }
+    });
+
+    it('LN-I2: waits for Retry-After after a 429 before catching up again', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      const view = (dock as unknown as { windows: Map<string, { catchUp(): Promise<void> }> }).windows.get('a');
+      const { ChatApiError } = await import('../src/api');
+      api.messages.mockRejectedValueOnce(new ChatApiError(429, 'rate_limited', '', 20));
+      await expect(view?.catchUp()).rejects.toThrow('rate_limited');
+      const sent = api.messages.mock.calls.length;
+      const later = message();
+      threads.a = [first, later];
+      await view?.catchUp();
+      expect(api.messages.mock.calls.length, 'paused').toBe(sent);
+      vi.advanceTimersByTime(20_000);
+      await view?.catchUp();
+      expect(api.messages.mock.calls.length).toBe(sent + 1);
+      expect(shown(root, later.id)).toBe(1);
+
+      // Without a Retry-After: 30 s.
+      api.messages.mockRejectedValueOnce(new ChatApiError(429, 'rate_limited'));
+      await expect(view?.catchUp()).rejects.toThrow('rate_limited');
+      await view?.catchUp();
+      expect(api.messages.mock.calls.length).toBe(sent + 2);
+      vi.advanceTimersByTime(30_000);
+      await view?.catchUp();
+      expect(api.messages.mock.calls.length).toBe(sent + 3);
+    });
+
+    it('LN-I3: a call made as soon as a chain ends starts a new one; a chain failing at once is not kept', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      const view = (dock as unknown as { windows: Map<string, { catchUp(): Promise<void> }> }).windows.get('a');
+      const late = message();
+      const before = api.messages.mock.calls.length;
+      const chain = view?.catchUp();
+      // The first reaction to the chain's end already gets a request of its own.
+      const followUp = chain?.then(() => {
+        threads.a = [first, late];
+        return view?.catchUp();
+      });
+      await followUp;
+      expect(api.messages.mock.calls.length).toBe(before + 2);
+      expect(shown(root, late.id)).toBe(1);
+
+      api.messages.mockImplementationOnce(() => {
+        throw new Error('sync');
+      });
+      await expect(view?.catchUp()).rejects.toThrow('sync');
+      const after = api.messages.mock.calls.length;
+      await view?.catchUp();
+      expect(api.messages.mock.calls.length).toBe(after + 1);
+    });
+    it('LN-DL1 (audit LN-4): a catch-up of lines already shown keeps the inline editor and its text', async () => {
+      const mine = message({ mine: true, authorUuid: 'me', createdAt: new Date().toISOString(), html: '<p>mine</p>' });
+      const thread: ChatMessage[] = [mine];
+      server({ a: thread });
+      const { dock, root } = mount([summary('a', { lastMessageId: mine.id })]);
+      api.conversations.mockImplementation(() => Promise.resolve({ conversations: [summary('a', { lastMessageId: thread.at(-1)?.id })], unreadTotal: 0 }));
+      await dock.start();
+      await dock.open(summary('a', { lastMessageId: mine.id }));
+      await settle();
+      realtimeHandlers?.onState(true);
+      // A live message, with its keys in another order than the page will give them.
+      const live = message({ html: '<p>live</p>' });
+      thread.push(live);
+      const { id, ...rest } = live;
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: { ...rest, id } as ChatMessage });
+      await settle();
+      const article = () => root.querySelector<HTMLElement>(`.nowo-chat-window [data-id="${mine.id}"]`) as HTMLElement;
+      const liveNode = root.querySelector(`.nowo-chat-window [data-id="${live.id}"]`);
+      article().querySelector<HTMLButtonElement>('[data-part="edit"]')?.click();
+      const input = article().querySelector<HTMLTextAreaElement>('.nowo-chat-edit textarea, .nowo-chat-edit [data-part="input"]') as HTMLTextAreaElement;
+      expect(input).not.toBeNull();
+      input.value = 'typed, not saved';
+
+      // The tick re-fetches the live line (the cursor stopped before it): nothing changed, nothing repaints.
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a').map(([, cursor]) => cursor.after)).toEqual([mine.id]);
+      expect(root.querySelector(`.nowo-chat-window [data-id="${live.id}"]`)).toBe(liveNode);
+      expect(article().querySelector('.nowo-chat-edit')).not.toBeNull();
+      expect(article().querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('typed, not saved');
+
+      // A change to the edited line waits for the editor; another line changes in place.
+      realtimeHandlers?.onEvent({ type: 'message_updated', conversationUuid: 'a', message: { ...mine, html: '<p>elsewhere</p>', edited: true } });
+      expect(article().querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('typed, not saved');
+      const view = (dock as unknown as { windows: Map<string, { merge(m: ChatMessage[], n: boolean): void }> }).windows.get('a');
+      view?.merge([{ ...live, html: '<p>live, edited</p>', edited: true }], true);
+      expect(root.querySelector(`.nowo-chat-window [data-id="${live.id}"]`)?.textContent).toContain('live, edited');
+      expect(article().querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('typed, not saved');
+
+      // A full repaint (a message inserted before the last one) keeps the editor node too.
+      const older = message({ id: mine.id + 0.5 } as Partial<ChatMessage>);
+      view?.merge([older], true);
+      expect(article().querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('typed, not saved');
+
+      // Escape ends the edit and repaints the line from the newest copy; a later update repaints it again.
+      article().querySelector('textarea')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(article().querySelector('.nowo-chat-edit')).toBeNull();
+      expect(article().textContent).toContain('elsewhere');
+      realtimeHandlers?.onEvent({ type: 'message_updated', conversationUuid: 'a', message: { ...mine, html: '<p>third</p>', edited: true } });
+      expect(article().textContent).toContain('third');
+
+      // Deleted elsewhere while being edited: the editor goes and the line shows the deletion.
+      article().querySelector<HTMLButtonElement>('[data-part="edit"]')?.click();
+      expect(article().querySelector('.nowo-chat-edit')).not.toBeNull();
+      view?.merge([{ ...mine, html: '', deleted: true }], true);
+      expect(article().querySelector('.nowo-chat-edit')).toBeNull();
     });
   });
 });

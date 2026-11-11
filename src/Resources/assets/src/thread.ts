@@ -99,6 +99,23 @@ const NEAR_BOTTOM_PX = 48;
 /** localStorage key: the formatting toolbar stays open (1.11). */
 const TOOLBAR_KEY = 'nowo-chat-format-toolbar';
 
+/** 1.26.1: newer pages one catch-up fetches at most (30 messages each); a longer gap goes on at the next tick. */
+const MAX_CATCH_UP_PAGES = 10;
+
+/**
+ * 1.26.1: whether two copies of a message show the same thing (`mine` aside; keys compared in a fixed order, since a
+ * realtime payload and a page may list them differently).
+ *
+ * @param a Copy shown.
+ * @param b Copy received.
+ * @returns True when nothing visible differs.
+ */
+function sameMessage(a: ChatMessage, b: ChatMessage): boolean {
+  const canonical = (message: ChatMessage): string =>
+    JSON.stringify(Object.entries(message).filter(([key]) => key !== 'mine').sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)));
+  return canonical(a) === canonical(b);
+}
+
 /** One conversation window: header, thread (messages, receipts, reactions, previews) and composer. */
 export class ThreadView {
   readonly element: HTMLElement;
@@ -113,6 +130,21 @@ export class ThreadView {
   /** 1.19: pinned links (bar under the header), the "Attach link" composer button and the links panel. */
   private readonly links: ConversationLinks | null;
   private loaded = false;
+  /** 1.26.1: the first load (or a reload) is on its way; a resync waits for it instead of sending another. */
+  private loading = false;
+  /** 1.26.1: the catch-up on its way (one request chain per window) and whether another one was asked for meanwhile. */
+  private catchingUp: Promise<void> | null = null;
+  private catchUpAgain = false;
+  /** Whether the last fetchNewer() chain has ended (it clears `catchingUp` in the same step as its last check). */
+  private chainDone = true;
+  /**
+   * 1.26.1 (audit LN-M1): newest message id up to which this window is known to hold every message (the newest page,
+   * then each catch-up page). Live messages never move it: one can arrive while older ones are still missing (during a
+   * reconnection, or between two catch-up pages), so the catch-up asks `?after=` this id, never the newest one shown.
+   */
+  private syncedUpTo = 0;
+  /** 1.26.1 (LN-I2): after a 429 the catch-up waits until then (epoch ms; Retry-After, else 30 s). */
+  private catchUpPausedUntil = 0;
   private loadingOlder = false;
   private minimised = false;
   private minimisedApplied = false;
@@ -336,6 +368,15 @@ export class ThreadView {
    */
   lastId(): number {
     return this.messages.at(-1)?.id ?? 0;
+  }
+
+  /**
+   * 1.26.1: newest message id up to which the window holds every message (live messages may sit beyond it).
+   *
+   * @returns The id, or 0 before the first load.
+   */
+  syncedId(): number {
+    return this.syncedUpTo;
   }
 
   /**
@@ -745,6 +786,8 @@ export class ThreadView {
     if (cached !== null && cached.messages.length > 0) {
       this.messages = cached.messages;
       this.hasMore = cached.hasMore;
+      // Audit LN-I5: the cache may hold a live message beyond a gap; load() starts from the server's newest page.
+      this.syncedUpTo = 0;
       this.render();
       this.scrollToBottom(false);
     } else {
@@ -754,15 +797,18 @@ export class ThreadView {
 
   /** Loads the newest page from the server (or catches up after a cache paint); failures show the error state. */
   async load(): Promise<void> {
+    this.loading = true;
     try {
       if (this.messages.length > 0) {
-        await this.catchUp();
+        await this.refreshCached();
         this.loaded = true;
         return;
       }
       const page = await this.host.api.messages(this.summary.uuid);
       this.messages = page.messages;
       this.hasMore = page.hasMore;
+      // The newest page is complete up to its last message.
+      this.syncedUpTo = this.lastId();
       this.readUpTo = page.readUpTo ?? 0;
       this.setReaders(page.readers);
       this.loaded = true;
@@ -772,6 +818,34 @@ export class ThreadView {
       this.maybeMarkRead();
     } catch {
       this.logState('error');
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  /**
+   * 1.26.1 (audit LN-I5): after a cache paint, the server's newest page is the cursor's boundary. A page that overlaps
+   * the cache is merged (only new or changed lines repaint); one that does not replaces it (a gap could hide between).
+   * Then the catch-up fetches anything newer than that page.
+   */
+  private async refreshCached(): Promise<void> {
+    const page = await this.host.api.messages(this.summary.uuid);
+    const first = page.messages[0];
+    if (first !== undefined && first.id > this.lastId()) {
+      this.messages = [];
+      this.hasMore = page.hasMore;
+      this.render();
+    }
+    if (page.readUpTo !== null) {
+      this.readUpTo = Math.max(this.readUpTo, page.readUpTo);
+    }
+    this.setReaders(page.readers);
+    this.syncedUpTo = Math.max(this.syncedUpTo, page.messages.at(-1)?.id ?? 0);
+    this.merge(page.messages, true);
+    if (page.messages.length === 0) {
+      // The conversation is empty on the server (e.g. messages moved elsewhere): the cache goes too.
+      this.messages = [];
+      this.render();
     }
   }
 
@@ -780,20 +854,77 @@ export class ThreadView {
     this.messages = [];
     this.hasMore = false;
     this.loaded = false;
+    this.syncedUpTo = 0;
     await this.load();
   }
 
-  /** Poll / reconnect: fetch only what arrived after the newest message we have. */
-  async catchUp(): Promise<void> {
-    if (!this.loaded && this.messages.length === 0) {
+  /**
+   * 1.26.1: the live connection came back (or a list refresh found a newer message than the one shown): fetch every
+   * message after the newest one shown. A thread whose first load failed loads again; one still loading is left alone.
+   */
+  async resync(): Promise<void> {
+    if (this.loading) {
       return;
     }
-    const page = await this.host.api.messages(this.summary.uuid, { after: this.lastId() });
-    if (page.readUpTo !== null) {
-      this.readUpTo = Math.max(this.readUpTo, page.readUpTo);
+    if (!this.loaded && this.messages.length === 0) {
+      await this.load();
+      return;
     }
-    this.setReaders(page.readers);
-    this.merge(page.messages, true);
+    await this.catchUp();
+  }
+
+  /**
+   * Poll / reconnect: fetch what arrived after the newest message the window is known to hold in full (`?after=`
+   * pages until the server has nothing newer; syncedId(), not the newest one shown, since a live message may have
+   * arrived beyond a gap). Since 1.26.1 one chain of requests runs per window: a call made while one is on its way runs
+   * one more request after it (the first one may have left before the newest message existed) and waits for it. After
+   * a 429 nothing is sent until the server's Retry-After has passed.
+   */
+  async catchUp(): Promise<void> {
+    if ((!this.loaded && this.messages.length === 0) || Date.now() < this.catchUpPausedUntil) {
+      return;
+    }
+    if (this.catchingUp !== null) {
+      this.catchUpAgain = true;
+      return this.catchingUp;
+    }
+    const chain = this.fetchNewer();
+    // fetchNewer() clears it itself, right after its last check (LN-I3); a chain that failed at once is done already.
+    this.catchingUp = this.chainDone ? null : chain;
+    return chain;
+  }
+
+  /** The catch-up requests: newer pages (at most MAX_CATCH_UP_PAGES; the next tick goes on) merged as they come. */
+  private async fetchNewer(): Promise<void> {
+    this.chainDone = false;
+    let pages = 0;
+    let more: boolean;
+    try {
+      do {
+        this.catchUpAgain = false;
+        const page = await this.host.api.messages(this.summary.uuid, { after: this.syncedUpTo });
+        if (page.readUpTo !== null) {
+          this.readUpTo = Math.max(this.readUpTo, page.readUpTo);
+        }
+        this.setReaders(page.readers);
+        // Everything after the cursor up to this page's newest message is now held (pages are contiguous).
+        const newest = page.messages.at(-1)?.id ?? 0;
+        this.syncedUpTo = Math.max(this.syncedUpTo, newest);
+        this.merge(page.messages, true);
+        pages += 1;
+        // A catch-up page's hasMore means newer messages wait beyond it.
+        more = (page.hasMore && page.messages.length > 0) || this.catchUpAgain;
+      } while (more && pages < MAX_CATCH_UP_PAGES);
+    } catch (error) {
+      if (error instanceof ChatApiError && error.status === 429) {
+        this.catchUpPausedUntil = Date.now() + Math.min(300, error.retryAfter ?? 30) * 1_000;
+      }
+      throw error;
+    } finally {
+      // Same synchronous step as the last check of catchUpAgain: a later call starts a new chain (LN-I3).
+      this.chainDone = true;
+      this.catchingUp = null;
+    }
   }
 
   /**
@@ -805,19 +936,26 @@ export class ThreadView {
   merge(incoming: ChatMessage[], notify: boolean): void {
     const known = new Map(this.messages.map((message) => [message.id, message]));
     const fresh: ChatMessage[] = [];
+    // 1.26.1 (audit LN-DL1): a message already shown is applied only when its content changed, and repainted in place.
+    const changed: ChatMessage[] = [];
     for (const message of incoming) {
-      if (!known.has(message.id)) {
+      const current = known.get(message.id);
+      if (current === undefined) {
         fresh.push(message);
+        known.set(message.id, message);
+      } else if (!sameMessage(current, message)) {
+        const merged = { ...message, mine: current.mine };
+        changed.push(merged);
+        known.set(message.id, merged);
       }
-      known.set(message.id, message);
     }
-    if (incoming.length === 0) {
+    if (fresh.length === 0 && changed.length === 0) {
+      // Nothing new (e.g. a catch-up page of messages that came live): no repaint, no lost editor.
       return;
     }
     this.links?.messagesChanged();
     const wasAtBottom = this.isNearBottom();
     const previousLast = this.messages.at(-1);
-    const onlyAppended = incoming.every((message) => fresh.includes(message));
     this.messages = [...known.values()].sort((a, b) => a.id - b.id);
     const fromOthers = fresh.filter((message) => !message.mine);
     for (const message of fromOthers) {
@@ -835,7 +973,9 @@ export class ThreadView {
     }
     // A new "New messages" divider for an already painted id needs a full render; otherwise append.
     const dividerOk = dividerBefore === this.firstUnseenId || fresh.some((message) => message.id === this.firstUnseenId);
-    if (!(onlyAppended && dividerOk && this.appendFresh(fresh, previousLast))) {
+    if (fresh.length === 0 || (dividerOk && this.appendFresh(fresh, previousLast))) {
+      this.repaint(changed);
+    } else {
       this.render();
     }
     if (fresh.some((message) => message.mine)) {
@@ -845,7 +985,7 @@ export class ThreadView {
       this.scrollToBottom(true);
     }
     this.updateJump();
-    if (notify && fresh.length > 0) {
+    if (notify && (fresh.length > 0 || changed.length > 0)) {
       this.host.messagesChanged(this.summary.uuid, this.messages, this.hasMore, fresh);
     }
     const last = fromOthers.at(-1);
@@ -853,6 +993,24 @@ export class ThreadView {
       this.live.textContent = `${last.authorName}: ${plain(last.html)}`;
     }
     this.maybeMarkRead();
+  }
+
+  /**
+   * 1.26.1: repaints changed lines in place. A line being edited keeps its editor: leaving it repaints the line from
+   * the current message (a deletion ends the edit, as in update()).
+   *
+   * @param changed Messages already shown whose content changed.
+   */
+  private repaint(changed: ChatMessage[]): void {
+    for (const message of changed) {
+      if (this.editing === message.id && message.deleted) {
+        this.editing = null;
+      }
+      const node = this.log.querySelector<HTMLElement>(`[data-id="${message.id}"]`);
+      if (node !== null && this.editing !== message.id) {
+        node.replaceWith(this.renderMessage(message, node.classList.contains('nowo-chat-msg--group-start')));
+      }
+    }
   }
 
   /**
@@ -1420,6 +1578,16 @@ export class ThreadView {
     }
     for (const pending of this.pending) {
       fragment.append(this.renderPending(pending));
+    }
+    // 1.26.1 (audit LN-DL1): a line being edited keeps its node, so the typed text and the editor survive a repaint.
+    const edited = this.editing === null ? null : this.log.querySelector<HTMLElement>(`[data-id="${this.editing}"]`);
+    const replacement = edited === null ? null : fragment.querySelector<HTMLElement>(`[data-id="${this.editing}"]`);
+    if (edited !== null && replacement !== null) {
+      edited.classList.toggle('nowo-chat-msg--group-start', replacement.classList.contains('nowo-chat-msg--group-start'));
+      replacement.replaceWith(edited);
+    } else if (edited !== null) {
+      // The message left the thread: so does its editor.
+      this.editing = null;
     }
     this.log.replaceChildren(fragment);
     this.paintedUpTo = Math.max(this.paintedUpTo, this.lastId());

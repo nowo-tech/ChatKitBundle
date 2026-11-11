@@ -92,4 +92,28 @@ describe('chat realtime client', () => {
     expect(FakeSource.last).toBeNull();
     vi.restoreAllMocks();
   });
+  it('1.26.1: reports a connection replaced without an error (token refresh) once it is open again', async () => {
+    const realtime = vi.fn().mockResolvedValue({ enabled: true, hubUrl: '/hub', token: 'jwt', topic: 't', expiresAt: new Date(Date.now() + 3_600_000).toISOString() });
+    const resumed = vi.fn();
+    const client = new ChatRealtime({ realtime } as unknown as ChatApi, vi.fn(), vi.fn(), resumed);
+    await client.connect();
+    (FakeSource.last as FakeSource).onopen?.();
+    expect(resumed, 'the first connection has nothing to catch up').not.toHaveBeenCalled();
+
+    // Token refresh: the open stream is replaced; events published in between are fetched once the new one opens.
+    await vi.advanceTimersByTimeAsync(3_300_000);
+    const refreshed = FakeSource.last as FakeSource;
+    refreshed.onopen?.();
+    refreshed.onopen?.();
+    expect(resumed).toHaveBeenCalledTimes(1);
+
+    // After an error the dock's reconnection handles it: no extra report.
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    refreshed.onerror?.();
+    await vi.advanceTimersByTimeAsync(1_000);
+    (FakeSource.last as FakeSource).onopen?.();
+    expect(resumed).toHaveBeenCalledTimes(1);
+    client.stop();
+    vi.restoreAllMocks();
+  });
 });
