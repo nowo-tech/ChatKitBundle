@@ -78,8 +78,12 @@ configuration or template change.
   connection looked live. One request chain runs per window (a call made meanwhile waits for it and asks once more; a
   call made once it ended starts a new one); after a 429 the catch-up waits for `Retry-After` (30 s without one, at
   most 5 min). Messages merge by id, so none shows twice; scroll position, the "New messages" divider and the read
-  rules are those of a live message. A minimised window no longer counts a caught-up message on top of the server's
-  unread count. Not covered: an edit, deletion or reaction made during the outage to a message already shown stays as
+  rules are those of a live message. A catch-up or merge applies only messages the window does not have or whose
+  content changed, repaints changed lines in place, repaints nothing when nothing changed, and keeps an inline edit in
+  progress (its typed text) across any repaint; a change to the line being edited shows once the edit ends (audit
+  LN-DL1). After a paint from the per-tab cache the window starts from the server's newest page, replacing the cached
+  lines when that page does not overlap them (LN-I5). A minimised window no longer counts a caught-up message on top of
+  the server's unread count. Not covered: an edit, deletion or reaction made during the outage to a message already shown stays as
   it was until the window is reopened or the change is sent again.
 
 ### Added
@@ -96,7 +100,8 @@ configuration or template change.
 
 - Vitest: dock windows and the full-page thread (drop, missed message, reconnect: shown exactly once; several open
   windows; a gap found by the list tick; a replaced connection; one catch-up chain per window; audit LN scenarios: a
-  live message during the list request or between two catch-up pages, Retry-After). Demo Playwright e2e
+  live message during the list request or between two catch-up pages, Retry-After, an inline edit kept across a
+  catch-up, cache boundary). Demo Playwright e2e
   `resync.spec.ts` with a scripted live connection.
 
 ### Documentation

@@ -152,16 +152,41 @@ describe('ThreadView', () => {
     expect(view.lastId()).toBe(first.id);
     expect(host.messagesChanged).toHaveBeenCalledWith('c1', [first], true, []);
 
+    // 1.26.1 (audit LN-I5): with messages shown, load() takes the server's newest page as the cursor's boundary.
     const second = msg();
-    api.messages.mockResolvedValueOnce({ messages: [second], hasMore: false, readUpTo: 99, readers: [] });
+    api.messages.mockResolvedValueOnce({ messages: [first, second], hasMore: false, readUpTo: 99, readers: [] });
     await view.load();
-    expect(api.messages).toHaveBeenLastCalledWith('c1', { after: first.id });
-    api.messages.mockResolvedValueOnce({ messages: [], hasMore: false, readUpTo: null, readers: [] });
+    expect(api.messages).toHaveBeenLastCalledWith('c1');
+    expect(view.syncedId()).toBe(second.id);
+    api.messages.mockResolvedValueOnce({ messages: [], hasMore: false, readUpTo: second.id, readers: [] });
     await view.catchUp();
+    expect(api.messages).toHaveBeenLastCalledWith('c1', { after: second.id });
 
+    // A cache painted before a gap: a newest page that does not overlap it replaces it.
     const cached = setup();
-    cached.view.hydrate({ messages: [msg()], hasMore: false });
+    const stale = msg();
+    cached.view.hydrate({ messages: [stale], hasMore: false });
     expect(cached.q('.nowo-chat-msg')).not.toBeNull();
+    expect(cached.view.syncedId()).toBe(0);
+    msg();
+    const fresh = [msg(), msg()];
+    cached.api.messages.mockResolvedValueOnce({ messages: fresh, hasMore: true, readUpTo: null, readers: [] });
+    await cached.view.load();
+    expect([...cached.q('.nowo-chat-thread').querySelectorAll<HTMLElement>('.nowo-chat-msg[data-id]')].map((node) => Number(node.dataset.id))).toEqual(fresh.map((item) => item.id));
+    expect(cached.view.syncedId()).toBe(fresh[1]?.id);
+    // A cache the page overlaps is kept, and an empty conversation clears it.
+    const overlapping = setup();
+    const kept = msg();
+    const newer = msg();
+    overlapping.view.hydrate({ messages: [kept], hasMore: false });
+    overlapping.api.messages.mockResolvedValueOnce({ messages: [kept, newer], hasMore: false, readUpTo: 5, readers: [] });
+    await overlapping.view.load();
+    expect(overlapping.view.lastId()).toBe(newer.id);
+    const emptied = setup();
+    emptied.view.hydrate({ messages: [msg()], hasMore: false });
+    emptied.api.messages.mockResolvedValueOnce({ messages: [], hasMore: false, readUpTo: null, readers: [] });
+    await emptied.view.load();
+    expect(emptied.view.lastId()).toBe(0);
     const failing = setup({}, { messages: vi.fn().mockRejectedValue(new Error('x')) });
     await failing.view.load();
     expect(failing.q('.nowo-chat-thread').textContent).toBe('Error');

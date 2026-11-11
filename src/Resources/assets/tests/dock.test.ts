@@ -1940,5 +1940,62 @@ describe('ChatDock', () => {
       await view?.catchUp();
       expect(api.messages.mock.calls.length).toBe(after + 1);
     });
+    it('LN-DL1 (audit LN-4): a catch-up of lines already shown keeps the inline editor and its text', async () => {
+      const mine = message({ mine: true, authorUuid: 'me', createdAt: new Date().toISOString(), html: '<p>mine</p>' });
+      const thread: ChatMessage[] = [mine];
+      server({ a: thread });
+      const { dock, root } = mount([summary('a', { lastMessageId: mine.id })]);
+      api.conversations.mockImplementation(() => Promise.resolve({ conversations: [summary('a', { lastMessageId: thread.at(-1)?.id })], unreadTotal: 0 }));
+      await dock.start();
+      await dock.open(summary('a', { lastMessageId: mine.id }));
+      await settle();
+      realtimeHandlers?.onState(true);
+      // A live message, with its keys in another order than the page will give them.
+      const live = message({ html: '<p>live</p>' });
+      thread.push(live);
+      const { id, ...rest } = live;
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: { ...rest, id } as ChatMessage });
+      await settle();
+      const article = () => root.querySelector<HTMLElement>(`.nowo-chat-window [data-id="${mine.id}"]`) as HTMLElement;
+      const liveNode = root.querySelector(`.nowo-chat-window [data-id="${live.id}"]`);
+      article().querySelector<HTMLButtonElement>('[data-part="edit"]')?.click();
+      const input = article().querySelector<HTMLTextAreaElement>('.nowo-chat-edit textarea, .nowo-chat-edit [data-part="input"]') as HTMLTextAreaElement;
+      expect(input).not.toBeNull();
+      input.value = 'typed, not saved';
+
+      // The tick re-fetches the live line (the cursor stopped before it): nothing changed, nothing repaints.
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a').map(([, cursor]) => cursor.after)).toEqual([mine.id]);
+      expect(root.querySelector(`.nowo-chat-window [data-id="${live.id}"]`)).toBe(liveNode);
+      expect(article().querySelector('.nowo-chat-edit')).not.toBeNull();
+      expect(article().querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('typed, not saved');
+
+      // A change to the edited line waits for the editor; another line changes in place.
+      realtimeHandlers?.onEvent({ type: 'message_updated', conversationUuid: 'a', message: { ...mine, html: '<p>elsewhere</p>', edited: true } });
+      expect(article().querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('typed, not saved');
+      const view = (dock as unknown as { windows: Map<string, { merge(m: ChatMessage[], n: boolean): void }> }).windows.get('a');
+      view?.merge([{ ...live, html: '<p>live, edited</p>', edited: true }], true);
+      expect(root.querySelector(`.nowo-chat-window [data-id="${live.id}"]`)?.textContent).toContain('live, edited');
+      expect(article().querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('typed, not saved');
+
+      // A full repaint (a message inserted before the last one) keeps the editor node too.
+      const older = message({ id: mine.id + 0.5 } as Partial<ChatMessage>);
+      view?.merge([older], true);
+      expect(article().querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('typed, not saved');
+
+      // Escape ends the edit and repaints the line from the newest copy; a later update repaints it again.
+      article().querySelector('textarea')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(article().querySelector('.nowo-chat-edit')).toBeNull();
+      expect(article().textContent).toContain('elsewhere');
+      realtimeHandlers?.onEvent({ type: 'message_updated', conversationUuid: 'a', message: { ...mine, html: '<p>third</p>', edited: true } });
+      expect(article().textContent).toContain('third');
+
+      // Deleted elsewhere while being edited: the editor goes and the line shows the deletion.
+      article().querySelector<HTMLButtonElement>('[data-part="edit"]')?.click();
+      expect(article().querySelector('.nowo-chat-edit')).not.toBeNull();
+      view?.merge([{ ...mine, html: '', deleted: true }], true);
+      expect(article().querySelector('.nowo-chat-edit')).toBeNull();
+    });
   });
 });
