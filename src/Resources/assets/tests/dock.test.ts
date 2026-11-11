@@ -1735,14 +1735,15 @@ describe('ChatDock', () => {
       release();
       await Promise.all([one, two, three]);
       // The request on its way, then one more after it (it may have left before the newest message existed).
-      expect(api.messages.mock.calls.map(([, cursor]) => cursor.after)).toEqual([first.id, late.id]);
+      // 1.26.2 (audit LN-I1): then the resync reads the lines shown again (newest page, no cursor).
+      expect(api.messages.mock.calls.map(([, cursor]) => cursor?.after)).toEqual([first.id, late.id, undefined]);
       expect(shown(root, late.id)).toBe(1);
 
       // A failed chain is not stuck: the next call sends again.
       api.messages.mockRejectedValueOnce(new Error('offline'));
       await expect(view?.catchUp()).rejects.toThrow('offline');
       await view?.catchUp();
-      expect(api.messages).toHaveBeenCalledTimes(4);
+      expect(api.messages).toHaveBeenCalledTimes(5);
     });
 
     it('loads again a window whose first load failed, and leaves one still loading alone', async () => {
@@ -1996,6 +1997,134 @@ describe('ChatDock', () => {
       expect(article().querySelector('.nowo-chat-edit')).not.toBeNull();
       view?.merge([{ ...mine, html: '', deleted: true }], true);
       expect(article().querySelector('.nowo-chat-edit')).toBeNull();
+    });
+
+    describe('1.26.2 (audit LN-I1): edits, deletions and reactions made while the connection was down', () => {
+      /** A server with pages of `size` messages: newest page, `?after=` and `?before=` like the bundle's API. */
+      const paged = (threads: Record<string, ChatMessage[]>, size: number) =>
+        api.messages.mockImplementation((uuid: string, cursor: { after?: number; before?: number } = {}) => {
+          const all = threads[uuid] ?? [];
+          if (cursor.after !== undefined) {
+            const newer = all.filter((item) => item.id > (cursor.after as number));
+            return Promise.resolve(page(newer.slice(0, size), newer.length > size));
+          }
+          const older = cursor.before === undefined ? all : all.filter((item) => item.id < (cursor.before as number));
+          return Promise.resolve(page(older.slice(-size), older.length > size));
+        });
+      const node = (root: HTMLElement, id: number) => root.querySelector<HTMLElement>(`.nowo-chat-window [data-id="${id}"]`) as HTMLElement;
+
+      it('are shown after the reconnection, with the missed message, each line once', async () => {
+        const edited = message({ html: '<p>before</p>' });
+        const deleted = message({ html: '<p>to delete</p>' });
+        const reacted = message({ html: '<p>react to me</p>' });
+        const untouched = message({ html: '<p>same</p>' });
+        const threads: Record<string, ChatMessage[]> = { a: [edited, deleted, reacted, untouched] };
+        paged(threads, 30);
+        const { dock, root } = mount([summary('a', { lastMessageId: untouched.id })]);
+        await dock.start();
+        await dock.open(summary('a', { lastMessageId: untouched.id }));
+        await settle();
+        realtimeHandlers?.onState(true);
+        realtimeHandlers?.onState(false);
+        const untouchedNode = node(root, untouched.id);
+
+        // Meanwhile (no event reaches this tab): one edit, one deletion, one reaction and a new message.
+        const missed = message({ html: '<p>missed</p>' });
+        threads.a = [
+          { ...edited, html: '<p>after</p>', edited: true },
+          { ...deleted, html: '', deleted: true },
+          { ...reacted, reactions: { '👍': ['peer'] } },
+          untouched,
+          missed,
+        ];
+        api.conversations.mockResolvedValue({ conversations: [summary('a', { unread: 1, lastMessageId: missed.id })], unreadTotal: 1 });
+        api.messages.mockClear();
+        realtimeHandlers?.onState(true);
+        await settle();
+        expect(api.messages.mock.calls.map(([, cursor]) => cursor)).toEqual([{ after: untouched.id }, undefined]);
+        expect(node(root, edited.id).textContent).toContain('after');
+        expect(node(root, deleted.id).querySelector('.nowo-chat-bubble--deleted')).not.toBeNull();
+        expect(node(root, deleted.id).textContent).not.toContain('to delete');
+        expect(node(root, reacted.id).querySelector('.nowo-chat-reaction')).not.toBeNull();
+        // An unchanged line is not repainted.
+        expect(node(root, untouched.id)).toBe(untouchedNode);
+        for (const item of [edited, deleted, reacted, untouched, missed]) {
+          expect(shown(root, item.id), `message ${item.id}`).toBe(1);
+        }
+
+        // The 60 s ticks do not read the shown pages again (only a resync does).
+        api.messages.mockClear();
+        await vi.advanceTimersByTimeAsync(60_000);
+        await settle();
+        expect(api.messages).not.toHaveBeenCalled();
+      });
+
+      it('reads the older pages shown too, stops at the oldest line shown and never adds a line', async () => {
+        const thread = Array.from({ length: 7 }, () => message());
+        const threads: Record<string, ChatMessage[]> = { a: thread };
+        paged(threads, 2);
+        const { dock, root } = mount([summary('a')]);
+        await dock.start();
+        await dock.open(summary('a'));
+        await settle();
+        // The window shows the newest page and one older page (thread[3..6]); thread[0..2] were never loaded.
+        const view = (dock as unknown as { windows: Map<string, { merge(m: ChatMessage[], n: boolean): void; resync(): Promise<void> }> }).windows.get('a');
+        view?.merge([thread[3] as ChatMessage, thread[4] as ChatMessage], false);
+        expect(root.querySelectorAll('.nowo-chat-window .nowo-chat-msg[data-id]')).toHaveLength(4);
+
+        threads.a = thread.map((item) => ({ ...item, html: `<p>edited ${item.id}</p>`, edited: true }));
+        api.messages.mockClear();
+        await view?.resync();
+        // The catch-up (nothing newer), then the newest page and the older page shown; never the pages before it.
+        expect(api.messages.mock.calls.map(([, cursor]) => cursor)).toEqual([{ after: thread[6]?.id }, undefined, { before: thread[5]?.id }]);
+        for (const item of thread.slice(3)) {
+          expect(node(root, item.id).textContent).toContain(`edited ${item.id}`);
+        }
+        expect(root.querySelectorAll('.nowo-chat-window .nowo-chat-msg[data-id]')).toHaveLength(4);
+      });
+
+      it('stops after ten pages, runs once per window, and waits for Retry-After after a 429', async () => {
+        const thread = Array.from({ length: 30 }, () => message());
+        const threads: Record<string, ChatMessage[]> = { a: thread };
+        paged(threads, 30);
+        const { dock } = mount([summary('a')]);
+        await dock.start();
+        await dock.open(summary('a'));
+        await settle();
+        const view = (dock as unknown as { windows: Map<string, { resync(): Promise<void> }> }).windows.get('a');
+        // A server with one-message pages: the window shows 30 lines, the re-read reads ten pages at most.
+        paged(threads, 1);
+        api.messages.mockClear();
+        await view?.resync();
+        const reread = api.messages.mock.calls.filter(([, cursor]) => cursor?.after === undefined);
+        expect(reread).toHaveLength(10);
+
+        // Two resyncs at once share one re-read (after the 30 s cooldown, audit LP-I3).
+        paged(threads, 30);
+        vi.advanceTimersByTime(30_000);
+        api.messages.mockClear();
+        await Promise.all([view?.resync(), view?.resync()]);
+        expect(api.messages.mock.calls.filter(([, cursor]) => cursor === undefined)).toHaveLength(1);
+
+        // A 429 on the re-read pauses both the re-read and the catch-up.
+        const { ChatApiError } = await import('../src/api');
+        vi.advanceTimersByTime(30_000);
+        api.messages.mockClear();
+        api.messages
+          .mockResolvedValueOnce(page([]))
+          .mockRejectedValueOnce(new ChatApiError(429, 'rate_limited', '', 20));
+        await expect(view?.resync()).rejects.toThrow('rate_limited');
+        api.messages.mockClear();
+        await view?.resync();
+        expect(api.messages).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(20_000);
+        await view?.resync();
+        expect(api.messages).toHaveBeenCalledTimes(2);
+        // Another failure is passed on as it is.
+        vi.advanceTimersByTime(30_000);
+        api.messages.mockResolvedValueOnce(page([])).mockRejectedValueOnce(new Error('offline'));
+        await expect(view?.resync()).rejects.toThrow('offline');
+      });
     });
   });
 });

@@ -187,6 +187,16 @@ describe('ThreadView', () => {
     emptied.api.messages.mockResolvedValueOnce({ messages: [], hasMore: false, readUpTo: null, readers: [] });
     await emptied.view.load();
     expect(emptied.view.lastId()).toBe(0);
+    // 1.26.2 (audit LN-D2-I1, probe P5): a cache holding a live message beyond a gap longer than one page. The newest
+    // page reaches back past the cache's newest id but its first message is not cached: it replaces the cache, so no
+    // hole stays in the middle.
+    const holed = setup();
+    holed.view.hydrate({ messages: [msg({ id: 1 }), msg({ id: 2 }), msg({ id: 3 }), msg({ id: 50 })], hasMore: false });
+    holed.api.messages.mockResolvedValueOnce({ messages: [msg({ id: 48 }), msg({ id: 49 }), msg({ id: 50 })], hasMore: true, readUpTo: null, readers: [] });
+    await holed.view.load();
+    expect([...holed.q('.nowo-chat-thread').querySelectorAll<HTMLElement>('.nowo-chat-msg[data-id]')].map((node) => Number(node.dataset.id))).toEqual([48, 49, 50]);
+    expect(holed.view.syncedId()).toBe(50);
+    expect(holed.q('.nowo-chat-thread__more')).not.toBeNull();
     const failing = setup({}, { messages: vi.fn().mockRejectedValue(new Error('x')) });
     await failing.view.load();
     expect(failing.q('.nowo-chat-thread').textContent).toBe('Error');
@@ -1036,6 +1046,121 @@ describe('ThreadView', () => {
       (editing.querySelector('[data-part="cancel"]') as HTMLButtonElement).click();
       expect(log.querySelector('.nowo-chat-edit')).toBeNull();
       expect(log.lastElementChild?.querySelector('.nowo-chat-bubble')?.textContent).toBe('original');
+    });
+
+    describe('1.26.2 (audit LP-L1): a re-read never undoes a newer state shown', () => {
+      const pg = (messages: ChatMessage[], hasMore = false) => ({ messages, hasMore, readUpTo: null, readers: [] });
+      const bubble = (view: ThreadView, id: number) => view.element.querySelector(`[data-id="${id}"] .nowo-chat-bubble`)?.textContent ?? null;
+      /** Resync whose re-read (newest page) answers only when released. */
+      async function inFlight(view: ThreadView, api: ApiMock) {
+        let release: (page: unknown) => void = () => undefined;
+        api.messages.mockResolvedValueOnce(pg([])).mockReturnValueOnce(new Promise((resolve) => (release = resolve)));
+        const run = view.resync();
+        for (let i = 0; i < 4; i += 1) {
+          await Promise.resolve();
+        }
+        expect(api.messages).toHaveBeenLastCalledWith('c1');
+        return { run, release };
+      }
+
+      it('LP-1: a live deletion during the re-read stays deleted', async () => {
+        const a = msg({ html: '<p>keep</p>' });
+        const b = msg({ html: '<p>secret text</p>' });
+        const { view, api } = setup();
+        api.messages.mockResolvedValueOnce(pg([a, b]));
+        await view.load();
+        const { run, release } = await inFlight(view, api);
+        view.update({ ...b, html: '', deleted: true });
+        release(pg([a, b]));
+        await run;
+        expect(bubble(view, b.id)).toBe('Deleted');
+        expect(view.element.textContent).not.toContain('secret text');
+      });
+
+      it('LP-2: a live edit during the re-read is not reverted', async () => {
+        const a = msg({ html: '<p>v1</p>' });
+        const { view, api } = setup();
+        api.messages.mockResolvedValueOnce(pg([a]));
+        await view.load();
+        const { run, release } = await inFlight(view, api);
+        view.update({ ...a, html: '<p>v2 redacted</p>', edited: true });
+        release(pg([a]));
+        await run;
+        expect(bubble(view, a.id)).toContain('v2 redacted');
+      });
+
+      it('keeps a live merge, the viewer\'s own reaction and pin, and a deletion shown before the re-read', async () => {
+        const reacted = msg({ uuid: 'r', html: '<p>react</p>' });
+        const pinned = msg({ uuid: 'p', html: '<p>pin</p>' });
+        const merged = msg({ html: '<p>first</p>' });
+        const gone = msg({ html: '', deleted: true });
+        const other = msg({ html: '<p>old</p>' });
+        const { view, api } = setup({}, { react: vi.fn().mockResolvedValue({ '👍': ['me'] }), pin: vi.fn().mockResolvedValue(undefined) });
+        api.messages.mockResolvedValueOnce(pg([reacted, pinned, merged, gone, other]));
+        await view.load();
+        const { run, release } = await inFlight(view, api);
+        // Own reaction and own pin (both through update()), a merge from another tab.
+        view.update({ ...reacted, reactions: { '👍': ['me'] } });
+        view.update({ ...pinned, pinned: true } as ChatMessage);
+        view.merge([{ ...merged, html: '<p>second</p>', edited: true }], false);
+        // The page predates all of them; it still says the deleted line had text, and edits another line.
+        release(pg([reacted, pinned, merged, { ...gone, html: '<p>resurrected</p>', deleted: false }, { ...other, html: '<p>new</p>', edited: true }]));
+        await run;
+        expect(view.element.querySelector(`[data-id="${reacted.id}"] .nowo-chat-reaction`)).not.toBeNull();
+        expect((view as unknown as { messages: ChatMessage[] }).messages.find((item) => item.id === pinned.id)?.pinned).toBe(true);
+        expect(bubble(view, merged.id)).toContain('second');
+        expect(view.element.textContent).not.toContain('resurrected');
+        // A line nobody touched still takes the page's change.
+        expect(bubble(view, other.id)).toContain('new');
+        // Outside a re-read, live changes are recorded nowhere.
+        view.update({ ...other, html: '<p>later</p>', edited: true });
+        expect(bubble(view, other.id)).toContain('later');
+      });
+
+      it('LP-I3: waits 30 s after a re-read before the next one; a failed one does not count', async () => {
+        const a = msg();
+        const { view, api } = setup();
+        api.messages.mockResolvedValueOnce(pg([a]));
+        await view.load();
+        api.messages.mockResolvedValue(pg([a]));
+        api.messages.mockClear();
+        await view.resync();
+        expect(api.messages).toHaveBeenCalledTimes(2);
+        api.messages.mockClear();
+        await view.resync();
+        expect(api.messages.mock.calls.map(([, cursor]) => cursor)).toEqual([{ after: a.id }]);
+        vi.advanceTimersByTime(30_000);
+        api.messages.mockClear();
+        api.messages.mockResolvedValueOnce(pg([])).mockRejectedValueOnce(new Error('offline'));
+        await expect(view.resync()).rejects.toThrow('offline');
+        api.messages.mockClear();
+        await view.resync();
+        expect(api.messages).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it('1.26.2 (audit LN-D2-I2): a full repaint ends the edit of a line deleted in the same merge', async () => {
+      const older = msg();
+      const mine = msg({ mine: true, authorUuid: 'me', uuid: 'e3', html: '<p>mine</p>' });
+      const theirs = msg();
+      const { action, article, view, host } = await loaded([mine, theirs]);
+      action(mine.id, 'edit').click();
+      expect(article(mine.id).querySelector('.nowo-chat-edit')).not.toBeNull();
+      // A message older than the last one cannot be appended: the merge renders the whole thread.
+      view.merge([{ ...mine, html: '', deleted: true }, older], true);
+      expect(article(older.id)).not.toBeNull();
+      expect(article(mine.id).querySelector('.nowo-chat-edit')).toBeNull();
+      expect(article(mine.id).querySelector('.nowo-chat-bubble--deleted')).not.toBeNull();
+      // The edit is over: a later change of the line is painted at once.
+      view.update({ ...mine, html: '', deleted: true, moderated: true });
+      expect(article(mine.id).textContent).toContain('Moderated');
+      expect(host.messagesChanged).toHaveBeenCalled();
+      // A line still being edited and not deleted keeps its editor through a full repaint.
+      const other = msg({ mine: true, authorUuid: 'me', uuid: 'e4', html: '<p>other</p>' });
+      view.merge([other], true);
+      action(other.id, 'edit').click();
+      view.merge([msg({ id: older.id - 1 } as Partial<ChatMessage>)], true);
+      expect(article(other.id).querySelector('.nowo-chat-edit')).not.toBeNull();
     });
 
     it('deletes after confirming; cancel and errors restore the actions', async () => {

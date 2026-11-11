@@ -102,6 +102,9 @@ const TOOLBAR_KEY = 'nowo-chat-format-toolbar';
 /** 1.26.1: newer pages one catch-up fetches at most (30 messages each); a longer gap goes on at the next tick. */
 const MAX_CATCH_UP_PAGES = 10;
 
+/** 1.26.2 (audit LP-I3): shortest time between two re-reads of the lines shown (a flapping connection reopens often). */
+const REREAD_COOLDOWN_MS = 30_000;
+
 /**
  * 1.26.1: whether two copies of a message show the same thing (`mine` aside; keys compared in a fixed order, since a
  * realtime payload and a page may list them differently).
@@ -145,6 +148,15 @@ export class ThreadView {
   private syncedUpTo = 0;
   /** 1.26.1 (LN-I2): after a 429 the catch-up waits until then (epoch ms; Retry-After, else 30 s). */
   private catchUpPausedUntil = 0;
+  /** 1.26.2 (audit LN-I1): the re-read of the lines shown after a resync on its way (one per window). */
+  private refreshingShown: Promise<void> | null = null;
+  /** 1.26.2 (audit LP-I3): when the last re-read ended without an error (epoch ms). */
+  private rereadAt = 0;
+  /**
+   * 1.26.2 (audit LP-L1): ids changed live (update(), merge()) while a re-read is on its way: its pages were read
+   * before those changes, so they are not applied over them. Null when no re-read runs.
+   */
+  private touchedDuringReread: Set<number> | null = null;
   private loadingOlder = false;
   private minimised = false;
   private minimisedApplied = false;
@@ -827,11 +839,15 @@ export class ThreadView {
    * 1.26.1 (audit LN-I5): after a cache paint, the server's newest page is the cursor's boundary. A page that overlaps
    * the cache is merged (only new or changed lines repaint); one that does not replaces it (a gap could hide between).
    * Then the catch-up fetches anything newer than that page.
+   *
+   * 1.26.2 (audit LN-D2-I1): the page overlaps only when its first message is already in the cache. Comparing with the
+   * cache's newest id was not enough: a cache holding a live message beyond a gap longer than one page (`[1, 2, 3, 50]`
+   * against the page `[48, 49, 50]`) kept the hole in the middle for good.
    */
   private async refreshCached(): Promise<void> {
     const page = await this.host.api.messages(this.summary.uuid);
     const first = page.messages[0];
-    if (first !== undefined && first.id > this.lastId()) {
+    if (first !== undefined && !this.messages.some((message) => message.id === first.id)) {
       this.messages = [];
       this.hasMore = page.hasMore;
       this.render();
@@ -859,8 +875,12 @@ export class ThreadView {
   }
 
   /**
-   * 1.26.1: the live connection came back (or a list refresh found a newer message than the one shown): fetch every
-   * message after the newest one shown. A thread whose first load failed loads again; one still loading is left alone.
+   * 1.26.1: the live connection came back (or was replaced): fetch every message after the newest one held in full.
+   * A thread whose first load failed loads again; one still loading is left alone.
+   *
+   * 1.26.2 (audit LN-I1): `?after=` only returns newer messages, so an edit, deletion or reaction made during the drop
+   * to a line already shown stayed stale until the window was reopened. After the catch-up, the lines shown are read
+   * again (see refreshShown()).
    */
   async resync(): Promise<void> {
     if (this.loading) {
@@ -871,6 +891,75 @@ export class ThreadView {
       return;
     }
     await this.catchUp();
+    await this.refreshShown();
+  }
+
+  /**
+   * 1.26.2 (audit LN-I1): reads again the pages the window shows (the newest page, then `?before=` pages back to the
+   * oldest line shown, at most MAX_CATCH_UP_PAGES) and applies what changed on the lines already shown: edits,
+   * deletions, reactions. Messages the window does not hold are left out (the catch-up and "older" pages add those), so
+   * no hole can open. One re-read per window: a call made meanwhile waits for it. A 429 pauses it like the catch-up.
+   * Audit LP-I3: after a re-read that ended without an error, the next one waits REREAD_COOLDOWN_MS.
+   */
+  private async refreshShown(): Promise<void> {
+    if (this.refreshingShown !== null) {
+      return this.refreshingShown;
+    }
+    const now = Date.now();
+    if (this.messages.length === 0 || now < this.catchUpPausedUntil || now - this.rereadAt < REREAD_COOLDOWN_MS) {
+      return;
+    }
+    const touched = new Set<number>();
+    this.touchedDuringReread = touched;
+    this.refreshingShown = this.rereadShown(touched).finally(() => {
+      this.refreshingShown = null;
+      this.touchedDuringReread = null;
+    });
+    return this.refreshingShown;
+  }
+
+  /**
+   * The re-read requests of refreshShown(), newest page first. Audit LP-L1: a page copy never undoes a newer state
+   * shown — a deletion stays (the page may predate it), and a line changed live during the re-read (an edit, a
+   * deletion, a reaction or a pin, the viewer's own included) is left as it is.
+   *
+   * @param touched Ids changed live since the re-read started (filled by update() and merge()).
+   */
+  private async rereadShown(touched: Set<number>): Promise<void> {
+    const oldest = (this.messages[0] as ChatMessage).id;
+    try {
+      let page = await this.host.api.messages(this.summary.uuid);
+      for (let pages = 1; ; pages += 1) {
+        const shown = new Map(this.messages.map((message) => [message.id, message]));
+        this.apply(
+          page.messages.filter((message) => {
+            const current = shown.get(message.id);
+            return current !== undefined && !touched.has(message.id) && (message.deleted || !current.deleted);
+          }),
+          true,
+        );
+        const first = page.messages[0];
+        if (first === undefined || !page.hasMore || first.id <= oldest || pages >= MAX_CATCH_UP_PAGES) {
+          this.rereadAt = Date.now();
+          return;
+        }
+        page = await this.host.api.messages(this.summary.uuid, { before: first.id });
+      }
+    } catch (error) {
+      this.pauseOnRateLimit(error);
+      throw error;
+    }
+  }
+
+  /**
+   * After a 429, the catch-up and the re-read wait for the server's Retry-After (30 s without one, 300 s at most).
+   *
+   * @param error Error of the failed request.
+   */
+  private pauseOnRateLimit(error: unknown): void {
+    if (error instanceof ChatApiError && error.status === 429) {
+      this.catchUpPausedUntil = Date.now() + Math.min(300, error.retryAfter ?? 30) * 1_000;
+    }
   }
 
   /**
@@ -916,9 +1005,7 @@ export class ThreadView {
         more = (page.hasMore && page.messages.length > 0) || this.catchUpAgain;
       } while (more && pages < MAX_CATCH_UP_PAGES);
     } catch (error) {
-      if (error instanceof ChatApiError && error.status === 429) {
-        this.catchUpPausedUntil = Date.now() + Math.min(300, error.retryAfter ?? 30) * 1_000;
-      }
+      this.pauseOnRateLimit(error);
       throw error;
     } finally {
       // Same synchronous step as the last check of catchUpAgain: a later call starts a new chain (LN-I3).
@@ -934,6 +1021,18 @@ export class ThreadView {
    * @param notify Whether to report the new ones to the host (false when they came from another tab).
    */
   merge(incoming: ChatMessage[], notify: boolean): void {
+    // Audit LP-L1: a re-read on its way must not apply its older copies over these.
+    incoming.forEach((message) => this.touchedDuringReread?.add(message.id));
+    this.apply(incoming, notify);
+  }
+
+  /**
+   * Adds or replaces messages by id (merge() without the re-read bookkeeping).
+   *
+   * @param incoming Messages to add or replace.
+   * @param notify Whether to report the new ones to the host.
+   */
+  private apply(incoming: ChatMessage[], notify: boolean): void {
     const known = new Map(this.messages.map((message) => [message.id, message]));
     const fresh: ChatMessage[] = [];
     // 1.26.1 (audit LN-DL1): a message already shown is applied only when its content changed, and repainted in place.
@@ -1024,6 +1123,8 @@ export class ThreadView {
       return;
     }
     const merged = { ...message, mine: (this.messages[index] as ChatMessage).mine };
+    // Audit LP-L1: a re-read on its way must not apply its older copy over this one.
+    this.touchedDuringReread?.add(message.id);
     this.links?.messagesChanged();
     this.messages[index] = merged;
     if (this.editing === message.id && message.deleted) {
@@ -1578,6 +1679,10 @@ export class ThreadView {
     }
     for (const pending of this.pending) {
       fragment.append(this.renderPending(pending));
+    }
+    // 1.26.2 (audit LN-D2-I2): a deletion ends the edit, as in repaint() and update(): the line shows its tombstone.
+    if (this.editing !== null && this.messages.some((message) => message.id === this.editing && message.deleted)) {
+      this.editing = null;
     }
     // 1.26.1 (audit LN-DL1): a line being edited keeps its node, so the typed text and the editor survive a repaint.
     const edited = this.editing === null ? null : this.log.querySelector<HTMLElement>(`[data-id="${this.editing}"]`);
