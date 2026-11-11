@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.26.1](#to-1261)
 - [To 1.26.0](#to-1260)
 - [To 1.25.1](#to-1251)
 - [To 1.25.0](#to-1250)
@@ -60,6 +61,27 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.26.1
+
+From **1.26.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+php bin/console assets:install   # nowo-chat.js changed
+```
+
+No schema, configuration or template change. Everything is backward compatible:
+
+- **Open windows catch up after a dropped realtime connection.** Nothing to configure. If your end-to-end tests worked
+  around the stale window (reopening it after a reconnection), the workaround can go.
+- **`lastMessageId`** is a new key of the conversation summary JSON (after `lastMessageAt`; set on list rows, `null`
+  without a message or where `lastMessage` is `null`). Clients that compare the summary keys exactly must allow it.
+- **Bundlers that import the TypeScript:** `ChatRealtime`'s constructor takes an optional fourth argument `onResumed`;
+  `ThreadView` gains `resync()`. Rebuild as usual.
+- **CSRF token ids (docs).** If `framework.csrf_protection.stateless_token_ids` lists `nowo_chat` (or `nowo_chat_page`),
+  remove it: with a stateless id every chat request after sign-in is refused. See
+  [CONFIGURATION — CSRF token ids](CONFIGURATION.md#csrf-token-ids).
 
 ## To 1.26.0
 

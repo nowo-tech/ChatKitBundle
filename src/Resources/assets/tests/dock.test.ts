@@ -26,7 +26,7 @@ const api = {
   linkPreviews: vi.fn(),
   message: vi.fn(),
 };
-let realtimeHandlers: { onEvent: (event: RealtimeEvent) => void; onState: (connected: boolean) => void } | null = null;
+let realtimeHandlers: { onEvent: (event: RealtimeEvent) => void; onState: (connected: boolean) => void; onResumed: (() => void) | null } | null = null;
 let apiHooks: { onCsrfRejected?: () => void } = {};
 const playOnce = vi.fn();
 
@@ -44,8 +44,8 @@ vi.mock('../src/api', async (importOriginal) => {
 });
 vi.mock('../src/realtime', () => ({
   ChatRealtime: class {
-    constructor(_api: unknown, onEvent: (event: RealtimeEvent) => void, onState: (connected: boolean) => void) {
-      realtimeHandlers = { onEvent, onState };
+    constructor(_api: unknown, onEvent: (event: RealtimeEvent) => void, onState: (connected: boolean) => void, onResumed: (() => void) | null = null) {
+      realtimeHandlers = { onEvent, onState, onResumed };
     }
     connect = vi.fn().mockResolvedValue(undefined);
     stop = vi.fn();
@@ -1563,6 +1563,234 @@ describe('ChatDock', () => {
       });
       expect((dock as unknown as { modalOutside(): boolean }).modalOutside()).toBe(false);
       expect(root.hasAttribute('data-overlay')).toBe(false);
+    });
+  });
+  describe('1.26.1: open windows catch up after a dropped live connection', () => {
+    const page = (messages: ChatMessage[], hasMore = false) => ({ messages, hasMore, readUpTo: null, readers: [] });
+    /** Lines of message `id` in the windows (never more than one). */
+    const shown = (root: HTMLElement, id: number) => root.querySelectorAll(`.nowo-chat-window [data-id="${id}"]`).length;
+    /** Lets every pending promise chain (list, sections, catch-up pages) settle. */
+    const settle = async (): Promise<void> => {
+      for (let i = 0; i < 40; i += 1) {
+        await Promise.resolve();
+      }
+    };
+    /** `?after=` answers per conversation: what arrived after the given id. */
+    const server = (threads: Record<string, ChatMessage[]>) =>
+      api.messages.mockImplementation((uuid: string, cursor: { after?: number } = {}) =>
+        Promise.resolve(page((threads[uuid] ?? []).filter((item) => item.id > (cursor.after ?? 0)))),
+      );
+    const afterCalls = (uuid: string) => api.messages.mock.calls.filter(([id, cursor]) => id === uuid && cursor?.after !== undefined);
+
+    it('shows the message a window missed while the connection was down, exactly once, and reads it', async () => {
+      // Same second as the message shown: the list time does not change (DATE_ATOM), only the message id does.
+      const first = message({ createdAt: '2026-10-15T10:00:00Z' });
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root, q } = mount([summary('a', { lastMessageId: first.id })]);
+      await dock.start();
+      await dock.open(summary('a', { lastMessageId: first.id }));
+      await settle();
+      expect(shown(root, first.id)).toBe(1);
+      realtimeHandlers?.onState(true);
+      realtimeHandlers?.onState(false);
+      expect(q('.nowo-chat-status').textContent).toBe('reconnecting');
+
+      const missed = message({ createdAt: '2026-10-15T10:00:00Z', html: '<p>missed</p>' });
+      threads.a = [first, missed];
+      api.conversations.mockResolvedValue({ conversations: [summary('a', { unread: 1, lastMessageId: missed.id })], unreadTotal: 1 });
+      api.markRead.mockClear();
+      realtimeHandlers?.onState(true);
+      await settle();
+      expect(q('.nowo-chat-status').textContent).toBe('reconnected');
+      expect(api.messages).toHaveBeenCalledWith('a', { after: first.id });
+      expect(shown(root, missed.id)).toBe(1);
+      expect(q(`.nowo-chat-window [data-id="${missed.id}"]`).textContent).toContain('missed');
+      // Seen at the bottom of a visible window: read, as a live message would be.
+      expect(api.markRead).toHaveBeenLastCalledWith('a', missed.id);
+
+      // The late realtime event and the next ticks never add it twice.
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: missed });
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(shown(root, missed.id)).toBe(1);
+      expect(root.querySelectorAll('.nowo-chat-window .nowo-chat-msg[data-id]')).toHaveLength(2);
+    });
+
+    it('catches up every open window (minimised included) without counting a missed message twice', async () => {
+      const a1 = message();
+      const b1 = message();
+      const c1 = message();
+      const threads: Record<string, ChatMessage[]> = { a: [a1], b: [b1], c: [c1] };
+      server(threads);
+      const { dock, root } = mount([summary('a'), summary('b'), summary('c')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await dock.open(summary('b'));
+      await dock.open(summary('c'));
+      await settle();
+      dock.minimise('b', true);
+      realtimeHandlers?.onState(true);
+      realtimeHandlers?.onState(false);
+
+      const a2 = message({ html: '<p>to a</p>' });
+      const a3 = message({ html: '<p>again a</p>' });
+      const b2 = message({ html: '<p>to b</p>' });
+      threads.a = [a1, a2, a3];
+      threads.b = [b1, b2];
+      // An older server: no lastMessageId and an unchanged list time. Reconnecting catches up anyway.
+      api.conversations.mockResolvedValue({ conversations: [summary('a', { unread: 2 }), summary('b', { unread: 1, lastMessageId: b2.id }), summary('c')], unreadTotal: 3 });
+      realtimeHandlers?.onState(true);
+      await settle();
+      for (const id of [a1.id, a2.id, a3.id, b1.id, b2.id, c1.id]) {
+        expect(shown(root, id), `message ${id}`).toBe(1);
+      }
+      expect(afterCalls('a')).toHaveLength(1);
+      expect(afterCalls('b')).toHaveLength(1);
+      expect(afterCalls('c')).toHaveLength(1);
+      // The minimised window keeps the server count (it already includes b2): one unread, not two.
+      const internals = dock as unknown as { conversations: Map<string, ConversationSummary> };
+      expect(internals.conversations.get('b')?.unread).toBe(1);
+      // A live message after the catch-up still counts.
+      const b3 = message();
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'b', message: b3 });
+      expect(internals.conversations.get('b')?.unread).toBe(2);
+      expect(shown(root, b3.id)).toBe(1);
+    });
+
+    it('catches up a window when the live safety-net tick finds a newer message id than the one shown', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a', { lastMessageId: first.id })]);
+      await dock.start();
+      await dock.open(summary('a', { lastMessageId: first.id }));
+      await settle();
+      realtimeHandlers?.onState(true);
+
+      // Nothing new: the tick refreshes the list only.
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a')).toHaveLength(0);
+
+      // An event lost while "live" (no drop seen): the next tick sees the id, same second as before.
+      const lost = message({ html: '<p>lost</p>' });
+      threads.a = [first, lost];
+      api.conversations.mockResolvedValue({ conversations: [summary('a', { unread: 1, lastMessageId: lost.id })], unreadTotal: 1 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a')).toHaveLength(1);
+      expect(shown(root, lost.id)).toBe(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a'), 'caught up: no further request').toHaveLength(1);
+      expect(shown(root, lost.id)).toBe(1);
+    });
+
+    it('catches up when the connection was replaced (token refresh) and pages through a long gap in one chain', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      realtimeHandlers?.onState(true);
+
+      const gap = Array.from({ length: 5 }, () => message());
+      threads.a = [first, ...gap];
+      // The server answers two messages per page here (30 in production).
+      api.messages.mockImplementation((uuid: string, cursor: { after?: number } = {}) => {
+        const newer = (threads[uuid] ?? []).filter((item) => item.id > (cursor.after ?? 0));
+        return Promise.resolve(page(newer.slice(0, 2), newer.length > 2));
+      });
+      realtimeHandlers?.onResumed?.();
+      await settle();
+      expect(afterCalls('a').map(([, cursor]) => cursor.after)).toEqual([first.id, gap[1]?.id, gap[3]?.id]);
+      for (const item of gap) {
+        expect(shown(root, item.id)).toBe(1);
+      }
+    });
+
+    it('runs one catch-up chain per window: a call made meanwhile waits for it and asks once more', async () => {
+      const first = message();
+      const { dock, root } = mount([summary('a')]);
+      api.messages.mockResolvedValue(page([first]));
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+
+      let release: () => void = () => undefined;
+      const late = message();
+      api.messages.mockReset();
+      api.messages
+        .mockImplementationOnce(() => new Promise((resolve) => (release = () => resolve(page([late])))))
+        .mockResolvedValue(page([]));
+      const internals = dock as unknown as { windows: Map<string, { catchUp(): Promise<void>; resync(): Promise<void> }> };
+      const view = internals.windows.get('a');
+      const one = view?.catchUp();
+      const two = view?.resync();
+      const three = view?.catchUp();
+      expect(api.messages).toHaveBeenCalledTimes(1);
+      release();
+      await Promise.all([one, two, three]);
+      // The request on its way, then one more after it (it may have left before the newest message existed).
+      expect(api.messages.mock.calls.map(([, cursor]) => cursor.after)).toEqual([first.id, late.id]);
+      expect(shown(root, late.id)).toBe(1);
+
+      // A failed chain is not stuck: the next call sends again.
+      api.messages.mockRejectedValueOnce(new Error('offline'));
+      await expect(view?.catchUp()).rejects.toThrow('offline');
+      await view?.catchUp();
+      expect(api.messages).toHaveBeenCalledTimes(4);
+    });
+
+    it('loads again a window whose first load failed, and leaves one still loading alone', async () => {
+      api.messages.mockRejectedValueOnce(new Error('offline'));
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      expect(root.querySelector('.nowo-chat-window')?.textContent).toContain('error');
+      realtimeHandlers?.onState(true);
+      realtimeHandlers?.onState(false);
+
+      const arrived = message();
+      api.messages.mockResolvedValue(page([arrived]));
+      realtimeHandlers?.onState(true);
+      await settle();
+      expect(shown(root, arrived.id)).toBe(1);
+
+      // A load on its way is not doubled by a resync.
+      let release: () => void = () => undefined;
+      api.messages.mockReset();
+      api.messages.mockImplementationOnce(() => new Promise((resolve) => (release = () => resolve(page([arrived])))));
+      const view = (dock as unknown as { windows: Map<string, { reload(): Promise<void>; resync(): Promise<void> }> }).windows.get('a');
+      const reloading = view?.reload();
+      await view?.resync();
+      expect(api.messages).toHaveBeenCalledTimes(1);
+      release();
+      await reloading;
+      expect(shown(root, arrived.id)).toBe(1);
+    });
+
+    it('catches up the open windows even when the list fails to load on reconnect', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      realtimeHandlers?.onState(true);
+      realtimeHandlers?.onState(false);
+      const missed = message();
+      threads.a = [first, missed];
+      api.conversations.mockRejectedValue(new Error('list down'));
+      realtimeHandlers?.onState(true);
+      await settle();
+      expect(root.classList.contains('is-offline')).toBe(true);
+      expect(shown(root, missed.id)).toBe(1);
     });
   });
 });

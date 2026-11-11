@@ -10,6 +10,7 @@
 - [Rate limits](#rate-limits)
 - [Container parameters](#container-parameters)
 - [Timeouts](#timeouts)
+- [CSRF token ids](#csrf-token-ids)
 - [FormKit profile](#formkit-profile)
 
 ## Root key
@@ -252,6 +253,27 @@ are used). Raise them together. A failed or timed-out publish is logged and neve
 catch up by polling. Set HTTP / SMTP timeouts in your `ChatPushSenderInterface` / `ChatDigestSenderInterface`
 implementations (Messenger workers). See also [USAGE — Timeouts](USAGE.md#timeouts) and
 [DEMO-FRANKENPHP — Timeouts](DEMO-FRANKENPHP.md#timeouts).
+
+## CSRF token ids
+
+The JSON API checks the `X-CSRF-TOKEN` header against the token id **`nowo_chat`**; the full-page message form uses
+**`nowo_chat_page`**. Both must stay **session** tokens (Symfony's default).
+
+> **Warning:** do **not** add `nowo_chat` (or `nowo_chat_page`) to `framework.csrf_protection.stateless_token_ids`.
+> `SameOriginCsrfTokenManager` keeps the double-submit state of stateless ids in the session, and signing in
+> regenerates the session, so every chat request after sign-in is refused (the log reads "double-submit info was used
+> in a previous request but is now missing"). Keep the chat ids out of that list; the 1.26 token refresh
+> (`GET {prefix}/api/csrf`) plus one retry of the refused write is the supported recovery when a session loses its token.
+
+```yaml
+# config/packages/framework.yaml
+framework:
+    csrf_protection:
+        # Your own stateless ids only; never nowo_chat / nowo_chat_page.
+        stateless_token_ids: ['submit', 'authenticate', 'logout']
+```
+
+See [SECURITY — Host responsibilities](SECURITY.md#host-responsibilities-residual-risks).
 
 ## FormKit profile
 

@@ -184,7 +184,7 @@ final class ChatAvatarsApiTest extends DatabaseTestCase
         self::assertSame([
             'archived', 'uuid', 'kind', 'title', 'subtitle', 'initials', 'avatarUrl', 'peerUuid', 'channelKey', 'supportStatus',
             'supportContext', 'ticket', 'canSend', 'peerOnline', 'peerStatus', 'peerStatusText', 'peerStatusEmoji', 'unread',
-            'lastMessageAt', 'lastMessage', 'canPin', 'mutedUntil',
+            'lastMessageAt', 'lastMessageId', 'lastMessage', 'canPin', 'mutedUntil',
         ], array_keys($row));
         $message = $this->getJson('/chat/api/conversations/' . $dm->getUuid() . '/messages')['messages'][0];
         self::assertNull($message['authorAvatarUrl']);

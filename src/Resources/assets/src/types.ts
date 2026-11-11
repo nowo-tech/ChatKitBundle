@@ -33,6 +33,8 @@ export interface ConversationSummary {
   peerStatusEmoji?: string | null;
   unread: number;
   lastMessageAt: string | null;
+  /** 1.26.1: id of the newest message (null without one; absent from older servers): an open window that lacks it catches up. */
+  lastMessageId?: number | null;
   lastMessage: { preview: string; deleted: boolean; moderated?: boolean; buzz?: boolean; pin?: boolean; mine: boolean; authorName: string | null } | null;
   /** 1.10: the viewer may pin and unpin messages here. */
   canPin?: boolean;

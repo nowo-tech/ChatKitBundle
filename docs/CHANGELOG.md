@@ -59,6 +59,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.26.1: open conversation windows catch up after a dropped realtime connection (Symfony Beacon e2e). No schema,
+configuration or template change.
+
+### Fixed
+
+- **An open window (and the full-page thread) now shows the messages it missed while the realtime connection was down.**
+  On reconnection the dock refreshed the conversation list (the row showed the new message and its unread count) but
+  fetched an open window's messages only when the list's `lastMessageAt` had changed. That time has second precision,
+  so a message sent in the same second as the newest one shown (or an older server summary) left the window behind
+  until it was reopened. Now a reconnection, and a live connection that was replaced (token refresh), make every open
+  window and the full-page thread fetch `?after=` its newest message id (paging through long gaps, up to 10 pages per
+  pass), even when the list request fails; a window whose first load failed loads again. The list refresh (the 60 s
+  safety-net tick while live, every 4th poll tick while down) catches up a window as soon as the summary names a newer
+  message id than the one shown. One request chain runs per window (a call made meanwhile waits for it and asks once
+  more); messages merge by id, so none shows twice; scroll position, the "New messages" divider and the read rules are
+  those of a live message. A minimised window no longer counts a caught-up message on top of the server's unread count.
+
+### Added
+
+- **`lastMessageId`** on conversation summaries: id of the newest message on the list rows (`GET /api/conversations`,
+  the full-page list); `null` without a message and in single-conversation answers, which carry no last message
+  (`lastMessage` is `null` there too). Additive; the dock falls back to `lastMessageAt` when a server does not send it.
+- `ChatRealtime` takes an optional fourth constructor argument `onResumed` (called when a connection replaced without an
+  error is open again). Optional; existing callers are unchanged.
+
+### Tests
+
+- Vitest: dock windows and the full-page thread (drop, missed message, reconnect: shown exactly once; several open
+  windows; a gap found by the list tick; a replaced connection; one catch-up chain per window). Demo Playwright e2e
+  `resync.spec.ts` with a scripted live connection.
+
+### Documentation
+
+- **Keep the `nowo_chat` CSRF token id a session token** ([CONFIGURATION](CONFIGURATION.md#csrf-token-ids),
+  [SECURITY](SECURITY.md#host-responsibilities-residual-risks); Symfony Beacon finding): listing it in
+  `framework.csrf_protection.stateless_token_ids` makes `SameOriginCsrfTokenManager` keep the double-submit state in the
+  session that sign-in regenerates, so every chat request after sign-in is refused. The 1.26 token refresh and one retry
+  is the supported recovery. The SECURITY CSRF row now describes that refresh (it still said "never retries").
+
 ## [1.26.0] - 2026-11-10
 
 Sidebar grouped rows regain status, preview and close; phone layout fix; optional UiKit dialog runtime in the dock; CSRF token refresh and one retry on invalid_csrf. See [UPGRADING](https://github.com/nowo-tech/ChatKitBundle/blob/v1.26.0/docs/UPGRADING.md#to-1260).

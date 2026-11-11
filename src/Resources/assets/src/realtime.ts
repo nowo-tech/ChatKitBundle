@@ -16,6 +16,7 @@ export class ChatRealtime {
   private readonly api: ChatApi;
   private readonly onEvent: (event: RealtimeEvent) => void;
   private readonly onState: (connected: boolean) => void;
+  private readonly onResumed: (() => void) | null;
 
   /**
    * Creates the connection manager (call connect() to open it).
@@ -23,11 +24,14 @@ export class ChatRealtime {
    * @param api API client (fetches the hub URL and the subscriber token).
    * @param onEvent Called with every decoded realtime event.
    * @param onState Called with true when connected, false when disconnected or disabled.
+   * @param onResumed 1.26.1: called when a connection replaced an open one (token refresh) is open again: events
+   *   published between the two were not received.
    */
-  constructor(api: ChatApi, onEvent: (event: RealtimeEvent) => void, onState: (connected: boolean) => void) {
+  constructor(api: ChatApi, onEvent: (event: RealtimeEvent) => void, onState: (connected: boolean) => void, onResumed: (() => void) | null = null) {
     this.api = api;
     this.onEvent = onEvent;
     this.onState = onState;
+    this.onResumed = onResumed;
   }
 
   /**
@@ -55,12 +59,19 @@ export class ChatRealtime {
     const url = new URL(config.hubUrl, window.location.href);
     url.searchParams.append('topic', config.topic);
     url.searchParams.set('authorization', config.token);
+    // An open connection replaced without an error (token refresh): the gap between the two is caught up on open.
+    const replacing = this.source !== null;
     this.close();
     const source = new EventSource(url.toString(), { withCredentials: true });
     this.source = source;
+    let resumed = false;
     source.onopen = () => {
       this.retry = 0;
       this.onState(true);
+      if (replacing && !resumed) {
+        resumed = true;
+        this.onResumed?.();
+      }
     };
     source.onmessage = (message: MessageEvent<string>) => {
       try {

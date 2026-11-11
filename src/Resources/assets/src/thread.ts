@@ -99,6 +99,9 @@ const NEAR_BOTTOM_PX = 48;
 /** localStorage key: the formatting toolbar stays open (1.11). */
 const TOOLBAR_KEY = 'nowo-chat-format-toolbar';
 
+/** 1.26.1: newer pages one catch-up fetches at most (30 messages each); a longer gap goes on at the next tick. */
+const MAX_CATCH_UP_PAGES = 10;
+
 /** One conversation window: header, thread (messages, receipts, reactions, previews) and composer. */
 export class ThreadView {
   readonly element: HTMLElement;
@@ -113,6 +116,11 @@ export class ThreadView {
   /** 1.19: pinned links (bar under the header), the "Attach link" composer button and the links panel. */
   private readonly links: ConversationLinks | null;
   private loaded = false;
+  /** 1.26.1: the first load (or a reload) is on its way; a resync waits for it instead of sending another. */
+  private loading = false;
+  /** 1.26.1: the catch-up on its way (one request chain per window) and whether another one was asked for meanwhile. */
+  private catchingUp: Promise<void> | null = null;
+  private catchUpAgain = false;
   private loadingOlder = false;
   private minimised = false;
   private minimisedApplied = false;
@@ -754,6 +762,7 @@ export class ThreadView {
 
   /** Loads the newest page from the server (or catches up after a cache paint); failures show the error state. */
   async load(): Promise<void> {
+    this.loading = true;
     try {
       if (this.messages.length > 0) {
         await this.catchUp();
@@ -772,6 +781,8 @@ export class ThreadView {
       this.maybeMarkRead();
     } catch {
       this.logState('error');
+    } finally {
+      this.loading = false;
     }
   }
 
@@ -783,17 +794,56 @@ export class ThreadView {
     await this.load();
   }
 
-  /** Poll / reconnect: fetch only what arrived after the newest message we have. */
+  /**
+   * 1.26.1: the live connection came back (or a list refresh found a newer message than the one shown): fetch every
+   * message after the newest one shown. A thread whose first load failed loads again; one still loading is left alone.
+   */
+  async resync(): Promise<void> {
+    if (this.loading) {
+      return;
+    }
+    if (!this.loaded && this.messages.length === 0) {
+      await this.load();
+      return;
+    }
+    await this.catchUp();
+  }
+
+  /**
+   * Poll / reconnect: fetch only what arrived after the newest message we have (`?after=` pages until the server has
+   * nothing newer). Since 1.26.1 one chain of requests runs per window: a call made while one is on its way runs one
+   * more request after it (the first one may have left before the newest message existed) and waits for it.
+   */
   async catchUp(): Promise<void> {
     if (!this.loaded && this.messages.length === 0) {
       return;
     }
-    const page = await this.host.api.messages(this.summary.uuid, { after: this.lastId() });
-    if (page.readUpTo !== null) {
-      this.readUpTo = Math.max(this.readUpTo, page.readUpTo);
+    if (this.catchingUp !== null) {
+      this.catchUpAgain = true;
+      return this.catchingUp;
     }
-    this.setReaders(page.readers);
-    this.merge(page.messages, true);
+    this.catchingUp = this.fetchNewer().finally(() => {
+      this.catchingUp = null;
+    });
+    return this.catchingUp;
+  }
+
+  /** The catch-up requests: newer pages (at most MAX_CATCH_UP_PAGES; the next tick goes on) merged as they come. */
+  private async fetchNewer(): Promise<void> {
+    let pages = 0;
+    let more: boolean;
+    do {
+      this.catchUpAgain = false;
+      const page = await this.host.api.messages(this.summary.uuid, { after: this.lastId() });
+      if (page.readUpTo !== null) {
+        this.readUpTo = Math.max(this.readUpTo, page.readUpTo);
+      }
+      this.setReaders(page.readers);
+      this.merge(page.messages, true);
+      pages += 1;
+      // A catch-up page's hasMore means newer messages wait beyond it.
+      more = (page.hasMore && page.messages.length > 0) || this.catchUpAgain;
+    } while (more && pages < MAX_CATCH_UP_PAGES);
   }
 
   /**

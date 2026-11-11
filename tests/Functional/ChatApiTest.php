@@ -115,6 +115,8 @@ final class ChatApiTest extends DatabaseTestCase
         $reply = $this->postJson('/chat/api/conversations/' . $uuid . '/messages', ['body' => 'Hey'], $luisCsrf)['message'];
         $after = $this->getJson('/chat/api/conversations/' . $uuid . '/messages?after=' . $sent['id']);
         self::assertSame([$reply['id']], array_column($after['messages'], 'id'));
+        // 1.26.1: the summary names the newest message, so an open window can tell it missed one (?after= catches up).
+        self::assertSame($reply['id'], $this->getJson('/chat/api/conversations')['conversations'][0]['lastMessageId']);
         self::assertSame($uuid, $this->getJson('/chat/api/conversations/' . $uuid)['conversation']['uuid']);
 
         // Ana sees Luis's read cursor and the reaction, then deletes her message.

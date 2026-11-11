@@ -429,10 +429,12 @@ export class ChatDock implements ThreadHost {
           this.schedulePoll();
         }
         if (catchUp) {
-          // Catch up whatever happened while the connection was down.
+          // Catch up whatever happened while the connection was down: the list and, since 1.26.1, every open window.
           void this.poll(true);
         }
       },
+      // 1.26.1: the connection was replaced (fresh token) without an error: events sent in between are fetched too.
+      () => void this.poll(true),
     );
     void this.realtime.connect();
     this.startPresence();
@@ -839,11 +841,15 @@ export class ChatDock implements ThreadHost {
     const last = messages.at(-1);
     const summary = this.conversations.get(uuid);
     if (summary !== undefined && last !== undefined) {
+      // 1.26.1: the server's unread count already includes the messages up to its lastMessageId (a catch-up after a
+      // list refresh fetches them again): only newer ones raise it.
+      const counted = summary.lastMessageId ?? 0;
       summary.lastMessageAt = last.createdAt;
+      summary.lastMessageId = Math.max(counted, last.id);
       summary.lastMessage = { preview: plain(last.html).slice(0, 90), deleted: last.deleted, moderated: last.moderated, buzz: last.kind === 'buzz', pin: last.kind === 'pin', mine: last.mine, authorName: last.authorName };
       const view = this.windows.get(uuid);
       if (view !== undefined && view.isMinimised) {
-        summary.unread += fresh.filter((message) => !message.mine).length;
+        summary.unread += fresh.filter((message) => !message.mine && message.id > counted).length;
         view.applySummary(summary);
       }
       this.renderList();
@@ -1766,8 +1772,12 @@ export class ChatDock implements ThreadHost {
   /**
    * Reloads the conversation list: updates open windows (catching up the ones whose last message changed),
    * toggles the offline state, then renders the list and the layout.
+   *
+   * @param prune Drop the conversations the server no longer lists (closed elsewhere).
+   * @param resync 1.26.1: after a dropped live connection, every open window (and the full-page thread) fetches what
+   *   arrived after its newest message, whatever the list says (and even when the list fails to load).
    */
-  private async refreshList(prune = false): Promise<void> {
+  private async refreshList(prune = false, resync = false): Promise<void> {
     // 1.25: the host sections of the sidebar load beside the list (a failed load keeps the last ones).
     const sections = this.sidebar !== null && (this.config.sidebar?.endpoint ?? null) !== null ? this.api.sidebar().catch(() => null) : Promise.resolve(null);
     try {
@@ -1784,7 +1794,11 @@ export class ChatDock implements ThreadHost {
         if (view !== undefined) {
           // The server count stays until this tab actually marks the window read (read()).
           view.applySummary(summary);
-          if (known !== undefined && summary.lastMessageAt !== known.lastMessageAt) {
+          // 1.26.1: a newer message id than the newest one shown is a missed event (the times only have second
+          // precision: a message sent in the same second as the one shown left the list time unchanged). Servers
+          // before 1.26.1 send no id: a changed time is all there is.
+          const gap = typeof summary.lastMessageId === 'number' ? summary.lastMessageId > view.lastId() : known !== undefined && summary.lastMessageAt !== known.lastMessageAt;
+          if (gap && !resync) {
             void view.catchUp().catch(() => undefined);
           }
         }
@@ -1793,6 +1807,9 @@ export class ChatDock implements ThreadHost {
       this.root.classList.remove('is-offline');
     } catch {
       this.root.classList.add('is-offline');
+    }
+    if (resync) {
+      await Promise.all([...this.windows.values()].map((view) => view.resync().catch(() => undefined)));
     }
     const loaded = await sections;
     if (loaded !== null) {
@@ -2244,12 +2261,12 @@ export class ChatDock implements ThreadHost {
   /**
    * One poll tick: refresh the list (forced, live, every 4th tick or hidden tab), else catch up the open windows.
    *
-   * @param force Refresh the list now (reconnect, tab visible again).
+   * @param force Refresh the list now and catch up every open window (reconnect, a resumed live connection).
    */
   private async poll(force: boolean): Promise<void> {
     this.tick += 1;
     if (force || this.live || this.tick % 4 === 0 || document.visibilityState !== 'visible') {
-      await this.refreshList();
+      await this.refreshList(false, force);
       return;
     }
     await Promise.all(

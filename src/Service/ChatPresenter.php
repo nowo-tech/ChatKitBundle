@@ -95,7 +95,8 @@ final readonly class ChatPresenter
 
     /**
      * Conversation summary for the dock list and header: title / subtitle / initials by kind, status, unread
-     * count and a preview of the last message.
+     * count and a preview of the last message. Since 1.26.1 `lastMessageId` names that message: open windows compare it
+     * with their newest one (`lastMessageAt` has second precision).
      *
      * @param ChatConversation $conversation The conversation
      * @param ChatUserInterface $viewer The user the summary is built for
@@ -154,6 +155,7 @@ final readonly class ChatPresenter
             'peerStatusEmoji' => $peerStatus['emoji'] ?? null,
             'unread'          => $unread,
             'lastMessageAt'   => ($last?->getCreatedAt() ?? $conversation->getLastMessageAt())->format(DATE_ATOM),
+            'lastMessageId'   => $last?->getId(),
             'lastMessage'     => $last instanceof ChatMessage ? [
                 'preview' => match (true) {
                     $last->isDeleted(), $last->isBuzz() => '',
