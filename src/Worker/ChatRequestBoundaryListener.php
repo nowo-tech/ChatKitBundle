@@ -9,7 +9,7 @@ use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Symfony\Component\Console\ConsoleEvents;
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
@@ -30,7 +30,7 @@ use Symfony\Contracts\Service\ResetInterface;
  *
  * @internal
  */
-final class ChatRequestBoundaryListener implements EventSubscriberInterface
+final class ChatRequestBoundaryListener
 {
     /** @var list<ResetInterface> */
     private readonly array $memos;
@@ -55,25 +55,13 @@ final class ChatRequestBoundaryListener implements EventSubscriberInterface
     }
 
     /**
-     * @return array<string, array{string, int}>
-     */
-    public static function getSubscribedEvents(): array
-    {
-        return [
-            // Before the firewall (8) and every bundle listener: the request starts from empty memos.
-            KernelEvents::REQUEST            => ['onKernelRequest', 2048],
-            KernelEvents::TERMINATE          => ['clear', -2048],
-            ConsoleEvents::TERMINATE         => ['clear', -2048],
-            WorkerMessageHandledEvent::class => ['clear', -2048],
-            WorkerMessageFailedEvent::class  => ['clear', -2048],
-        ];
-    }
-
-    /**
      * Clears the memos at the start of a main request (a sub-request shares its main request's memos).
+     *
+     * Priority 2048: before the firewall (8) and every bundle listener, so the request starts from empty memos.
      *
      * @param RequestEvent $event The request event
      */
+    #[AsEventListener(event: KernelEvents::REQUEST, priority: 2048)]
     public function onKernelRequest(RequestEvent $event): void
     {
         if ($event->isMainRequest()) {
@@ -84,6 +72,10 @@ final class ChatRequestBoundaryListener implements EventSubscriberInterface
     /**
      * Clears every memo (end of a request, a command or a Messenger message).
      */
+    #[AsEventListener(event: KernelEvents::TERMINATE, priority: -2048)]
+    #[AsEventListener(event: ConsoleEvents::TERMINATE, priority: -2048)]
+    #[AsEventListener(event: WorkerMessageHandledEvent::class, priority: -2048)]
+    #[AsEventListener(event: WorkerMessageFailedEvent::class, priority: -2048)]
     public function clear(): void
     {
         foreach ($this->memos as $memo) {
