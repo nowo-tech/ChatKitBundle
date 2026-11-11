@@ -84,6 +84,16 @@ built in the process are reset, so a request that never touches the chat builds 
 - `tests/Unit/Doctrine/UserReferenceListenerResetTest.php`: `reset()` forgets the resolved entities.
 - Memory: `ChatCsrfRefreshTest` (1.26.0) keeps the 1,000-heartbeat flat-memory check (64 KiB on stable Symfony).
 
+### Host requirement: clear your entity managers when the services resetter is off (REQ-RUNTIME-002 rule 7)
+
+ChatKit reads `ChatUserSettings` (presence visibility, e-mail digest) through the host's entity manager. A host that
+removes or bypasses `services_resetter`, drives `http_kernel` directly, starts `messenger:consume --no-reset` or runs
+long console commands must also clear its Doctrine entity managers at every boundary (main request, Messenger
+message, console command). Otherwise the identity map keeps returning the managed row this thread loaded first, and a
+change another thread made (e.g. a user hiding their presence or opting out of digests) is not seen until the
+manager is cleared (audit MC-C-L1). Stock Symfony, including FrankenPHP worker mode with
+`FRANKENPHP_RESET_KERNEL=false`, runs the resetter and needs nothing extra.
+
 ## Rules for future code
 
 - Keep presence, typing and counters in storage (database / cache pool / Mercure), never in service properties.
