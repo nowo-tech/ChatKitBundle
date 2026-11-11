@@ -389,6 +389,34 @@ jobs:
           files: coverage.xml
           fail_ci_if_error: false
 
+  # Audit LN-I4: the realtime resync Playwright spec (demo/symfony8/e2e/tests/resync.spec.ts) on every pull request,
+  # against the demo booted from this checkout (the committed nowo-chat.js). The full e2e suite stays in demo-smoke.yml.
+  resync-e2e:
+    name: Realtime resync e2e (demo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # Same boot as demo-smoke.yml: release-verify lets the container's entrypoint install vendor/ first (a direct
+      # `up` would race it with a second composer install), then `up` builds the assets and seeds the demo.
+      - name: Boot the demo
+        run: |
+          make -C demo release-verify
+          make -C demo/symfony8 up
+
+      - name: Run the resync spec
+        run: make -C demo/symfony8 test-e2e-resync
+
+      - name: Demo logs on failure
+        if: failure()
+        run: docker compose -f demo/symfony8/docker-compose.yml logs --tail 200 php
+
+      - name: Stop the demo
+        if: always()
+        run: make -C demo/symfony8 down
+
   typescript:
     name: TypeScript tests
     runs-on: ubuntu-latest

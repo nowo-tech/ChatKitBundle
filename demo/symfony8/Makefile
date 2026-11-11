@@ -2,7 +2,7 @@
 COMPOSE_BIN := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 dc = $(SHELL) -c '$(COMPOSE_BIN) $(1)'
 
-.PHONY: help up down build install shell logs test test-coverage cache-clear update-bundle ensure-up restart setup setup-db verify assets-install assets test-e2e demo-screenshots
+.PHONY: help up down build install shell logs test test-coverage cache-clear update-bundle ensure-up restart setup setup-db verify assets-install assets test-e2e test-e2e-resync demo-screenshots
 
 BUNDLE_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 export DOCKER_CONFIG := $(BUNDLE_ROOT)/.docker
@@ -26,6 +26,7 @@ help:
 	@echo "  make update-deps    composer update inside the demo (REQ-MAKE-008)"
 	@echo "  make update-bundle  Refresh bundle autoload, assets, and cache"
 	@echo "  make test-e2e       Playwright e2e (REQ-DEMO-013)"
+	@echo "  make test-e2e-resync  Playwright realtime resync spec only (CI on pull requests)"
 	@echo "  make demo-screenshots  Refresh docs/images/demo/*.webp"
 
 # REQ-DEMO-005: canonical up — no build here (use `make build`); Waiting…, Installing…, Demo started at: from PORT
@@ -145,6 +146,17 @@ test-e2e: ensure-up
 		-e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
 		$(PLAYWRIGHT_IMAGE) \
 		bash -lc 'npm install --no-fund --no-audit && npx playwright test --project=chromium --project=phone-chromium --project=phone-webkit'
+
+# 1.26.2 (audit LN-I4): the realtime resync spec alone, Chromium only; the CI workflow runs it on every pull request.
+test-e2e-resync: ensure-up
+	@mkdir -p e2e/node_modules
+	@PORT=$$(grep "^PORT=" .env 2>/dev/null | cut -d= -f2 | tr -d '\r'); \
+	[ -z "$$PORT" ] && PORT=$$(grep "^PORT=" .env.example 2>/dev/null | cut -d= -f2 | tr -d '\r'); \
+	docker run --rm --network host \
+		-v "$(CURDIR)/e2e:/e2e" -w /e2e \
+		-e CI -e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
+		$(PLAYWRIGHT_IMAGE) \
+		bash -lc 'npm install --no-fund --no-audit && npx playwright test tests/resync.spec.ts --project=chromium'
 
 demo-screenshots: ensure-up
 	@mkdir -p ../../docs/images/demo e2e/node_modules

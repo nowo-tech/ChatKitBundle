@@ -62,6 +62,23 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Target **1.26.2** (patch), from **1.26.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+php bin/console assets:install   # nowo-chat.js changed
+```
+
+No PHP, schema, configuration, template or API change. Client-side fixes only:
+
+- **After a realtime reconnection**, each open window (and the full-page thread) sends one more `GET …/messages`
+  request (plus one `?before=` request per older page it shows, at most 10) to refresh edits, deletions and reactions
+  made while the connection was down. Rate limits sized for 1.26.1 keep working: it happens once per reconnection, not
+  on the 60 s tick. If your end-to-end tests reopened a window after a reconnection to see an edit or a deletion, that
+  workaround can go.
+- **Cache paint:** the server's newest page replaces the cached lines unless its first message is already cached.
+  Nothing to change.
+
 ## To 1.26.1
 
 From **1.26.0**:

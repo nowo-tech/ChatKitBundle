@@ -187,6 +187,16 @@ describe('ThreadView', () => {
     emptied.api.messages.mockResolvedValueOnce({ messages: [], hasMore: false, readUpTo: null, readers: [] });
     await emptied.view.load();
     expect(emptied.view.lastId()).toBe(0);
+    // 1.26.2 (audit LN-D2-I1, probe P5): a cache holding a live message beyond a gap longer than one page. The newest
+    // page reaches back past the cache's newest id but its first message is not cached: it replaces the cache, so no
+    // hole stays in the middle.
+    const holed = setup();
+    holed.view.hydrate({ messages: [msg({ id: 1 }), msg({ id: 2 }), msg({ id: 3 }), msg({ id: 50 })], hasMore: false });
+    holed.api.messages.mockResolvedValueOnce({ messages: [msg({ id: 48 }), msg({ id: 49 }), msg({ id: 50 })], hasMore: true, readUpTo: null, readers: [] });
+    await holed.view.load();
+    expect([...holed.q('.nowo-chat-thread').querySelectorAll<HTMLElement>('.nowo-chat-msg[data-id]')].map((node) => Number(node.dataset.id))).toEqual([48, 49, 50]);
+    expect(holed.view.syncedId()).toBe(50);
+    expect(holed.q('.nowo-chat-thread__more')).not.toBeNull();
     const failing = setup({}, { messages: vi.fn().mockRejectedValue(new Error('x')) });
     await failing.view.load();
     expect(failing.q('.nowo-chat-thread').textContent).toBe('Error');
@@ -1036,6 +1046,30 @@ describe('ThreadView', () => {
       (editing.querySelector('[data-part="cancel"]') as HTMLButtonElement).click();
       expect(log.querySelector('.nowo-chat-edit')).toBeNull();
       expect(log.lastElementChild?.querySelector('.nowo-chat-bubble')?.textContent).toBe('original');
+    });
+
+    it('1.26.2 (audit LN-D2-I2): a full repaint ends the edit of a line deleted in the same merge', async () => {
+      const older = msg();
+      const mine = msg({ mine: true, authorUuid: 'me', uuid: 'e3', html: '<p>mine</p>' });
+      const theirs = msg();
+      const { action, article, view, host } = await loaded([mine, theirs]);
+      action(mine.id, 'edit').click();
+      expect(article(mine.id).querySelector('.nowo-chat-edit')).not.toBeNull();
+      // A message older than the last one cannot be appended: the merge renders the whole thread.
+      view.merge([{ ...mine, html: '', deleted: true }, older], true);
+      expect(article(older.id)).not.toBeNull();
+      expect(article(mine.id).querySelector('.nowo-chat-edit')).toBeNull();
+      expect(article(mine.id).querySelector('.nowo-chat-bubble--deleted')).not.toBeNull();
+      // The edit is over: a later change of the line is painted at once.
+      view.update({ ...mine, html: '', deleted: true, moderated: true });
+      expect(article(mine.id).textContent).toContain('Moderated');
+      expect(host.messagesChanged).toHaveBeenCalled();
+      // A line still being edited and not deleted keeps its editor through a full repaint.
+      const other = msg({ mine: true, authorUuid: 'me', uuid: 'e4', html: '<p>other</p>' });
+      view.merge([other], true);
+      action(other.id, 'edit').click();
+      view.merge([msg({ id: older.id - 1 } as Partial<ChatMessage>)], true);
+      expect(article(other.id).querySelector('.nowo-chat-edit')).not.toBeNull();
     });
 
     it('deletes after confirming; cancel and errors restore the actions', async () => {
