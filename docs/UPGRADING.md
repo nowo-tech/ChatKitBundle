@@ -78,7 +78,8 @@ No schema, configuration or template change. Everything is backward compatible:
 - **`lastMessageId`** is a new key of the conversation summary JSON (after `lastMessageAt`; set on list rows, `null`
   without a message or where `lastMessage` is `null`). Clients that compare the summary keys exactly must allow it.
 - **Bundlers that import the TypeScript:** `ChatRealtime`'s constructor takes an optional fourth argument `onResumed`;
-  `ThreadView` gains `resync()`. Rebuild as usual.
+  `ThreadView` gains `resync()` and `syncedId()`; `ChatApiError` gains `retryAfter` (optional fourth constructor
+  argument). Rebuild as usual.
 - **CSRF token ids (docs).** If `framework.csrf_protection.stateless_token_ids` lists `nowo_chat` (or `nowo_chat_page`),
   remove it: with a stateless id every chat request after sign-in is refused. See
   [CONFIGURATION — CSRF token ids](CONFIGURATION.md#csrf-token-ids).

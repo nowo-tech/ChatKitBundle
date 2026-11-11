@@ -121,6 +121,16 @@ export class ThreadView {
   /** 1.26.1: the catch-up on its way (one request chain per window) and whether another one was asked for meanwhile. */
   private catchingUp: Promise<void> | null = null;
   private catchUpAgain = false;
+  /** Whether the last fetchNewer() chain has ended (it clears `catchingUp` in the same step as its last check). */
+  private chainDone = true;
+  /**
+   * 1.26.1 (audit LN-M1): newest message id up to which this window is known to hold every message (the newest page,
+   * then each catch-up page). Live messages never move it: one can arrive while older ones are still missing (during a
+   * reconnection, or between two catch-up pages), so the catch-up asks `?after=` this id, never the newest one shown.
+   */
+  private syncedUpTo = 0;
+  /** 1.26.1 (LN-I2): after a 429 the catch-up waits until then (epoch ms; Retry-After, else 30 s). */
+  private catchUpPausedUntil = 0;
   private loadingOlder = false;
   private minimised = false;
   private minimisedApplied = false;
@@ -344,6 +354,15 @@ export class ThreadView {
    */
   lastId(): number {
     return this.messages.at(-1)?.id ?? 0;
+  }
+
+  /**
+   * 1.26.1: newest message id up to which the window holds every message (live messages may sit beyond it).
+   *
+   * @returns The id, or 0 before the first load.
+   */
+  syncedId(): number {
+    return this.syncedUpTo;
   }
 
   /**
@@ -753,6 +772,8 @@ export class ThreadView {
     if (cached !== null && cached.messages.length > 0) {
       this.messages = cached.messages;
       this.hasMore = cached.hasMore;
+      // The cached thread was this tab's view: the catch-up of load() asks for everything after it.
+      this.syncedUpTo = this.lastId();
       this.render();
       this.scrollToBottom(false);
     } else {
@@ -772,6 +793,8 @@ export class ThreadView {
       const page = await this.host.api.messages(this.summary.uuid);
       this.messages = page.messages;
       this.hasMore = page.hasMore;
+      // The newest page is complete up to its last message.
+      this.syncedUpTo = this.lastId();
       this.readUpTo = page.readUpTo ?? 0;
       this.setReaders(page.readers);
       this.loaded = true;
@@ -791,6 +814,7 @@ export class ThreadView {
     this.messages = [];
     this.hasMore = false;
     this.loaded = false;
+    this.syncedUpTo = 0;
     await this.load();
   }
 
@@ -810,40 +834,57 @@ export class ThreadView {
   }
 
   /**
-   * Poll / reconnect: fetch only what arrived after the newest message we have (`?after=` pages until the server has
-   * nothing newer). Since 1.26.1 one chain of requests runs per window: a call made while one is on its way runs one
-   * more request after it (the first one may have left before the newest message existed) and waits for it.
+   * Poll / reconnect: fetch what arrived after the newest message the window is known to hold in full (`?after=`
+   * pages until the server has nothing newer; syncedId(), not the newest one shown, since a live message may have
+   * arrived beyond a gap). Since 1.26.1 one chain of requests runs per window: a call made while one is on its way runs
+   * one more request after it (the first one may have left before the newest message existed) and waits for it. After
+   * a 429 nothing is sent until the server's Retry-After has passed.
    */
   async catchUp(): Promise<void> {
-    if (!this.loaded && this.messages.length === 0) {
+    if ((!this.loaded && this.messages.length === 0) || Date.now() < this.catchUpPausedUntil) {
       return;
     }
     if (this.catchingUp !== null) {
       this.catchUpAgain = true;
       return this.catchingUp;
     }
-    this.catchingUp = this.fetchNewer().finally(() => {
-      this.catchingUp = null;
-    });
-    return this.catchingUp;
+    const chain = this.fetchNewer();
+    // fetchNewer() clears it itself, right after its last check (LN-I3); a chain that failed at once is done already.
+    this.catchingUp = this.chainDone ? null : chain;
+    return chain;
   }
 
   /** The catch-up requests: newer pages (at most MAX_CATCH_UP_PAGES; the next tick goes on) merged as they come. */
   private async fetchNewer(): Promise<void> {
+    this.chainDone = false;
     let pages = 0;
     let more: boolean;
-    do {
-      this.catchUpAgain = false;
-      const page = await this.host.api.messages(this.summary.uuid, { after: this.lastId() });
-      if (page.readUpTo !== null) {
-        this.readUpTo = Math.max(this.readUpTo, page.readUpTo);
+    try {
+      do {
+        this.catchUpAgain = false;
+        const page = await this.host.api.messages(this.summary.uuid, { after: this.syncedUpTo });
+        if (page.readUpTo !== null) {
+          this.readUpTo = Math.max(this.readUpTo, page.readUpTo);
+        }
+        this.setReaders(page.readers);
+        // Everything after the cursor up to this page's newest message is now held (pages are contiguous).
+        const newest = page.messages.at(-1)?.id ?? 0;
+        this.syncedUpTo = Math.max(this.syncedUpTo, newest);
+        this.merge(page.messages, true);
+        pages += 1;
+        // A catch-up page's hasMore means newer messages wait beyond it.
+        more = (page.hasMore && page.messages.length > 0) || this.catchUpAgain;
+      } while (more && pages < MAX_CATCH_UP_PAGES);
+    } catch (error) {
+      if (error instanceof ChatApiError && error.status === 429) {
+        this.catchUpPausedUntil = Date.now() + Math.min(300, error.retryAfter ?? 30) * 1_000;
       }
-      this.setReaders(page.readers);
-      this.merge(page.messages, true);
-      pages += 1;
-      // A catch-up page's hasMore means newer messages wait beyond it.
-      more = (page.hasMore && page.messages.length > 0) || this.catchUpAgain;
-    } while (more && pages < MAX_CATCH_UP_PAGES);
+      throw error;
+    } finally {
+      // Same synchronous step as the last check of catchUpAgain: a later call starts a new chain (LN-I3).
+      this.chainDone = true;
+      this.catchingUp = null;
+    }
   }
 
   /**

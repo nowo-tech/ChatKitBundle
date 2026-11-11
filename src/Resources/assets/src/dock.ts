@@ -1797,7 +1797,9 @@ export class ChatDock implements ThreadHost {
           // 1.26.1: a newer message id than the newest one shown is a missed event (the times only have second
           // precision: a message sent in the same second as the one shown left the list time unchanged). Servers
           // before 1.26.1 send no id: a changed time is all there is.
-          const gap = typeof summary.lastMessageId === 'number' ? summary.lastMessageId > view.lastId() : known !== undefined && summary.lastMessageAt !== known.lastMessageAt;
+          // Audit LN-M1: compared with the id the window holds every message up to, not the newest one shown (a live
+          // message may sit beyond a gap).
+          const gap = typeof summary.lastMessageId === 'number' ? summary.lastMessageId > view.syncedId() : known !== undefined && summary.lastMessageAt !== known.lastMessageAt;
           if (gap && !resync) {
             void view.catchUp().catch(() => undefined);
           }

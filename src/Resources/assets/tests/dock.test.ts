@@ -1792,5 +1792,153 @@ describe('ChatDock', () => {
       expect(root.classList.contains('is-offline')).toBe(true);
       expect(shown(root, missed.id)).toBe(1);
     });
+    it('LN-1 (audit): a live message during the reconnect list request does not hide the missed one', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      realtimeHandlers?.onState(true);
+      realtimeHandlers?.onState(false);
+      const missed = message({ html: '<p>missed</p>' });
+      const live = message({ html: '<p>live</p>' });
+      threads.a = [first, missed, live];
+      let releaseList: () => void = () => undefined;
+      api.conversations.mockImplementation(
+        () => new Promise((resolve) => (releaseList = () => resolve({ conversations: [summary('a', { lastMessageId: live.id })], unreadTotal: 0 }))),
+      );
+      realtimeHandlers?.onState(true);
+      await settle();
+      // The live connection is open again: the next event arrives before the list answers.
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: live });
+      expect(shown(root, live.id)).toBe(1);
+      releaseList();
+      await settle();
+      expect(afterCalls('a').map(([, cursor]) => cursor.after)).toEqual([first.id]);
+      expect(shown(root, missed.id)).toBe(1);
+      expect(shown(root, live.id)).toBe(1);
+      const ids = [...root.querySelectorAll<HTMLElement>('.nowo-chat-window .nowo-chat-msg[data-id]')].map((node) => Number(node.dataset.id));
+      expect(ids).toEqual([first.id, missed.id, live.id]);
+    });
+
+    it('LN-1 (audit): the live tick repairs a gap a live message hid while connected', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a', { lastMessageId: first.id })]);
+      await dock.start();
+      await dock.open(summary('a', { lastMessageId: first.id }));
+      await settle();
+      realtimeHandlers?.onState(true);
+      // One event lost while "live", the next one delivered: the newest id shown equals the list's lastMessageId.
+      const lost = message();
+      const live = message();
+      threads.a = [first, lost, live];
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: live });
+      api.conversations.mockResolvedValue({ conversations: [summary('a', { lastMessageId: live.id })], unreadTotal: 0 });
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a').map(([, cursor]) => cursor.after)).toEqual([first.id]);
+      expect(shown(root, lost.id)).toBe(1);
+      expect(shown(root, live.id)).toBe(1);
+      // Held in full now: the next tick asks nothing.
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle();
+      expect(afterCalls('a')).toHaveLength(1);
+    });
+
+    it('LN-2 (audit): a live message between two catch-up pages does not skip the rest of the gap', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      realtimeHandlers?.onState(true);
+      const gap = Array.from({ length: 4 }, () => message());
+      const live = message();
+      threads.a = [first, ...gap, live];
+      let calls = 0;
+      api.messages.mockImplementation((uuid: string, cursor: { after?: number } = {}) => {
+        calls += 1;
+        const newer = (threads[uuid] ?? []).filter((item) => item.id > (cursor.after ?? 0));
+        if (calls === 1) {
+          // Delivered while the first catch-up page is on its way.
+          queueMicrotask(() => realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: live }));
+        }
+        return Promise.resolve(page(newer.slice(0, 2), newer.length > 2));
+      });
+      realtimeHandlers?.onResumed?.();
+      await settle();
+      expect(afterCalls('a').map(([, cursor]) => cursor.after)).toEqual([first.id, gap[1]?.id, gap[3]?.id]);
+      for (const item of [...gap, live]) {
+        expect(shown(root, item.id), `message ${item.id}`).toBe(1);
+      }
+    });
+
+    it('LN-I2: waits for Retry-After after a 429 before catching up again', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      const view = (dock as unknown as { windows: Map<string, { catchUp(): Promise<void> }> }).windows.get('a');
+      const { ChatApiError } = await import('../src/api');
+      api.messages.mockRejectedValueOnce(new ChatApiError(429, 'rate_limited', '', 20));
+      await expect(view?.catchUp()).rejects.toThrow('rate_limited');
+      const sent = api.messages.mock.calls.length;
+      const later = message();
+      threads.a = [first, later];
+      await view?.catchUp();
+      expect(api.messages.mock.calls.length, 'paused').toBe(sent);
+      vi.advanceTimersByTime(20_000);
+      await view?.catchUp();
+      expect(api.messages.mock.calls.length).toBe(sent + 1);
+      expect(shown(root, later.id)).toBe(1);
+
+      // Without a Retry-After: 30 s.
+      api.messages.mockRejectedValueOnce(new ChatApiError(429, 'rate_limited'));
+      await expect(view?.catchUp()).rejects.toThrow('rate_limited');
+      await view?.catchUp();
+      expect(api.messages.mock.calls.length).toBe(sent + 2);
+      vi.advanceTimersByTime(30_000);
+      await view?.catchUp();
+      expect(api.messages.mock.calls.length).toBe(sent + 3);
+    });
+
+    it('LN-I3: a call made as soon as a chain ends starts a new one; a chain failing at once is not kept', async () => {
+      const first = message();
+      const threads: Record<string, ChatMessage[]> = { a: [first] };
+      server(threads);
+      const { dock, root } = mount([summary('a')]);
+      await dock.start();
+      await dock.open(summary('a'));
+      await settle();
+      const view = (dock as unknown as { windows: Map<string, { catchUp(): Promise<void> }> }).windows.get('a');
+      const late = message();
+      const before = api.messages.mock.calls.length;
+      const chain = view?.catchUp();
+      // The first reaction to the chain's end already gets a request of its own.
+      const followUp = chain?.then(() => {
+        threads.a = [first, late];
+        return view?.catchUp();
+      });
+      await followUp;
+      expect(api.messages.mock.calls.length).toBe(before + 2);
+      expect(shown(root, late.id)).toBe(1);
+
+      api.messages.mockImplementationOnce(() => {
+        throw new Error('sync');
+      });
+      await expect(view?.catchUp()).rejects.toThrow('sync');
+      const after = api.messages.mock.calls.length;
+      await view?.catchUp();
+      expect(api.messages.mock.calls.length).toBe(after + 1);
+    });
   });
 });

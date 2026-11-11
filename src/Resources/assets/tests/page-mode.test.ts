@@ -429,4 +429,34 @@ describe('ChatDock page mode', () => {
     expect(page.querySelectorAll(`.nowo-chat-pagemode__thread [data-id="${missed.id}"]`)).toHaveLength(1);
     expect(page.querySelectorAll('.nowo-chat-pagemode__thread .nowo-chat-msg[data-id]')).toHaveLength(2);
   });
+  it('1.26.1 (audit LN): a live message during the catch-up hides nothing in the open thread', async () => {
+    const first = message();
+    const threads: Record<string, ChatMessage[]> = { a: [first] };
+    api.messages.mockImplementation((uuid: string, cursor: { after?: number } = {}) =>
+      Promise.resolve({ messages: (threads[uuid] ?? []).filter((item) => item.id > (cursor.after ?? 0)), hasMore: false, readUpTo: null, readers: [] }),
+    );
+    window.history.replaceState(null, '', '/chat/a');
+    const { dock, page } = mountPage([summary('a'), summary('b')], { current: 'a' });
+    await dock.start();
+    await flush();
+    realtimeHandlers?.onState(true);
+    realtimeHandlers?.onState(false);
+    const missed = message({ html: '<p>missed</p>' });
+    const live = message({ html: '<p>live</p>' });
+    threads.a = [first, missed, live];
+    let releaseList: () => void = () => undefined;
+    api.conversations.mockImplementation(
+      () => new Promise((resolve) => (releaseList = () => resolve({ conversations: [summary('a', { lastMessageId: live.id }), summary('b')], unreadTotal: 0 }))),
+    );
+    realtimeHandlers?.onState(true);
+    await flush();
+    realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: live });
+    releaseList();
+    for (let i = 0; i < 5; i += 1) {
+      await flush();
+    }
+    expect(api.messages).toHaveBeenCalledWith('a', { after: first.id });
+    const ids = [...page.querySelectorAll<HTMLElement>('.nowo-chat-pagemode__thread .nowo-chat-msg[data-id]')].map((node) => Number(node.dataset.id));
+    expect(ids).toEqual([first.id, missed.id, live.id]);
+  });
 });

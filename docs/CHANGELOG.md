@@ -69,25 +69,34 @@ configuration or template change.
   fetched an open window's messages only when the list's `lastMessageAt` had changed. That time has second precision,
   so a message sent in the same second as the newest one shown (or an older server summary) left the window behind
   until it was reopened. Now a reconnection, and a live connection that was replaced (token refresh), make every open
-  window and the full-page thread fetch `?after=` its newest message id (paging through long gaps, up to 10 pages per
-  pass), even when the list request fails; a window whose first load failed loads again. The list refresh (the 60 s
-  safety-net tick while live, every 4th poll tick while down) catches up a window as soon as the summary names a newer
-  message id than the one shown. One request chain runs per window (a call made meanwhile waits for it and asks once
-  more); messages merge by id, so none shows twice; scroll position, the "New messages" divider and the read rules are
-  those of a live message. A minimised window no longer counts a caught-up message on top of the server's unread count.
+  window and the full-page thread fetch `?after=` the newest message id it holds every message up to (paging through
+  long gaps, up to 10 pages per pass), even when the list request fails; a window whose first load failed loads again.
+  That cursor moves only with the first page and each catch-up page, never with a live message: a live message that
+  arrives during the reconnection or between two catch-up pages no longer makes the window skip the rest of the gap
+  (audit LN-M1). The list refresh (the 60 s safety-net tick while live, every 4th poll tick while down) catches up a
+  window as soon as the summary names a newer message id than that cursor, which also repairs an event lost while the
+  connection looked live. One request chain runs per window (a call made meanwhile waits for it and asks once more; a
+  call made once it ended starts a new one); after a 429 the catch-up waits for `Retry-After` (30 s without one, at
+  most 5 min). Messages merge by id, so none shows twice; scroll position, the "New messages" divider and the read
+  rules are those of a live message. A minimised window no longer counts a caught-up message on top of the server's
+  unread count. Not covered: an edit, deletion or reaction made during the outage to a message already shown stays as
+  it was until the window is reopened or the change is sent again.
 
 ### Added
 
 - **`lastMessageId`** on conversation summaries: id of the newest message on the list rows (`GET /api/conversations`,
   the full-page list); `null` without a message and in single-conversation answers, which carry no last message
   (`lastMessage` is `null` there too). Additive; the dock falls back to `lastMessageAt` when a server does not send it.
+- `ChatApiError` has `retryAfter` (seconds from a `Retry-After` header, or `null`; optional fourth constructor
+  argument).
 - `ChatRealtime` takes an optional fourth constructor argument `onResumed` (called when a connection replaced without an
   error is open again). Optional; existing callers are unchanged.
 
 ### Tests
 
 - Vitest: dock windows and the full-page thread (drop, missed message, reconnect: shown exactly once; several open
-  windows; a gap found by the list tick; a replaced connection; one catch-up chain per window). Demo Playwright e2e
+  windows; a gap found by the list tick; a replaced connection; one catch-up chain per window; audit LN scenarios: a
+  live message during the list request or between two catch-up pages, Retry-After). Demo Playwright e2e
   `resync.spec.ts` with a scripted live connection.
 
 ### Documentation
