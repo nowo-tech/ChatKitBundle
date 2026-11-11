@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.26.1] - 2026-11-11](#1261---2026-11-11)
 - [[1.26.0] - 2026-11-10](#1260---2026-11-10)
 - [[1.25.1] - 2026-11-10](#1251---2026-11-10)
 - [[1.25.0] - 2026-11-10](#1250---2026-11-10)
@@ -59,8 +60,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
-Target 1.26.1: open conversation windows catch up after a dropped realtime connection (Symfony Beacon e2e). No schema,
-configuration or template change.
+## [1.26.1] - 2026-11-11
+
+Open dock windows and the page-mode thread catch up after a realtime drop or a missed event, without duplicates or losing an edit in progress. See [UPGRADING](https://github.com/nowo-tech/ChatKitBundle/blob/v1.26.1/docs/UPGRADING.md#to-1261).
+
 
 ### Fixed
 
@@ -1214,7 +1217,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.26.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.26.1...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
