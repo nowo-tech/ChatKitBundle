@@ -4,10 +4,6 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Worker;
 
-use Nowo\ChatKitBundle\Avatar\ChatAvatars;
-use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
-use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
-use Nowo\ChatKitBundle\Service\ChatReferences;
 use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
@@ -18,10 +14,11 @@ use Symfony\Contracts\Service\ResetInterface;
 
 /**
  * 1.26.3 (REQ-RUNTIME-002): clears the bundle's per-request memos at every request boundary the bundle can see, so a
- * FrankenPHP worker with the kernel kept alive and NOT reset (`FRANKENPHP_RESET_KERNEL=false`, no `services_resetter`
- * between requests) never serves one request with state of the previous one: the access-filtered reference cards of
- * ChatReferences (a revoked item kept its card), the avatar URLs of ChatAvatars, the managed settings rows of
- * ChatUserSettingsRepository and the resolved-entity map of UserReferenceListener (id mode).
+ * long-lived kernel where the services resetter does not run (a host that removes or bypasses `services_resetter` or
+ * drives `http_kernel` directly, `messenger:consume --no-reset`, long-running console commands) never serves one
+ * request, message or command with state of the previous one: the access-filtered reference cards of ChatReferences (a
+ * revoked item kept its card), the avatar URLs of ChatAvatars, the managed settings rows of ChatUserSettingsRepository
+ * and the resolved-entity map of UserReferenceListener (id mode).
  *
  * Boundaries: the main `kernel.request` (before the firewall), `kernel.terminate`, `console.terminate`, and Messenger
  * `WorkerMessageHandledEvent` / `WorkerMessageFailedEvent` for consumers. The memos keep `ResetInterface`
@@ -32,26 +29,15 @@ use Symfony\Contracts\Service\ResetInterface;
  */
 final class ChatRequestBoundaryListener
 {
-    /** @var list<ResetInterface> */
-    private readonly array $memos;
-
     /**
-     * @param ChatReferences $references Access-filtered reference cards per viewer
-     * @param ChatAvatars $avatars Avatar URLs per person
-     * @param ChatUserSettingsRepository $settings Settings rows per user
-     * @param UserReferenceListener|null $userReferences Resolved entities (registered in `doctrine.user_reference: id` only)
+     * @param iterable<ResetInterface> $memos The memos to empty. The bundle wires a lazy iterator of references that
+     *                                        skip services not built yet (`IGNORE_ON_UNINITIALIZED_REFERENCE`), so a
+     *                                        request that never touched the chat builds none of them: only memos
+     *                                        that exist can hold state, and those are emptied.
      */
     public function __construct(
-        ChatReferences $references,
-        ChatAvatars $avatars,
-        ChatUserSettingsRepository $settings,
-        ?UserReferenceListener $userReferences = null,
+        private readonly iterable $memos,
     ) {
-        $memos = [$references, $avatars, $settings];
-        if ($userReferences instanceof UserReferenceListener) {
-            $memos[] = $userReferences;
-        }
-        $this->memos = $memos;
     }
 
     /**

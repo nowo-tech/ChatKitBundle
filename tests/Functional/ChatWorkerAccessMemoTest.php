@@ -19,8 +19,10 @@ use Symfony\Component\HttpKernel\TerminableInterface;
 
 use function array_column;
 use function assert;
+use function gc_collect_cycles;
 use function json_decode;
 use function json_encode;
+use function memory_get_usage;
 use function substr_count;
 
 use const JSON_THROW_ON_ERROR;
@@ -35,6 +37,15 @@ use const JSON_THROW_ON_ERROR;
  */
 final class ChatWorkerAccessMemoTest extends DatabaseTestCase
 {
+    /** Rounds of the two-person test (2 requests each). */
+    private const ROUNDS = 200;
+
+    /** Rounds before the memory baseline is taken. */
+    private const WARM_UP_ROUNDS = 20;
+
+    /** Allowed memory growth after the warm-up (bytes). */
+    private const MEMORY_MARGIN = 4 * 1024 * 1024;
+
     private KernelBrowser $client;
 
     protected function chatKitConfig(): array
@@ -92,13 +103,17 @@ final class ChatWorkerAccessMemoTest extends DatabaseTestCase
         $luis = $this->user('Luis');
         $this->grant($ana, '7');
         $this->grant($luis, '7');
+        $resolver = $this->get(CountingAvatarResolver::class);
+        // Primed before the first request: round 0 asserts the picture the worker resolved in that very round, so the
+        // card (asserted first in every round) is proven on every round, the revoked ones included.
+        $resolver->urls                    = [$ana->getChatPublicId() => '/files/ana/0.webp'];
         [$anaSession, $luisSession, $uuid] = $this->directConversationWithDoc($ana, $luis);
-        $resolver                          = $this->get(CountingAvatarResolver::class);
         $realtime                          = $this->get(RecordingRealtime::class);
         $queries                           = $this->get(QueryCounter::class);
 
-        $granted = true;
-        for ($round = 0; $round < 200; ++$round) {
+        $granted  = true;
+        $baseline = 0;
+        for ($round = 0; $round < self::ROUNDS; ++$round) {
             // The host changes Ana's picture between two requests.
             $resolver->urls = [$ana->getChatPublicId() => '/files/ana/' . $round . '.webp'];
 
@@ -107,7 +122,7 @@ final class ChatWorkerAccessMemoTest extends DatabaseTestCase
 
             $seen = $this->messages($uuid, $luisSession)[0];
             self::assertSame($granted ? ['7'] : [], array_column($seen['references'], 'id'), 'round ' . $round . ': Luis sees the card only while granted');
-            self::assertSame($granted ? 0 : 1, substr_count($seen['html'], 'nowo-chat-ref--restricted'));
+            self::assertSame($granted ? 0 : 1, substr_count($seen['html'], 'nowo-chat-ref--restricted'), 'round ' . $round . ': restricted chip');
             self::assertSame('/files/ana/' . $round . '.webp', $seen['authorAvatarUrl'], 'round ' . $round . ': the picture of this request, not a memoised one');
 
             $granted ? $this->revoke($luis, '7') : $this->grant($luis, '7');
@@ -116,7 +131,15 @@ final class ChatWorkerAccessMemoTest extends DatabaseTestCase
             $resolver->calls     = [];
             $realtime->published = [];
             $queries->clear();
+
+            if ($round === self::WARM_UP_ROUNDS) {
+                gc_collect_cycles();
+                $baseline = memory_get_usage();
+            }
         }
+
+        gc_collect_cycles();
+        self::assertLessThan($baseline + self::MEMORY_MARGIN, memory_get_usage(), 'memory stays flat over the rounds on one kernel');
     }
 
     /**

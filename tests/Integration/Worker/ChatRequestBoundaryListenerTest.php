@@ -28,6 +28,8 @@ use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
 use Symfony\Component\Messenger\Event\WorkerMessageHandledEvent;
 use WeakMap;
 
+use function array_intersect;
+use function array_values;
 use function count;
 use function is_array;
 
@@ -35,9 +37,13 @@ use function is_array;
  * 1.26.3 (REQ-RUNTIME-002): the bundle registers its own boundary listener on the main `kernel.request`,
  * `kernel.terminate`, `console.terminate` and the Messenger worker events, and each of them empties the reference,
  * avatar and settings memos (which `kernel.reset` alone did before). A sub-request keeps its main request's memos.
+ * The listener's references are lazy: memos not built yet are skipped (nothing is built per request).
  */
 final class ChatRequestBoundaryListenerTest extends DatabaseTestCase
 {
+    /** The memos built on demand (the id-mode UserReferenceListener is built with the entity manager). */
+    private const CHAT_MEMOS = [ChatReferences::class, ChatAvatars::class, ChatUserSettingsRepository::class];
+
     public function testTheListenerIsRegisteredOnEveryBoundary(): void
     {
         $dispatcher = $this->get(EventDispatcherInterface::class);
@@ -87,11 +93,46 @@ final class ChatRequestBoundaryListenerTest extends DatabaseTestCase
         /** @var WeakMap<object, true> $resolved */
         $resolved          = (new ReflectionProperty(UserReferenceListener::class, 'resolved'))->getValue($userReferences);
         $resolved[$entity] = true;
-        $listener          = new ChatRequestBoundaryListener($this->get(ChatReferences::class), $this->get(ChatAvatars::class), $this->get(ChatUserSettingsRepository::class), $userReferences);
+        $listener          = new ChatRequestBoundaryListener([$userReferences]);
 
         $listener->clear();
 
         self::assertFalse($userReferences->isResolved($entity));
+    }
+
+    public function testOnlyMemosAlreadyBuiltAreResetAndTheyAreStillCleared(): void
+    {
+        // Lazy references (IGNORE_ON_UNINITIALIZED_REFERENCE): a request that never touched the chat builds no memo.
+        $listener = $this->get(ChatRequestBoundaryListener::class);
+        self::assertSame([], array_intersect(self::CHAT_MEMOS, $this->memoClasses($listener)), 'no chat memo is built by the boundary listener');
+        $listener->onKernelRequest(new RequestEvent($this->kernel, Request::create('/'), HttpKernelInterface::MAIN_REQUEST));
+        $listener->clear();
+        self::assertSame([], array_intersect(self::CHAT_MEMOS, $this->memoClasses($listener)), 'the boundaries build none either');
+
+        // Once built (and filled), each memo is reached by the same listener instance and emptied.
+        [$references, , , $resolver, $user] = $this->fillMemos();
+        self::assertSame(self::CHAT_MEMOS, array_values(array_intersect($this->memoClasses($listener), self::CHAT_MEMOS)));
+        $listener->onKernelRequest(new RequestEvent($this->kernel, Request::create('/'), HttpKernelInterface::MAIN_REQUEST));
+        self::assertSame(0, $this->resolvedCount($references));
+        $calls = count($resolver->calls);
+        $this->get(ChatAvatars::class)->urlOf($user);
+        self::assertCount($calls + 1, $resolver->calls);
+    }
+
+    /**
+     * @return list<class-string>
+     */
+    private function memoClasses(ChatRequestBoundaryListener $listener): array
+    {
+        $memos = (new ReflectionProperty(ChatRequestBoundaryListener::class, 'memos'))->getValue($listener);
+        self::assertIsIterable($memos);
+        $classes = [];
+        foreach ($memos as $memo) {
+            self::assertIsObject($memo);
+            $classes[] = $memo::class;
+        }
+
+        return $classes;
     }
 
     /**

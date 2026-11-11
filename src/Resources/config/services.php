@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
+use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Avatar\NullChatAvatarUrlResolver;
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
@@ -31,9 +32,11 @@ use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Realtime\ChatRecipients;
 use Nowo\ChatKitBundle\Realtime\MercureChatRealtime;
 use Nowo\ChatKitBundle\Realtime\NullChatRealtime;
+use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Nowo\ChatKitBundle\Service\ChatMentions;
+use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
 use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
@@ -44,6 +47,7 @@ use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\UX\Icons\IconRendererInterface;
 
+use function Symfony\Component\DependencyInjection\Loader\Configurator\iterator;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\param;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service_closure;
@@ -95,8 +99,15 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$secret', param('kernel.secret'));
     // 1.26.3 (REQ-RUNTIME-002): the memos are cleared at every request / command / message boundary, not only by
     // `kernel.reset` (FrankenPHP worker with FRANKENPHP_RESET_KERNEL=false). The id-mode listener may be removed.
+    // Lazy: only memos already built in this process are reset (IGNORE_ON_UNINITIALIZED_REFERENCE), so a request that
+    // never touched the chat builds none of them.
     $services->get(ChatRequestBoundaryListener::class)
-        ->arg('$userReferences', service(UserReferenceListener::class)->nullOnInvalid());
+        ->arg('$memos', iterator([
+            service(ChatReferences::class)->ignoreOnUninitialized(),
+            service(ChatAvatars::class)->ignoreOnUninitialized(),
+            service(ChatUserSettingsRepository::class)->ignoreOnUninitialized(),
+            service(UserReferenceListener::class)->ignoreOnUninitialized(),
+        ]));
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).
     $services->alias(ChatServiceInterface::class, ChatService::class);
