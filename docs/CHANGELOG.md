@@ -61,6 +61,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Next version: **1.26.3** (patch).
+
+### Security
+
+- **A revoked reference kept its card in a long-lived kernel where the services resetter does not run**
+  (REQ-RUNTIME-002; affects 1.9.0 to 1.26.2). `ChatReferences` memoises, per viewer, the reference cards a viewer may
+  open (the access-filtered result of the application's `ChatReferenceProviderInterface::resolve()`). The memo was
+  emptied only by `kernel.reset` (`services_resetter`). The stock Symfony kernel runs the services resetter before every
+  request, also in FrankenPHP worker mode with `FRANKENPHP_RESET_KERNEL=false` (`Kernel::handle()` → `boot()`), so a
+  stock web worker was not affected. The memo crossed requests, messages or commands where the resetter does not run:
+  a host that removes or bypasses `services_resetter` or drives `http_kernel` directly, Messenger consumers started
+  with `messenger:consume --no-reset`, and long-running console commands. There, once the application revoked a
+  person's access to an item (or deleted it), that process kept showing them the item's title, subtitle, badge and URL
+  until it restarted. The bundle's own path is the e-mail digest: `ChatDigestDispatcher` under
+  `messenger:consume --no-reset` kept a revoked card's title, subtitle and badge in the digest preview, and kept
+  sending digests to a user who had opted out (the memoised `ChatUserSettings` row). The memos also grew with every
+  viewer. A new `ChatRequestBoundaryListener` (registered by the bundle, nothing to wire) now empties the bundle's
+  memos at the main `kernel.request` (before the firewall), `kernel.terminate`, `console.terminate` and the Messenger
+  `WorkerMessageHandledEvent` / `WorkerMessageFailedEvent`, in addition to `kernel.reset`: the reference cards of
+  `ChatReferences`, the avatar URLs of `ChatAvatars` (a changed or removed picture stayed, since 1.16.0), the managed
+  settings rows of `ChatUserSettingsRepository` (since 1.5.1) and the resolved-entity map of `UserReferenceListener`
+  (`doctrine.user_reference: id`). Its references are lazy (`IGNORE_ON_UNINITIALIZED_REFERENCE`): only memos already
+  built are reset, so a request that never touches the chat builds none. Sub-requests keep their main request's memos.
+  Regression tests: `ChatWorkerAccessMemoTest` (one kernel, `http_kernel` called directly with no services resetter:
+  Luis is served a card, his grant is deleted with SQL, the next request shows the "Content not visible" chip; then
+  200 rounds of two people in turn while Luis is granted and revoked every round and Ana's picture changes, memory
+  margin 4 MiB after a 20-round warm-up) and `ChatRequestBoundaryListenerTest` (every boundary empties every memo; a
+  sub-request does not; memos not built yet are skipped, built ones are emptied).
+
 ## [1.26.2] - 2026-11-11
 
 Follow-ups of the 1.26.1 audit (LN): edits and deletions made while the realtime connection was down now show after

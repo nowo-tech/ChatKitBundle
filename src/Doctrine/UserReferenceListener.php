@@ -90,7 +90,7 @@ final class UserReferenceListener implements ResetInterface
      */
     public function reset(): void
     {
-        // @igor-ignore Cleared between requests by the services resetter.
+        // @igor-ignore Cleared at every request boundary (ChatRequestBoundaryListener) and by the services resetter.
         $this->resolved = new WeakMap();
     }
 

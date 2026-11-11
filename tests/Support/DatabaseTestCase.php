@@ -30,7 +30,7 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function setUp(): void
     {
-        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders());
+        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences());
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
@@ -53,6 +53,14 @@ abstract class DatabaseTestCase extends TestCase
      * 1.25: whether the kernel registers the test sidebar section providers.
      */
     protected function sidebarProviders(): bool
+    {
+        return false;
+    }
+
+    /**
+     * 1.26.3: whether the kernel registers the `/doc` provider whose grants live in a table (worker tests).
+     */
+    protected function grantReferences(): bool
     {
         return false;
     }

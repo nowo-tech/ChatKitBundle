@@ -10,7 +10,7 @@
 
 ![FrankenPHP Friendly Worker Mode](docs/images/frankenphp-friendly.png)
 
-This bundle is **FrankenPHP worker mode friendly**. See [docs/FRANKENPHP-WORKER-AUDIT.md](docs/FRANKENPHP-WORKER-AUDIT.md).
+This bundle is **FrankenPHP worker mode friendly**, including worker mode with the kernel kept alive and **kernel reset false** (`FRANKENPHP_RESET_KERNEL=false`). It does not rely on the services resetter: it clears its own memos at every request, command and message boundary, so it also stays correct where `services_resetter` does not run (a host that bypasses it, `messenger:consume --no-reset`, long-running commands). See [docs/FRANKENPHP-WORKER-AUDIT.md](docs/FRANKENPHP-WORKER-AUDIT.md).
 
 ## Features
 

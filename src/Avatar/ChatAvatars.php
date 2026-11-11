@@ -19,7 +19,8 @@ use function is_string;
  * Profile picture URLs for one request (1.16): the callers prime the people of a response after the access filters,
  * so the host resolver gets exactly one urlsFor() call per response; the presenter then reads the memo. Every value is
  * checked by AvatarUrlPolicy before it is kept. A resolver that throws gives null for the whole batch: a broken picture
- * service never breaks the chat. The memo is reset between requests (`kernel.reset`, FrankenPHP worker, Messenger).
+ * service never breaks the chat. The memo is emptied at every request / command / message boundary (ChatRequestBoundaryListener, 1.26.3) and by
+ * `kernel.reset`.
  *
  * @internal
  */
