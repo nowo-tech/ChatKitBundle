@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [Exact channel keys (house rule LQ)](#exact-channel-keys-house-rule-lq)
 - [To 1.26.3](#to-1263)
 - [To 1.26.2](#to-1262)
 - [To 1.26.1](#to-1261)
@@ -63,6 +64,46 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+### Exact channel keys (house rule LQ)
+
+**Who is affected:** hosts on MySQL or MariaDB. PostgreSQL and SQLite need nothing.
+
+1. **Channel keys must follow the `ChatChannelKey` rule**: 1–120 bytes of UTF-8, no whitespace at either end and no
+   control or format characters (zero-width spaces and joiners, bidirectional overrides, the BOM). `project:<uuid>`
+   and any printable key pass. A key that breaks the rule is now an unknown channel: the API answers 404 and
+   `ChatService::openChannel()` throws a `LogicException`. Keys are compared byte for byte, so `project:Acme` and
+   `project:acme` are two channels; make `ChatChannelProviderInterface::find()` return the canonical key.
+2. **Give `channel_key` the binary collation.** New schemas get it from `ChannelKeyCollationListener`;
+   `doctrine:migrations:diff` (or `doctrine:schema:update --dump-sql`) shows the change for an existing table. By hand
+   (default table name; use yours when `doctrine.table_prefix` / `table_name_prefix` are set):
+
+   ```sql
+   -- MySQL 8.0 / 8.4
+   ALTER TABLE nowo_chat_conversation MODIFY channel_key VARCHAR(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL;
+   -- MariaDB
+   ALTER TABLE nowo_chat_conversation MODIFY channel_key VARCHAR(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_nopad_bin DEFAULT NULL;
+   -- MySQL 5.7
+   ALTER TABLE nowo_chat_conversation MODIFY channel_key VARCHAR(120) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL;
+   ```
+
+   The change only makes comparisons stricter, so it never fails on existing rows: any two keys the old unique key
+   accepted are also distinct under the binary collation. Until it runs, the PHP re-check already keeps every channel to its
+   exact key, and a look-alike of a channel that is already open fails with a unique-key error instead of opening it.
+3. **Check existing rows before or after the `ALTER`.** A channel whose provider key differed only in case, accents or
+   trailing spaces from an older one was attached to the older conversation; that conversation keeps its stored key
+   and stays with the channel that created it. Find rows whose stored key the provider no longer returns exactly, and
+   rows with padded keys (they no longer open and are no longer listed):
+
+   ```sql
+   SELECT id, uuid, HEX(channel_key) FROM nowo_chat_conversation
+   WHERE channel_key IS NOT NULL AND (channel_key <> TRIM(channel_key) OR channel_key REGEXP '[[:cntrl:]]');
+   ```
+
+   Participant rows that members of the other channel received in it grant nothing (`ChatAccess::canView()` checks
+   the provider for the stored key); remove them if you want their unread counters gone:
+   `DELETE FROM nowo_chat_participant WHERE conversation_id = ? AND user_id IN (...)`. For a padded key, either fix
+   the provider key and update the row to the exact key, or leave the row: its channel is simply no longer reachable.
 
 ## To 1.26.3
 

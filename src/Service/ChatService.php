@@ -26,6 +26,7 @@ use Nowo\ChatKitBundle\Event\SupportTicketReopenedEvent;
 use Nowo\ChatKitBundle\Event\SupportTicketStatusChangedEvent;
 use Nowo\ChatKitBundle\Link\ChatLinks;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Model\ChatChannelKey;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
@@ -111,11 +112,13 @@ final readonly class ChatService implements ChatServiceInterface
      * @param ChatChannel $channel The application channel
      *
      * @throws ChatChannelDeniedException When a listener refuses to create it; nothing is written
+     * @throws LogicException When the channel key breaks the ChatChannelKey format rule; nothing is written
      *
      * @return ChatConversation The channel conversation
      */
     public function openChannel(ChatUserInterface $actor, ChatChannel $channel): ChatConversation
     {
+        ChatChannelKey::assertValid($channel->key);
         $conversation = $this->conversations->findChannel($channel->key) ?? $this->createChannel($actor, $channel);
         $this->participant($conversation, $actor);
         $this->entityManager->flush();

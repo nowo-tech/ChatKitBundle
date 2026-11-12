@@ -15,6 +15,8 @@ use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
+use function in_array;
+
 /**
  * Queries for @mentions: the rows of one message (kept in step by ChatMentions) and "messages that mention me" for a
  * host inbox, limited to conversations the user may still read.
@@ -139,13 +141,17 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             return [];
         }
 
-        return $this->visibleTo($user, $channelKeys, $supportAgent, $unreadOnly, $since, $channelsOnly, true)
+        /** @var list<ChatMessageMention> $rows */
+        $rows = $this->visibleTo($user, $channelKeys, $supportAgent, $unreadOnly, $since, $channelsOnly, true)
             ->addSelect('m', 'c')
             ->orderBy('mm.createdAt', 'DESC')
             ->addOrderBy('mm.id', 'DESC')
             ->setMaxResults($limit)
             ->getQuery()
             ->getResult();
+
+        // The SQL IN runs on the column collation: keep only the exact channel keys (look-alikes, house rule LQ).
+        return array_values(array_filter($rows, static fn (ChatMessageMention $mention): bool => self::exactChannel($mention->getMessage()->getConversation(), $channelKeys)));
     }
 
     /**
@@ -168,10 +174,30 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
         ?DateTimeImmutable $since = null,
         bool $channelsOnly = false,
     ): int {
-        return (int) $this->visibleTo($user, $channelKeys, $supportAgent, $unreadOnly, $since, $channelsOnly)
-            ->select('COUNT(mm.id)')
+        // One row per conversation, so the channel key is matched again in PHP (look-alikes, house rule LQ).
+        /** @var list<array{k: string|null, n: int|string}> $rows */
+        $rows = $this->visibleTo($user, $channelKeys, $supportAgent, $unreadOnly, $since, $channelsOnly)
+            ->select('c.channelKey AS k', 'COUNT(mm.id) AS n')
+            ->groupBy('c.id')
             ->getQuery()
-            ->getSingleScalarResult();
+            ->getArrayResult();
+        $count = 0;
+        foreach ($rows as $row) {
+            $count += $row['k'] === null || in_array($row['k'], $channelKeys, true) ? (int) $row['n'] : 0;
+        }
+
+        return $count;
+    }
+
+    /**
+     * Whether a mention's conversation passes the PHP re-check: not a channel, or a channel whose key is exactly one of
+     * the given keys.
+     *
+     * @param list<string> $channelKeys
+     */
+    private static function exactChannel(ChatConversation $conversation, array $channelKeys): bool
+    {
+        return !$conversation->isChannel() || in_array($conversation->getChannelKey(), $channelKeys, true);
     }
 
     /**

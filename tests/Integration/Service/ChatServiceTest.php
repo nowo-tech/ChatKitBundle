@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Integration\Service;
 
 use InvalidArgumentException;
+use LogicException;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
@@ -14,6 +15,7 @@ use Nowo\ChatKitBundle\Event\ChatSupportStatusChangedEvent;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Realtime\ChatTopics;
+use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
@@ -92,6 +94,29 @@ final class ChatServiceTest extends DatabaseTestCase
 
         $this->expectExceptionMessage('reaction');
         $chat->toggleReaction($ana, $message, '💩');
+    }
+
+    public function testLookAlikeChannelKeysAreRefused(): void
+    {
+        $chat   = $this->get(ChatService::class);
+        $access = $this->get(ChatAccess::class);
+        $repo   = $this->get(ChatConversationRepository::class);
+        $ana    = $this->user('Ana');
+        $acme   = $chat->openChannel($ana, new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+
+        self::assertSame($acme, $repo->findChannel(TestChannelProvider::KEY));
+        foreach ([TestChannelProvider::KEY . ' ', "\t" . TestChannelProvider::KEY, "project:\u{200D}acme", "project:acme\0"] as $lookAlike) {
+            self::assertNull($repo->findChannel($lookAlike), 'house rule LQ: never matched in SQL');
+            self::assertNull($access->channel($lookAlike), 'unknown without asking the provider');
+            self::assertFalse($access->canUseChannel($ana, $lookAlike));
+            try {
+                $chat->openChannel($ana, new ChatChannel($lookAlike, 'Acme'));
+                self::fail('a padded or control-character key must be refused');
+            } catch (LogicException) {
+            }
+        }
+        self::assertCount(1, $repo->findAll(), 'nothing written for a refused key');
+        self::assertSame([$acme], $repo->findListForUser($ana, [TestChannelProvider::KEY, TestChannelProvider::KEY . ' '], false, 10));
     }
 
     public function testChannelAndSupport(): void

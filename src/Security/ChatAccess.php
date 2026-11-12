@@ -14,6 +14,7 @@ use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
 use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Model\ChatChannelKey;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -199,7 +200,9 @@ final class ChatAccess implements ResetInterface
     }
 
     /**
-     * Looks a channel up by key through the provider (memoized for the request).
+     * Looks a channel up by key through the provider (memoized for the request). A key that breaks the ChatChannelKey
+     * format rule (whitespace at either end, control or format characters, over 120 bytes) is unknown without asking
+     * the provider, and so is a channel the provider returns with such a key (look-alike keys, house rule LQ).
      *
      * @param string $key Channel key
      *
@@ -207,9 +210,12 @@ final class ChatAccess implements ResetInterface
      */
     public function channel(string $key): ?ChatChannel
     {
+        if (!ChatChannelKey::isValid($key)) {
+            return null;
+        }
         $channel = $this->memo('channel:' . $key, fn (): ChatChannel|false => $this->channelProvider->find($key) ?? false);
 
-        return $channel instanceof ChatChannel ? $channel : null;
+        return $channel instanceof ChatChannel && ChatChannelKey::isValid($channel->key) ? $channel : null;
     }
 
     /**

@@ -13,8 +13,10 @@ use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
+use Nowo\ChatKitBundle\Model\ChatChannelKey;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
+use function array_filter;
 use function array_slice;
 use function in_array;
 
@@ -86,7 +88,10 @@ class ChatConversationRepository extends ServiceEntityRepository
     }
 
     /**
-     * Finds the conversation of an application channel.
+     * Finds the conversation of an application channel. The key is compared byte for byte: the SQL lookup runs on the
+     * column collation (case-, accent- and trailing-space-insensitive on a MySQL / MariaDB table created before
+     * the binary collation of ChannelKeyCollationListener), so the row is matched again in PHP and a look-alike key (`project:Acme` for `project:acme`) never opens
+     * another channel's conversation (house rule LQ). A key that breaks the ChatChannelKey rule finds nothing.
      *
      * @param string $key Channel key
      *
@@ -94,7 +99,12 @@ class ChatConversationRepository extends ServiceEntityRepository
      */
     public function findChannel(string $key): ?ChatConversation
     {
-        return $this->findOneBy(['channelKey' => $key]);
+        if (!ChatChannelKey::isValid($key)) {
+            return null;
+        }
+        $conversation = $this->findOneBy(['channelKey' => $key]);
+
+        return $conversation?->getChannelKey() === $key ? $conversation : null;
     }
 
     /**
@@ -182,9 +192,10 @@ class ChatConversationRepository extends ServiceEntityRepository
                 ->setParameter('kinds', [ConversationKind::Direct, ConversationKind::Support]);
         });
         if ($channelKeys !== []) {
-            $rows = [...$rows, ...$branch(static function ($qb) use ($channelKeys): void {
+            // The SQL IN runs on the column collation: keep only the exact keys (look-alikes, house rule LQ).
+            $rows = [...$rows, ...array_filter($branch(static function ($qb) use ($channelKeys): void {
                 $qb->andWhere('c.channelKey IN (:channels)')->setParameter('channels', $channelKeys);
-            })];
+            }), static fn (ChatConversation $conversation): bool => in_array($conversation->getChannelKey(), $channelKeys, true))];
         }
         if ($isSupportAgent) {
             $rows = [...$rows, ...$branch(static function ($qb): void {

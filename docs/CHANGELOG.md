@@ -62,6 +62,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Security
+
+- **Look-alike channel keys opened another channel's conversation on MySQL / MariaDB** (house rule LQ; affects 1.0.0
+  to 1.26.3). `nowo_chat_conversation.channel_key` had no collation of its own, so it took the host's default, which on
+  MySQL and MariaDB folds case and accents (`utf8mb4_0900_ai_ci`, `utf8mb4_uca1400_ai_ci`, `utf8mb4_unicode_ci`,
+  `utf8mb4_general_ci`) and, except for the MySQL 8 `0900` collations, ignores trailing spaces (PAD SPACE).
+  `ChatConversationRepository::findChannel()` used that comparison with no PHP re-check, so when the application's
+  `ChatChannelProviderInterface` used keys that differ only in case, accents or trailing spaces (`team:Sales` /
+  `team:sales`), the first of them to be opened took the conversation and `ChatService::openChannel()` handed it to the
+  members of the other one: they got a participant row in it and its summary (uuid, the other channel's label, subtitle,
+  icon and last activity time), and their own channel could never be created. Messages stayed protected:
+  `ChatAccess::canView()` and every message, send and realtime path check the conversation's stored key, so the other
+  channel's members could not read or write in it. PostgreSQL and SQLite compare exactly and were not affected, nor were
+  keys that cannot collide (the documented `project:<uuid>` with canonical lowercase UUIDs). Fixed in three layers:
+  - `findChannel()` matches the row again with `===`, and the channel branch of `findListForUser()` and the mention
+    inbox (`ChatMessageMentionRepository::findForUser()` / `countForUser()`) keep only exact keys;
+  - a new `ChatChannelKey` format rule: 1–120 bytes of UTF-8, no whitespace at either end, no control, format,
+    surrogate, private-use, line or paragraph separator character. `ChatAccess::channel()` treats a key that breaks it
+    as unknown without asking the provider (the API answers 404), and `ChatService::openChannel()` /
+    `ChatConversation::channel()` throw a `LogicException` with nothing written. Keys are refused, never normalised;
+  - a new `ChannelKeyCollationListener` gives `channel_key` a binary NO PAD collation in the generated schema:
+    `utf8mb4_0900_bin` on MySQL 8.0+, `utf8mb4_nopad_bin` on MariaDB, `utf8mb4_bin` on MySQL 5.7. Existing tables need
+    the `ALTER TABLE` in [UPGRADING.md](UPGRADING.md#unreleased); until then a look-alike of an open channel fails
+    with a unique-key error instead of opening the other conversation.
+
+  Regression tests: `ChatChannelKeyTest`, `ChannelKeyCollationListenerTest`, `ChatServiceTest`, `ChatApiTest` and
+  `ChatChannelLookalikeTest` (real MySQL / MariaDB / PostgreSQL in the CI `database` job, including a table still on
+  `utf8mb4_unicode_ci`).
+
 ## [1.26.3] - 2026-11-11
 
 Next version: **1.26.3** (patch).
