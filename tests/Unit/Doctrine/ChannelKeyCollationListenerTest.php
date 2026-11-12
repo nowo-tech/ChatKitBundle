@@ -41,7 +41,8 @@ final class ChannelKeyCollationListenerTest extends TestCase
      */
     public static function platforms(): iterable
     {
-        // DBAL 3 (the race job's second DBAL) has neither MySQL84Platform nor, in older 3.x releases, MariaDBPlatform.
+        // DBAL 3 (the database job's second DBAL) has no MySQL84Platform, names SQLite `SqlitePlatform` and, in older 3.x
+        // releases, has no MariaDBPlatform; PHPUnit builds every data provider before it applies --filter.
         if (class_exists(MariaDBPlatform::class)) {
             yield 'MariaDB' => [new MariaDBPlatform(), 'utf8mb4_nopad_bin'];
         }
@@ -51,7 +52,9 @@ final class ChannelKeyCollationListenerTest extends TestCase
         }
         yield 'MySQL 5.7' => [new MySQLPlatform(), 'utf8mb4_bin'];
         yield 'PostgreSQL' => [new PostgreSQLPlatform(), null];
-        yield 'SQLite' => [new SQLitePlatform(), null];
+        if (class_exists(SQLitePlatform::class)) {
+            yield 'SQLite' => [new SQLitePlatform(), null];
+        }
     }
 
     #[DataProvider('platforms')]
