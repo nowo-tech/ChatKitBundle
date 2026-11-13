@@ -15,6 +15,7 @@ use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Vote;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
 
+use function assert;
 use function in_array;
 
 /**
@@ -63,13 +64,32 @@ final class ChatVoter extends Voter
     {
         $user = $token->getUser();
         $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
-        if (!$user instanceof ChatUserInterface || !$this->access->isReachable($user)) {
+
+        return $user instanceof ChatUserInterface && ($subject instanceof ChatConversation || $subject instanceof ChatMessage)
+            && $this->decide($attribute, $subject, $user);
+    }
+
+    /**
+     * 1.27 (audit OJ-M2): the voter's decision for a chat participant, without a security token — what
+     * ChatMessagingInterface checks for its actor. Same rules as the API: the user must be reachable; VIEW, SEND,
+     * MODERATE, RESOLVE on a conversation; EDIT, DELETE, REACT on a message.
+     *
+     * @param string $attribute One of the voter's attributes
+     * @param ChatConversation|ChatMessage $subject The conversation or the message
+     * @param ChatUserInterface $user The participant
+     *
+     * @return bool True when allowed
+     */
+    public function decide(string $attribute, ChatConversation|ChatMessage $subject, ChatUserInterface $user): bool
+    {
+        if (!$this->supports($attribute, $subject) || !$this->access->isReachable($user)) {
             return false;
         }
-
         if ($subject instanceof ChatMessage) {
             return $this->voteOnMessage($attribute, $subject, $user);
         }
+
+        assert($subject instanceof ChatConversation);
 
         return match ($attribute) {
             self::VIEW     => $this->canView($subject, $user),

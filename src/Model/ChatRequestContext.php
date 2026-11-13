@@ -12,8 +12,9 @@ use function is_string;
 /**
  * 1.27 (REQ-ARCH-001 rule 3): the page request as the framework-free port twins see it (ChatChannelSourceInterface,
  * ChatRealtimeTransportInterface) instead of the HttpFoundation `Request`: the method, the URL parts, the route and its
- * scalar parameters, the scalar query parameters and the locale. Never a header, a cookie, the session or the body, so
- * a host may log it. Built per call by the bundle and never stored (FrankenPHP worker mode, kernel reset false).
+ * scalar parameters, the scalar query parameters and the locale. Never a header, a cookie, the session or the body; the
+ * query string and route parameters are copied as they are, though, and may hold tokens (password-reset links, signed
+ * URLs): do not log them blindly. Built per call by the bundle and never stored (FrankenPHP worker mode, kernel reset false).
  */
 final readonly class ChatRequestContext
 {
