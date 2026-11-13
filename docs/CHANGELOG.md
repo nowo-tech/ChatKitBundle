@@ -128,31 +128,38 @@ unchanged configuration and unchanged host services the bundle behaves exactly a
     reopening, message moves, ticket numbers) run in a savepoint (`nowo_chat_kit_*`) inside an open transaction; when
     rolling back to it fails too, the ORIGINAL exception is rethrown.
 
-- **String user references (opt-in, REQ-ARCH-001 rule 2).** With `doctrine.user_reference: id`, a chat user may now be
-  known by a string instead of an integer id: implement `Model\ChatUserReferenceInterface`
-  (`getChatUserReference(): string`; `getId()` may return null) and let the directory implement
-  `Contract\ChatUserReferenceDirectoryInterface` (`findByReferences(list<string>)`). The user columns (already
-  `VARCHAR(64)` in id mode) then hold the reference; users with integer ids keep working exactly as before (same
-  stored values, same direct keys, same message payloads). Key pieces:
-  - `Doctrine\ChatUserReferences::key()` / `same()` / `idOrKey()`: every in-memory comparison of users goes through the
-    exact key (REQ-SEC-006 item 7); `ChatAccess::usersByIds()` takes keys (`list<int|string>`).
+- **String user references (opt-in `doctrine.user_reference: string`, REQ-ARCH-001 rule 2).** The `id` mode with
+  string keys: every chat user implements `Model\ChatUserReferenceInterface` (`getChatUserReference(): string`;
+  `getId()` may return null) and the directory `Contract\ChatUserReferenceDirectoryInterface`
+  (`findByReferences(list<string>)`). The user columns (`VARCHAR(64)` as in id mode) hold the references. The `relation`
+  and `id` modes are unchanged: same stored values, same direct keys, same message payloads, no new column and no
+  collation change (audit OJ-M3). Key pieces:
+  - `Doctrine\ChatUserReferences::key()` / `same()` / `idOrKey()` / `isCanonicalId()`: every in-memory comparison of
+    users goes through the exact key (REQ-SEC-006 item 7); `ChatAccess::usersByIds()` takes keys (`list<int|string>`);
+    the integer-id rule is one (canonical decimal, at most 18 digits; audit OJ-L2).
   - Direct conversations of string references: `direct_key` is `r` + 40 hex digits of the pair's SHA-256 (same column),
-    and the two references are kept in `direct_user_low` / `direct_user_high` (id mode only; nullable). New
+    and the two references are kept in `direct_user_low` / `direct_user_high` (mapped in `string` mode only). New
     `ChatConversation::directUserKeys()` / `peerKeyOf()`; `directUserIds()` / `peerIdOf()` answer only for integer pairs.
+  - Users of both kinds never mix (audit OJ-L1): in `string` mode an integer-id user, in `id` mode a reference user, is
+    unreachable (`ChatAccess`) and refused when a chat row is written (`UserReferenceListener` pre-persist / pre-update),
+    and a `user_class` of the wrong kind fails the container build.
   - `ChatPersonalData::eraseFormerAccount(int|string $userId, …)` (a string reference erases through the new
     `Model\ErasedChatUserReference`); `SendChatDigestMessage::$userId` and `DeliverChatPushMessage::$recipientIds` take
     references too (integers stay integers).
-  - A `relation`-mode `user_class` that implements `ChatUserReferenceInterface` fails the container build.
-- **REQ-SEC-006 on the user reference columns (id mode).** `Model\ChatUserReference` refuses a reference with whitespace
-  or a space separator at either end, a control / format / surrogate / private-use / line or paragraph separator
-  character (ZWSP, BOM, bidi marks, NBSP at an edge), invalid UTF-8 or more than 64 characters, before anything is
-  written (never trimmed). `ChannelKeyCollationListener` gives every user reference column (`author_id`, `user_id`,
-  `support_owner_id`, `assignee_id`, `resolved_by_id`, `deleted_by_id`, `pinned_by_id`, `created_by_id`,
-  `direct_user_low`, `direct_user_high`) the binary NO PAD collation in id mode (`utf8mb4_0900_bin` on MySQL 8,
-  `utf8mb4_nopad_bin` on MariaDB). Every directory answer is re-checked with `===` (a look-alike user is dropped); the
-  single-row lookups by user (participant row, settings, quick reply, mention, reaction, support thread), the
-  quick-reply and ticket lists, the push recipients and the settings batch keep only exact rows; the erasure selects
-  the user's rows, keeps the exact ones and updates / deletes them by primary key.
+- **REQ-SEC-006 on the user reference columns (`string` mode).** `Model\ChatUserReference` refuses a reference with
+  whitespace or a space separator at either end, a control / format / surrogate / private-use / line or paragraph
+  separator character (ZWSP, BOM, bidi marks, NBSP at an edge), invalid UTF-8 or more than 64 characters, before
+  anything is written (never trimmed). `ChannelKeyCollationListener` gives every user reference column (`author_id`,
+  `user_id`, `support_owner_id`, `assignee_id`, `resolved_by_id`, `deleted_by_id`, `pinned_by_id`, `created_by_id`,
+  `direct_user_low`, `direct_user_high`) the binary NO PAD collation (`utf8mb4_0900_bin` on MySQL 8,
+  `utf8mb4_nopad_bin` on MariaDB). Audit OJ-M1: `Doctrine\StringReferenceSchemaGuard` checks once per process
+  (`information_schema`) that these columns exist and compare byte for byte, and until then every query or write by
+  user throws a `LogicException` (fail closed: no look-alike reads, no unique-key clash closing the entity manager).
+  Every directory answer is re-checked with `===`; the lookups by user (participant rows by conversation and in batch,
+  settings, quick replies, mentions with their inbox, counts and unread badges, reactions, support threads,
+  participating conversations, direct peers, push recipients) keep only exact rows, lists read on until the page holds
+  only exact rows (item 6), the unread message counts compare the user columns as binary in SQL on MySQL / MariaDB, and
+  the mention mark-read and the erasure select first, keep the exact rows and update / delete them by primary key.
 
 - Docs: a "Standard Symfony host" section next to the DDD one in USAGE.
 
@@ -193,9 +200,14 @@ unchanged configuration and unchanged host services the bundle behaves exactly a
   settings and participant rows are exact, the erasure touches only the exact reference (also for a gone account by
   string), and unusable references (padding, NBSP, ZWSP, BOM, bidi, newline, empty, 65 characters, invalid UTF-8) are
   refused before any write.
-- `ChatUserReferenceLookalikeTest` (the MySQL / MariaDB / PostgreSQL CI job, also run locally on MySQL 8.4 and MariaDB
-  11.4): the generated user columns are binary NO PAD, three look-alike people, and on columns still created with
-  `utf8mb4_unicode_ci` the re-checks keep them apart (participant row, settings, erasure).
+- `ChatUserReferenceLookalikeTest` (the MySQL / MariaDB / PostgreSQL CI job): the generated user columns are binary NO
+  PAD and three look-alike people stay apart; on columns still created with `utf8mb4_unicode_ci` every chat call
+  (reaction, settings, unread count, direct open) throws the guard's `LogicException` and the entity manager stays open
+  (audit OJ-M1); and if the columns fold behind a process that already passed the check, the unread counts, mention
+  counts and inbox, participating conversations, direct peers, participant rows and the mention mark-read stay exact.
+- `StringReferencePartsTest`: the key helpers and the 18-digit integer rule (OJ-L2), users of the other kind refused
+  (unreachable, refused on write, a `user_class` of the wrong kind fails the build; OJ-L1), the guard on exact
+  platforms, the erased account by reference, the digest of a string-keyed user.
 - `ChatMessagingTest`: every method by uuid, same rows and events as the entity service, views equal to
   `ChatConversationView::of()`, unknown / upper-case / padded uuids refused with nothing written.
   Audit OJ-M2: a stranger and a non-member get `ChatNotFoundException` for send, buzz, edit, delete, pin, react,

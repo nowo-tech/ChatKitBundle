@@ -16,6 +16,7 @@ use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
+use function array_key_exists;
 use function in_array;
 
 /**
@@ -26,6 +27,9 @@ use function in_array;
  */
 class ChatMessageMentionRepository extends ServiceEntityRepository
 {
+    /** 1.27: rows read at most to fill one page with exact matches (REQ-SEC-006 item 6). */
+    private const int EXACT_SCAN = 1000;
+
     /**
      * Builds the repository for ChatMessageMention entities.
      *
@@ -100,6 +104,34 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             ->where('m.conversation = :conversation')
             ->andWhere('m.id <= :upTo');
 
+        if ($this->refs->isIdMode()) {
+            // 1.27 (audit OJ-M1, REQ-SEC-006 item 2): select, keep the rows of exactly this user, update them by key.
+            $key = ChatUserReferences::key($user);
+            $ids = [];
+            foreach ($this->createQueryBuilder('mm')
+                ->select('mm.id AS id', 'mm.userRef AS ref')
+                ->where('mm.userRef = :user AND mm.readAt IS NULL')
+                ->andWhere('IDENTITY(mm.message) IN (' . $messages->getDQL() . ')')
+                ->setParameter('user', $this->refs->value($user))
+                ->setParameter('conversation', $conversation)
+                ->setParameter('upTo', $messageId)
+                ->getQuery()
+                ->getArrayResult() as $row) {
+                if ($key !== null && $row['ref'] === $key) {
+                    $ids[] = (int) $row['id'];
+                }
+            }
+
+            return $ids === [] ? 0 : (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
+                ->update(ChatMessageMention::class, 'mm')
+                ->set('mm.readAt', ':now')
+                ->where('mm.id IN (:ids)')
+                ->setParameter('now', $now)
+                ->setParameter('ids', $ids)
+                ->getQuery()
+                ->execute());
+        }
+
         return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->update(ChatMessageMention::class, 'mm')
             ->set('mm.readAt', ':now')
@@ -142,17 +174,30 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             return [];
         }
 
-        /** @var list<ChatMessageMention> $rows */
-        $rows = $this->visibleTo($user, $channelKeys, $supportAgent, $unreadOnly, $since, $channelsOnly, true)
-            ->addSelect('m', 'c')
-            ->orderBy('mm.createdAt', 'DESC')
-            ->addOrderBy('mm.id', 'DESC')
-            ->setMaxResults($limit)
-            ->getQuery()
-            ->getResult();
+        // The SQL IN runs on the column collation: keep only the exact channel keys (look-alikes, house rule LQ) and
+        // (1.27, audit OJ-M1) the rows of exactly this user; pages are read until `$limit` exact rows are found, so a
+        // look-alike's rows never push the user's own past the limit (REQ-SEC-006 item 6).
+        $kept   = [];
+        $offset = 0;
+        do {
+            /** @var list<ChatMessageMention> $rows */
+            $rows = $this->visibleTo($user, $channelKeys, $supportAgent, $unreadOnly, $since, $channelsOnly, true)
+                ->addSelect('m', 'c')
+                ->orderBy('mm.createdAt', 'DESC')
+                ->addOrderBy('mm.id', 'DESC')
+                ->setFirstResult($offset)
+                ->setMaxResults($limit)
+                ->getQuery()
+                ->getResult();
+            foreach ($rows as $mention) {
+                if (count($kept) < $limit && self::exactChannel($mention->getMessage()->getConversation(), $channelKeys) && ChatUserReferences::same($mention->getUser(), $user)) {
+                    $kept[] = $mention;
+                }
+            }
+            $offset += $limit;
+        } while (count($rows) === $limit && count($kept) < $limit && $offset < self::EXACT_SCAN);
 
-        // The SQL IN runs on the column collation: keep only the exact channel keys (look-alikes, house rule LQ).
-        return array_values(array_filter($rows, static fn (ChatMessageMention $mention): bool => self::exactChannel($mention->getMessage()->getConversation(), $channelKeys)));
+        return $kept;
     }
 
     /**
@@ -176,15 +221,20 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
         bool $channelsOnly = false,
     ): int {
         // One row per conversation, so the channel key is matched again in PHP (look-alikes, house rule LQ).
-        /** @var list<array{k: string|null, n: int|string}> $rows */
-        $rows = $this->visibleTo($user, $channelKeys, $supportAgent, $unreadOnly, $since, $channelsOnly)
+        // 1.27 (audit OJ-M1): per stored user reference too, counted only for exactly this user.
+        $qb = $this->visibleTo($user, $channelKeys, $supportAgent, $unreadOnly, $since, $channelsOnly)
             ->select('c.channelKey AS k', 'COUNT(mm.id) AS n')
-            ->groupBy('c.id')
-            ->getQuery()
-            ->getArrayResult();
+            ->groupBy('c.id');
+        if ($this->refs->isIdMode()) {
+            $qb->addSelect('mm.userRef AS ref')->addGroupBy('mm.userRef');
+        }
+        /** @var list<array{k: string|null, n: int|string, ref?: string|null}> $rows */
+        $rows  = $qb->getQuery()->getArrayResult();
+        $key   = ChatUserReferences::key($user);
         $count = 0;
         foreach ($rows as $row) {
-            $count += $row['k'] === null || in_array($row['k'], $channelKeys, true) ? (int) $row['n'] : 0;
+            $exactUser = !array_key_exists('ref', $row) || ($key !== null && $row['ref'] === $key);
+            $count += $exactUser && ($row['k'] === null || in_array($row['k'], $channelKeys, true)) ? (int) $row['n'] : 0;
         }
 
         return $count;
@@ -230,8 +280,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
         if ($conversationIds === []) {
             return [];
         }
-        /** @var list<array{cid: int|string, n: int|string}> $rows */
-        $rows = $this->createQueryBuilder('mm')
+        $qb = $this->createQueryBuilder('mm')
             ->select('IDENTITY(m.conversation) AS cid', 'COUNT(mm.id) AS n')
             ->innerJoin('mm.message', 'm')
             ->where($this->refs->field('mm', 'user') . ' = :user')
@@ -240,12 +289,20 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             ->andWhere('IDENTITY(m.conversation) IN (:ids)')
             ->setParameter('user', $this->refs->value($user))
             ->setParameter('ids', $conversationIds)
-            ->groupBy('m.conversation')
-            ->getQuery()
-            ->getArrayResult();
+            ->groupBy('m.conversation');
+        if ($this->refs->isIdMode()) {
+            // 1.27 (audit OJ-M1): counted per stored reference, kept only for exactly this user.
+            $qb->addSelect('mm.userRef AS ref')->addGroupBy('mm.userRef');
+        }
+        /** @var list<array{cid: int|string, n: int|string, ref?: string|null}> $rows */
+        $rows   = $qb->getQuery()->getArrayResult();
+        $key    = ChatUserReferences::key($user);
         $counts = [];
         foreach ($rows as $row) {
-            $counts[(int) $row['cid']] = (int) $row['n'];
+            if (array_key_exists('ref', $row) && ($key === null || $row['ref'] !== $key)) {
+                continue;
+            }
+            $counts[(int) $row['cid']] = ($counts[(int) $row['cid']] ?? 0) + (int) $row['n'];
         }
 
         return $counts;

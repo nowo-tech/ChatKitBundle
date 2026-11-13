@@ -72,7 +72,10 @@ Target 1.27.0, from **1.26.4**:
 composer update nowo-tech/chat-kit-bundle
 ```
 
-Nothing to change: with the same configuration and the same services the bundle behaves as 1.26.4. No schema change.
+Nothing to change: with the same configuration and the same services the bundle behaves as 1.26.4, and no migration is
+needed in any of the existing modes (`relation`, `id`). A migration is needed only when you opt in to the new
+`doctrine.user_reference: string` (two columns, the binary collation; see "String user references" below). The opt-in
+private entity manager needs no schema change.
 
 ### Framework-free port twins (REQ-ARCH-001 rule 3)
 
@@ -119,19 +122,27 @@ closed by the bundle. No schema change. Check after enabling it:
 
 Setting it to `false` explicitly is deprecated (it becomes the only mode in 2.0); leaving it unset keeps 1.26 behaviour.
 
-### String user references (REQ-ARCH-001 rule 2, `doctrine.user_reference: id` only)
+### String user references (REQ-ARCH-001 rule 2, opt-in `doctrine.user_reference: string`)
 
-Nothing changes for integer ids. To key chat users by a string (UUID, ULID, IdP subject) instead of an integer
-surrogate:
+Nothing changes for integer ids, in `relation` or `id` mode (no new column, no collation change). To key chat users by a
+string (UUID, ULID, IdP subject) instead of an integer surrogate:
 
-1. Your chat user class implements `ChatUserReferenceInterface::getChatUserReference(): string` (1–64 characters, no
-   whitespace at either end, no control or format characters; `getId()` may return null).
-2. Your `ChatDirectoryInterface` also implements `ChatUserReferenceDirectoryInterface::findByReferences(list<string>)`,
+1. Set `doctrine.user_reference: string` (the `id` mode with string references).
+2. Every chat user class implements `ChatUserReferenceInterface::getChatUserReference(): string` (1–64 characters, no
+   whitespace at either end, no control or format characters; `getId()` may return null). Users of both kinds never mix
+   (audit OJ-L1: a reference `"42"` must not meet the integer id 42): in `string` mode a user without the interface is
+   unreachable and refused when a chat row is written, in `id` mode a user with it is refused the same way, and a
+   configured `user_class` of the wrong kind fails the container build.
+3. Your `ChatDirectoryInterface` also implements `ChatUserReferenceDirectoryInterface::findByReferences(list<string>)`,
    returning users whose reference is **exactly** one of those asked (no case, accent, padding or Unicode-normalisation
    folding; the bundle drops any other answer).
-3. Generate a migration: in id mode `nowo_chat_conversation` gains two nullable columns, `direct_user_low` and
-   `direct_user_high` (`VARCHAR(64)`), and on MySQL / MariaDB every user reference column gets the binary NO PAD
-   collation (required before you store string references: the default collations fold `Bob`, `bob`, `bób` and `bob `).
+4. Migrate: `nowo_chat_conversation` gains two nullable columns, `direct_user_low` and `direct_user_high`
+   (`VARCHAR(64)`), and on MySQL / MariaDB every user reference column gets the binary NO PAD collation. **This is
+   enforced (audit OJ-M1):** on MySQL / MariaDB the bundle checks once per process (`information_schema`) that the
+   columns exist and compare byte for byte, and until then every chat query or write by user throws a `LogicException`
+   naming the columns (fail closed: a folding column would let look-alikes read each other's rows, and a unique-key
+   clash between them would close the entity manager). Existing `id`-mode stored values (integer ids) must be rewritten
+   to your references by your own migration when you switch.
 
 **Before the `ALTER` (MySQL / MariaDB): look for references that the old collation folds together.** Integer ids cannot
 collide; run these only if string references were already written (e.g. by a custom import). `TRIM`, `DISTINCT`,
@@ -171,10 +182,11 @@ ALTER TABLE nowo_chat_quick_reply MODIFY user_id VARCHAR(64) CHARACTER SET utf8m
 ALTER TABLE nowo_chat_conversation_link MODIFY created_by_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL;
 ```
 
-`doctrine:migrations:diff` generates the same (the collation comes from the bundle's schema listener). Until the
-`ALTER`, the bundle's PHP re-checks keep look-alikes apart on the lookups that return rows (participant row, settings,
-quick replies, mentions, reactions, support threads, push recipients, erasure); counts (unread badges) and list pages
-may still include a look-alike's rows on a folding column, so string references **require** the `ALTER`.
+`doctrine:migrations:diff` generates the same in `string` mode (the collation comes from the bundle's schema listener).
+Until the `ALTER` the chat refuses to work (see step 4). On top of the collation, every lookup by user is re-checked
+byte for byte in PHP (participant rows, settings, quick replies, mentions and their counts, reactions, support threads,
+direct peers, push recipients, the erasure), lists read on until a page holds only exact rows, and the unread counts
+compare the user columns as binary in SQL.
 
 Also: `ChatAccess::usersByIds()` now returns users keyed by `ChatUserReferences::key()` (the integer id stays an
 integer array key), `ChatConversation::directUserKeys()` / `peerKeyOf()` work for both kinds of pairs, and

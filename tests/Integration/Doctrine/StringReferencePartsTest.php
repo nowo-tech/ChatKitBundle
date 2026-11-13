@@ -46,7 +46,7 @@ final class StringReferencePartsTest extends DatabaseTestCase
 
     protected function chatKitConfig(): array
     {
-        return ['profiles' => ['default' => ['user_class' => null, 'doctrine' => ['user_reference' => 'id']]]];
+        return ['profiles' => ['default' => ['user_class' => null, 'doctrine' => ['user_reference' => 'string']]]];
     }
 
     protected function setUp(): void
@@ -138,13 +138,62 @@ final class StringReferencePartsTest extends DatabaseTestCase
         self::assertCount(0, $this->get(ChatPersonalData::class)->eraseFormerAccount('bob', 'pub-bob'));
     }
 
-    public function testARelationModeUserWithAReferenceFailsTheBuild(): void
+    /**
+     * @return iterable<string, array{string, class-string, string}>
+     */
+    public static function wrongKinds(): iterable
     {
-        $container = new ContainerBuilder();
+        yield 'reference user in relation mode' => ['relation', RefChatUser::class, 'needs "doctrine.user_reference: string"'];
+        yield 'reference user in id mode' => ['id', RefChatUser::class, 'needs "doctrine.user_reference: string"'];
+        yield 'integer user in string mode' => ['string', TestUser::class, 'does not implement'];
+    }
+
+    /**
+     * @param class-string $userClass
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('wrongKinds')]
+    public function testAUserClassOfTheWrongKindFailsTheBuild(string $mode, string $userClass, string $message): void
+    {
+        $container = new \Symfony\Component\DependencyInjection\ContainerBuilder();
         $container->setParameter('kernel.secret', 'x');
-        $this->expectException(InvalidConfigurationException::class);
-        $this->expectExceptionMessage('needs "doctrine.user_reference: id"');
-        (new NowoChatKitExtension())->load([['profiles' => ['default' => ['user_class' => RefChatUser::class]]]], $container);
+        $this->expectException(\Symfony\Component\Config\Definition\Exception\InvalidConfigurationException::class);
+        $this->expectExceptionMessage($message);
+        (new \Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension())->load([['profiles' => ['default' => ['user_class' => $userClass, 'doctrine' => ['user_reference' => $mode]]]]], $container);
+    }
+
+    public function testUsersOfTheOtherKindAreUnreachableAndRefused(): void
+    {
+        $ana     = $this->directory->add(new RefChatUser('ana', 'pub-ana', 'Ana'));
+        $integer = new TestUser('Int Ivan');
+        $this->em->persist($integer);
+        $this->em->flush();
+        self::assertFalse($this->get(ChatAccess::class)->isReachable($integer), 'an integer-id user has no chat in string mode');
+        self::assertTrue($this->get(ChatAccess::class)->isReachable($ana));
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('every chat user must implement');
+        $this->get(ChatServiceInterface::class)->openDirect($ana, $integer);
+    }
+
+    public function testAReferenceUserInIdModeIsRefused(): void
+    {
+        $refs = new ChatUserReferences(ChatUserReferences::ID);
+        self::assertFalse($refs->fitsKind(new RefChatUser('42', 'p', 'X')), 'a reference "42" never stands for the integer id 42');
+        self::assertTrue($refs->fitsKind(new TestUser('A')));
+        self::assertTrue((new ChatUserReferences())->fitsKind(new RefChatUser('42', 'p', 'X')), 'relation mode: the build already refused it');
+        $this->expectException(LogicException::class);
+        $refs->assertKind(new RefChatUser('42', 'p', 'X'));
+    }
+
+    public function testTheGuardPassesOnExactPlatforms(): void
+    {
+        $guard = $this->get(\Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard::class);
+        $guard->assertReady();
+        $guard->reset();
+        $guard->assertReady();
+        self::assertTrue((new ChatUserReferences(ChatUserReferences::STRING))->isIdMode());
+        self::assertTrue(ChatUserReferences::isCanonicalId('123456789012345678'));
+        self::assertFalse(ChatUserReferences::isCanonicalId('1234567890123456789'), 'at most 18 digits everywhere (OJ-L2)');
+        self::assertSame('1234567890123456789', ChatUserReferences::idOrKey('1234567890123456789'));
     }
 
     public function testTheCollationFieldsOfEveryUserColumn(): void

@@ -49,6 +49,7 @@ final class ChatAccess implements ResetInterface
         private readonly ChatChannelProviderInterface $channelProvider,
         private readonly ChatDirectoryInterface $directory,
         private readonly ?RequestStack $requests = null,
+        private readonly ?ChatUserReferences $refs = null,
     ) {
     }
 
@@ -164,7 +165,8 @@ final class ChatAccess implements ResetInterface
     public function isReachable(ChatUserInterface $user): bool
     {
         // 1.24: a placeholder for a user the directory no longer knows (`doctrine.user_reference: id`) never is.
-        return ChatUserReferences::key($user) !== null && !$user instanceof UnresolvedChatUser && $this->policy->isReachable($user);
+        return ChatUserReferences::key($user) !== null && !$user instanceof UnresolvedChatUser
+            && ($this->refs === null || $this->refs->fitsKind($user)) && $this->policy->isReachable($user);
     }
 
     /**
@@ -327,8 +329,8 @@ final class ChatAccess implements ResetInterface
         if ($this->directory instanceof ChatUserReferenceDirectoryInterface) {
             $found = $this->directory->findByReferences($keys);
         } else {
-            // Integer ids only: a canonical decimal key (no sign, no leading zero) is an id; anything else is unknown.
-            $ids   = array_values(array_filter($keys, static fn (string $key): bool => preg_match('/\A(?:0|[1-9][0-9]{0,18})\z/D', $key) === 1));
+            // Integer ids only: a canonical decimal key (ChatUserReferences::isCanonicalId()) is an id; anything else is unknown.
+            $ids   = array_values(array_filter($keys, ChatUserReferences::isCanonicalId(...)));
             $found = $ids === [] ? [] : $this->directory->findByIds(array_map(intval(...), $ids));
         }
         $wanted = array_fill_keys($keys, true);

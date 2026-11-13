@@ -13,6 +13,7 @@ use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\PrivateEntityManagerMiddleware;
+use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -185,13 +186,19 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.doctrine.table_name_prefix', $profile['doctrine']['table_name_prefix']);
         // 1.24: users referenced by id — the listener exists only then (the default mode costs nothing).
         $container->setParameter(Configuration::ALIAS . '.doctrine.user_reference', $profile['doctrine']['user_reference']);
-        if ($profile['doctrine']['user_reference'] !== ChatUserReferences::ID) {
+        $userReference = $profile['doctrine']['user_reference'];
+        if ($userReference === ChatUserReferences::RELATION) {
             $container->removeDefinition(UserReferenceListener::class);
-            // 1.27: string references exist only in id mode (relation mode keys every row by the entity's integer id).
-            $userClass = $profile['user_class'];
-            if (is_string($userClass) && is_a($userClass, ChatUserReferenceInterface::class, true)) {
-                throw new InvalidConfigurationException(sprintf('nowo_chat_kit: %s implements %s, which needs "doctrine.user_reference: id" (the relation mode keys the chat rows by the integer id).', $userClass, ChatUserReferenceInterface::class));
-            }
+        }
+        // 1.27 (audit OJ-L1): string references only in `string` mode, and integer users never in it.
+        $userClass = $profile['user_class'];
+        if (is_string($userClass) && class_exists($userClass) && is_a($userClass, ChatUserReferenceInterface::class, true) !== ($userReference === ChatUserReferences::STRING)) {
+            throw new InvalidConfigurationException($userReference === ChatUserReferences::STRING
+                ? sprintf('nowo_chat_kit: doctrine.user_reference is "string" but %s does not implement %s.', $userClass, ChatUserReferenceInterface::class)
+                : sprintf('nowo_chat_kit: %s implements %s, which needs "doctrine.user_reference: string".', $userClass, ChatUserReferenceInterface::class));
+        }
+        if ($userReference !== ChatUserReferences::STRING) {
+            $container->removeDefinition(StringReferenceSchemaGuard::class);
         }
         $this->registerTableNames($container, $configs, $config['default_profile'], $profile['doctrine']);
         $this->registerPrivateEntityManager($container, $profile['doctrine']['private_entity_manager'], $profile['doctrine']['entity_manager']);
@@ -289,7 +296,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         if (!$container->hasExtension('doctrine')) {
             return;
         }
-        $byId = $userReference === ChatUserReferences::ID;
+        $byId = $userReference !== ChatUserReferences::RELATION;
         if (!$byId && ($userClass === null || $userClass === '')) {
             throw new InvalidArgumentException(sprintf('The "nowo_chat_kit.profiles.%s.user_class" configuration value is required.', $profileName));
         }

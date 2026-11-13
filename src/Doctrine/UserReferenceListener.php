@@ -9,6 +9,8 @@ use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Event\LoadClassMetadataEventArgs;
 use Doctrine\ORM\Event\PostLoadEventArgs;
+use Doctrine\ORM\Event\PrePersistEventArgs;
+use Doctrine\ORM\Event\PreUpdateEventArgs;
 use Doctrine\ORM\Events;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -40,6 +42,8 @@ use function is_string;
  */
 #[AsDoctrineListener(event: Events::loadClassMetadata, priority: 16)]
 #[AsDoctrineListener(event: Events::postLoad)]
+#[AsDoctrineListener(event: Events::prePersist)]
+#[AsDoctrineListener(event: Events::preUpdate)]
 final class UserReferenceListener implements ResetInterface
 {
     /**
@@ -90,6 +94,7 @@ final class UserReferenceListener implements ResetInterface
         private readonly Closure $access,
         #[SensitiveParameter]
         private readonly string $secret = '',
+        private readonly ChatUserReferences $refs = new ChatUserReferences(ChatUserReferences::ID),
     ) {
         $this->resolved = new WeakMap();
     }
@@ -132,8 +137,9 @@ final class UserReferenceListener implements ResetInterface
                 $table['indexes'][$index] = ['columns' => [$column]];
             }
         }
-        // 1.27: the two references of a direct pair of string references (ChatUserReferenceInterface).
-        foreach (self::EXTRA_FIELDS[$class] ?? [] as $field => $column) {
+        // 1.27: the two references of a direct pair of string references (ChatUserReferenceInterface); `string` mode only,
+        // so an integer-id host in `id` mode needs no new column (audit OJ-M3).
+        foreach ($this->refs->isStringMode() ? self::EXTRA_FIELDS[$class] ?? [] : [] as $field => $column) {
             $metadata->mapField([
                 'fieldName'  => $field,
                 'columnName' => $column,
@@ -143,6 +149,38 @@ final class UserReferenceListener implements ResetInterface
             ]);
         }
         $metadata->setPrimaryTable($table);
+    }
+
+    /**
+     * 1.27 (audit OJ-L1): a new chat row may only point at users of the mode's kind (string references in `string`
+     * mode, integer ids in `id` mode), so a reference `"42"` never meets the integer id 42.
+     *
+     * @param PrePersistEventArgs $event Doctrine persist event
+     */
+    public function prePersist(PrePersistEventArgs $event): void
+    {
+        $this->checkKinds($event->getObject());
+    }
+
+    /**
+     * Same check when a user field of a chat row changes (assignee, resolver, pinner, …).
+     *
+     * @param PreUpdateEventArgs $event Doctrine update event
+     */
+    public function preUpdate(PreUpdateEventArgs $event): void
+    {
+        $this->checkKinds($event->getObject());
+    }
+
+    private function checkKinds(object $entity): void
+    {
+        foreach (array_keys(self::RELATIONS[$entity::class] ?? []) as $relation) {
+            $property = $this->property($entity::class, $relation);
+            $user     = $property->isInitialized($entity) ? $property->getValue($entity) : null;
+            if ($user instanceof ChatUserInterface) {
+                $this->refs->assertKind($user);
+            }
+        }
     }
 
     /**

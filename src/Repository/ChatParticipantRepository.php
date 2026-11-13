@@ -140,7 +140,10 @@ class ChatParticipantRepository extends ServiceEntityRepository
             ->getResult();
         $byConversation = [];
         foreach ($rows as $row) {
-            $byConversation[(int) $row->getConversation()->getId()] = $row;
+            // 1.27 (audit OJ-M1, REQ-SEC-006 item 2): only rows of exactly this user.
+            if (ChatUserReferences::same($row->getUser(), $user)) {
+                $byConversation[(int) $row->getConversation()->getId()] = $row;
+            }
         }
 
         return $byConversation;

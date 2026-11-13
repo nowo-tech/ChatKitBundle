@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Doctrine;
 
 use Doctrine\ORM\QueryBuilder;
 use InvalidArgumentException;
+use LogicException;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Model\ChatUserReference;
 use Nowo\ChatKitBundle\Model\ChatUserReferenceInterface;
@@ -14,6 +15,7 @@ use function array_map;
 use function array_values;
 use function is_string;
 use function preg_match;
+use function sprintf;
 
 /**
  * 1.24: how the bundle's tables point at users (`doctrine.user_reference`).
@@ -35,6 +37,13 @@ final readonly class ChatUserReferences
 
     public const string ID = 'id';
 
+    /**
+     * 1.27: `id` with string references (ChatUserReferenceInterface): every chat user is keyed by its string reference,
+     * the direct pairs keep both references (`direct_user_low` / `direct_user_high`), the user columns must be binary NO
+     * PAD on MySQL / MariaDB (checked once per process before the first query by user, StringReferenceSchemaGuard).
+     */
+    public const string STRING = 'string';
+
     /** Longest user reference stored in id mode. */
     public const int REFERENCE_LENGTH = 64;
 
@@ -43,17 +52,68 @@ final readonly class ChatUserReferences
      */
     public function __construct(
         private string $mode = self::RELATION,
+        private ?StringReferenceSchemaGuard $guard = null,
     ) {
     }
 
     /**
-     * Whether users are referenced by id (no Doctrine relation).
+     * Whether users are referenced by id (no Doctrine relation): the `id` and (1.27) `string` modes.
      *
-     * @return bool True in `id` mode
+     * @return bool True in `id` or `string` mode
      */
     public function isIdMode(): bool
     {
-        return $this->mode === self::ID;
+        return $this->mode === self::ID || $this->mode === self::STRING;
+    }
+
+    /**
+     * 1.27: whether chat users are keyed by string references (ChatUserReferenceInterface).
+     *
+     * @return bool True in `string` mode
+     */
+    public function isStringMode(): bool
+    {
+        return $this->mode === self::STRING;
+    }
+
+    /**
+     * 1.27 (audit OJ-L1): refuses a user of the other kind — a ChatUserReferenceInterface user outside `string` mode, or
+     * an integer-id user in it — so a reference `"42"` can never meet the integer id 42 in one host.
+     *
+     * @param ChatUserInterface $user The user
+     *
+     * @throws LogicException When the user does not fit the mode
+     */
+    public function assertKind(ChatUserInterface $user): void
+    {
+        if (!$this->fitsKind($user)) {
+            throw new LogicException($this->isStringMode()
+                ? sprintf('nowo_chat_kit: doctrine.user_reference is "string": every chat user must implement %s (%s does not).', ChatUserReferenceInterface::class, $user::class)
+                : sprintf('nowo_chat_kit: %s implements %s, which needs doctrine.user_reference "string".', $user::class, ChatUserReferenceInterface::class));
+        }
+    }
+
+    /**
+     * 1.27: whether the user is of the mode's kind (always in `relation` mode; placeholders of gone users always).
+     *
+     * @param ChatUserInterface $user The user
+     *
+     * @return bool True when usable in this mode
+     */
+    public function fitsKind(ChatUserInterface $user): bool
+    {
+        return $this->mode === self::RELATION || $user instanceof UnresolvedChatUser
+            || $this->isStringMode() === $user instanceof ChatUserReferenceInterface;
+    }
+
+    /**
+     * 1.27 (audit OJ-M1): before a query by user in `string` mode, the user columns must compare byte for byte.
+     */
+    private function guarded(): void
+    {
+        if ($this->isStringMode()) {
+            $this->guard?->assertReady();
+        }
     }
 
     /**
@@ -91,6 +151,8 @@ final readonly class ChatUserReferences
      */
     public function value(ChatUserInterface $user): ChatUserInterface|string
     {
+        $this->guarded();
+
         return $this->isIdMode() ? (string) self::reference($user) : $user;
     }
 
@@ -104,6 +166,8 @@ final readonly class ChatUserReferences
      */
     public function sqlValue(int|string $key): int|string
     {
+        $this->guarded();
+
         return $this->isIdMode() ? (string) $key : (int) $key;
     }
 
@@ -192,7 +256,20 @@ final readonly class ChatUserReferences
      */
     public static function idOrKey(int|string $key): int|string
     {
-        return is_string($key) && preg_match('/\A(?:0|[1-9][0-9]{0,17})\z/D', $key) === 1 ? (int) $key : $key;
+        return is_string($key) && self::isCanonicalId($key) ? (int) $key : $key;
+    }
+
+    /**
+     * 1.27 (audit OJ-L2): whether a key is an integer id as the bundle writes it: a canonical decimal of at most 18
+     * digits (no sign, no leading zero; always within PHP_INT_MAX). The one rule for every place that turns keys into ids.
+     *
+     * @param string $key A user key
+     *
+     * @return bool True for a canonical integer id
+     */
+    public static function isCanonicalId(string $key): bool
+    {
+        return preg_match('/\A(?:0|[1-9][0-9]{0,17})\z/D', $key) === 1;
     }
 
     /**

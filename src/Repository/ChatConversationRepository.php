@@ -240,19 +240,35 @@ class ChatConversationRepository extends ServiceEntityRepository
      */
     public function findDirectPeerIds(ChatUserInterface $user, int $limit = 200): array
     {
-        $ids = $this->getEntityManager()->createQueryBuilder()
-            ->select($this->refs->identity('other', 'user'))
-            ->from(ChatParticipant::class, 'mine')
-            ->innerJoin('mine.conversation', 'c')
-            ->innerJoin(ChatParticipant::class, 'other', 'WITH', 'other.conversation = c AND ' . $this->refs->field('other', 'user') . ' <> ' . $this->refs->field('mine', 'user'))
-            ->where($this->refs->field('mine', 'user') . ' = :user AND c.kind = :direct')
-            ->setParameter('user', $this->refs->value($user))
-            ->setParameter('direct', ConversationKind::Direct)
-            ->setMaxResults($limit)
-            ->getQuery()
-            ->getSingleColumnResult();
+        // 1.27 (audit OJ-M1): both references are read back and compared in PHP, byte for byte (a folding legacy column
+        // would join a look-alike's rows); pages are read until `$limit` exact peers are found (REQ-SEC-006 item 6).
+        $key    = (string) ChatUserReferences::key($user);
+        $peers  = [];
+        $offset = 0;
+        do {
+            /** @var list<array{mine: int|string, other: int|string}> $rows */
+            $rows = $this->getEntityManager()->createQueryBuilder()
+                ->select($this->refs->identity('mine', 'user') . ' AS mine', $this->refs->identity('other', 'user') . ' AS other')
+                ->from(ChatParticipant::class, 'mine')
+                ->innerJoin('mine.conversation', 'c')
+                ->innerJoin(ChatParticipant::class, 'other', 'WITH', 'other.conversation = c AND ' . $this->refs->field('other', 'user') . ' <> ' . $this->refs->field('mine', 'user'))
+                ->where($this->refs->field('mine', 'user') . ' = :user AND c.kind = :direct')
+                ->setParameter('user', $this->refs->value($user))
+                ->setParameter('direct', ConversationKind::Direct)
+                ->orderBy('mine.id', 'ASC')
+                ->setFirstResult($offset)
+                ->setMaxResults($limit)
+                ->getQuery()
+                ->getArrayResult();
+            foreach ($rows as $row) {
+                if (count($peers) < $limit && (string) $row['mine'] === $key && (string) $row['other'] !== $key) {
+                    $peers[] = ChatUserReferences::idOrKey((string) $row['other']);
+                }
+            }
+            $offset += $limit;
+        } while (count($rows) === $limit && count($peers) < $limit && $offset < self::EXACT_SCAN * $limit);
 
-        return array_values(array_map(ChatUserReferences::idOrKey(...), $ids));
+        return $peers;
     }
 
     /**
@@ -367,17 +383,32 @@ class ChatConversationRepository extends ServiceEntityRepository
      */
     public function findParticipating(ChatUserInterface $user, int $limit): array
     {
-        /** @var list<ChatConversation> $rows */
-        $rows = $this->createQueryBuilder('c')
-            ->innerJoin(ChatParticipant::class, 'p', 'WITH', 'p.conversation = c AND ' . $this->refs->field('p', 'user') . ' = :user')
-            ->setParameter('user', $this->refs->value($user))
-            ->orderBy('c.lastMessageAt', 'DESC')
-            ->addOrderBy('c.id', 'DESC')
-            ->setMaxResults($limit)
-            ->getQuery()
-            ->getResult();
+        // 1.27 (audit OJ-M1): the participant rows come along and only exactly this user's count (REQ-SEC-006 items 2, 6).
+        $kept   = [];
+        $offset = 0;
+        do {
+            /** @var list<ChatParticipant> $rows */
+            $rows = $this->getEntityManager()->createQueryBuilder()
+                ->select('p', 'c')
+                ->from(ChatParticipant::class, 'p')
+                ->innerJoin('p.conversation', 'c')
+                ->where($this->refs->field('p', 'user') . ' = :user')
+                ->setParameter('user', $this->refs->value($user))
+                ->orderBy('c.lastMessageAt', 'DESC')
+                ->addOrderBy('c.id', 'DESC')
+                ->setFirstResult($offset)
+                ->setMaxResults($limit)
+                ->getQuery()
+                ->getResult();
+            foreach ($rows as $row) {
+                if (count($kept) < $limit && ChatUserReferences::same($row->getUser(), $user)) {
+                    $kept[] = $row->getConversation();
+                }
+            }
+            $offset += $limit;
+        } while (count($rows) === $limit && count($kept) < $limit && $offset < self::EXACT_SCAN * $limit);
 
-        return $rows;
+        return $kept;
     }
 
     /**

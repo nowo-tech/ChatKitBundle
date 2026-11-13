@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
@@ -113,13 +114,18 @@ class ChatMessageRepository extends ServiceEntityRepository
         $em           = $this->getEntityManager();
         $messages     = $em->getClassMetadata(ChatMessage::class)->getTableName();
         $participants = $em->getClassMetadata(ChatParticipant::class)->getTableName();
+        // 1.27 (audit OJ-M1, REQ-SEC-006 item 6): with user references on MySQL / MariaDB the user columns are compared
+        // byte for byte in SQL too (a folding legacy column would count a look-alike's read cursor or messages).
+        $exact        = $this->refs->isIdMode() && $em->getConnection()->getDatabasePlatform() instanceof AbstractMySQLPlatform;
+        $sameUser     = $exact ? ' AND CAST(p.user_id AS BINARY) = CAST(:user AS BINARY)' : '';
+        $otherAuthor  = $exact ? 'CAST(m.author_id AS BINARY) <> CAST(:user AS BINARY)' : 'm.author_id <> :user';
         $rows         = $em->getConnection()->fetchAllAssociative(
             'SELECT m.conversation_id AS cid, COUNT(m.id) AS n
                FROM ' . $messages . ' m
-          LEFT JOIN ' . $participants . ' p ON p.conversation_id = m.conversation_id AND p.user_id = :user
+          LEFT JOIN ' . $participants . ' p ON p.conversation_id = m.conversation_id AND p.user_id = :user' . $sameUser . '
               WHERE m.conversation_id IN (:ids)
                 AND m.deleted_at IS NULL
-                AND (m.author_id IS NULL OR m.author_id <> :user)
+                AND (m.author_id IS NULL OR ' . $otherAuthor . ')
                 AND m.id > COALESCE(p.last_read_message_id, 0)
            GROUP BY m.conversation_id',
             // 1.24: in `doctrine.user_reference: id` the user columns hold the id as text.

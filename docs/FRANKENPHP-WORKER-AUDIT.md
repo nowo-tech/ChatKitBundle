@@ -90,6 +90,7 @@ built in the process are reset, so a request that never touches the chat builds 
 |---------------|-------|------------|
 | `ChatKitEntityManager` (only with `doctrine.private_entity_manager: true`) | the private Doctrine manager of the chat rows, its rollback bookkeeping and its non-service repositories | `ChatRequestBoundaryListener` (last, after the memos) + `kernel.reset`: the manager is dropped FIRST, then its pending changes are logged (class and count) and cleared, each step guarded; recreated when closed, on another connection, or stale after a rollback (DBAL 4 middleware) |
 | `PrivateManagerRepositoryFactory` | repositories of one private manager | collected with that manager (audit NZ pattern; the bundle's repositories are container services) |
+| `StringReferenceSchemaGuard` (only with `doctrine.user_reference: string`) | whether the user columns were found binary NO PAD (a passed check only; a schema fact, never request data) | `kernel.reset`; a failing check keeps nothing, so the next query checks again |
 | Port gates (`Port\*Gate`) | the host's twin | nothing request-scoped (stateless); the value copies (`ChatRequestContext`, `ChatSecurityUser`) are built per call |
 
 Worker test: `tests/Functional/ChatPrivateEntityManagerWorkerTest.php` — one kernel, `http_kernel->handle()` /

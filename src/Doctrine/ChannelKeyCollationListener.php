@@ -31,7 +31,7 @@ use function method_exists;
  * whitespace). PostgreSQL and SQLite compare exactly and are untouched. Applied to the generated schema (schema tool,
  * `doctrine:migrations:diff`); an existing table needs the `ALTER TABLE` in UPGRADING.md. Stateless (REQ-RUNTIME-002).
  *
- * 1.27 (REQ-SEC-006 item 3): with `doctrine.user_reference: id` every user reference column of the bundle's tables
+ * 1.27 (REQ-SEC-006 item 3): with `doctrine.user_reference: string` every user reference column of the bundle's tables
  * (`author_id`, `user_id`, `support_owner_id`, … and `direct_user_low` / `direct_user_high`) gets the same collation,
  * so string references (ChatUserReferenceInterface) such as `Bob`, `bob` and `bob ` are different users in the database.
  */
@@ -45,7 +45,7 @@ final readonly class ChannelKeyCollationListener
      * Builds the listener.
      *
      * @param ManagerRegistry $doctrine Finds the entity manager (and so the platform) of ChatConversation
-     * @param ChatUserReferences $refs 1.27: in `doctrine.user_reference: id` the user reference columns get the collation too
+     * @param ChatUserReferences $refs 1.27: in `doctrine.user_reference: string` the user reference columns get the collation too
      */
     public function __construct(
         private ManagerRegistry $doctrine,
@@ -78,7 +78,7 @@ final readonly class ChannelKeyCollationListener
     public function postGenerateSchemaTable(GenerateSchemaTableEventArgs $args): void
     {
         $metadata = $args->getClassMetadata();
-        $fields   = self::fieldsOf($metadata->getName(), $this->refs->isIdMode());
+        $fields   = self::fieldsOf($metadata->getName(), $this->refs->isStringMode());
         if ($fields === []) {
             return;
         }
@@ -111,7 +111,7 @@ final readonly class ChannelKeyCollationListener
      * every user reference column (REQ-SEC-006 item 3: string references are compared byte for byte).
      *
      * @param string $class The entity class
-     * @param bool $idMode Whether users are referenced by id
+     * @param bool $idMode Whether users are keyed by string references (`string` mode)
      *
      * @return list<string> The mapped field names
      */

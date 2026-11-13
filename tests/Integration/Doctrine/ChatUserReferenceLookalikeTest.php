@@ -9,19 +9,26 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Doctrine\ChannelKeyCollationListener;
+use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
+use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
+use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
+use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
+use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefChatUser;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefDirectory;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
 use PHPUnit\Framework\TestCase;
+use LogicException;
 use RuntimeException;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -38,8 +45,8 @@ use const PHP_URL_PATH;
 /**
  * 1.27 (REQ-SEC-006 on the user reference columns, `doctrine.user_reference: id` with string references): on a real
  * MySQL / MariaDB server the generated user columns are binary NO PAD, `bob`, `Bob`, `bób` are three people, and on a
- * table still created with a case- and accent-folding PAD SPACE collation the PHP re-checks keep them apart (participant
- * rows, settings, erasure). Same throwaway database as ChatChannelRaceTest:
+ * table still created with a case- and accent-folding PAD SPACE collation the chat refuses to run (audit OJ-M1), and the
+ * read paths stay exact even if the columns fold behind a process that already checked them. Same throwaway database as ChatChannelRaceTest:
  *
  *     CHAT_KIT_RACE_DATABASE_URL='mysql://root:pass@db:3306/race?serverVersion=8.4.0&charset=utf8mb4' vendor/bin/phpunit --filter ChatUserReferenceLookalikeTest
  */
@@ -61,7 +68,7 @@ final class ChatUserReferenceLookalikeTest extends TestCase
         if (preg_match('/(?:^|_)(?:test|race|throwaway)(?:_|$)/', $database) !== 1) {
             throw new RuntimeException(sprintf('Refusing to use database "%s": setup drops everything in it.', $database));
         }
-        $this->kernel = new TestKernel(['profiles' => ['default' => ['user_class' => null, 'doctrine' => ['user_reference' => 'id']]]]);
+        $this->kernel = new TestKernel(['profiles' => ['default' => ['user_class' => null, 'doctrine' => ['user_reference' => 'string']]]]);
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
@@ -114,7 +121,39 @@ final class ChatUserReferenceLookalikeTest extends TestCase
         self::assertNull($participants->findOneFor($one, $bob2));
     }
 
-    public function testAFoldingTableNeverMergesLookAlikes(): void
+    public function testAFoldingTableIsRefusedBeforeAnyReadOrWrite(): void
+    {
+        $connection = $this->em->getConnection();
+        if (!$connection->getDatabasePlatform() instanceof AbstractMySQLPlatform) {
+            $this->get(StringReferenceSchemaGuard::class)->assertReady();
+            self::assertTrue(true, 'PostgreSQL / SQLite compare exactly: nothing to check');
+
+            return;
+        }
+        [$ana, $bob, $bigB] = $this->people();
+        $chat = $this->chat();
+        $mine = $chat->openDirect($ana, $bob);
+        $chat->send($bob, $mine, 'from bob');
+        $this->fold();
+        $this->get(StringReferenceSchemaGuard::class)->reset();
+
+        foreach ([
+            'reaction' => fn () => $chat->toggleReaction($bigB, $chat->send($ana, $mine, 'x'), '👍'),
+            'settings' => fn () => $this->get(ChatUserSettingsRepository::class)->forUser($bigB),
+            'unread'   => fn () => $this->get(ChatMessageRepository::class)->countUnreadByConversation('Bob', [(int) $mine->getId()]),
+            'direct'   => fn () => $chat->openDirect($ana, $bigB),
+        ] as $what => $call) {
+            try {
+                $call();
+                self::fail($what . ' ran on a folding column');
+            } catch (LogicException $exception) {
+                self::assertStringContainsString('still fold', $exception->getMessage(), $what);
+            }
+        }
+        self::assertTrue($this->em->isOpen(), 'no unique-key clash closed the entity manager');
+    }
+
+    public function testTheReadPathsAreExactEvenIfTheColumnsFoldLater(): void
     {
         $connection = $this->em->getConnection();
         if (!$connection->getDatabasePlatform() instanceof AbstractMySQLPlatform) {
@@ -122,29 +161,46 @@ final class ChatUserReferenceLookalikeTest extends TestCase
 
             return;
         }
-        // The columns as 1.24–1.26 created them on a host whose default collation folds case, accents and padding.
-        foreach ([ChatParticipant::class => 'user_id', ChatUserSettings::class => 'user_id'] as $class => $column) {
-            $connection->executeStatement(sprintf('ALTER TABLE %s MODIFY %s VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL', $this->em->getClassMetadata($class)->getTableName(), $column));
-        }
-        foreach (['author_id', 'deleted_by_id', 'pinned_by_id'] as $column) {
-            $connection->executeStatement(sprintf('ALTER TABLE %s MODIFY %s VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL', $this->em->getClassMetadata(ChatMessage::class)->getTableName(), $column));
-        }
         [$ana, $bob, $bigB] = $this->people();
-        $chat               = $this->chat();
-        $mine               = $chat->openDirect($ana, $bob);
-        $chat->send($bob, $mine, 'from bob');
-        $chat->send($bigB, $chat->openDirect($ana, $bigB), 'from Bob');
-        $settings = $this->get(ChatUserSettingsRepository::class);
-        $row      = $settings->forUser($bob);
-        $row->setPushEnabled(true);
-        $settings->save($row);
-        $settings->reset();
+        $chat    = $this->chat();
+        $withBob = $chat->openDirect($ana, $bob);
+        $withBig = $chat->openDirect($ana, $bigB);
+        $chat->send($ana, $withBob, 'hi @[Bob lower](' . $bob->getChatPublicId() . ')');
+        $chat->send($ana, $withBig, 'hi @[Bob upper](' . $bigB->getChatPublicId() . ')');
+        // Both in one channel: Bob writes and has read everything; bob has read nothing.
+        $channel = $chat->openChannel($bob, new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+        $chat->openChannel($bigB, new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+        $chat->markRead($bigB, $channel, (int) $chat->send($bigB, $channel, 'from Bob')->getId());
+        $this->get(StringReferenceSchemaGuard::class)->assertReady();
+        // The schema folds again behind a process that already checked it (e.g. a later botched migration).
+        $this->fold();
         $this->em->clear();
+        $withBob = $this->em->getRepository(ChatConversation::class)->findOneBy(['uuid' => $withBob->getUuid()]) ?? self::fail('conversation');
+        $withBig = $this->em->getRepository(ChatConversation::class)->findOneBy(['uuid' => $withBig->getUuid()]) ?? self::fail('conversation');
 
-        self::assertNull($this->get(ChatParticipantRepository::class)->findOneFor($mine, $bigB), 'the SQL row of bob is dropped by the re-check');
-        self::assertNull($settings->forUser($bigB)->getId(), 'Bob never gets bob\'s settings');
-        $this->get(ChatPersonalData::class)->erase($bob);
-        self::assertSame(['Bob'], $connection->fetchFirstColumn(sprintf('SELECT author_id FROM %s WHERE author_id IS NOT NULL', $this->em->getClassMetadata(ChatMessage::class)->getTableName())), 'erasing bob keeps Bob\'s messages');
+        $ids = [(int) $withBob->getId(), (int) $withBig->getId()];
+        self::assertSame([(int) $channel->getId() => 1], $this->get(ChatMessageRepository::class)->countUnreadByConversation('bob', [(int) $channel->getId()]), 'Bob\'s message is foreign to bob, and Bob\'s read cursor is not bob\'s');
+        $mentions = $this->get(ChatMessageMentionRepository::class);
+        self::assertSame([(int) $withBob->getId() => 1], $mentions->countUnreadByConversation($bob, $ids));
+        self::assertSame(1, $mentions->countForUser($bob, [], false));
+        self::assertCount(1, $mentions->findForUser($bob, [], false, 10));
+        self::assertSame([$withBob->getId()], array_map(static fn (ChatConversation $c): ?int => $c->getId(), $this->get(ChatConversationRepository::class)->findParticipating($bob, 10)));
+        self::assertSame(['ana'], $this->get(ChatConversationRepository::class)->findDirectPeerIds($bob));
+        self::assertSame([(int) $withBob->getId()], array_keys($this->get(ChatParticipantRepository::class)->findForUser($bob, $ids)));
+        self::assertSame(1, $mentions->markReadUpTo($bob, $withBob, PHP_INT_MAX, new \DateTimeImmutable()));
+        self::assertSame(1, $mentions->countForUser($bigB, [], false), 'Bob\'s mention stays unread');
+    }
+
+    private function fold(): void
+    {
+        // The columns as a host's default collation would create them: case-, accent- and padding-insensitive.
+        $connection = $this->em->getConnection();
+        foreach (UserReferenceListener::RELATIONS as $class => $relations) {
+            $metadata = $this->em->getClassMetadata($class);
+            foreach ($relations as $relation => $nullable) {
+                $connection->executeStatement(sprintf('ALTER TABLE %s MODIFY %s VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci %s', $metadata->getTableName(), $metadata->getColumnName($relation . 'Ref'), $nullable ? 'NULL' : 'NOT NULL'));
+            }
+        }
     }
 
     /**

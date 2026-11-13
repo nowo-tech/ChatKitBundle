@@ -21,6 +21,7 @@ use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
+use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Link\ChatLinks;
@@ -100,7 +101,9 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$tableNamePrefix', param('nowo_chat_kit.doctrine.table_name_prefix'));
     // 1.24: `doctrine.user_reference` (the extension removes the listener in the default `relation` mode).
     $services->get(ChatUserReferences::class)
-        ->arg('$mode', param('nowo_chat_kit.doctrine.user_reference'));
+        ->arg('$mode', param('nowo_chat_kit.doctrine.user_reference'))
+        // 1.27 (audit OJ-M1): `string` mode only (the extension removes the guard otherwise).
+        ->arg('$guard', service(StringReferenceSchemaGuard::class)->nullOnInvalid());
     $services->get(UserReferenceListener::class)
         ->arg('$access', service_closure(ChatAccess::class))
         ->arg('$secret', param('kernel.secret'));

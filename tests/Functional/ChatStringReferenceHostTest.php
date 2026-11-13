@@ -55,7 +55,7 @@ final class ChatStringReferenceHostTest extends DatabaseTestCase
     {
         return ['profiles' => ['default' => [
             'user_class' => null,
-            'doctrine'   => ['user_reference' => 'id', 'private_entity_manager' => true],
+            'doctrine'   => ['user_reference' => 'string', 'private_entity_manager' => true],
             'limits'     => ['send_per_minute' => 10_000, 'actions_per_minute' => 10_000, 'reads_per_minute' => 10_000],
         ]]];
     }
