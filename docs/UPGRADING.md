@@ -5,6 +5,11 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.27.0](#to-1270)
+  - [Framework-free port twins (REQ-ARCH-001 rule 3)](#framework-free-port-twins-req-arch-001-rule-3)
+  - [Private entity manager (REQ-ARCH-001 rule 6, opt-in)](#private-entity-manager-req-arch-001-rule-6-opt-in)
+  - [String user references (REQ-ARCH-001 rule 2, opt-in `doctrine.user_reference: string`)](#string-user-references-req-arch-001-rule-2-opt-in-doctrineuser_reference-string)
+  - [Calling the chat by id](#calling-the-chat-by-id)
 - [To 1.26.4](#to-1264)
   - [Exact channel keys (house rule LQ)](#exact-channel-keys-house-rule-lq)
 - [To 1.26.3](#to-1263)
@@ -65,6 +70,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.27.0
+
+From **1.26.4**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 Target 1.27.0, from **1.26.4**:
 

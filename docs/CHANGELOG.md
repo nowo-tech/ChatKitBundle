@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.27.0] - 2026-11-13](#1270---2026-11-13)
 - [[1.26.4] - 2026-11-13](#1264---2026-11-13)
 - [[1.26.3] - 2026-11-11](#1263---2026-11-11)
 - [[1.26.2] - 2026-11-11](#1262---2026-11-11)
@@ -62,6 +63,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.27.0] - 2026-11-13
 
 Target 1.27.0 (minor; REQ-ARCH-001, with REQ-RUNTIME-002 and REQ-SEC-006 kept). Every change is additive: with an
 unchanged configuration and unchanged host services the bundle behaves exactly as 1.26.4. See
@@ -1478,7 +1481,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.26.4...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.27.0...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
