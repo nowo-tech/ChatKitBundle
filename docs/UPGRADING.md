@@ -6,7 +6,6 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 - [Unreleased](#unreleased)
 - [To 1.27.1](#to-1271)
-- [To 1.27.1](#to-1271-1)
 - [To 1.27.0](#to-1270)
   - [Framework-free port twins (REQ-ARCH-001 rule 3)](#framework-free-port-twins-req-arch-001-rule-3)
   - [Private entity manager (REQ-ARCH-001 rule 6, opt-in)](#private-entity-manager-req-arch-001-rule-6-opt-in)
@@ -72,14 +71,6 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
-
-## To 1.27.1
-
-From **1.27.0**:
-
-```bash
-composer update nowo-tech/chat-kit-bundle
-```
 
 ## To 1.27.1
 
