@@ -33,7 +33,7 @@ final class ConfigurationTest extends TestCase
             'push_url'                  => '/?chat={uuid}',
             'push_icon'                 => null,
             'push_preview'              => false,
-            'doctrine'                  => ['table_name_prefix' => 'nowo_chat_', 'table_prefix' => '', 'user_reference' => 'relation'],
+            'doctrine'                  => ['table_name_prefix' => 'nowo_chat_', 'table_prefix' => '', 'user_reference' => 'relation', 'entity_manager' => 'default', 'private_entity_manager' => null],
             'digest'                    => ['enabled' => false, 'delay_minutes' => 15, 'interval_minutes' => 60],
             'web_ui'                    => ['layout_template' => null, 'assets' => true, 'channels_url' => null, 'page' => ['full_height' => false, 'open_recent' => false], 'dock' => ['sidebar_sections' => false, 'dialog_runtime' => false], 'templates' => ['page' => '@NowoChatKitBundle/page.html.twig']],
             'page_layout'               => null,
@@ -95,7 +95,7 @@ final class ConfigurationTest extends TestCase
     {
         $config = $this->process([['profiles' => ['default' => ['doctrine' => ['table_name_prefix' => 'chat_', 'table_prefix' => 'app_']]]]]);
 
-        self::assertSame(['table_name_prefix' => 'chat_', 'table_prefix' => 'app_', 'user_reference' => 'relation'], $config['profiles']['default']['doctrine']);
+        self::assertSame(['table_name_prefix' => 'chat_', 'table_prefix' => 'app_', 'user_reference' => 'relation', 'entity_manager' => 'default', 'private_entity_manager' => null], $config['profiles']['default']['doctrine']);
     }
 
     /**

@@ -95,10 +95,39 @@ unchanged configuration and unchanged host services the bundle behaves exactly a
   It loads the rows, re-checks every uuid byte for byte (REQ-SEC-006 item 2: an unknown or look-alike uuid throws
   `Service\ChatNotFoundException` before anything is written) and calls `ChatServiceInterface`, so a decoration of that
   interface applies to both. `ChatServiceInterface` stays the entity form for standard hosts (not deprecated).
+- **Private entity manager for the chat rows (opt-in, REQ-ARCH-001 rule 6).**
+  `doctrine.private_entity_manager: true` makes every bundle service read and write through
+  `Doctrine\ChatKitEntityManager`, a private manager created on the connection, mapping, caches, proxies and event
+  manager of the new `doctrine.entity_manager` (default `default`, where 1.26 wrote; the tables do not move, the bundle's
+  and the host's Doctrine listeners still run). A chat write then never flushes a change the application left pending
+  in its own manager, never clears it, and a failed chat write closes only the private manager (created again on the
+  next call). Adapted from TaskBoardBundle 2.15.0 / AuthKitBundle 1.46.0 (audits NV, NJ-2, NJV-1, NF-2, NF2-2, NF3-2,
+  NF-7, NZ):
+  - `PrivateEntityManagerReferencesPass` moves every bundle service (inline definitions, iterators, method calls and
+    properties included) from the source manager, the manager `EntityManagerInterface` autowires and the `doctrine`
+    registry onto the private manager and `Doctrine\ChatKitManagerRegistry`; host services are never touched.
+  - Dropped at every request / message / command boundary by `ChatRequestBoundaryListener` (last, after the memos) and
+    at `kernel.reset`: the manager is dropped FIRST, then its pending changes are inspected (logged as a warning by entity
+    class and count, never a value) and cleared, each step guarded.
+  - Recreated when closed, when the connection changed, or when a rollback undid rows it wrote (DBAL 4 middleware
+    `PrivateEntityManagerMiddleware`, attached only to the source manager's connection); the source manager's SQL filters
+    are mirrored on every call.
+  - Bundle-owned repository factory (`Doctrine\PrivateManagerRepositoryFactory`): service repositories (the bundle's
+    own, or a host entity a host listener loads through the private manager) come from the source factory; every other
+    repository is built and kept per manager, so a replaced manager is collected.
+  - In `relation` mode, host user objects on chat rows that the private manager does not hold (the security user) are
+    adopted before each flush as the private manager's reference to the same id; the application's instance is never
+    written. Users read back from chat rows are the private manager's instances: compare users by id.
+  - `Doctrine\ChatKitSavepoint`: the bundle's bulk DQL / DBAL writes (purge, link index, mentions, read cursors, archive
+    reopening, message moves, ticket numbers) run in a savepoint (`nowo_chat_kit_*`) inside an open transaction; when
+    rolling back to it fails too, the ORIGINAL exception is rethrown.
+
 - Docs: a "Standard Symfony host" section next to the DDD one in USAGE.
 
 ### Deprecated
 
+- `doctrine.private_entity_manager: false` (explicit) is deprecated: the private entity manager becomes the only mode
+  in 2.0. The default (`null`, not set) keeps the 1.26 behaviour without a deprecation.
 - `ChatChannelProviderInterface`, `ChatRealtimeInterface` and `CurrentChatUserResolverInterface` (`@deprecated`;
   Symfony's DebugClassLoader reports an application class implementing one in debug mode). They keep working unchanged
   until 2.0. No runtime deprecation is triggered.
@@ -115,6 +144,17 @@ unchanged configuration and unchanged host services the bundle behaves exactly a
 - **Twin replay** (`CHAT_KIT_PORTS=twin`, a CI job): the whole suite runs with the test kernel's channel provider and
   realtime transport behind their twins only (aliased under the deprecated ids) and the current-user resolver through
   `ChatParticipantResolverInterface`.
+- Private entity manager: `PrivateEntityManagerKernelTest` (direct, channel, reaction and read-cursor writes leave a
+  pending application insert and update unflushed; the bundle services hold the private manager; a failing write
+  closes only the private manager; the boundary drops it), `LegacyEntityManagerKernelTest` (the default flushes the
+  application's manager, as 1.26), `PrivateEntityManagerPartsTest` (registry routing, boundary drop that cannot be
+  poisoned, dropped changes logged by class only, rollback bookkeeping, middleware, savepoints with the original
+  exception rethrown).
+- `ChatPrivateEntityManagerWorkerTest` (REQ-RUNTIME-002): one kernel driven through `http_kernel->handle()` /
+  `terminate()` (no services resetter), 300 rounds of two people writing and listing their conversations: no
+  cross-user data, the private manager dropped after every request, a pending application change never flushed,
+  memory within 4 MiB after the warm-up.
+- **Private-manager replay** (`CHAT_KIT_PRIVATE_EM=1`, a CI job): the whole suite runs with the option on.
 - `ChatMessagingTest`: every method by uuid, same rows and events as the entity service, views equal to
   `ChatConversationView::of()`, unknown / upper-case / padded uuids refused with nothing written.
 

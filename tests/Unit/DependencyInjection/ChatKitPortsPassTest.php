@@ -114,6 +114,15 @@ final class ChatKitPortsPassTest extends TestCase
         $container->get(ChatChannelProviderInterface::class);
     }
 
+    public function testAnAliasToAServiceDefinedLaterIsDecidedAtRuntime(): void
+    {
+        $container = $this->container();
+        $container->setAlias(ChatChannelProviderInterface::class, 'app.later');
+        (new ChatKitPortsPass())->process($container);
+
+        self::assertSame([Ports::class, 'channelProvider'], $container->getDefinition(ChatChannelProviderInterface::class)->getFactory());
+    }
+
     public function testNeitherInterfaceFailsTheBuild(): void
     {
         $container = $this->container();

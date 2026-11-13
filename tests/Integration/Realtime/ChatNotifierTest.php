@@ -17,6 +17,7 @@ use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use PHPUnit\Framework\Attributes\Group;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 
@@ -83,6 +84,8 @@ final class ChatNotifierTest extends DatabaseTestCase
         self::assertSame([], $this->get(ChatReactionRepository::class)->summaryFor([]));
     }
 
+    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
+    #[Group('application-manager')]
     public function testRecipientsAreCachedUntilForgotten(): void
     {
         $chat       = $this->get(ChatService::class);

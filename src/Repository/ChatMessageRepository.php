@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -190,26 +191,26 @@ class ChatMessageRepository extends ServiceEntityRepository
         if ($ids === []) {
             return 0;
         }
-        $this->getEntityManager()->createQueryBuilder()
+        ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->delete(ChatReaction::class, 'r')
             ->where('IDENTITY(r.message) IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
-            ->execute();
+            ->execute());
         // 1.19: their links leave the Links panel.
-        $this->getEntityManager()->createQueryBuilder()
+        ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->delete(ChatMessageLink::class, 'ml')
             ->where('IDENTITY(ml.message) IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
-            ->execute();
+            ->execute());
 
-        return (int) $this->createQueryBuilder('m')
+        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')
             ->delete()
             ->where('m.id IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
-            ->execute();
+            ->execute());
     }
 
     /**
@@ -222,14 +223,14 @@ class ChatMessageRepository extends ServiceEntityRepository
      */
     public function moveAll(ChatConversation $from, ChatConversation $to): int
     {
-        return (int) $this->createQueryBuilder('m')
+        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')
             ->update()
             ->set('m.conversation', ':to')
             ->where('m.conversation = :from')
             ->setParameter('to', $to)
             ->setParameter('from', $from)
             ->getQuery()
-            ->execute();
+            ->execute());
     }
 
     /**

@@ -23,6 +23,7 @@ use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use PHPUnit\Framework\Attributes\Group;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
@@ -90,6 +91,8 @@ final class ChatLinksIndexTest extends DatabaseTestCase
         self::assertSame(['https://his.example/'], array_map(static fn (ChatMessageLink $row): string => $row->getUrl(), $this->em->getRepository(ChatMessageLink::class)->findAll()));
     }
 
+    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
+    #[Group('application-manager')]
     public function testTheLimitHoldsUnderAConcurrentAdd(): void
     {
         $ana  = $this->user('Ana');

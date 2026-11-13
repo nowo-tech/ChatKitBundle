@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Repository;
 
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -45,12 +46,12 @@ class ChatMessageLinkRepository extends ServiceEntityRepository
      */
     public function removeForMessageIds(array $messageIds): int
     {
-        return (int) $this->getEntityManager()->createQueryBuilder()
+        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->delete(ChatMessageLink::class, 'ml')
             ->where('IDENTITY(ml.message) IN (:ids)')
             ->setParameter('ids', $messageIds)
             ->getQuery()
-            ->execute();
+            ->execute());
     }
 
     /**

@@ -84,9 +84,25 @@ built in the process are reset, so a request that never touches the chat builds 
 - `tests/Unit/Doctrine/UserReferenceListenerResetTest.php`: `reset()` forgets the resolved entities.
 - Memory: `ChatCsrfRefreshTest` (1.26.0) keeps the 1,000-heartbeat flat-memory check (64 KiB on stable Symfony).
 
+## 1.27.0 additions: the private entity manager (REQ-ARCH-001 rule 6)
+
+| Stateful unit | Holds | Cleared by |
+|---------------|-------|------------|
+| `ChatKitEntityManager` (only with `doctrine.private_entity_manager: true`) | the private Doctrine manager of the chat rows, its rollback bookkeeping and its non-service repositories | `ChatRequestBoundaryListener` (last, after the memos) + `kernel.reset`: the manager is dropped FIRST, then its pending changes are logged (class and count) and cleared, each step guarded; recreated when closed, on another connection, or stale after a rollback (DBAL 4 middleware) |
+| `PrivateManagerRepositoryFactory` | repositories of one private manager | collected with that manager (audit NZ pattern; the bundle's repositories are container services) |
+| Port gates (`Port\*Gate`) | the host's twin | nothing request-scoped (stateless); the value copies (`ChatRequestContext`, `ChatSecurityUser`) are built per call |
+
+Worker test: `tests/Functional/ChatPrivateEntityManagerWorkerTest.php` — one kernel, `http_kernel->handle()` /
+`terminate()` (no services resetter), 300 rounds in which Ana and Eve each write in their own direct conversation with
+Luis and list their conversations; each sees only hers, Eve's read of Ana's conversation answers 404, the private
+manager is dropped after every request, an application insert left pending in the application's manager for the whole
+run is never flushed, and memory grows by at most 4 MiB after a 30-round warm-up. Rule 4 (bundle-owned EMs): the
+private manager is cleared at every boundary, recreated when closed, keeps no entity across requests, and the bundle's
+transactions open and close within the call.
+
 ### Host requirement: clear your entity managers when the services resetter is off (REQ-RUNTIME-002 rule 7)
 
-ChatKit reads `ChatUserSettings` (presence visibility, e-mail digest) through the host's entity manager. A host that
+ChatKit reads `ChatUserSettings` (presence visibility, e-mail digest) through the host's entity manager (unless `doctrine.private_entity_manager: true`, 1.27, where the bundle drops its own manager at every boundary). A host that
 removes or bypasses `services_resetter`, drives `http_kernel` directly, starts `messenger:consume --no-reset` or runs
 long console commands must also clear its Doctrine entity managers at every boundary (main request, Messenger
 message, console command). Otherwise the identity map keeps returning the managed row this thread loaded first, and a

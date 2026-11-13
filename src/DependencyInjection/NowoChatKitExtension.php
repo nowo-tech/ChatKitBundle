@@ -7,18 +7,27 @@ namespace Nowo\ChatKitBundle\DependencyInjection;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatReferenceProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatSidebarSectionProviderInterface;
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerPass;
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerReferencesPass;
+use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
+use Nowo\ChatKitBundle\Doctrine\PrivateEntityManagerMiddleware;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\FileLocator;
+use Symfony\Component\DependencyInjection\Argument\IteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
+use Symfony\Component\DependencyInjection\Reference;
 
 use function array_key_exists;
 use function is_array;
@@ -177,6 +186,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
             $container->removeDefinition(UserReferenceListener::class);
         }
         $this->registerTableNames($container, $configs, $config['default_profile'], $profile['doctrine']);
+        $this->registerPrivateEntityManager($container, $profile['doctrine']['private_entity_manager'], $profile['doctrine']['entity_manager']);
         foreach ($profile['links'] as $key => $value) {
             $container->setParameter(Configuration::ALIAS . '.links.' . $key, $value);
         }
@@ -197,6 +207,44 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.web_ui.page.open_recent', $profile['web_ui']['page']['open_recent']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.dock.sidebar_sections', $profile['web_ui']['dock']['sidebar_sections']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.dock.dialog_runtime', $profile['web_ui']['dock']['dialog_runtime']);
+    }
+
+    /**
+     * 1.27 (REQ-ARCH-001 rule 6): `doctrine.private_entity_manager: true` registers {@see ChatKitEntityManager} and
+     * {@see ChatKitManagerRegistry}; {@see PrivateEntityManagerReferencesPass} then points every bundle service at them,
+     * {@see PrivateEntityManagerPass} attaches the rollback middleware (DBAL 4) to the source manager's connection, and
+     * the boundary listener drops the private manager after the memos. null keeps the 1.26 wiring; false too, with a
+     * deprecation (the private manager is the only mode in 2.0).
+     */
+    private function registerPrivateEntityManager(ContainerBuilder $container, ?bool $private, string $emName): void
+    {
+        $container->setParameter(PrivateEntityManagerReferencesPass::PARAMETER, $private === true);
+        $container->setParameter(PrivateEntityManagerReferencesPass::SOURCE_PARAMETER, $emName);
+        if ($private === false) {
+            trigger_deprecation('nowo-tech/chat-kit-bundle', '1.27', '"nowo_chat_kit ... doctrine.private_entity_manager: false" is deprecated: chat writes then flush the application\'s entity manager, including its pending changes; the private entity manager becomes the only mode in 2.0. Set it to true (see UPGRADING.md).');
+        }
+        if ($private !== true) {
+            return;
+        }
+
+        $container->register(ChatKitEntityManager::class, ChatKitEntityManager::class)
+            ->setArguments([new Reference('doctrine'), $emName, new Reference('logger', ContainerInterface::IGNORE_ON_INVALID_REFERENCE)])
+            ->addTag('kernel.reset', ['method' => 'reset'])
+            // Audit NJV-1: loads of the private manager inside a transaction are tracked like its writes.
+            ->addTag('doctrine.event_listener', ['event' => 'postLoad', 'method' => 'postLoad', 'lazy' => true, 'entity_manager' => $emName]);
+        $container->register(ChatKitManagerRegistry::class, ChatKitManagerRegistry::class)
+            ->setArguments([new Reference('doctrine'), new Reference(ChatKitEntityManager::class), $emName]);
+        if (PrivateEntityManagerPass::supportsRollbackMiddleware()) {
+            $container->register(PrivateEntityManagerMiddleware::class, PrivateEntityManagerMiddleware::class)
+                ->setArguments([new Reference(ChatKitEntityManager::class)])
+                ->addTag('doctrine.middleware');
+        }
+        // The private manager last, after the memos that may still hold its rows.
+        $listener = $container->getDefinition(ChatRequestBoundaryListener::class);
+        $memos    = $listener->getArgument('$memos');
+        $values   = $memos instanceof IteratorArgument ? $memos->getValues() : [];
+        $values[] = new Reference(ChatKitEntityManager::class, ContainerInterface::IGNORE_ON_UNINITIALIZED_REFERENCE);
+        $listener->setArgument('$memos', new IteratorArgument($values));
     }
 
     /**

@@ -80,6 +80,8 @@ return static function (ContainerConfigurator $container): void {
             '../../Service/ChatNotFoundException.php',
             '../../Avatar/AvatarUrlPolicy.php',
             '../../Doctrine/UnresolvedChatUser.php',
+            // 1.27: registered by the extension only with doctrine.private_entity_manager: true.
+            '../../Doctrine/{ChatKitEntityManager,ChatKitManagerRegistry,ChatKitSavepoint,PrivateEntityManagerConnection,PrivateEntityManagerDriver,PrivateEntityManagerMiddleware,PrivateManagerRepositoryFactory}.php',
         ]);
     // REQ-SF-004 rule 7: controllers are NOT autoconfigured. On Symfony >= 7.3 autoconfiguration tags every #[Route]
     // class with routing.controller, and the host's default `routing.controllers` import would then register the chat

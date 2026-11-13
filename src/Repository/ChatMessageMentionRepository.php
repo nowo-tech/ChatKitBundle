@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -78,7 +79,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             $qb->andWhere($this->refs->identity('mm', 'user') . ' NOT IN (:keep)')->setParameter('keep', $this->refs->ids($keepUserIds));
         }
 
-        return (int) $qb->getQuery()->execute();
+        return (int) ChatKitSavepoint::write($this->getEntityManager(), static fn (): mixed => $qb->getQuery()->execute());
     }
 
     /**
@@ -99,7 +100,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             ->where('m.conversation = :conversation')
             ->andWhere('m.id <= :upTo');
 
-        return (int) $this->getEntityManager()->createQueryBuilder()
+        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->update(ChatMessageMention::class, 'mm')
             ->set('mm.readAt', ':now')
             ->where($this->refs->field('mm', 'user') . ' = :user')
@@ -110,7 +111,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             ->setParameter('conversation', $conversation)
             ->setParameter('upTo', $messageId)
             ->getQuery()
-            ->execute();
+            ->execute());
     }
 
     /**

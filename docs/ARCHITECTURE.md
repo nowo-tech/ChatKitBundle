@@ -5,7 +5,9 @@
 | Layer | Namespace / path | Role |
 | --- | --- | --- |
 | Model | `Model`, `Entity`, `Enum`, `Repository` | `ChatUserInterface` (your user), conversations, participants (read cursors, mute), messages (Markdown + sanitised HTML, tombstones, buzz), reactions, user settings |
-| Contracts | `Contract` | What the application provides: directory, access policy, channels, realtime, push |
+| Contracts | `Contract` | What the application provides: directory, access policy, channels, realtime, push. 1.27: framework-free twins (`ChatChannelSourceInterface`, `ChatRealtimeTransportInterface`, `ChatParticipantResolverInterface`) and the id-based application port `ChatMessagingInterface` |
+| Ports | `Port` | 1.27, internal: `Ports` picks the deprecated interface or the twin's gate per host service; `ChatRequestContexts` copies the request / security user into `ChatRequestContext` / `ChatSecurityUser` |
+| Persistence | `Doctrine` | Table prefixes, channel-key collation, user references; 1.27 opt-in private entity manager (`ChatKitEntityManager`, `ChatKitManagerRegistry`, rollback middleware, per-manager repository factory, `ChatKitSavepoint`) |
 | Security | `Security` | `ChatAccess` (per-request memo over the contracts, `ResetInterface`), `ChatVoter` (view, send, moderate, resolve, edit, delete, react) |
 | Domain | `Service` | `ChatService` (lifecycle), `ChatMarkdownRenderer` (escape-first), `ChatPresenter` (JSON shapes) |
 | Realtime | `Realtime` | `ChatNotifier` → `ChatRecipients` (30 s cache) → `ChatPublisher` → `ChatRealtimeInterface`; `ChatPresence` (heartbeats in a PSR-6 pool) |
@@ -27,5 +29,6 @@
 
 - The application decides who exists and who may talk to whom; the bundle never queries the user table directly.
 - Every API read re-checks access; only the realtime recipient list is cached (30 s).
-- No request state in services without `ResetInterface` (FrankenPHP worker mode).
+- No request state in services without `ResetInterface` (FrankenPHP worker mode); memos and the private entity manager are cleared at every request / message / command boundary by `ChatRequestBoundaryListener`.
+- REQ-ARCH-001: standard Symfony is the zero-config default; the DDD path is opt-in — port twins with bundle value objects, `ChatMessagingInterface` by uuid, `doctrine.user_reference: id`, `doctrine.private_entity_manager: true`. The bundle never flushes the application's manager once the private one is on.
 - Text reaches the DOM through `textContent`; only the server-sanitised message HTML uses `innerHTML` (lint rule).

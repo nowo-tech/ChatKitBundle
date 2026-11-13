@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
@@ -88,12 +89,12 @@ class ChatConversationLinkRepository extends ServiceEntityRepository
             return 0;
         }
 
-        return (int) $this->createQueryBuilder('l')
+        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('l')
             ->delete()
             ->where('l.id IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
-            ->execute();
+            ->execute());
     }
 
     /**

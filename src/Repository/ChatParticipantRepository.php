@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -152,7 +153,7 @@ class ChatParticipantRepository extends ServiceEntityRepository
      */
     public function reopenArchived(ChatConversation $conversation, DateTimeImmutable $now): int
     {
-        $reopened = $this->createQueryBuilder('p')
+        $reopened = ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('p')
             ->update()
             ->set('p.archivedAt', ':none')
             ->where('p.conversation = :conversation AND p.archivedAt IS NOT NULL')
@@ -161,7 +162,7 @@ class ChatParticipantRepository extends ServiceEntityRepository
             ->setParameter('conversation', $conversation)
             ->setParameter('now', $now)
             ->getQuery()
-            ->execute();
+            ->execute());
         $count = is_int($reopened) ? $reopened : 0;
         if ($count > 0) {
             // Managed rows read again (the UPDATE bypassed them).

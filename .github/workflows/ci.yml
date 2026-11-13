@@ -279,7 +279,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: 'twin ports', env: 'CHAT_KIT_PORTS=twin' }
+          - { name: 'twin ports', env: 'CHAT_KIT_PORTS=twin', args: '' }
+          - { name: 'private entity manager', env: 'CHAT_KIT_PRIVATE_EM=1', args: '--exclude-group application-manager' }
 
     steps:
       - name: Checkout code
@@ -311,7 +312,7 @@ jobs:
       - name: Run the suite
         env:
           SYMFONY_DEPRECATIONS_HELPER: max[direct]=0
-        run: env ${{ matrix.env }} vendor/bin/phpunit --no-coverage
+        run: env ${{ matrix.env }} vendor/bin/phpunit --no-coverage ${{ matrix.args }}
 
   database:
     name: Channel race and look-alike keys (${{ matrix.name }})

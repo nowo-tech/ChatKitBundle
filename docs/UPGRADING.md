@@ -95,6 +95,30 @@ Keep the write and mention policies (`ChatChannelWritePolicyInterface`, `ChatCha
 same class. A class implementing both the old interface and the twin is asked through the old one until 2.0. A port
 service that implements neither now fails the container build (it failed at the first call before).
 
+### Private entity manager (REQ-ARCH-001 rule 6, opt-in)
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            doctrine:
+                private_entity_manager: true
+                # entity_manager: default   # the manager that maps the chat entities
+```
+
+Recommended. Up to 1.26 every chat write flushed your default entity manager (your pending changes included). With the
+option, the chat writes through its own manager on the same connection; your manager is never flushed, cleared or
+closed by the bundle. No schema change. Check after enabling it:
+
+- code that relied on a chat call flushing **your** pending changes must call `flush()` itself;
+- users read from chat rows are the private manager's instances: compare users by id (`getId()`), never with `===`;
+- chat entities you load through **your** manager are not the ones the bundle writes: change chat rows through the
+  ChatKit services only;
+- inside your own transaction the chat rows are part of it (shared connection); the bundle's own writes run in
+  savepoints.
+
+Setting it to `false` explicitly is deprecated (it becomes the only mode in 2.0); leaving it unset keeps 1.26 behaviour.
+
 ### Calling the chat by id
 
 New `ChatMessagingInterface` (autowire it): the same operations as `ChatServiceInterface` by public uuid, answering
