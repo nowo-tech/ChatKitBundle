@@ -15,6 +15,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\DomainDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Nowo\ChatKitBundle\Tests\Support\TestKernel;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -43,6 +44,9 @@ final class ChatDddHostTest extends DatabaseTestCase
 
     protected function setUp(): void
     {
+        if (TestKernel::twinPorts()) {
+            self::markTestSkipped('This host replaces the 1.26 resolver service; the twin replay wires its own.');
+        }
         parent::setUp();
         $this->directory = new DomainDirectory();
         $container       = $this->kernel->getContainer()->get('test.service_container');

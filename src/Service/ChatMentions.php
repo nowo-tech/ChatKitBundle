@@ -12,9 +12,9 @@ use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\Ports;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Realtime\ChatRecipients;
-use Nowo\ChatKitBundle\Port\Ports;
 use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
@@ -155,7 +155,7 @@ final readonly class ChatMentions
     private function grantGroup(ChatConversation $conversation, ChatUserInterface $author, string $group, int $memberCount, ?string $previousGroup): ?string
     {
         $channel = $this->access->channel((string) $conversation->getChannelKey());
-        if (!$channel instanceof ChatChannel || !($policy = $this->channels === null ? null : Ports::companion($this->channels)) instanceof ChatChannelMentionPolicyInterface
+        if (!$channel instanceof ChatChannel || !($policy = $this->channels instanceof ChatChannelProviderInterface ? Ports::companion($this->channels) : null) instanceof ChatChannelMentionPolicyInterface
             || !$this->access->canWriteChannel($author, $channel->key) || !$policy->canMentionAll($author, $channel, $memberCount)) {
             return null;
         }

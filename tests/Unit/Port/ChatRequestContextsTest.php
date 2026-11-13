@@ -8,6 +8,7 @@ use Nowo\ChatKitBundle\Model\ChatRequestContext;
 use Nowo\ChatKitBundle\Model\ChatSecurityUser;
 use Nowo\ChatKitBundle\Port\ChatRequestContexts;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Security\Core\User\InMemoryUser;
 use Symfony\Component\Security\Core\User\UserInterface;
@@ -21,7 +22,7 @@ final class ChatRequestContextsTest extends TestCase
     {
         $request = Request::create('https://app.example.test:8443/projects/acme?tab=chat&list[]=1', 'POST', [], ['PHPSESSID' => 'secret'], [], ['HTTP_AUTHORIZATION' => 'Bearer secret'], 'body');
         $request->attributes->set('_route', 'project_show');
-        $request->attributes->set('_route_params', ['slug' => 'acme', 'page' => 2, 'object' => new \stdClass(), 3 => 'x']);
+        $request->attributes->set('_route_params', ['slug' => 'acme', 'page' => 2, 'object' => new stdClass(), 3 => 'x']);
         $request->setLocale('es');
 
         $context = ChatRequestContexts::fromRequest($request);

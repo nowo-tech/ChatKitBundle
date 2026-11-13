@@ -25,6 +25,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
 
 use function assert;
+use function in_array;
+use function is_string;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -38,6 +40,8 @@ use const JSON_THROW_ON_ERROR;
  */
 final class ChatTwinPortsEquivalenceTest extends TestCase
 {
+    private string $lastUuid = '';
+
     public function testTheTwinsAnswerLikeTheDeprecatedPorts(): void
     {
         $legacy = $this->scenario(false);
@@ -114,7 +118,7 @@ final class ChatTwinPortsEquivalenceTest extends TestCase
             $client->loginUser($users['Reader Luis']);
             $readerCsrf         = (string) $this->config($client, '/page')['csrf'];
             $out['readerOpen']  = $this->call($client, Request::METHOD_POST, '/chat/api/channel', $readerCsrf, ['channelKey' => TestChannelProvider::KEY], $users);
-            $channelUuid        = (string) ($out['readerOpen'][1]['conversation']['uuid'] ?? '');
+            $channelUuid        = $this->lastUuid;
             $out['readerWrite'] = $this->call($client, Request::METHOD_POST, '/chat/api/conversations/' . $channelUuid . '/messages', $readerCsrf, ['body' => 'hello'], $users);
 
             $client->loginUser($users['Lead Ana']);
@@ -165,8 +169,13 @@ final class ChatTwinPortsEquivalenceTest extends TestCase
     private function call(KernelBrowser $client, string $method, string $url, string $csrf, ?array $body, array $users): array
     {
         $client->request($method, $url, server: ['HTTP_X_CSRF_TOKEN' => $csrf, 'CONTENT_TYPE' => 'application/json'], content: $body === null ? null : json_encode($body, JSON_THROW_ON_ERROR));
+        $content = (string) $client->getResponse()->getContent();
         /** @var array<string, mixed> $json */
-        $json = json_decode((string) $client->getResponse()->getContent() ?: '[]', true, 512, JSON_THROW_ON_ERROR);
+        $json = json_validate($content) ? json_decode($content, true, 512, JSON_THROW_ON_ERROR) : ['body' => 'not json'];
+        $uuid = $json['conversation']['uuid'] ?? null;
+        if (is_string($uuid)) {
+            $this->lastUuid = $uuid;
+        }
 
         return [$client->getResponse()->getStatusCode(), $this->normalize($json, $users)];
     }

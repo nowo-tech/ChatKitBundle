@@ -7,13 +7,10 @@ namespace Nowo\ChatKitBundle\Tests\Integration\Service;
 use DateTimeImmutable;
 use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
-use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
-use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatConversationView;
-use Nowo\ChatKitBundle\Model\ChatMessageView;
 use Nowo\ChatKitBundle\Model\ChatParticipantView;
 use Nowo\ChatKitBundle\Service\ChatMessaging;
 use Nowo\ChatKitBundle\Service\ChatNotFoundException;
@@ -41,12 +38,10 @@ final class ChatMessagingTest extends DatabaseTestCase
         });
 
         $direct = $messaging->openDirect($ana, $luis);
-        self::assertInstanceOf(ChatConversationView::class, $direct);
         self::assertSame('direct', $direct->kind);
         self::assertSame($direct->uuid, $messaging->openDirect($luis, $ana)->uuid, 'one conversation per pair');
 
         $message = $messaging->send($ana, $direct->uuid, 'hello **Luis**');
-        self::assertInstanceOf(ChatMessageView::class, $message);
         self::assertSame([$direct->uuid, $ana->getChatPublicId(), 'hello **Luis**'], [$message->conversationUuid, $message->authorPublicId, $message->body]);
         self::assertSame([$message->uuid], $sent);
 
@@ -64,9 +59,7 @@ final class ChatMessagingTest extends DatabaseTestCase
         self::assertNotNull($muted->mutedUntil);
 
         $messaging->archive($luis, [$direct->uuid, '00000000-0000-7000-8000-000000000000'], true);
-        $this->em->clear();
-        $row = $this->em->getRepository(ChatParticipant::class)->findOneBy(['conversation' => $this->em->getRepository(ChatConversation::class)->findOneBy(['uuid' => $direct->uuid])]);
-        self::assertInstanceOf(ChatParticipant::class, $row);
+        self::assertSame(1, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_participant WHERE archived_at IS NOT NULL'));
 
         $messaging->delete($ana, $direct->uuid, $message->uuid);
         $stored = $this->em->getRepository(ChatMessage::class)->findOneBy(['uuid' => $message->uuid]);
@@ -84,8 +77,7 @@ final class ChatMessagingTest extends DatabaseTestCase
         self::assertSame(['channel', TestChannelProvider::KEY], [$channel->kind, $channel->channelKey]);
         $joined = $messaging->join($channel->uuid, $agent);
         self::assertSame($agent->getChatPublicId(), $joined->userPublicId);
-        $this->em->clear();
-        self::assertCount(2, $this->em->getRepository(ChatParticipant::class)->findAll(), 'join() saved the row');
+        self::assertSame(2, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_participant'), 'join() saved the row');
 
         $support = $messaging->openSupport($ana, ['url' => '/billing']);
         self::assertSame('support', $support->kind);

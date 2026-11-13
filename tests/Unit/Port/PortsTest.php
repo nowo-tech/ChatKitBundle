@@ -6,15 +6,11 @@ namespace Nowo\ChatKitBundle\Tests\Unit\Port;
 
 use DateTimeImmutable;
 use LogicException;
-use Nowo\ChatKitBundle\Contract\ChatChannelMentionPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelWritePolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatParticipantResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeTransportInterface;
 use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
-use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatRequestContext;
 use Nowo\ChatKitBundle\Model\ChatSecurityUser;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -59,7 +55,7 @@ final class PortsTest extends TestCase
             {
             }
 
-            public function browserHubUrl(Request|ChatRequestContext $request): ?string
+            public function browserHubUrl(Request|ChatRequestContext $request): string
             {
                 return $request instanceof Request ? 'legacy' : 'twin';
             }
@@ -82,7 +78,6 @@ final class PortsTest extends TestCase
 
         self::assertInstanceOf(ChatChannelSourceGate::class, $gate);
         self::assertSame($source, Ports::companion($gate));
-        self::assertInstanceOf(ChatChannelWritePolicyInterface::class, Ports::companion($gate));
         self::assertSame([$source->channel], $gate->channelsFor($user));
         self::assertSame($source->channel, $gate->find('project:a'));
         self::assertNull($gate->find('project:b'));
@@ -110,12 +105,12 @@ final class PortsTest extends TestCase
                 $this->published[] = [$topics, $payload];
             }
 
-            public function browserHubUrl(ChatRequestContext $request): ?string
+            public function browserHubUrl(ChatRequestContext $request): string
             {
                 return $request->origin() . '/.well-known/mercure';
             }
 
-            public function subscriberToken(array $topics, DateTimeImmutable $expiresAt): ?string
+            public function subscriberToken(array $topics, DateTimeImmutable $expiresAt): string
             {
                 return implode(',', $topics) . '@' . $expiresAt->getTimestamp();
             }
@@ -162,9 +157,14 @@ final class PortsTest extends TestCase
 
     public function testNeitherFailsClosed(): void
     {
-        foreach (['channelProvider', 'realtime', 'currentUser'] as $factory) {
+        $calls = [
+            'channelProvider' => static fn (): object => Ports::channelProvider(new stdClass()),
+            'realtime'        => static fn (): object => Ports::realtime(new stdClass()),
+            'currentUser'     => static fn (): object => Ports::currentUser(new stdClass()),
+        ];
+        foreach ($calls as $factory => $call) {
             try {
-                Ports::{$factory}(new stdClass());
+                $call();
                 self::fail($factory . ' accepted a service implementing neither interface');
             } catch (LogicException $exception) {
                 self::assertStringContainsString('must implement', $exception->getMessage());

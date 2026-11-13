@@ -17,7 +17,7 @@ use function is_string;
  */
 final readonly class ChatRequestContext
 {
-    /** @var array<string, string|int|float|bool|null> */
+    /** @var array<string, bool|float|int|string|null> */
     public array $routeParams;
 
     /** @var array<string, string> */
@@ -80,7 +80,7 @@ final readonly class ChatRequestContext
      *
      * @param string $name Parameter name
      *
-     * @return string|int|float|bool|null The value; null when absent
+     * @return bool|float|int|string|null The value; null when absent
      */
     public function routeParam(string $name): string|int|float|bool|null
     {

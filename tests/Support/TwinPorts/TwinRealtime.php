@@ -32,14 +32,14 @@ final class TwinRealtime implements ChatRealtimeTransportInterface
         $this->realtime->publish($topics, $payload);
     }
 
-    public function browserHubUrl(ChatRequestContext $request): ?string
+    public function browserHubUrl(ChatRequestContext $request): string
     {
         $this->lastRequest = $request;
 
         return $this->realtime->browserHubUrl(Request::create($request->origin() . $request->path));
     }
 
-    public function subscriberToken(array $topics, DateTimeImmutable $expiresAt): ?string
+    public function subscriberToken(array $topics, DateTimeImmutable $expiresAt): string
     {
         return $this->realtime->subscriberToken($topics, $expiresAt);
     }

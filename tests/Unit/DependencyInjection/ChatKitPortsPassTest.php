@@ -11,6 +11,8 @@ use Nowo\ChatKitBundle\Contract\ChatParticipantResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\ChatKitPortsPass;
+use Nowo\ChatKitBundle\Model\ChatSecurityUser;
+use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Port\ChatChannelSourceGate;
 use Nowo\ChatKitBundle\Port\ChatParticipantResolverGate;
 use Nowo\ChatKitBundle\Port\Ports;
@@ -21,6 +23,7 @@ use PHPUnit\Framework\TestCase;
 use stdClass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
  * 1.27: the build wires the twins and refuses a port service that implements neither interface.
@@ -156,7 +159,7 @@ final class ChatKitPortsPassTest extends TestCase
  */
 final class TwinResolver implements ChatParticipantResolverInterface
 {
-    public function resolve(?\Nowo\ChatKitBundle\Model\ChatSecurityUser $user): ?\Nowo\ChatKitBundle\Model\ChatUserInterface
+    public function resolve(?ChatSecurityUser $user): ?ChatUserInterface
     {
         return null;
     }
@@ -167,7 +170,7 @@ final class TwinResolver implements ChatParticipantResolverInterface
  */
 final class LegacyResolver implements CurrentChatUserResolverInterface
 {
-    public function resolve(?\Symfony\Component\Security\Core\User\UserInterface $user): ?\Nowo\ChatKitBundle\Model\ChatUserInterface
+    public function resolve(?UserInterface $user): ?ChatUserInterface
     {
         return null;
     }

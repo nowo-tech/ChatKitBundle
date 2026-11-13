@@ -10,6 +10,7 @@ use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatConversationView;
 use Nowo\ChatKitBundle\Model\ChatMessageView;
@@ -168,7 +169,7 @@ final readonly class ChatMessaging implements ChatMessagingInterface
     {
         $participant = $this->chat->mute($user, $this->conversation($conversationUuid), $until);
 
-        return $participant === null ? null : ChatParticipantView::of($participant);
+        return $participant instanceof ChatParticipant ? ChatParticipantView::of($participant) : null;
     }
 
     /**

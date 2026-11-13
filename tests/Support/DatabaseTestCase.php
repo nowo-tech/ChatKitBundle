@@ -120,7 +120,9 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function tearDown(): void
     {
-        $this->kernel->shutdown();
+        if (isset($this->kernel)) {
+            $this->kernel->shutdown();
+        }
     }
 
     protected function user(string $name): TestUser
