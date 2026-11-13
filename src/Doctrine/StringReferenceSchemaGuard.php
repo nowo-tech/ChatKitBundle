@@ -41,7 +41,8 @@ use function sprintf;
  * switched between two requests of the same worker is checked again. The pass says nothing more than "this Connection
  * object passed": it does not distinguish the same database name on another server, nor a `USE other_db` issued on the
  * connection inside one request (audit AOY-L2).
- */ final class StringReferenceSchemaGuard implements ResetInterface
+ */
+final class StringReferenceSchemaGuard implements ResetInterface
 {
     /** Every collation this guard accepts on some platform; exactFor() is what it applies to one. */
     public const array EXACT = ['utf8mb4_0900_bin', 'utf8mb4_nopad_bin', 'utf8mb4_bin', 'binary'];
@@ -72,6 +73,13 @@ use function sprintf;
      * The collations that compare a user reference byte for byte on this platform (1.27.1, REQ-SEC-006).
      * `utf8mb4_bin` is PAD SPACE on MySQL 8 and on MariaDB, so only MySQL 5.7, which has no NO PAD collation, may use
      * it; there the ChatUserReference format rule refuses the trailing spaces that would fold.
+     *
+     * The `default` arm is the MySQL 5.7 one, and it is the least strict of the three (audit AOY-N1): it also catches
+     * any MySQL-family server that carries no `mariadb` marker and whose version DBAL cannot read as >= 8.0.0 — a
+     * fork, a proxy that rewrites the version banner, an unparseable string — so such a server is allowed
+     * `utf8mb4_bin` although it may well pad like MySQL 8. There, what keeps the references exact is not the
+     * collation but ChatUserReference::assertValid(), which refuses leading and trailing whitespace on every write.
+     * Making an unrecognised platform fail closed instead is a 1.28 decision, not a patch one.
      *
      * @param AbstractPlatform $platform The database platform
      *
