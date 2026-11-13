@@ -45,7 +45,7 @@ final class ChatMessagingTest extends DatabaseTestCase
         self::assertSame([$direct->uuid, $ana->getChatPublicId(), 'hello **Luis**'], [$message->conversationUuid, $message->authorPublicId, $message->body]);
         self::assertSame([$message->uuid], $sent);
 
-        $edited = $messaging->edit($direct->uuid, $message->uuid, 'hello again');
+        $edited = $messaging->edit($ana, $direct->uuid, $message->uuid, 'hello again');
         self::assertSame(['hello again', true], [$edited->body, $edited->editedAt instanceof DateTimeImmutable]);
         self::assertSame(['👍' => [$luis->getChatPublicId()]], $messaging->toggleReaction($luis, $direct->uuid, $message->uuid, '👍'));
         self::assertTrue($messaging->markRead($luis, $direct->uuid, $message->id));
@@ -99,7 +99,7 @@ final class ChatMessagingTest extends DatabaseTestCase
             static fn () => $messaging->send($ana, '00000000-0000-7000-8000-000000000000', 'x'),
             static fn () => $messaging->send($ana, strtoupper($direct->uuid), 'x'),
             static fn () => $messaging->send($ana, $direct->uuid . ' ', 'x'),
-            static fn () => $messaging->edit($direct->uuid, strtoupper($message->uuid), 'x'),
+            static fn () => $messaging->edit($ana, $direct->uuid, strtoupper($message->uuid), 'x'),
             static fn () => $messaging->delete($ana, $direct->uuid, '00000000-0000-7000-8000-000000000000'),
         ] as $i => $call) {
             try {
@@ -112,6 +112,86 @@ final class ChatMessagingTest extends DatabaseTestCase
         self::assertSame($before, $this->messageCount());
         $messaging->archive($ana, [strtoupper($direct->uuid)], true);
         self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_participant WHERE archived_at IS NOT NULL'));
+    }
+
+    public function testStrangersAndNonMembersGetNotFound(): void
+    {
+        $messaging = $this->get(ChatMessagingInterface::class);
+        $ana       = $this->user('Ana');
+        $luis      = $this->user('Luis');
+        $eve       = $this->user('Eve');
+        $stranger  = $this->user('Stranger Sam');
+        $direct    = $messaging->openDirect($ana, $luis);
+        $message   = $messaging->send($ana, $direct->uuid, 'only for Luis');
+        $before    = $this->messageCount();
+
+        foreach ([$eve, $stranger] as $outsider) {
+            foreach ([
+                'send'   => static fn () => $messaging->send($outsider, $direct->uuid, 'x'),
+                'buzz'   => static fn () => $messaging->buzz($outsider, $direct->uuid),
+                'edit'   => static fn () => $messaging->edit($outsider, $direct->uuid, $message->uuid, 'x'),
+                'delete' => static fn () => $messaging->delete($outsider, $direct->uuid, $message->uuid),
+                'pin'    => static fn () => $messaging->pin($outsider, $direct->uuid, $message->uuid, true),
+                'react'  => static fn () => $messaging->toggleReaction($outsider, $direct->uuid, $message->uuid, '👍'),
+                'read'   => static fn () => $messaging->markRead($outsider, $direct->uuid, $message->id),
+                'join'   => static fn () => $messaging->join($direct->uuid, $outsider),
+                'mute'   => static fn () => $messaging->mute($outsider, $direct->uuid, null),
+                'solve'  => static fn () => $messaging->resolveSupport($outsider, $direct->uuid),
+            ] as $what => $call) {
+                try {
+                    $call();
+                    self::fail($outsider->getChatDisplayName() . ' could ' . $what);
+                } catch (ChatNotFoundException $exception) {
+                    self::assertSame('not_found', $exception->getMessage(), 'forbidden reads exactly like unknown');
+                }
+            }
+            self::assertFalse($messaging->can($outsider, $direct->uuid, ChatMessagingInterface::VIEW));
+        }
+        // Luis is a member, but the message is Ana's: he may react, not edit, delete or (direct) is free to pin.
+        foreach (['edit' => static fn () => $messaging->edit($luis, $direct->uuid, $message->uuid, 'x'), 'delete' => static fn () => $messaging->delete($luis, $direct->uuid, $message->uuid)] as $what => $call) {
+            try {
+                $call();
+                self::fail('Luis could ' . $what . ' Ana\'s message');
+            } catch (ChatNotFoundException) {
+            }
+        }
+        self::assertSame($before, $this->messageCount());
+        $messaging->archive($eve, [$direct->uuid], true);
+        self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_participant WHERE archived_at IS NOT NULL'), 'archive skips what the user cannot read');
+
+        // The stranger may not open a direct thread with Luis, nor use the channel.
+        foreach ([static fn () => $messaging->openDirect($stranger, $luis), static fn () => $messaging->openChannel($stranger, new ChatChannel(TestChannelProvider::KEY, 'Acme')), static fn () => $messaging->openChannel($ana, new ChatChannel('project:ACME', 'Acme'))] as $call) {
+            try {
+                $call();
+                self::fail('opened');
+            } catch (ChatNotFoundException) {
+            }
+        }
+    }
+
+    public function testCanAnswersByUuid(): void
+    {
+        $messaging = $this->get(ChatMessagingInterface::class);
+        $ana       = $this->user('Ana');
+        $luis      = $this->user('Luis');
+        $agent     = $this->user('Agent Zoe');
+        $direct    = $messaging->openDirect($ana, $luis);
+        $message   = $messaging->send($ana, $direct->uuid, 'hi');
+
+        self::assertTrue($messaging->can($luis, $direct->uuid, ChatMessagingInterface::VIEW));
+        self::assertTrue($messaging->can($luis, $direct->uuid, ChatMessagingInterface::SEND));
+        self::assertTrue($messaging->can($luis, $direct->uuid, ChatMessagingInterface::PIN));
+        self::assertTrue($messaging->can($luis, $direct->uuid, ChatMessagingInterface::REACT, $message->uuid));
+        self::assertFalse($messaging->can($luis, $direct->uuid, ChatMessagingInterface::EDIT, $message->uuid));
+        self::assertTrue($messaging->can($ana, $direct->uuid, ChatMessagingInterface::EDIT, $message->uuid));
+        self::assertTrue($messaging->can($ana, $direct->uuid, ChatMessagingInterface::DELETE, $message->uuid));
+        self::assertFalse($messaging->can($ana, $direct->uuid, ChatMessagingInterface::EDIT), 'EDIT needs the message');
+        self::assertFalse($messaging->can($ana, $direct->uuid, ChatMessagingInterface::RESOLVE));
+        self::assertFalse($messaging->can($ana, $direct->uuid, 'unknown'));
+        self::assertFalse($messaging->can($ana, '00000000-0000-7000-8000-000000000000', ChatMessagingInterface::VIEW));
+        $support = $messaging->openSupport($ana);
+        self::assertTrue($messaging->can($agent, $support->uuid, ChatMessagingInterface::RESOLVE));
+        self::assertFalse($messaging->can($agent, $direct->uuid, ChatMessagingInterface::VIEW));
     }
 
     public function testTheViewsAreThoseOfTheEntityService(): void

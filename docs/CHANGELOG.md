@@ -79,7 +79,8 @@ unchanged configuration and unchanged host services the bundle behaves exactly a
   | `Contract\CurrentChatUserResolverInterface` (`UserInterface`) | `Contract\ChatParticipantResolverInterface` (`Model\ChatSecurityUser`) |
 
   `ChatRequestContext` carries the method, scheme, host, port, base path, path, route with its scalar parameters, the
-  scalar query parameters and the locale (never a header, a cookie, the session or the body, so a host may log it);
+  scalar query parameters and the locale (never a header, a cookie, the session or the body; the query string may
+  still hold tokens, so a host should not log it blindly);
   `ChatSecurityUser` the user class (no Doctrine proxy), the id the object reports, the identifier and the role names.
 - **Selection rule.** A service implementing the deprecated interface is asked exactly as in 1.26, also when it
   implements the twin too. A service implementing only the twin is asked through an internal gate (`Port\*Gate`, built
@@ -94,7 +95,12 @@ unchanged configuration and unchanged host services the bundle behaves exactly a
   `toggleReaction`, `resolveSupport`, `reopenSupport`, `markRead`, `join`, `pin`, `postSystemLine`, `mute`, `archive`.
   It loads the rows, re-checks every uuid byte for byte (REQ-SEC-006 item 2: an unknown or look-alike uuid throws
   `Service\ChatNotFoundException` before anything is written) and calls `ChatServiceInterface`, so a decoration of that
-  interface applies to both. `ChatServiceInterface` stays the entity form for standard hosts (not deprecated).
+  interface applies to both. Audit OJ-M2: every method with an actor authorizes it with the API's rules
+  (`ChatVoter::decide()`, new; `ChatAccess`): view, send, pin, edit and delete own messages within the window, react,
+  resolve for agents; a forbidden conversation or message throws the same `ChatNotFoundException` as an unknown one
+  (no existence oracle), and `edit()` takes its actor. `can($actor, $conversationUuid, $action, $messageUuid)`
+  authorizes by uuid without acting. `ChatServiceInterface` stays the entity form for standard hosts (not deprecated;
+  authorization is still its caller's job).
 - Docs: a "Standard Symfony host" section next to the DDD one in USAGE.
 
 ### Deprecated
@@ -117,6 +123,9 @@ unchanged configuration and unchanged host services the bundle behaves exactly a
   `ChatParticipantResolverInterface`.
 - `ChatMessagingTest`: every method by uuid, same rows and events as the entity service, views equal to
   `ChatConversationView::of()`, unknown / upper-case / padded uuids refused with nothing written.
+  Audit OJ-M2: a stranger and a non-member get `ChatNotFoundException` for send, buzz, edit, delete, pin, react,
+  read, join, mute and resolve (nothing written); a member cannot edit or delete someone else's message; `can()` by
+  uuid matches the voter.
 
 ## [1.26.4] - 2026-11-13
 

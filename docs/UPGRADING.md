@@ -99,8 +99,10 @@ service that implements neither now fails the container build (it failed at the 
 
 New `ChatMessagingInterface` (autowire it): the same operations as `ChatServiceInterface` by public uuid, answering
 with `ChatConversationView` / `ChatMessageView` / `ChatParticipantView`. `edit()`, `delete()`, `toggleReaction()` and
-`pin()` take the conversation uuid and the message uuid. An unknown uuid throws `ChatNotFoundException`
-(`$what`, `$uuid`). `ChatServiceInterface` is not deprecated.
+`pin()` take the conversation uuid and the message uuid; `edit()` takes the actor first. Every method with an actor
+authorizes it like the JSON API does; an unknown uuid and a forbidden one both throw `ChatNotFoundException` (`$what`,
+`$uuid`). Use `can($actor, $conversationUuid, ChatMessagingInterface::SEND)` (VIEW, SEND, MODERATE, RESOLVE, PIN, EDIT,
+DELETE, REACT) to authorize by uuid. `ChatServiceInterface` is not deprecated (it still leaves authorization to you).
 
 ## To 1.26.4
 
