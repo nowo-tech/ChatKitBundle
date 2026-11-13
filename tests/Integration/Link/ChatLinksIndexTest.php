@@ -91,7 +91,12 @@ final class ChatLinksIndexTest extends DatabaseTestCase
         self::assertSame(['https://his.example/'], array_map(static fn (ChatMessageLink $row): string => $row->getUrl(), $this->em->getRepository(ChatMessageLink::class)->findAll()));
     }
 
-    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
+    /**
+     * 1.27 (skipped by the private-manager replay): the first add is rolled back on purpose; with the private manager that
+     * rollback replaces the manager (it may describe rolled-back rows), so the conversation the test keeps from before is
+     * detached for the second add. The test holds an entity across the rollback, which only the application's manager
+     * allows.
+     */
     #[Group('application-manager')]
     public function testTheLimitHoldsUnderAConcurrentAdd(): void
     {
