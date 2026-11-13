@@ -14,6 +14,7 @@ use Nowo\ChatKitBundle\Doctrine\ChannelKeyCollationListener;
 use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
+use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
@@ -115,6 +116,38 @@ final class ChatUserReferenceLookalikeTest extends TestCase
         self::assertNotNull($participants->findOneFor($one, $bob));
         self::assertNull($participants->findOneFor($one, $bigB));
         self::assertNull($participants->findOneFor($one, $bob2));
+    }
+
+    public function testUtf8mb4BinIsPadSpaceOnThisServerAndIsRefused(): void
+    {
+        // 1.27.1 (REQ-SEC-006): `utf8mb4_bin` is a binary collation but a PAD SPACE one on MySQL 8 and on MariaDB, so
+        // a user column collated with it still folds `'bob '` onto `'bob'` and the guard must not accept it.
+        $connection = $this->em->getConnection();
+        $platform   = $connection->getDatabasePlatform();
+        if (!$platform instanceof AbstractMySQLPlatform) {
+            self::assertNull(ChannelKeyCollationListener::collationFor($platform), 'PostgreSQL and SQLite compare exactly');
+
+            return;
+        }
+        $folds = (string) $connection->fetchOne("SELECT CONVERT('bob ' USING utf8mb4) COLLATE utf8mb4_bin = CONVERT('bob' USING utf8mb4) COLLATE utf8mb4_bin");
+        self::assertSame('1', $folds, 'utf8mb4_bin pads trailing spaces on this server');
+        self::assertNotContains('utf8mb4_bin', StringReferenceSchemaGuard::exactFor($platform));
+
+        $metadata = $this->em->getClassMetadata(ChatParticipant::class);
+        $connection->executeStatement(sprintf(
+            'ALTER TABLE %s MODIFY %s VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL',
+            $metadata->getTableName(),
+            $metadata->getColumnName('userRef'),
+        ));
+        $guard = $this->get(StringReferenceSchemaGuard::class);
+        $guard->reset();
+        try {
+            $guard->assertReady();
+            self::fail('a utf8mb4_bin user column must be refused');
+        } catch (LogicException $exception) {
+            self::assertStringContainsString('still fold', $exception->getMessage());
+            self::assertStringContainsString('utf8mb4_bin', $exception->getMessage());
+        }
     }
 
     public function testAFoldingTableIsRefusedBeforeAnyReadOrWrite(): void

@@ -17,8 +17,10 @@ use Symfony\Contracts\Service\ResetInterface;
  * long-lived kernel where the services resetter does not run (a host that removes or bypasses `services_resetter` or
  * drives `http_kernel` directly, `messenger:consume --no-reset`, long-running console commands) never serves one
  * request, message or command with state of the previous one: the access-filtered reference cards of ChatReferences (a
- * revoked item kept its card), the avatar URLs of ChatAvatars, the managed settings rows of ChatUserSettingsRepository
- * and the resolved-entity map of UserReferenceListener (id mode).
+ * revoked item kept its card), the avatar URLs of ChatAvatars, the managed settings rows of ChatUserSettingsRepository,
+ * the resolved-entity map of UserReferenceListener (id mode) and, 1.27.1, the schema pass of
+ * StringReferenceSchemaGuard (`string` mode): the user columns are read once per request instead of once per query by
+ * user, and a database switched between two requests of the same worker is checked again.
  *
  * Boundaries: the main `kernel.request` (before the firewall), `kernel.terminate`, `console.terminate`, and Messenger
  * `WorkerMessageHandledEvent` / `WorkerMessageFailedEvent` for consumers. The memos keep `ResetInterface`

@@ -463,7 +463,8 @@ export class ChatDock implements ThreadHost {
    * Keeps the dock flush with the bottom of the viewport, or just above whatever covers it there: elements the
    * application marks with `data-nowo-chat-avoid` (e.g. its footer — fixed, or static and scrolled into view) and the
    * Symfony web debug toolbar (collapsed, open, wrapped on two rows). Their visible height goes to
-   * `--nowo-chat-toolbar-offset`, recomputed when they appear or change, on scroll and on resize.
+   * `--nowo-chat-toolbar-offset`, recomputed when they appear or change, on resize and on every scroll — captured, so
+   * an inner scroller (the host's main column under a fixed header) counts too.
    *
    * @param signal Stops the observers and listeners when the dock is destroyed.
    */
@@ -499,7 +500,10 @@ export class ChatDock implements ThreadHost {
     const body = new MutationObserver(watch);
     body.observe(document.body, { childList: true });
     window.addEventListener('resize', measure, { signal });
-    window.addEventListener('scroll', schedule, { signal, passive: true });
+    // 1.27.1: `capture: true` is what makes this work in a host whose scroller is an inner element (a fixed header with
+    // a scrolling main column): scroll events do not bubble, so a bubble-phase listener on `window` only ever sees the
+    // document scrolling, and a static footer scrolled into view would never be measured.
+    window.addEventListener('scroll', schedule, { signal, passive: true, capture: true });
     signal.addEventListener('abort', () => {
       window.cancelAnimationFrame(frame);
       bars.disconnect();

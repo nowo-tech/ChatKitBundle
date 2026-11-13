@@ -917,6 +917,47 @@ describe('ChatDock', () => {
     expect(offset(), 'observers stop with the dock').toBe('0px');
   });
 
+  it('lifts off a static footer scrolled inside an inner scroller, not the document (1.27.1)', async () => {
+    // The host (Symfony Beacon) scrolls its main column under a fixed header: the scroll events are fired on that
+    // element and never bubble, so only a capturing listener on `window` sees them.
+    const scroller = document.createElement('div');
+    scroller.className = 'app-main';
+    const page = document.createElement('div');
+    const footer = document.createElement('footer');
+    footer.setAttribute('data-nowo-chat-avoid', '');
+    scroller.append(page, footer);
+    document.body.append(scroller);
+    const { dock, root } = mount([]);
+    await dock.start();
+    const offset = (): string => root.style.getPropertyValue('--nowo-chat-toolbar-offset');
+    const rect = (top: number, height: number) => ({ top, height, width: 600, bottom: top + height, left: 0, right: 600, x: 0, y: top, toJSON: () => ({}) });
+    // The footer sits below the fold while the column is at the top.
+    let footerRect = rect(window.innerHeight + 120, 64);
+    footer.getBoundingClientRect = () => footerRect as DOMRect;
+    await flush();
+    expect(offset(), 'footer out of view: the dock is flush with the bottom edge').toBe('0px');
+
+    // The column scrolls (not the document): the footer comes in by 40px of its 64.
+    footerRect = rect(window.innerHeight - 40, 64);
+    scroller.dispatchEvent(new Event('scroll', { bubbles: false }));
+    vi.advanceTimersByTime(20);
+    expect(offset(), 'the dock lifts by the footer height that is visible').toBe('40px');
+
+    // Fully in view: the dock rests on the whole footer, never covering it.
+    footerRect = rect(window.innerHeight - 64, 64);
+    scroller.dispatchEvent(new Event('scroll', { bubbles: false }));
+    vi.advanceTimersByTime(20);
+    expect(offset()).toBe('64px');
+
+    // Scrolled back out.
+    footerRect = rect(window.innerHeight + 10, 64);
+    scroller.dispatchEvent(new Event('scroll', { bubbles: false }));
+    vi.advanceTimersByTime(20);
+    expect(offset()).toBe('0px');
+    dock.destroy();
+    scroller.remove();
+  });
+
   it('reserves the folded dock space for the host while it is shown (1.23, MUX-02)', async () => {
     const reserve = () => document.documentElement.style.getPropertyValue('--nowo-chat-dock-reserve');
     const shown = () => document.body.classList.contains('nowo-chat-dock-shown');

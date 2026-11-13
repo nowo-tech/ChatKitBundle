@@ -8,9 +8,9 @@ use Closure;
 use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Event\LoadClassMetadataEventArgs;
+use Doctrine\ORM\Event\OnFlushEventArgs;
 use Doctrine\ORM\Event\PostLoadEventArgs;
 use Doctrine\ORM\Event\PrePersistEventArgs;
-use Doctrine\ORM\Event\PreUpdateEventArgs;
 use Doctrine\ORM\Events;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -43,7 +43,9 @@ use function is_string;
 #[AsDoctrineListener(event: Events::loadClassMetadata, priority: 16)]
 #[AsDoctrineListener(event: Events::postLoad)]
 #[AsDoctrineListener(event: Events::prePersist)]
-#[AsDoctrineListener(event: Events::preUpdate)]
+// 1.27.1 (audit AOY-L3): a low priority runs the kind check last, after any host listener that still sets a user
+// field and recomputes its change set on `onFlush` — which is what `preUpdate` checked for free.
+#[AsDoctrineListener(event: Events::onFlush, priority: -512)]
 final class UserReferenceListener implements ResetInterface
 {
     /**
@@ -165,11 +167,23 @@ final class UserReferenceListener implements ResetInterface
     /**
      * Same check when a user field of a chat row changes (assignee, resolver, pinner, …).
      *
-     * @param PreUpdateEventArgs $event Doctrine update event
+     * 1.27.1 (audit AOJ2-L1): on `onFlush`, not `preUpdate`. Doctrine dispatches `onFlush` after the change sets are
+     * computed but still before `beginTransaction()`, while `preUpdate` runs inside the unit of work's transaction —
+     * an exception there closes the host EntityManager, and under FrankenPHP with `kernel.reset` false
+     * (REQ-RUNTIME-002) that manager stays closed for every later request served by the same worker. Throwing here
+     * leaves the manager open and the flush untouched.
+     *
+     * @param OnFlushEventArgs $event Doctrine flush event
      */
-    public function preUpdate(PreUpdateEventArgs $event): void
+    public function onFlush(OnFlushEventArgs $event): void
     {
-        $this->checkKinds($event->getObject());
+        $unitOfWork = $event->getObjectManager()->getUnitOfWork();
+        foreach ($unitOfWork->getScheduledEntityInsertions() as $entity) {
+            $this->checkKinds($entity);
+        }
+        foreach ($unitOfWork->getScheduledEntityUpdates() as $entity) {
+            $this->checkKinds($entity);
+        }
     }
 
     private function checkKinds(object $entity): void

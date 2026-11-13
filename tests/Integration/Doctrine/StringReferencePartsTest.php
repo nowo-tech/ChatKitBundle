@@ -38,6 +38,8 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 
 use function assert;
 
+use const PHP_INT_MAX;
+
 /**
  * 1.27: the smaller pieces of the string references — the key helpers, the erased account by reference, the digest of a
  * string-keyed user, the collation listener's fields, and an id-mode host whose directory knows integer ids only.
@@ -194,8 +196,16 @@ final class StringReferencePartsTest extends DatabaseTestCase
         $guard->assertReady();
         self::assertTrue((new ChatUserReferences(ChatUserReferences::STRING))->isIdMode());
         self::assertTrue(ChatUserReferences::isCanonicalId('123456789012345678'));
-        self::assertFalse(ChatUserReferences::isCanonicalId('1234567890123456789'), 'at most 18 digits everywhere (OJ-L2)');
-        self::assertSame('1234567890123456789', ChatUserReferences::idOrKey('1234567890123456789'));
+        // 1.27.1 (audit AOJ2-L3): snowflake-style bigint ids are ids, up to PHP_INT_MAX.
+        self::assertTrue(ChatUserReferences::isCanonicalId('1234567890123456789'), 'a 19-digit bigint id is an id');
+        self::assertTrue(ChatUserReferences::isCanonicalId(ChatUserReferences::MAX_ID));
+        self::assertSame(PHP_INT_MAX, ChatUserReferences::idOrKey(ChatUserReferences::MAX_ID));
+        self::assertSame(1234567890123456789, ChatUserReferences::idOrKey('1234567890123456789'));
+        self::assertFalse(ChatUserReferences::isCanonicalId('9223372036854775808'), 'one over PHP_INT_MAX is not an id');
+        self::assertFalse(ChatUserReferences::isCanonicalId('12345678901234567890'), 'at most 19 digits');
+        self::assertSame('9223372036854775808', ChatUserReferences::idOrKey('9223372036854775808'));
+        self::assertFalse(ChatUserReferences::isCanonicalId('0123'), 'no leading zero');
+        self::assertFalse(ChatUserReferences::isCanonicalId('-1'));
     }
 
     public function testTheCollationFieldsOfEveryUserColumn(): void

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Integration\Doctrine;
 
+use DateTimeImmutable;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Tools\SchemaTool;
 use LogicException;
@@ -29,6 +30,7 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use Nowo\ChatKitBundle\Tests\Support\Ddd\RefChatUser;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 
 use function assert;
@@ -113,6 +115,35 @@ final class UserReferenceIdModeTest extends DatabaseTestCase
         self::assertSame([$acme->getUuid()], array_map(static fn (ChatConversation $row): string => $row->getUuid(), $list));
         self::assertSame(1, $this->get(ChatMessageRepository::class)->countUnreadByConversation((int) $luis->getId(), [(int) $conversation->getId()])[(int) $conversation->getId()] ?? null);
         self::assertCount(2, $this->get(ChatUserSettingsRepository::class)->forUsers([$ana, $luis]));
+    }
+
+    public function testAUserOfTheWrongKindDoesNotCloseTheEntityManager(): void
+    {
+        // 1.27.1 (audit AOJ2-L1): the kind check runs on `onFlush`, before the unit of work opens its transaction, so
+        // the host EntityManager is still usable afterwards. Under FrankenPHP with `kernel.reset` false
+        // (REQ-RUNTIME-002) a closed manager would stay closed for every later request served by that worker.
+        $chat    = $this->get(ChatService::class);
+        $ana     = $this->user('Ana');
+        $luis    = $this->user('Luis');
+        $dm      = $chat->openDirect($ana, $luis);
+        $message = $chat->send($ana, $dm, 'hello');
+
+        $message->pin(new RefChatUser('u-1', 'pub-u-1', 'By reference'), new DateTimeImmutable('2026-11-13 10:00:00'));
+        try {
+            $this->em->flush();
+            self::fail('a string-reference user in `id` mode must be refused');
+        } catch (LogicException $exception) {
+            self::assertStringContainsString('user_reference', $exception->getMessage());
+        }
+        self::assertTrue($this->em->isOpen(), 'the host entity manager stays open (worker mode)');
+
+        // The same manager serves the next request of the worker.
+        $message->pin($luis, new DateTimeImmutable('2026-11-13 10:00:00'));
+        self::assertNotNull($chat->send($ana, $dm, 'after the refusal')->getId());
+        $this->em->clear();
+        $again = $this->get(ChatMessageRepository::class)->find((int) $message->getId());
+        assert($again instanceof ChatMessage);
+        self::assertSame((string) $luis->getId(), (string) ChatUserReferences::reference($again->getPinnedBy()));
     }
 
     public function testAUserTheDirectoryNoLongerKnows(): void
