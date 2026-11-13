@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\AutoReply;
 use DateInterval;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -68,7 +69,7 @@ final readonly class ChatAutoReplier
         $since      = $now->sub(new DateInterval('PT' . $this->intervalHours . 'H'));
         $sent       = [];
         foreach ($candidates as $candidate) {
-            if ($candidate->getId() === $author->getId() || !$this->access->isReachable($candidate)) {
+            if (ChatUserReferences::same($candidate, $author) || !$this->access->isReachable($candidate)) {
                 continue;
             }
             $shown = $this->presence->statusOf([$candidate])[$candidate->getChatPublicId()]['status'] ?? 'offline';

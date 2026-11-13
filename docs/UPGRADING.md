@@ -66,6 +66,141 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Target 1.27.0, from **1.26.4**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+Nothing to change: with the same configuration and the same services the bundle behaves as 1.26.4, and no migration is
+needed in any of the existing modes (`relation`, `id`). A migration is needed only when you opt in to the new
+`doctrine.user_reference: string` (two columns, the binary collation; see "String user references" below). The opt-in
+private entity manager needs no schema change.
+
+### Framework-free port twins (REQ-ARCH-001 rule 3)
+
+`ChatChannelProviderInterface`, `ChatRealtimeInterface` and `CurrentChatUserResolverInterface` are deprecated (removed
+in 2.0) and keep working unchanged. To move a service, implement the twin and alias either id to it:
+
+| Deprecated | Implement instead | Change |
+|---|---|---|
+| `ChatChannelProviderInterface` | `ChatChannelSourceInterface` | `contextChannel(ChatUserInterface $user, ChatRequestContext $page)`: read `$page->path`, `$page->route`, `$page->routeParam('slug')`, `$page->query` instead of the `Request` |
+| `ChatRealtimeInterface` | `ChatRealtimeTransportInterface` | `browserHubUrl(ChatRequestContext $request)`: `$request->origin()` is `Request::getSchemeAndHttpHost()` |
+| `CurrentChatUserResolverInterface` | `ChatParticipantResolverInterface` | `resolve(?ChatSecurityUser $user)`: map `$user->identifier` (or `$user->id`) to the participant; the security user object is not passed |
+
+```yaml
+# config/services.yaml — either line works
+Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface: '@App\Chat\ProjectChannels'
+Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface: '@App\Chat\ProjectChannels'
+```
+
+Keep the write and mention policies (`ChatChannelWritePolicyInterface`, `ChatChannelMentionPolicyInterface`) on the
+same class. A class implementing both the old interface and the twin is asked through the old one until 2.0. A port
+service that implements neither now fails the container build (it failed at the first call before).
+
+### Private entity manager (REQ-ARCH-001 rule 6, opt-in)
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            doctrine:
+                private_entity_manager: true
+                # entity_manager: default   # the manager that maps the chat entities
+```
+
+Recommended. Up to 1.26 every chat write flushed your default entity manager (your pending changes included). With the
+option, the chat writes through its own manager on the same connection; your manager is never flushed, cleared or
+closed by the bundle. No schema change. Check after enabling it:
+
+- code that relied on a chat call flushing **your** pending changes must call `flush()` itself;
+- users read from chat rows are the private manager's instances: compare users by id (`getId()`), never with `===`;
+- chat entities you load through **your** manager are not the ones the bundle writes: change chat rows through the
+  ChatKit services only;
+- inside your own transaction the chat rows are part of it (shared connection); the bundle's own writes run in
+  savepoints.
+
+Setting it to `false` explicitly is deprecated (it becomes the only mode in 2.0); leaving it unset keeps 1.26 behaviour.
+
+### String user references (REQ-ARCH-001 rule 2, opt-in `doctrine.user_reference: string`)
+
+Nothing changes for integer ids, in `relation` or `id` mode (no new column, no collation change). To key chat users by a
+string (UUID, ULID, IdP subject) instead of an integer surrogate:
+
+1. Set `doctrine.user_reference: string` (the `id` mode with string references).
+2. Every chat user class implements `ChatUserReferenceInterface::getChatUserReference(): string` (1–64 characters, no
+   whitespace at either end, no control or format characters; `getId()` may return null). Users of both kinds never mix
+   (audit OJ-L1: a reference `"42"` must not meet the integer id 42): in `string` mode a user without the interface is
+   unreachable and refused when a chat row is written, in `id` mode a user with it is refused the same way, and a
+   configured `user_class` of the wrong kind fails the container build.
+3. Your `ChatDirectoryInterface` also implements `ChatUserReferenceDirectoryInterface::findByReferences(list<string>)`,
+   returning users whose reference is **exactly** one of those asked (no case, accent, padding or Unicode-normalisation
+   folding; the bundle drops any other answer).
+4. Migrate: `nowo_chat_conversation` gains two nullable columns, `direct_user_low` and `direct_user_high`
+   (`VARCHAR(64)`), and on MySQL / MariaDB every user reference column gets the binary NO PAD collation. **This is
+   enforced (audit OJ-M1):** on MySQL / MariaDB the bundle checks once per process (`information_schema`) that the
+   columns exist and compare byte for byte, and until then every chat query or write by user throws a `LogicException`
+   naming the columns (fail closed: a folding column would let look-alikes read each other's rows, and a unique-key
+   clash between them would close the entity manager). Existing `id`-mode stored values (integer ids) must be rewritten
+   to your references by your own migration when you switch.
+
+**Before the `ALTER` (MySQL / MariaDB): look for references that the old collation folds together.** Integer ids cannot
+collide; run these only if string references were already written (e.g. by a custom import). `TRIM`, `DISTINCT`,
+`LOWER` and `COLLATE …_ai_ci` fold too, so compare the bytes:
+
+```sql
+-- Participant rows: references equal under the column's collation but different bytes.
+SELECT a.user_id, HEX(a.user_id), b.user_id, HEX(b.user_id)
+  FROM nowo_chat_participant a JOIN nowo_chat_participant b
+    ON a.user_id = b.user_id AND CAST(a.user_id AS BINARY) <> CAST(b.user_id AS BINARY)
+ GROUP BY a.user_id, b.user_id;
+-- The same check for the other user columns: nowo_chat_message.author_id / deleted_by_id / pinned_by_id,
+-- nowo_chat_reaction.user_id, nowo_chat_message_mention.user_id, nowo_chat_user_settings.user_id,
+-- nowo_chat_quick_reply.user_id, nowo_chat_conversation.support_owner_id / assignee_id / resolved_by_id,
+-- nowo_chat_conversation_link.created_by_id.
+```
+
+Then (adapt the table names to `doctrine.table_name_prefix` / `table_prefix`; MariaDB: `utf8mb4_nopad_bin`; MySQL 5.7:
+`utf8mb4_bin`):
+
+```sql
+ALTER TABLE nowo_chat_conversation
+    ADD direct_user_low VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    ADD direct_user_high VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    MODIFY support_owner_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    MODIFY assignee_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    MODIFY resolved_by_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL;
+ALTER TABLE nowo_chat_participant MODIFY user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE nowo_chat_message
+    MODIFY author_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    MODIFY deleted_by_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    MODIFY pinned_by_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL;
+ALTER TABLE nowo_chat_reaction MODIFY user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE nowo_chat_message_mention MODIFY user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE nowo_chat_user_settings MODIFY user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE nowo_chat_quick_reply MODIFY user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE nowo_chat_conversation_link MODIFY created_by_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL;
+```
+
+`doctrine:migrations:diff` generates the same in `string` mode (the collation comes from the bundle's schema listener).
+Until the `ALTER` the chat refuses to work (see step 4). On top of the collation, every lookup by user is re-checked
+byte for byte in PHP (participant rows, settings, quick replies, mentions and their counts, reactions, support threads,
+direct peers, push recipients, the erasure), lists read on until a page holds only exact rows, and the unread counts
+compare the user columns as binary in SQL.
+
+Also: `ChatAccess::usersByIds()` now returns users keyed by `ChatUserReferences::key()` (the integer id stays an
+integer array key), `ChatConversation::directUserKeys()` / `peerKeyOf()` work for both kinds of pairs, and
+`ChatPersonalData::eraseFormerAccount()` takes the string reference of a gone account.
+
+### Calling the chat by id
+
+New `ChatMessagingInterface` (autowire it): the same operations as `ChatServiceInterface` by public uuid, answering
+with `ChatConversationView` / `ChatMessageView` / `ChatParticipantView`. `edit()`, `delete()`, `toggleReaction()` and
+`pin()` take the conversation uuid and the message uuid; `edit()` takes the actor first. Every method with an actor
+authorizes it like the JSON API does; an unknown uuid and a forbidden one both throw `ChatNotFoundException` (`$what`,
+`$uuid`). Use `can($actor, $conversationUuid, ChatMessagingInterface::SEND)` (VIEW, SEND, MODERATE, RESOLVE, PIN, EDIT,
+DELETE, REACT) to authorize by uuid. `ChatServiceInterface` is not deprecated (it still leaves authorization to you).
+
 ## To 1.26.4
 
 From **1.26.3**:

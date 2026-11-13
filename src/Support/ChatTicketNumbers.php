@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Support;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
+use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 
 /**
@@ -44,10 +45,11 @@ final readonly class ChatTicketNumbers
         for ($attempt = 1; $attempt <= self::ATTEMPTS; ++$attempt) {
             try {
                 // The derived table lets MySQL read the table it updates; SQLite and PostgreSQL accept it too.
-                $connection->executeStatement(
+                // 1.27: in a savepoint inside an open transaction (private entity manager), so a lost race never aborts it.
+                ChatKitSavepoint::write($this->entityManager, static fn (): int|string => $connection->executeStatement(
                     'UPDATE ' . $table . ' SET ticket_number = (SELECT seq.next_number FROM (SELECT COALESCE(MAX(ticket_number), 0) + 1 AS next_number FROM ' . $table . ') seq) WHERE id = ? AND ticket_number IS NULL',
                     [$id],
-                );
+                ));
 
                 return (int) $connection->fetchOne('SELECT ticket_number FROM ' . $table . ' WHERE id = ?', [$id]);
             } catch (UniqueConstraintViolationException) {

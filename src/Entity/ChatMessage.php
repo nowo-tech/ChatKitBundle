@@ -447,7 +447,7 @@ class ChatMessage
      */
     public function isAuthoredBy(ChatUserInterface $user): bool
     {
-        return $this->author instanceof ChatUserInterface && $user->getId() !== null && $this->author->getId() === $user->getId();
+        return ChatUserReferences::same($this->author, $user);
     }
 
     /**

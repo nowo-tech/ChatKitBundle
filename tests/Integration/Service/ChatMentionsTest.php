@@ -17,6 +17,7 @@ use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use PHPUnit\Framework\Attributes\Group;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 use function sprintf;
@@ -98,6 +99,8 @@ final class ChatMentionsTest extends DatabaseTestCase
         self::assertSame('Hi @Luis and @Eve ops, @Sam,…', $this->get(ChatMarkdownRenderer::class)->plainText($message->getBody(), 29));
     }
 
+    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
+    #[Group('application-manager')]
     public function testEditUpdatesRowsAndNotifiesOnlyNewPeople(): void
     {
         $chat    = $this->get(ChatService::class);
@@ -185,7 +188,7 @@ final class ChatMentionsTest extends DatabaseTestCase
     }
 
     /**
-     * @return list<int>
+     * @return list<int|string>
      */
     private function mentionedIds(ChatMessage $message): array
     {

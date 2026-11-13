@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Sidebar;
 
 use Nowo\ChatKitBundle\Contract\ChatSidebarSectionProviderInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatSidebarAction;
 use Nowo\ChatKitBundle\Model\ChatSidebarItem;
 use Nowo\ChatKitBundle\Model\ChatSidebarSection;
@@ -252,7 +253,7 @@ final class ChatSidebar
             }
         }
         $ids          = array_keys($readable);
-        $unread       = $this->messages->countUnreadByConversation((int) $viewer->getId(), $ids);
+        $unread       = $this->messages->countUnreadByConversation((string) ChatUserReferences::key($viewer), $ids);
         $mentions     = $this->mentions->countUnreadByConversation($viewer, $ids);
         $participants = $this->participants->findForUser($viewer, $ids);
         $now          = $this->clock->now();

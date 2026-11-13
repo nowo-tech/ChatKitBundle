@@ -18,6 +18,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestBrokenReferenceProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestReferenceProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use PHPUnit\Framework\Attributes\Group;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 use function str_repeat;
@@ -54,6 +55,8 @@ final class ChatReferencesTest extends DatabaseTestCase
         self::assertStringEndsWith('#t `#[t](task:1)`', $body);
     }
 
+    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
+    #[Group('application-manager')]
     public function testFillPrimePlainTextAndScopes(): void
     {
         $references = $this->get(ChatReferences::class);

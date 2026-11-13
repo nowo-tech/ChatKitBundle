@@ -12,6 +12,7 @@ use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -490,7 +491,7 @@ final readonly class ChatService implements ChatServiceInterface
         if (!$conversation->isSupport()) {
             return false;
         }
-        $isOwner = $conversation->getSupportOwner()?->getId() === $author->getId();
+        $isOwner = ChatUserReferences::same($conversation->getSupportOwner(), $author);
         $status  = $conversation->getSupportStatus();
         if ($isOwner && $status === SupportStatus::Resolved) {
             $conversation->reopen();

@@ -25,6 +25,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use PHPUnit\Framework\Attributes\Group;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -62,6 +63,8 @@ final class ChatDigestTest extends DatabaseTestCase
         (new NullChatDigestSender())->send($ana, []);
     }
 
+    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
+    #[Group('application-manager')]
     public function testEmailsStillUnreadConversations(): void
     {
         $chat  = $this->get(ChatService::class);
@@ -114,6 +117,8 @@ final class ChatDigestTest extends DatabaseTestCase
         self::assertTrue($this->em->getRepository(ChatUserSettings::class)->forUser($ana)->isEmailDigest());
     }
 
+    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
+    #[Group('application-manager')]
     public function testNoSnippetsFromConversationsTheUserCanNoLongerRead(): void
     {
         $chat    = $this->get(ChatService::class);

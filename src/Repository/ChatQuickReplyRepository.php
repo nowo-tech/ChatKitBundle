@@ -47,7 +47,8 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
 
-        return $rows;
+        // REQ-SEC-006 item 2: exactly this user's rows (a folding collation may return a look-alike's).
+        return array_values(array_filter($rows, static fn (ChatQuickReply $row): bool => ChatUserReferences::same($row->getUser(), $user)));
     }
 
     /**
@@ -60,7 +61,9 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
      */
     public function findOwned(ChatUserInterface $user, int $id): ?ChatQuickReply
     {
-        return $this->findOneBy(['id' => $id] + $this->refs->criteria('user', $user));
+        $row = $this->findOneBy(['id' => $id] + $this->refs->criteria('user', $user));
+
+        return $row instanceof ChatQuickReply && ChatUserReferences::same($row->getUser(), $user) ? $row : null;
     }
 
     /**

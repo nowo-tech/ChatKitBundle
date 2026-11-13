@@ -10,8 +10,10 @@ use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatParticipantResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Nowo\ChatKitBundle\Tests\Support\Chat\CountingAvatarResolver;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingPushSender;
@@ -26,7 +28,11 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestSecondSidebarProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestSidebarProvider;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCountingMiddleware;
+use Nowo\ChatKitBundle\Tests\Support\Doctrine\TestKindFilter;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinChannelSource;
+use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinParticipantResolver;
+use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinRealtime;
 use Nowo\FormKitBundle\NowoFormKitBundle;
 use Nowo\UiKitBundle\NowoUiKitBundle;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
@@ -45,7 +51,9 @@ use Symfony\UX\Icons\UXIconsBundle;
 use Twig\Environment;
 use Twig\Extra\TwigExtraBundle\TwigExtraBundle;
 
+use function array_key_exists;
 use function dirname;
+use function is_array;
 use function is_string;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
@@ -78,6 +86,7 @@ final class TestKernel extends Kernel
         private readonly bool $hostControllersRoutesOnly = false,
         private readonly bool $sidebarProviders = false,
         private readonly bool $grantReferences = false,
+        private readonly bool $twinPortsKernel = false,
     ) {
         // Own environment for the routing.controllers-only host: its container class must not collide with the
         // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir).
@@ -113,6 +122,43 @@ final class TestKernel extends Kernel
         return is_string($mode) && $mode !== '' ? $mode : null;
     }
 
+    /**
+     * 1.27: `CHAT_KIT_PRIVATE_EM=1` runs the suite with `doctrine.private_entity_manager: true` (a test's own config wins).
+     */
+    public static function privateEntityManager(): bool
+    {
+        return getenv('CHAT_KIT_PRIVATE_EM') === '1';
+    }
+
+    /**
+     * Whether the replay writes this kernel's fixtures through the private manager.
+     */
+    private function privateEntityManagerConfigured(): bool
+    {
+        $doctrine = $this->chatKitConfig['profiles']['default']['doctrine'] ?? [];
+
+        // A test that sets the option itself (the private-manager tests) keeps the application's manager for its fixtures.
+        return !is_array($doctrine) || !array_key_exists('private_entity_manager', $doctrine);
+    }
+
+    /**
+     * 1.27: `CHAT_KIT_PORTS=twin` runs the suite with the host ports behind their framework-free twins ONLY
+     * (tests/Support/TwinPorts): the channel provider and the realtime transport through the deprecated ids, the
+     * current-user resolver through the twin's own id.
+     */
+    public static function twinPorts(): bool
+    {
+        return getenv('CHAT_KIT_PORTS') === 'twin';
+    }
+
+    /**
+     * 1.27: whether this kernel wires the twins (its constructor flag or `CHAT_KIT_PORTS=twin`).
+     */
+    public function usesTwinPorts(): bool
+    {
+        return $this->twinPortsKernel || self::twinPorts();
+    }
+
     /** The database of ChatChannelRaceTest (`CHAT_KIT_RACE_DATABASE_URL`); null = in-memory SQLite. */
     public static function databaseUrl(): ?string
     {
@@ -123,7 +169,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference()])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), self::privateEntityManager()])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -158,6 +204,8 @@ final class TestKernel extends Kernel
         $container->extension('doctrine', [
             'dbal' => self::databaseUrl() === null ? ['driver' => 'pdo_sqlite', 'memory' => true] : ['url' => self::databaseUrl()],
             'orm'  => [
+                // 1.27: an application filter the private entity manager mirrors (disabled by default).
+                'filters'  => ['test_kind' => ['class' => TestKindFilter::class, 'enabled' => false]],
                 'mappings' => [
                     'TestSupport' => [
                         'type'      => 'attribute',
@@ -174,7 +222,7 @@ final class TestKernel extends Kernel
             $container->extension('doctrine', ['orm' => ['identity_generation_preferences' => ['Doctrine\\DBAL\\Platforms\\PostgreSQLPlatform' => $idGeneration]]]);
         }
         $container->extension('nowo_chat_kit', array_replace_recursive(
-            ['profiles' => ['default' => ['user_class' => TestUser::class] + (self::userReference() === null ? [] : ['doctrine' => ['user_reference' => self::userReference()]])]],
+            ['profiles' => ['default' => ['user_class' => TestUser::class, 'doctrine' => (self::userReference() === null ? [] : ['user_reference' => self::userReference()]) + (self::privateEntityManager() ? ['private_entity_manager' => true] : [])]]],
             $this->chatKitConfig,
         ));
 
@@ -205,7 +253,17 @@ final class TestKernel extends Kernel
         // 1.16: records the picture batches; answers nothing (like the null default) until a test fills `urls`.
         $services->alias(ChatAvatarUrlResolverInterface::class, CountingAvatarResolver::class);
         $services->alias(self::ASSET_PACKAGES_ALIAS, 'assets.packages');
-        $services->alias(self::ENTITY_MANAGER_ALIAS, 'doctrine.orm.entity_manager');
+        // 1.27 private-manager replay: the fixtures are written through the bundle's private manager, as a host using the
+        // chat services would write chat rows.
+        $services->alias(self::ENTITY_MANAGER_ALIAS, self::privateEntityManager() && $this->privateEntityManagerConfigured() ? ChatKitEntityManager::class : 'doctrine.orm.entity_manager');
+        if ($this->usesTwinPorts()) {
+            $services->set(TwinChannelSource::class);
+            $services->set(TwinRealtime::class);
+            $services->set(TwinParticipantResolver::class);
+            $services->alias(ChatChannelProviderInterface::class, TwinChannelSource::class);
+            $services->alias(ChatRealtimeInterface::class, TwinRealtime::class);
+            $services->alias(ChatParticipantResolverInterface::class, TwinParticipantResolver::class);
+        }
         $services->set(self::TRANSLATOR_COLLECTOR, DataCollectorTranslator::class)->decorate('translator')->args([service('.inner')]);
     }
 

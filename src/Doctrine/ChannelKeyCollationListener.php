@@ -17,6 +17,7 @@ use Doctrine\ORM\Tools\ToolEvents;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 
+use function array_keys;
 use function method_exists;
 
 /**
@@ -29,6 +30,10 @@ use function method_exists;
  * 8.0+ `utf8mb4_0900_bin` (both NO PAD), MySQL 5.7 `utf8mb4_bin` (PAD SPACE, but ChatChannelKey refuses trailing
  * whitespace). PostgreSQL and SQLite compare exactly and are untouched. Applied to the generated schema (schema tool,
  * `doctrine:migrations:diff`); an existing table needs the `ALTER TABLE` in UPGRADING.md. Stateless (REQ-RUNTIME-002).
+ *
+ * 1.27 (REQ-SEC-006 item 3): with `doctrine.user_reference: string` every user reference column of the bundle's tables
+ * (`author_id`, `user_id`, `support_owner_id`, … and `direct_user_low` / `direct_user_high`) gets the same collation,
+ * so string references (ChatUserReferenceInterface) such as `Bob`, `bob` and `bob ` are different users in the database.
  */
 #[AsDoctrineListener(event: ToolEvents::postGenerateSchemaTable)]
 final readonly class ChannelKeyCollationListener
@@ -40,9 +45,11 @@ final readonly class ChannelKeyCollationListener
      * Builds the listener.
      *
      * @param ManagerRegistry $doctrine Finds the entity manager (and so the platform) of ChatConversation
+     * @param ChatUserReferences $refs 1.27: in `doctrine.user_reference: string` the user reference columns get the collation too
      */
     public function __construct(
         private ManagerRegistry $doctrine,
+        private ChatUserReferences $refs = new ChatUserReferences(),
     ) {
     }
 
@@ -71,7 +78,8 @@ final readonly class ChannelKeyCollationListener
     public function postGenerateSchemaTable(GenerateSchemaTableEventArgs $args): void
     {
         $metadata = $args->getClassMetadata();
-        if ($metadata->getName() !== ChatConversation::class) {
+        $fields   = self::fieldsOf($metadata->getName(), $this->refs->isStringMode());
+        if ($fields === []) {
             return;
         }
         $manager   = $this->doctrine->getManagerForClass(ChatConversation::class);
@@ -80,17 +88,46 @@ final readonly class ChannelKeyCollationListener
             return;
         }
 
-        /** @var non-empty-string $column mapped column names are never empty */
-        $column = $metadata->getColumnName(self::FIELD);
         // Table::edit() exists from DBAL 4.5 and GenerateSchemaTableEventArgs::setClassTable() from ORM 3.6.
         // @phpstan-ignore function.alreadyNarrowedType
         $tableEditor = method_exists(Table::class, 'edit');
         // @phpstan-ignore function.alreadyNarrowedType
         $classTableSetter = method_exists($args, 'setClassTable');
-        $edited           = self::collate($args->getClassTable(), $column, $collation, $tableEditor && $classTableSetter);
-        if ($edited instanceof Table) {
-            $args->setClassTable($edited);
+        foreach ($fields as $field) {
+            if (!$metadata->hasField($field)) {
+                continue;
+            }
+            /** @var non-empty-string $column mapped column names are never empty */
+            $column = $metadata->getColumnName($field);
+            $edited = self::collate($args->getClassTable(), $column, $collation, $tableEditor && $classTableSetter);
+            if ($edited instanceof Table) {
+                $args->setClassTable($edited);
+            }
         }
+    }
+
+    /**
+     * The fields of a bundle entity that get the exact collation: `channelKey`; 1.27, in `doctrine.user_reference: id`,
+     * every user reference column (REQ-SEC-006 item 3: string references are compared byte for byte).
+     *
+     * @param string $class The entity class
+     * @param bool $idMode Whether users are keyed by string references (`string` mode)
+     *
+     * @return list<string> The mapped field names
+     */
+    public static function fieldsOf(string $class, bool $idMode): array
+    {
+        $fields = $class === ChatConversation::class ? [self::FIELD] : [];
+        if ($idMode) {
+            foreach (array_keys(UserReferenceListener::RELATIONS[$class] ?? []) as $relation) {
+                $fields[] = $relation . 'Ref';
+            }
+            foreach (array_keys(UserReferenceListener::EXTRA_FIELDS[$class] ?? []) as $field) {
+                $fields[] = $field;
+            }
+        }
+
+        return $fields;
     }
 
     /**

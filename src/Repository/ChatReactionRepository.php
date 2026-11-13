@@ -42,7 +42,10 @@ class ChatReactionRepository extends ServiceEntityRepository
      */
     public function findOneFor(ChatMessage $message, ChatUserInterface $user, string $emoji): ?ChatReaction
     {
-        return $this->findOneBy(['message' => $message, 'emoji' => $emoji] + $this->refs->criteria('user', $user));
+        $row = $this->findOneBy(['message' => $message, 'emoji' => $emoji] + $this->refs->criteria('user', $user));
+
+        // REQ-SEC-006 item 2: exactly this user's reaction.
+        return $row instanceof ChatReaction && ChatUserReferences::same($row->getUser(), $user) ? $row : null;
     }
 
     /**

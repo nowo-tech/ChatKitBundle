@@ -7,7 +7,9 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -98,12 +100,12 @@ class ChatMessageRepository extends ServiceEntityRepository
      * Unread counts per conversation id for one user, one query: messages newer than the read cursor
      * and not written by the user. Conversations without a participant row count every foreign message.
      *
-     * @param int $userId Doctrine id of the reader
+     * @param int|string $userId Key of the reader (ChatUserReferences::key())
      * @param list<int> $conversationIds Conversations to count
      *
      * @return array<int, int> conversation id => unread count (conversations with none are left out)
      */
-    public function countUnreadByConversation(int $userId, array $conversationIds): array
+    public function countUnreadByConversation(int|string $userId, array $conversationIds): array
     {
         if ($conversationIds === []) {
             return [];
@@ -112,13 +114,18 @@ class ChatMessageRepository extends ServiceEntityRepository
         $em           = $this->getEntityManager();
         $messages     = $em->getClassMetadata(ChatMessage::class)->getTableName();
         $participants = $em->getClassMetadata(ChatParticipant::class)->getTableName();
-        $rows         = $em->getConnection()->fetchAllAssociative(
+        // 1.27 (audit OJ-M1, REQ-SEC-006 item 6): with user references on MySQL / MariaDB the user columns are compared
+        // byte for byte in SQL too (a folding legacy column would count a look-alike's read cursor or messages).
+        $exact       = $this->refs->isIdMode() && $em->getConnection()->getDatabasePlatform() instanceof AbstractMySQLPlatform;
+        $sameUser    = $exact ? ' AND CAST(p.user_id AS BINARY) = CAST(:user AS BINARY)' : '';
+        $otherAuthor = $exact ? 'CAST(m.author_id AS BINARY) <> CAST(:user AS BINARY)' : 'm.author_id <> :user';
+        $rows        = $em->getConnection()->fetchAllAssociative(
             'SELECT m.conversation_id AS cid, COUNT(m.id) AS n
                FROM ' . $messages . ' m
-          LEFT JOIN ' . $participants . ' p ON p.conversation_id = m.conversation_id AND p.user_id = :user
+          LEFT JOIN ' . $participants . ' p ON p.conversation_id = m.conversation_id AND p.user_id = :user' . $sameUser . '
               WHERE m.conversation_id IN (:ids)
                 AND m.deleted_at IS NULL
-                AND (m.author_id IS NULL OR m.author_id <> :user)
+                AND (m.author_id IS NULL OR ' . $otherAuthor . ')
                 AND m.id > COALESCE(p.last_read_message_id, 0)
            GROUP BY m.conversation_id',
             // 1.24: in `doctrine.user_reference: id` the user columns hold the id as text.
@@ -190,26 +197,26 @@ class ChatMessageRepository extends ServiceEntityRepository
         if ($ids === []) {
             return 0;
         }
-        $this->getEntityManager()->createQueryBuilder()
+        ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->delete(ChatReaction::class, 'r')
             ->where('IDENTITY(r.message) IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
-            ->execute();
+            ->execute());
         // 1.19: their links leave the Links panel.
-        $this->getEntityManager()->createQueryBuilder()
+        ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->delete(ChatMessageLink::class, 'ml')
             ->where('IDENTITY(ml.message) IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
-            ->execute();
+            ->execute());
 
-        return (int) $this->createQueryBuilder('m')
+        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')
             ->delete()
             ->where('m.id IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
-            ->execute();
+            ->execute());
     }
 
     /**
@@ -222,14 +229,14 @@ class ChatMessageRepository extends ServiceEntityRepository
      */
     public function moveAll(ChatConversation $from, ChatConversation $to): int
     {
-        return (int) $this->createQueryBuilder('m')
+        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')
             ->update()
             ->set('m.conversation', ':to')
             ->where('m.conversation = :from')
             ->setParameter('to', $to)
             ->setParameter('from', $from)
             ->getQuery()
-            ->execute();
+            ->execute());
     }
 
     /**

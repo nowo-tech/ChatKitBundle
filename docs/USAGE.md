@@ -4,6 +4,7 @@
 
 - [How it fits together](#how-it-fits-together)
 - [Contracts](#contracts)
+- [Standard Symfony host](#standard-symfony-host)
 - [Using it from a DDD / hexagonal application](#using-it-from-a-ddd--hexagonal-application)
 - [Conversations and permissions](#conversations-and-permissions)
 - [Opening conversations from your pages](#opening-conversations-from-your-pages)
@@ -194,6 +195,16 @@ public function send(ChatUserInterface $user, array $items): void; // list<ChatD
 
 See [Email digest](#email-digest).
 
+## Standard Symfony host
+
+The zero-config path (REQ-ARCH-001): your Doctrine user entity implements `ChatUserInterface` and is mapped through
+`user_class` (`doctrine.user_reference: relation`, the default: real foreign keys to your user table), your security
+user is the chat participant, and your services implement the ports below (`ChatChannelProviderInterface`,
+`ChatRealtimeInterface`, `CurrentChatUserResolverInterface` keep working unchanged in 1.x; their 1.27 twins are
+optional). Call the chat through `ChatServiceInterface` with the bundle's entities, and listen to the events. The
+bundle writes through your default entity manager unless you opt in to its private one
+([CONFIGURATION](CONFIGURATION.md)).
+
 ## Using it from a DDD / hexagonal application
 
 **Layer.** Chat Kit is a bounded context of its own: it owns its entities (conversations, participants,
@@ -223,13 +234,39 @@ context, not as part of your domain model.
 - 1.24: call the chat through **`ChatServiceInterface`** (aliased to `ChatService`), so your application layer can
   wrap it behind its own port, decorate it (audit, projections) or replace it in tests; the bundle's controllers use
   the interface too, so a decorator sees every API call.
+- 1.27: or call it **by id** through **`ChatMessagingInterface`** (aliased to `ChatMessaging`): conversations and
+  messages are named by their public uuids and every answer is a read-only view (`ChatConversationView`,
+  `ChatMessageView`, `ChatParticipantView`), never an entity. It loads the rows (compared byte for byte; an unknown or
+  look-alike uuid throws `ChatNotFoundException` before anything is written) and calls `ChatServiceInterface`, so a
+  decoration of that interface applies to both. Unlike `ChatServiceInterface`, it authorizes its actor with the API's
+  rules (view, send, pin, edit and delete own messages within the window, resolve for agents); a forbidden conversation
+  or message throws the same `ChatNotFoundException` as an unknown one. `can($actor, $conversationUuid, $action,
+  $messageUuid)` answers the same question without acting, so you can authorize by uuid without loading entities.
+- 1.27: **framework-free port twins** (REQ-ARCH-001 rule 3). Three ports were typed with Symfony classes; each has a
+  twin that takes a bundle value object instead, and the old interface is deprecated (removed in 2.0):
+
+  | Deprecated (1.x) | 1.27 twin | Value object instead of |
+  |---|---|---|
+  | `ChatChannelProviderInterface` | `ChatChannelSourceInterface` | `ChatRequestContext` (method, scheme, host, port, base path, path, route and its scalar parameters, scalar query parameters, locale; never a header, cookie, session or body) instead of `Request` in `contextChannel()` |
+  | `ChatRealtimeInterface` | `ChatRealtimeTransportInterface` | `ChatRequestContext` instead of `Request` in `browserHubUrl()` (`$request->origin()` builds a same-origin URL) |
+  | `CurrentChatUserResolverInterface` | `ChatParticipantResolverInterface` | `ChatSecurityUser` (class, id, identifier, roles) instead of `UserInterface` |
+
+  Alias either the old interface id or the twin's id to a service that implements the twin. A service that implements
+  the old interface is asked exactly as before (also when it implements the twin too); a service that implements only
+  the twin is asked through an internal gate; a service that implements neither fails the container build. The
+  optional `ChatChannelWritePolicyInterface` and `ChatChannelMentionPolicyInterface` go on the twin as they went on the
+  provider.
 - 1.24: when your Symfony security user is not the chat participant (a DTO, a wrapper around your domain user), alias
   **`CurrentChatUserResolverInterface`** to an adapter that maps one to the other; the voter, the dock and every chat
   controller ask it (default: the security user when it implements `ChatUserInterface`).
 - 1.24: with **`doctrine.user_reference: id`** the chat tables keep the user id as a string, without foreign keys or
   `resolve_target_entities`: the class implementing `ChatUserInterface` can be a plain object of your infrastructure
   layer, loaded by your `ChatDirectoryInterface::findByIds()` ([CONFIGURATION](CONFIGURATION.md#user-references-124),
-  migration in [UPGRADING](UPGRADING.md#to-1240)).
+  migration in [UPGRADING](UPGRADING.md#to-1240)). 1.27: with `doctrine.user_reference: string`, users known by a
+  string (UUID, IdP subject) implement `ChatUserReferenceInterface` too, and the directory
+  `ChatUserReferenceDirectoryInterface::findByReferences()` (exact answers only); the references are compared byte for
+  byte (REQ-SEC-006) and the chat refuses to run on folding columns.
+- 1.27: turn on `doctrine.private_entity_manager: true` so the chat never flushes your entity manager.
 - Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case, before the account is deleted
   (in id mode nothing cascades: `erase()` is how the rows go). For an account already gone, call
   `eraseFormerAccount($userId, $publicId, $displayName)` with what you kept of it: the public id scrubs the mention
@@ -252,6 +289,25 @@ final readonly class CurrentParticipant implements CurrentChatUserResolverInterf
 ```yaml
 # config/services.yaml
 Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface: '@App\Infrastructure\Chat\CurrentParticipant'
+```
+
+The same adapter without Symfony types (1.27):
+
+```php
+final readonly class CurrentParticipant implements ChatParticipantResolverInterface
+{
+    public function __construct(private ChatDirectoryInterface $directory) {}
+
+    public function resolve(?ChatSecurityUser $user): ?ChatUserInterface
+    {
+        return $user === null ? null : $this->directory->findByPublicId($user->identifier);
+    }
+}
+```
+
+```yaml
+# config/services.yaml
+Nowo\ChatKitBundle\Contract\ChatParticipantResolverInterface: '@App\Infrastructure\Chat\CurrentParticipant'
 ```
 
 ```php
@@ -287,14 +343,14 @@ final readonly class DirectoryAdapter implements ChatDirectoryInterface
 
 **Known limitations.**
 
-- User ids are integers: `ChatUserInterface::getId(): ?int` and `ChatDirectoryInterface::findByIds(list<int>)` stay
-  (UUID-keyed domain users need an integer surrogate). In id mode the columns are strings already, so a later version
-  can accept other identifiers without another migration.
+- In id mode, users with integer ids go through `ChatDirectoryInterface::findByIds()`; 1.27: with
+  `doctrine.user_reference: string` users known by a string implement `ChatUserReferenceInterface` and the directory
+  `ChatUserReferenceDirectoryInterface` (no integer surrogate needed; [CONFIGURATION](CONFIGURATION.md#user-references-124)).
 - The default `relation` mode still maps `user_class` through `resolve_target_entities` with foreign keys to your user
   table (choose `doctrine.user_reference: id` to avoid it).
-- `ChatServiceInterface` methods still take and return the bundle's entities (`ChatConversation`, `ChatMessage`,
-  `ChatParticipant`); the DTOs are on the events. `ChatSupportTickets`, `ChatLinks` and `ChatPersonalData` have no
-  interface yet.
+- `ChatServiceInterface` methods still take and return the bundle's entities; 1.27's `ChatMessagingInterface` is the
+  same service by uuid with views. `ChatSupportTickets` and `ChatLinks` have no id-based interface yet (use the events'
+  views and `ChatMessagingInterface`).
 - There are no events yet for message edits, reactions, pins, read cursors or conversations being opened.
 
 ## Conversations and permissions

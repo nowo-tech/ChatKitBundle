@@ -8,9 +8,11 @@ use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
+use Doctrine\ORM\QueryBuilder;
 use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Contract\ChatUserReferenceDirectoryInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
@@ -25,6 +27,7 @@ use Nowo\ChatKitBundle\Event\ChatLinkRemovedEvent;
 use Nowo\ChatKitBundle\Event\ChatMentionsErasedEvent;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Model\ErasedChatUser;
+use Nowo\ChatKitBundle\Model\ErasedChatUserReference;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
@@ -40,6 +43,7 @@ use Throwable;
 use function array_chunk;
 use function array_count_values;
 use function array_filter;
+use function array_key_exists;
 use function array_key_last;
 use function array_keys;
 use function array_map;
@@ -47,6 +51,7 @@ use function array_values;
 use function count;
 use function in_array;
 use function is_array;
+use function is_int;
 use function preg_match;
 use function preg_match_all;
 use function preg_quote;
@@ -216,16 +221,15 @@ final readonly class ChatPersonalData
             $erasure = $this->scrubMentions($user, self::ERASED_MENTION);
             $this->keepModeratedState($user);
             foreach ([[ChatMessage::class, 'pinnedBy'], [ChatMessage::class, 'deletedBy'], [ChatConversation::class, 'assignee'], [ChatConversation::class, 'resolvedBy']] as [$entity, $field]) {
-                $qb()->update($entity, 'x')->set($this->refs->field('x', $field), ':none')->where($this->refs->field('x', $field) . ' = :user')
-                    ->setParameter('none', null)->setParameter('user', $this->refs->value($user))->getQuery()->execute();
+                $this->byUser($qb()->update($entity, 'x')->set($this->refs->field('x', $field), ':none')->setParameter('none', null), 'x', $entity, $field, $user)
+                    ->getQuery()->execute();
             }
             $this->eraseBotNames($user);
             // 1.19 (audit FZ-L1): the links the user pinned go, in every conversation (their URL and title may be personal).
             $removedLinks = $this->removePinnedLinks($user);
 
             // The mention rows of the messages the user wrote (they become tombstones below).
-            $authored = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where($this->refs->field('m', 'author') . ' = :user')
-                ->setParameter('user', $this->refs->value($user))->getQuery()->getSingleColumnResult();
+            $authored = $this->exactIds(ChatMessage::class, 'author', $user);
             if ($authored !== []) {
                 $qb()->delete(ChatMessageMention::class, 'n')->where('IDENTITY(n.message) IN (:ids)')
                     ->setParameter('ids', $authored)->getQuery()->execute();
@@ -233,20 +237,22 @@ final readonly class ChatPersonalData
                 $qb()->delete(ChatMessageLink::class, 'k')->where('IDENTITY(k.message) IN (:ids)')
                     ->setParameter('ids', $authored)->getQuery()->execute();
             }
-            $qb()->update(ChatMessage::class, 'm')
-                ->set('m.body', ':empty')->set('m.bodyHtml', ':empty')
-                ->set($this->refs->field('m', 'author'), ':none')->set('m.deletedAt', ':now')
-                ->where($this->refs->field('m', 'author') . ' = :user')
-                ->setParameter('empty', '')->setParameter('none', null)->setParameter('now', $this->clock->now())
-                ->setParameter('user', $this->refs->value($user))
-                ->getQuery()->execute();
-            $qb()->delete(ChatReaction::class, 'r')->where($this->refs->field('r', 'user') . ' = :user')->setParameter('user', $this->refs->value($user))->getQuery()->execute();
-            $qb()->delete(ChatParticipant::class, 'p')->where($this->refs->field('p', 'user') . ' = :user')->setParameter('user', $this->refs->value($user))->getQuery()->execute();
-            $qb()->delete(ChatUserSettings::class, 's')->where($this->refs->field('s', 'user') . ' = :user')->setParameter('user', $this->refs->value($user))->getQuery()->execute();
-            $qb()->delete(ChatQuickReply::class, 'q')->where($this->refs->field('q', 'user') . ' = :user')->setParameter('user', $this->refs->value($user))->getQuery()->execute();
+            if ($authored !== []) {
+                $qb()->update(ChatMessage::class, 'm')
+                    ->set('m.body', ':empty')->set('m.bodyHtml', ':empty')
+                    ->set($this->refs->field('m', 'author'), ':none')->set('m.deletedAt', ':now')
+                    ->where('m.id IN (:ids)')
+                    ->setParameter('empty', '')->setParameter('none', null)->setParameter('now', $this->clock->now())
+                    ->setParameter('ids', $authored)
+                    ->getQuery()->execute();
+            }
+            foreach ([[ChatReaction::class, 'r'], [ChatParticipant::class, 'p'], [ChatUserSettings::class, 's'], [ChatQuickReply::class, 'q']] as [$entity, $alias]) {
+                $this->byUser($qb()->delete($entity, $alias), $alias, $entity, 'user', $user)->getQuery()->execute();
+            }
 
-            // Every support ticket of the user (and the intake draft), with its messages.
-            foreach ($this->conversations->findBy($this->refs->criteria('supportOwner', $user)) as $support) {
+            // Every support ticket of the user (and the intake draft), with its messages (1.27: exactly this user's).
+            $tickets = array_filter($this->conversations->findBy($this->refs->criteria('supportOwner', $user)), static fn (ChatConversation $support): bool => ChatUserReferences::same($support->getSupportOwner(), $user));
+            foreach ($tickets as $support) {
                 $messageIds = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->getSingleColumnResult();
                 if ($messageIds !== []) {
                     $qb()->delete(ChatReaction::class, 'r')->where('IDENTITY(r.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
@@ -273,6 +279,50 @@ final readonly class ChatPersonalData
     }
 
     /**
+     * 1.27 (REQ-SEC-006 item 2): ids of the rows of `$entity` whose user field holds exactly this user. In `id` mode the
+     * rows are selected by the stored reference and only those whose reference is equal byte for byte are kept (a
+     * legacy folding collation may also return a look-alike's rows); the bulk writes then go by primary key. In
+     * `relation` mode the foreign key is exact.
+     *
+     * @param class-string $entity The bundle entity
+     *
+     * @return list<int> The row ids
+     */
+    private function exactIds(string $entity, string $field, ChatUserInterface $user): array
+    {
+        $qb = $this->entityManager->createQueryBuilder()->from($entity, 'x')->where($this->refs->field('x', $field) . ' = :user')
+            ->setParameter('user', $this->refs->value($user));
+        if (!$this->refs->isIdMode()) {
+            return array_values(array_map(intval(...), $qb->select('x.id')->getQuery()->getSingleColumnResult()));
+        }
+        $key = ChatUserReferences::key($user);
+        $ids = [];
+        foreach ($qb->select('x.id AS id', 'x.' . $field . 'Ref AS ref')->getQuery()->getArrayResult() as $row) {
+            if ($key !== null && $row['ref'] === $key) {
+                $ids[] = (int) $row['id'];
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * Restricts a bulk DQL write to the rows of exactly this user: the user field in `relation` mode, the exact row ids
+     * ({@see self::exactIds()}) in `id` mode.
+     *
+     * @param class-string $entity The bundle entity
+     */
+    private function byUser(QueryBuilder $qb, string $alias, string $entity, string $field, ChatUserInterface $user): QueryBuilder
+    {
+        if (!$this->refs->isIdMode()) {
+            return $qb->where($this->refs->field($alias, $field) . ' = :user')->setParameter('user', $user);
+        }
+        $ids = $this->exactIds($entity, $field, $user);
+
+        return $ids === [] ? $qb->where('1 = 0') : $qb->where($alias . '.id IN (:exact)')->setParameter('exact', $ids);
+    }
+
+    /**
      * Deletes the links the user pinned (inside the erasure's transaction) and returns what the events need: the links
      * of conversations that survive the erasure (not the user's own support tickets, deleted with all their links).
      *
@@ -287,15 +337,19 @@ final readonly class ChatPersonalData
             ->setParameter('user', $this->refs->value($user))
             ->orderBy('l.id', 'ASC')
             ->getQuery()->getResult();
+        // REQ-SEC-006 item 2: only the links of exactly this user (a folding collation may return a look-alike's).
+        $links  = array_values(array_filter($links, static fn (ChatConversationLink $link): bool => ChatUserReferences::same($link->getCreatedBy(), $user)));
         $events = [];
         foreach ($links as $link) {
             $conversation = $link->getConversation();
-            if ($conversation->getSupportOwner()?->getId() !== $user->getId()) {
+            if (!ChatUserReferences::same($conversation->getSupportOwner(), $user)) {
                 $events[] = new ChatLinkRemovedEvent($conversation, $link->getUuid(), $link->getUrl(), $link->getTitle(), $user);
             }
         }
-        $this->entityManager->createQueryBuilder()->delete(ChatConversationLink::class, 'l')->where($this->refs->field('l', 'createdBy') . ' = :user')
-            ->setParameter('user', $this->refs->value($user))->getQuery()->execute();
+        if ($links !== []) {
+            $this->entityManager->createQueryBuilder()->delete(ChatConversationLink::class, 'l')->where('l.id IN (:ids)')
+                ->setParameter('ids', array_map(static fn (ChatConversationLink $link): int => (int) $link->getId(), $links))->getQuery()->execute();
+        }
         foreach ($links as $link) {
             $this->entityManager->detach($link);
         }
@@ -331,7 +385,7 @@ final readonly class ChatPersonalData
      * wire it to request input. It refuses (audit KC-L5) an id the directory still knows — a living account is erased
      * with erase() and its user — and (KC-L6) the default `relation` mode, where erase() takes the user entity.
      *
-     * @param int $userId The account's user id (the stored reference)
+     * @param int|string $userId The account's user id, or (1.27) its string reference (the stored reference)
      * @param string $publicId The account's former chat public id
      * @param string $displayName The account's former display name; '' skips the lines
      *
@@ -339,7 +393,7 @@ final readonly class ChatPersonalData
      *
      * @return ChatMentionErasure What the mention part rewrote and skipped
      */
-    public function eraseFormerAccount(int $userId, string $publicId, string $displayName = ''): ChatMentionErasure
+    public function eraseFormerAccount(int|string $userId, string $publicId, string $displayName = ''): ChatMentionErasure
     {
         if (!$this->refs->isIdMode()) {
             throw new LogicException('eraseFormerAccount() works with doctrine.user_reference: id only; in relation mode call erase() with the user entity (before deleting it).');
@@ -347,11 +401,21 @@ final readonly class ChatPersonalData
         if (!$this->directory instanceof ChatDirectoryInterface) {
             throw new LogicException('eraseFormerAccount() needs the ChatDirectoryInterface to check that the account is gone.');
         }
-        if ($this->directory->findByIds([$userId]) !== []) {
-            throw new LogicException(sprintf('User %d still exists: eraseFormerAccount() is for accounts that are gone; call erase() with the user.', $userId));
+        // 1.27: a string reference (ChatUserReferenceInterface) too, refused when it breaks the format rule.
+        $account = is_int($userId) ? new ErasedChatUser($userId, $publicId, $displayName) : new ErasedChatUserReference($userId, $publicId, $displayName);
+        $key     = (string) ChatUserReferences::key($account);
+        $found   = match (true) {
+            $this->directory instanceof ChatUserReferenceDirectoryInterface => $this->directory->findByReferences([$key]),
+            is_int($userId)                                                 => $this->directory->findByIds([$userId]),
+            default                                                         => [],
+        };
+        foreach ($found as $user) {
+            if (ChatUserReferences::key($user) === $key) {
+                throw new LogicException(sprintf('User %s still exists: eraseFormerAccount() is for accounts that are gone; call erase() with the user.', $key));
+            }
         }
 
-        return $this->erase(new ErasedChatUser($userId, $publicId, $displayName));
+        return $this->erase($account);
     }
 
     /**
@@ -588,13 +652,23 @@ final readonly class ChatPersonalData
      */
     private function keepModeratedState(ChatUserInterface $user): void
     {
-        /** @var iterable<array{id: int, meta: array<string, mixed>|null}> $rows */
-        $rows = $this->entityManager->createQueryBuilder()
+        $qb = $this->entityManager->createQueryBuilder()
             ->select('m.id', 'm.meta')->from(ChatMessage::class, 'm')
-            ->where($this->refs->field('m', 'deletedBy') . ' = :user')->andWhere($this->refs->field('m', 'author') . ' IS NULL OR ' . $this->refs->field('m', 'author') . ' <> :user')
-            ->setParameter('user', $this->refs->value($user))
-            ->getQuery()->toIterable([], AbstractQuery::HYDRATE_ARRAY);
+            ->where($this->refs->field('m', 'deletedBy') . ' = :user')
+            ->setParameter('user', $this->refs->value($user));
+        $key = ChatUserReferences::key($user);
+        if ($this->refs->isIdMode()) {
+            // REQ-SEC-006 item 2: compared in PHP, byte for byte (a folding collation may match a look-alike).
+            $qb->addSelect('m.deletedByRef AS deletedBy', 'm.authorRef AS author');
+        } else {
+            $qb->andWhere($this->refs->field('m', 'author') . ' IS NULL OR ' . $this->refs->field('m', 'author') . ' <> :user');
+        }
+        /** @var iterable<array{id: int, meta: array<string, mixed>|null, deletedBy?: string|null, author?: string|null}> $rows */
+        $rows = $qb->getQuery()->toIterable([], AbstractQuery::HYDRATE_ARRAY);
         foreach ($rows as $row) {
+            if (array_key_exists('deletedBy', $row) && ($row['deletedBy'] !== $key || ($row['author'] ?? null) === $key)) {
+                continue;
+            }
             $meta = $row['meta'] ?? [];
             if (($meta['moderated'] ?? false) === true) {
                 continue;

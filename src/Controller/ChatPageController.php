@@ -9,6 +9,7 @@ use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Form\ChatPageMessageType;
@@ -219,7 +220,7 @@ final class ChatPageController extends AbstractController
         }
         $list    = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => $conversation === $current || isset($closed[(int) $conversation->getId()]) === $archived));
         $ids     = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $unread  = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $unread  = $this->messages->countUnreadByConversation((string) ChatUserReferences::key($user), $ids);
         $latest  = $this->messages->findLatestByConversationIds($ids);
         $list    = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => !$conversation->isDirect() || isset($latest[(int) $conversation->getId()]) || $conversation === $current));
         $isAgent = $this->access->isSupportAgent($user);

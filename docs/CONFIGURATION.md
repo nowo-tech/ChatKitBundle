@@ -8,6 +8,7 @@
   - [How the profile is selected](#how-the-profile-is-selected)
 - [Reference](#reference)
 - [Rate limits](#rate-limits)
+- [Private entity manager (1.27)](#private-entity-manager-127)
 - [Container parameters](#container-parameters)
 - [Timeouts](#timeouts)
 - [CSRF token ids](#csrf-token-ids)
@@ -94,7 +95,9 @@ nowo_chat_kit:
 | `profiles.<name>.push_preview` | bool | `false` | Put the first 140 characters of the message in the Web Push body (lock screens). Off: a generic "New message". |
 | `profiles.<name>.doctrine.table_name_prefix` | string | `nowo_chat_` | Replaces the `nowo_chat_` part of every bundle table, index and unique-constraint name (non-empty; lowercase letters, digits, `_`). `chat_` gives `chat_conversation`, `chat_message`, `idx_chat_message_created`, `uniq_chat_message_uuid`, …; the Doctrine-generated `IDX_*` / `FK_*` names follow the new table names. See [Table names](#table-names). |
 | `profiles.<name>.doctrine.table_prefix` | string | `''` | Prepended to every bundle table, index and unique-constraint name **after** `table_name_prefix` is applied (lowercase letters, digits, `_`). `app_` gives `app_nowo_chat_conversation`, `app_idx_nowo_chat_message_created`, … Generate a migration after changing it. |
-| `profiles.<name>.doctrine.user_reference` | `relation` \| `id` | `relation` | 1.24: how the chat tables point at users. `relation` = Doctrine relations to `user_class` with foreign keys (`resolve_target_entities`). `id` = each user column holds the user's id as a string (`VARCHAR(64)`, no foreign key, indexed), users are loaded through `ChatDirectoryInterface::findByIds()` after the rows, `user_class` is not needed and need not be an entity. Global like the table names. Switching needs a migration ([User references](#user-references-124)). |
+| `profiles.<name>.doctrine.user_reference` | `relation` \| `id` \| `string` | `relation` | 1.24: how the chat tables point at users. `relation` = Doctrine relations to `user_class` with foreign keys (`resolve_target_entities`). `id` = each user column holds the user's id as a string (`VARCHAR(64)`, no foreign key, indexed), users are loaded through `ChatDirectoryInterface::findByIds()` after the rows, `user_class` is not needed and need not be an entity. Global like the table names. Switching needs a migration ([User references](#user-references-124)). |
+| `profiles.<name>.doctrine.entity_manager` | string | `default` | 1.27: the Doctrine entity manager that maps the chat entities: the source of `private_entity_manager` (connection, mapping, caches, events). |
+| `profiles.<name>.doctrine.private_entity_manager` | ?bool | `null` | 1.27 (REQ-ARCH-001 rule 6): `true` = the bundle reads and writes its rows through its own private entity manager, so a chat write never flushes, clears or closes yours ([Private entity manager](#private-entity-manager-127)). `null` (default) = 1.26 behaviour: the chat flushes your default manager. `false` = the same, deprecated: `true` becomes the only mode in 2.0. |
 | `profiles.<name>.web_ui.layout_template` | ?string | `null` | Layout the full-page chat extends (REQ-UI-003); `null` = `nowo_ui_kit.layouts.admin`. It must render the UiKit canonical blocks. |
 | `profiles.<name>.web_ui.templates.page` | string | `@NowoChatKitBundle/page.html.twig` | Template of the full-page chat (a host template extending `@!NowoChatKitBundle/page.html.twig` and overriding one block). |
 | `profiles.<name>.web_ui.assets` | bool | `true` | 1.21: `false` = the full-page chat leaves out the `nowo-chat.css` and `nowo-chat.js` tags (your bundler ships them). The dock on your other pages takes its own `nowo_chat_assets: false` ([USAGE](USAGE.md#front-end-iife-or-your-bundler)). |
@@ -218,8 +221,48 @@ In id mode the indexes the foreign keys gave are mapped explicitly (`idx_nowo_ch
 `idx_nowo_chat_msg_deleted_by`, `idx_nowo_chat_msg_pinned_by`, `idx_nowo_chat_conv_resolved_by`,
 `idx_nowo_chat_conv_link_by`, `idx_nowo_chat_reaction_user`; renamed by `table_name_prefix` / `table_prefix`), and every
 entity exposes `get<Relation>Reference()` (e.g. `ChatMessage::getAuthorReference()`) to read the stored id without
-loading the user. User ids are still integers (`ChatUserInterface::getId(): ?int`); the columns are strings so a later
-version can accept other identifiers without another migration. [UPGRADING](UPGRADING.md#to-1240) has the migration.
+loading the user. [UPGRADING](UPGRADING.md#to-1240) has the migration.
+
+1.27: **string references** (`doctrine.user_reference: string`). Every chat user implements
+`ChatUserReferenceInterface` and is stored by its `getChatUserReference()` (1–64 characters, refused with whitespace at
+either end or control / format characters), loaded through `ChatUserReferenceDirectoryInterface::findByReferences()`
+(every answer re-checked byte for byte), and compared exactly everywhere; direct pairs keep both references in
+`direct_user_low` / `direct_user_high`. On MySQL / MariaDB every user reference column must have the binary NO PAD
+collation: the bundle checks it once per process and refuses to work until the `ALTER` of
+[UPGRADING](UPGRADING.md#unreleased) has run. Integer-id users are refused in this mode (and reference users in `id`
+mode). The `relation` and `id` modes are unchanged.
+
+## Private entity manager (1.27)
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            doctrine:
+                private_entity_manager: true   # default: null (1.26 behaviour)
+                entity_manager: default        # the manager that maps the chat entities
+```
+
+Up to 1.26 every chat write flushed your default entity manager, so it also wrote whatever your application had left
+pending there, and a failed chat write closed your manager. With `private_entity_manager: true`:
+
+- every ChatKit service reads and writes through `ChatKitEntityManager`, a private manager created on the connection,
+  mapping, caches, proxies and event manager of `entity_manager`. The tables do not move and the Doctrine listeners
+  (the bundle's and yours) still run. Your services keep your manager;
+- a chat write never flushes, clears or closes your manager. A failed chat write closes only the private manager,
+  created again on the next call;
+- the connection is shared: inside a transaction you opened, the chat rows are part of it, and the bundle's own
+  transactions and bulk statements become savepoints (`nowo_chat_kit_*`); when rolling back to such a savepoint fails,
+  the original exception is rethrown;
+- the private manager is dropped at every request, Messenger message and console command boundary (after the memos;
+  `ChatRequestBoundaryListener`) and at `kernel.reset`. Changes still pending then are discarded and logged as a
+  warning by entity class and count (never a value);
+- with doctrine/dbal 4, a rollback that undid rows the private manager wrote replaces it before its next use (DBAL
+  middleware on the source connection only); with DBAL 3 it is replaced at the next boundary;
+- the SQL filters enabled on your manager are mirrored on the private one on every call;
+- in `relation` mode, your user objects on chat rows (the security user, a user your code loaded) are replaced on the
+  row by the private manager's reference to the same id before each flush; your instance is never written. Users read
+  back from chat rows are the private manager's instances: compare users by id, never with `===`.
 
 ## Container parameters
 

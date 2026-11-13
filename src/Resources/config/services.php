@@ -11,6 +11,7 @@ use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
@@ -20,6 +21,7 @@ use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
+use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Link\ChatLinks;
@@ -36,6 +38,7 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Nowo\ChatKitBundle\Service\ChatMentions;
+use Nowo\ChatKitBundle\Service\ChatMessaging;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
@@ -73,8 +76,13 @@ return static function (ContainerConfigurator $container): void {
             '../../Http/ChatApiException.php',
             '../../Service/ChatChannelDeniedException.php',
             '../../Realtime/ChatTopics.php',
+            // 1.27: the port gates and value copies are built by Ports (ChatKitPortsPass), never autowired.
+            '../../Port',
+            '../../Service/ChatNotFoundException.php',
             '../../Avatar/AvatarUrlPolicy.php',
             '../../Doctrine/UnresolvedChatUser.php',
+            // 1.27: registered by the extension only with doctrine.private_entity_manager: true.
+            '../../Doctrine/{ChatKitEntityManager,ChatKitManagerRegistry,ChatKitSavepoint,PrivateEntityManagerConnection,PrivateEntityManagerDriver,PrivateEntityManagerMiddleware,PrivateManagerRepositoryFactory}.php',
         ]);
     // REQ-SF-004 rule 7: controllers are NOT autoconfigured. On Symfony >= 7.3 autoconfiguration tags every #[Route]
     // class with routing.controller, and the host's default `routing.controllers` import would then register the chat
@@ -93,7 +101,9 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$tableNamePrefix', param('nowo_chat_kit.doctrine.table_name_prefix'));
     // 1.24: `doctrine.user_reference` (the extension removes the listener in the default `relation` mode).
     $services->get(ChatUserReferences::class)
-        ->arg('$mode', param('nowo_chat_kit.doctrine.user_reference'));
+        ->arg('$mode', param('nowo_chat_kit.doctrine.user_reference'))
+        // 1.27 (audit OJ-M1): `string` mode only (the extension removes the guard otherwise).
+        ->arg('$guard', service(StringReferenceSchemaGuard::class)->nullOnInvalid());
     $services->get(UserReferenceListener::class)
         ->arg('$access', service_closure(ChatAccess::class))
         ->arg('$secret', param('kernel.secret'));
@@ -111,6 +121,8 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).
     $services->alias(ChatServiceInterface::class, ChatService::class);
+    // 1.27: the same service by public uuid, answering with views (REQ-ARCH-001 rule 1; DDD hosts).
+    $services->alias(ChatMessagingInterface::class, ChatMessaging::class);
     // 1.24: who the signed-in user is in the chat (default: the security user when it implements ChatUserInterface).
     $services->alias(CurrentChatUserResolverInterface::class, SecurityChatUserResolver::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);

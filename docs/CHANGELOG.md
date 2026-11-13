@@ -63,6 +63,157 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.27.0 (minor; REQ-ARCH-001, with REQ-RUNTIME-002 and REQ-SEC-006 kept). Every change is additive: with an
+unchanged configuration and unchanged host services the bundle behaves exactly as 1.26.4. See
+[UPGRADING](UPGRADING.md#unreleased).
+
+### Added
+
+- **Framework-free host ports (REQ-ARCH-001 rules 1 and 3).** Each host port typed with a Symfony class has a 1.27 twin
+  that takes a bundle value object instead:
+
+  | Deprecated (removed in 2.0) | 1.27 twin |
+  |---|---|
+  | `Contract\ChatChannelProviderInterface` (`Request` in `contextChannel()`) | `Contract\ChatChannelSourceInterface` (`Model\ChatRequestContext`) |
+  | `Contract\ChatRealtimeInterface` (`Request` in `browserHubUrl()`) | `Contract\ChatRealtimeTransportInterface` (`Model\ChatRequestContext`) |
+  | `Contract\CurrentChatUserResolverInterface` (`UserInterface`) | `Contract\ChatParticipantResolverInterface` (`Model\ChatSecurityUser`) |
+
+  `ChatRequestContext` carries the method, scheme, host, port, base path, path, route with its scalar parameters, the
+  scalar query parameters and the locale (never a header, a cookie, the session or the body; the query string may
+  still hold tokens, so a host should not log it blindly);
+  `ChatSecurityUser` the user class (no Doctrine proxy), the id the object reports, the identifier and the role names.
+- **Selection rule.** A service implementing the deprecated interface is asked exactly as in 1.26, also when it
+  implements the twin too. A service implementing only the twin is asked through an internal gate (`Port\*Gate`, built
+  by `Port\Ports`). The application aliases either id: the deprecated one, or the twin's (used when the deprecated id
+  still points at the bundle's default). The optional `ChatChannelWritePolicyInterface` and
+  `ChatChannelMentionPolicyInterface` are read on the twin behind the gate. `DependencyInjection\Compiler\ChatKitPortsPass`
+  fails the build when a port service implements neither interface; a service whose class is only known at runtime (a
+  factory) is checked when built and fails closed (`LogicException`).
+- **`Contract\ChatMessagingInterface`** (default `Service\ChatMessaging`, REQ-ARCH-001 rule 1): the application service by
+  public uuid, answering with read-only views (`ChatConversationView`, `ChatMessageView`, the new
+  `Model\ChatParticipantView`) — `openDirect`, `openChannel`, `openSupport`, `send`, `buzz`, `edit`, `delete`,
+  `toggleReaction`, `resolveSupport`, `reopenSupport`, `markRead`, `join`, `pin`, `postSystemLine`, `mute`, `archive`.
+  It loads the rows, re-checks every uuid byte for byte (REQ-SEC-006 item 2: an unknown or look-alike uuid throws
+  `Service\ChatNotFoundException` before anything is written) and calls `ChatServiceInterface`, so a decoration of that
+  interface applies to both. Audit OJ-M2: every method with an actor authorizes it with the API's rules
+  (`ChatVoter::decide()`, new; `ChatAccess`): view, send, pin, edit and delete own messages within the window, react,
+  resolve for agents; a forbidden conversation or message throws the same `ChatNotFoundException` as an unknown one
+  (no existence oracle), and `edit()` takes its actor. `can($actor, $conversationUuid, $action, $messageUuid)`
+  authorizes by uuid without acting. `ChatServiceInterface` stays the entity form for standard hosts (not deprecated;
+  authorization is still its caller's job).
+- **Private entity manager for the chat rows (opt-in, REQ-ARCH-001 rule 6).**
+  `doctrine.private_entity_manager: true` makes every bundle service read and write through
+  `Doctrine\ChatKitEntityManager`, a private manager created on the connection, mapping, caches, proxies and event
+  manager of the new `doctrine.entity_manager` (default `default`, where 1.26 wrote; the tables do not move, the bundle's
+  and the host's Doctrine listeners still run). A chat write then never flushes a change the application left pending
+  in its own manager, never clears it, and a failed chat write closes only the private manager (created again on the
+  next call). Adapted from TaskBoardBundle 2.15.0 / AuthKitBundle 1.46.0 (audits NV, NJ-2, NJV-1, NF-2, NF2-2, NF3-2,
+  NF-7, NZ):
+  - `PrivateEntityManagerReferencesPass` moves every bundle service (inline definitions, iterators, method calls and
+    properties included) from the source manager, the manager `EntityManagerInterface` autowires and the `doctrine`
+    registry onto the private manager and `Doctrine\ChatKitManagerRegistry`; host services are never touched.
+  - Dropped at every request / message / command boundary by `ChatRequestBoundaryListener` (last, after the memos) and
+    at `kernel.reset`: the manager is dropped FIRST, then its pending changes are inspected (logged as a warning by entity
+    class and count, never a value) and cleared, each step guarded.
+  - Recreated when closed, when the connection changed, or when a rollback undid rows it wrote (DBAL 4 middleware
+    `PrivateEntityManagerMiddleware`, attached only to the source manager's connection); the source manager's SQL filters
+    are mirrored on every call.
+  - Bundle-owned repository factory (`Doctrine\PrivateManagerRepositoryFactory`): service repositories (the bundle's
+    own, or a host entity a host listener loads through the private manager) come from the source factory; every other
+    repository is built and kept per manager, so a replaced manager is collected.
+  - In `relation` mode, host user objects on chat rows that the private manager does not hold (the security user) are
+    adopted before each flush as the private manager's reference to the same id; the application's instance is never
+    written. Users read back from chat rows are the private manager's instances: compare users by id.
+  - `Doctrine\ChatKitSavepoint`: the bundle's bulk DQL / DBAL writes (purge, link index, mentions, read cursors, archive
+    reopening, message moves, ticket numbers) run in a savepoint (`nowo_chat_kit_*`) inside an open transaction; when
+    rolling back to it fails too, the ORIGINAL exception is rethrown.
+
+- **String user references (opt-in `doctrine.user_reference: string`, REQ-ARCH-001 rule 2).** The `id` mode with
+  string keys: every chat user implements `Model\ChatUserReferenceInterface` (`getChatUserReference(): string`;
+  `getId()` may return null) and the directory `Contract\ChatUserReferenceDirectoryInterface`
+  (`findByReferences(list<string>)`). The user columns (`VARCHAR(64)` as in id mode) hold the references. The `relation`
+  and `id` modes are unchanged: same stored values, same direct keys, same message payloads, no new column and no
+  collation change (audit OJ-M3). Key pieces:
+  - `Doctrine\ChatUserReferences::key()` / `same()` / `idOrKey()` / `isCanonicalId()`: every in-memory comparison of
+    users goes through the exact key (REQ-SEC-006 item 7); `ChatAccess::usersByIds()` takes keys (`list<int|string>`);
+    the integer-id rule is one (canonical decimal, at most 18 digits; audit OJ-L2).
+  - Direct conversations of string references: `direct_key` is `r` + 40 hex digits of the pair's SHA-256 (same column),
+    and the two references are kept in `direct_user_low` / `direct_user_high` (mapped in `string` mode only). New
+    `ChatConversation::directUserKeys()` / `peerKeyOf()`; `directUserIds()` / `peerIdOf()` answer only for integer pairs.
+  - Users of both kinds never mix (audit OJ-L1): in `string` mode an integer-id user, in `id` mode a reference user, is
+    unreachable (`ChatAccess`) and refused when a chat row is written (`UserReferenceListener` pre-persist / pre-update),
+    and a `user_class` of the wrong kind fails the container build.
+  - `ChatPersonalData::eraseFormerAccount(int|string $userId, …)` (a string reference erases through the new
+    `Model\ErasedChatUserReference`); `SendChatDigestMessage::$userId` and `DeliverChatPushMessage::$recipientIds` take
+    references too (integers stay integers).
+- **REQ-SEC-006 on the user reference columns (`string` mode).** `Model\ChatUserReference` refuses a reference with
+  whitespace or a space separator at either end, a control / format / surrogate / private-use / line or paragraph
+  separator character (ZWSP, BOM, bidi marks, NBSP at an edge), invalid UTF-8 or more than 64 characters, before
+  anything is written (never trimmed). `ChannelKeyCollationListener` gives every user reference column (`author_id`,
+  `user_id`, `support_owner_id`, `assignee_id`, `resolved_by_id`, `deleted_by_id`, `pinned_by_id`, `created_by_id`,
+  `direct_user_low`, `direct_user_high`) the binary NO PAD collation (`utf8mb4_0900_bin` on MySQL 8,
+  `utf8mb4_nopad_bin` on MariaDB). Audit OJ-M1: `Doctrine\StringReferenceSchemaGuard` checks once per process
+  (`information_schema`) that these columns exist and compare byte for byte, and until then every query or write by
+  user throws a `LogicException` (fail closed: no look-alike reads, no unique-key clash closing the entity manager).
+  Every directory answer is re-checked with `===`; the lookups by user (participant rows by conversation and in batch,
+  settings, quick replies, mentions with their inbox, counts and unread badges, reactions, support threads,
+  participating conversations, direct peers, push recipients) keep only exact rows, lists read on until the page holds
+  only exact rows (item 6), the unread message counts compare the user columns as binary in SQL on MySQL / MariaDB, and
+  the mention mark-read and the erasure select first, keep the exact rows and update / delete them by primary key.
+
+- Docs: a "Standard Symfony host" section next to the DDD one in USAGE.
+
+### Deprecated
+
+- `doctrine.private_entity_manager: false` (explicit) is deprecated: the private entity manager becomes the only mode
+  in 2.0. The default (`null`, not set) keeps the 1.26 behaviour without a deprecation.
+- `ChatChannelProviderInterface`, `ChatRealtimeInterface` and `CurrentChatUserResolverInterface` (`@deprecated`;
+  Symfony's DebugClassLoader reports an application class implementing one in debug mode). They keep working unchanged
+  until 2.0. No runtime deprecation is triggered.
+
+### Tests
+
+- `PortsTest` (deprecated, both, twin only, neither; the gates pass the values through; the companions stay on the
+  twin), `ChatRequestContextsTest`, `ChatKitPortsPassTest` (aliases of either id, inner definitions, factory services,
+  neither fails the build).
+- `ChatTwinPortsEquivalenceTest`: the same scenario (guest, stranger, reader, lead: dock configuration with the page
+  channel, channel open, writes refused by the write policy, `@channel`, the realtime endpoint, unknown and look-alike
+  channel keys, the conversation list) on a kernel with the 1.26 test ports and on one with their twins only
+  (`tests/Support/TwinPorts`) gives identical observations.
+- **Twin replay** (`CHAT_KIT_PORTS=twin`, a CI job): the whole suite runs with the test kernel's channel provider and
+  realtime transport behind their twins only (aliased under the deprecated ids) and the current-user resolver through
+  `ChatParticipantResolverInterface`.
+- Private entity manager: `PrivateEntityManagerKernelTest` (direct, channel, reaction and read-cursor writes leave a
+  pending application insert and update unflushed; the bundle services hold the private manager; a failing write
+  closes only the private manager; the boundary drops it), `LegacyEntityManagerKernelTest` (the default flushes the
+  application's manager, as 1.26), `PrivateEntityManagerPartsTest` (registry routing, boundary drop that cannot be
+  poisoned, dropped changes logged by class only, rollback bookkeeping, middleware, savepoints with the original
+  exception rethrown).
+- `ChatPrivateEntityManagerWorkerTest` (REQ-RUNTIME-002): one kernel driven through `http_kernel->handle()` /
+  `terminate()` (no services resetter), 300 rounds of two people writing and listing their conversations: no
+  cross-user data, the private manager dropped after every request, a pending application change never flushed,
+  memory within 4 MiB after the warm-up.
+- **Private-manager replay** (`CHAT_KIT_PRIVATE_EM=1`, a CI job): the whole suite runs with the option on.
+- `ChatStringReferenceHostTest` (the strict DDD host: plain-PHP users known by string references only, id mode, the
+  private entity manager, the current user through the twin): `bob`, `Bob` and `bób` are three people through the API
+  (direct pairs, lists, threads, unread counts, 404 for the look-alike), the directory's folding answers are dropped,
+  settings and participant rows are exact, the erasure touches only the exact reference (also for a gone account by
+  string), and unusable references (padding, NBSP, ZWSP, BOM, bidi, newline, empty, 65 characters, invalid UTF-8) are
+  refused before any write.
+- `ChatUserReferenceLookalikeTest` (the MySQL / MariaDB / PostgreSQL CI job): the generated user columns are binary NO
+  PAD and three look-alike people stay apart; on columns still created with `utf8mb4_unicode_ci` every chat call
+  (reaction, settings, unread count, direct open) throws the guard's `LogicException` and the entity manager stays open
+  (audit OJ-M1); and if the columns fold behind a process that already passed the check, the unread counts, mention
+  counts and inbox, participating conversations, direct peers, participant rows and the mention mark-read stay exact.
+- `StringReferencePartsTest`: the key helpers and the 18-digit integer rule (OJ-L2), users of the other kind refused
+  (unreachable, refused on write, a `user_class` of the wrong kind fails the build; OJ-L1), the guard on exact
+  platforms, the erased account by reference, the digest of a string-keyed user.
+- `ChatMessagingTest`: every method by uuid, same rows and events as the entity service, views equal to
+  `ChatConversationView::of()`, unknown / upper-case / padded uuids refused with nothing written.
+  Audit OJ-M2: a stranger and a non-member get `ChatNotFoundException` for send, buzz, edit, delete, pin, react,
+  read, join, mute and resolve (nothing written); a member cannot edit or delete someone else's message; `can()` by
+  uuid matches the voter.
+
 ## [1.26.4] - 2026-11-13
 
 ### Security

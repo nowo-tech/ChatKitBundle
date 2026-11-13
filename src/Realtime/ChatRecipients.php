@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Realtime;
 
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -49,10 +50,10 @@ final readonly class ChatRecipients
     {
         $item = $this->cache->getItem('nowo_chat_recipients_' . $conversation->getUuid());
         if ($item->isHit() && is_array($ids = $item->get())) {
-            return $ids === [] ? [] : $this->directory->findByIds(array_values(array_map(intval(...), $ids)));
+            return $ids === [] ? [] : array_values($this->access->usersByIds(array_values(array_map(strval(...), $ids))));
         }
         $recipients = $this->compute($conversation);
-        $this->cache->save($item->set(array_map(static fn (ChatUserInterface $user): int => (int) $user->getId(), $recipients))->expiresAfter(self::TTL_SECONDS));
+        $this->cache->save($item->set(array_map(static fn (ChatUserInterface $user): string => (string) ChatUserReferences::key($user), $recipients))->expiresAfter(self::TTL_SECONDS));
 
         return $recipients;
     }
@@ -75,7 +76,7 @@ final readonly class ChatRecipients
     private function compute(ChatConversation $conversation): array
     {
         if ($conversation->isDirect()) {
-            $candidates = $this->directory->findByIds($conversation->directUserIds());
+            $candidates = array_values($this->access->usersByIds($conversation->directUserKeys()));
         } elseif ($conversation->isSupport()) {
             $candidates = [...$this->directory->supportAgents(), ...array_filter([$conversation->getSupportOwner()])];
         } else {
@@ -86,7 +87,7 @@ final readonly class ChatRecipients
         $unique = [];
         foreach ($candidates as $user) {
             if ($this->access->isReachable($user)) {
-                $unique[(int) $user->getId()] = $user;
+                $unique[(string) ChatUserReferences::key($user)] = $user;
             }
         }
 

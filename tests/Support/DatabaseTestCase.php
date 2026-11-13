@@ -30,7 +30,7 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function setUp(): void
     {
-        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences());
+        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts());
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
@@ -53,6 +53,14 @@ abstract class DatabaseTestCase extends TestCase
      * 1.25: whether the kernel registers the test sidebar section providers.
      */
     protected function sidebarProviders(): bool
+    {
+        return false;
+    }
+
+    /**
+     * 1.27: whether the kernel wires the host ports through their framework-free twins only (tests/Support/TwinPorts).
+     */
+    protected function twinPorts(): bool
     {
         return false;
     }
@@ -112,7 +120,9 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function tearDown(): void
     {
-        $this->kernel->shutdown();
+        if (isset($this->kernel)) {
+            $this->kernel->shutdown();
+        }
     }
 
     protected function user(string $name): TestUser

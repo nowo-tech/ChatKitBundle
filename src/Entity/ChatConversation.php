@@ -12,10 +12,13 @@ use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Model\ChatChannelKey;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Model\ChatUserReferenceInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 
 use function in_array;
 use function strlen;
+
+use const SORT_STRING;
 
 /**
  * A conversation: one per user pair (direct), one per application channel key, and support tickets. A support
@@ -40,14 +43,27 @@ class ChatConversation
 
     public const int TOPIC_MAX_LENGTH = 64;
 
+    /** 1.27: prefix of the direct key of a pair of string references. */
+    public const string HASHED_DIRECT_KEY = 'r';
+
     #[ORM\Id]
     #[ORM\GeneratedValue]
     #[ORM\Column]
     private ?int $id = null;
 
-    /** Direct only: "<lower user id>:<higher user id>". */
+    /** Direct only: "<lower user id>:<higher user id>", or (1.27, string references) `r` + 40 hex digits of the pair's hash. */
     #[ORM\Column(name: 'direct_key', length: 41, nullable: true)]
     private ?string $directKey = null;
+
+    /**
+     * 1.27, direct only, string user references (ChatUserReferenceInterface): the two references, lower first (byte
+     * order). Mapped by UserReferenceListener in `doctrine.user_reference: id` mode only (columns `direct_user_low` /
+     * `direct_user_high`); null for integer pairs, whose ids are in `directKey`.
+     */
+    private ?string $directUserLow = null;
+
+    /** 1.27: see `directUserLow`. */
+    private ?string $directUserHigh = null;
 
     /** Channel only: the application key (ChatChannelProviderInterface), e.g. `project:<uuid>`. */
     #[ORM\Column(name: 'channel_key', length: self::CHANNEL_KEY_MAX_LENGTH, nullable: true)]
@@ -133,6 +149,11 @@ class ChatConversation
     {
         $conversation            = new self(ConversationKind::Direct, $createdAt);
         $conversation->directKey = self::directKeyFor($a, $b);
+        if (str_starts_with($conversation->directKey, self::HASHED_DIRECT_KEY)) {
+            $keys = [(string) ChatUserReferences::key($a), (string) ChatUserReferences::key($b)];
+            sort($keys, SORT_STRING);
+            [$conversation->directUserLow, $conversation->directUserHigh] = $keys;
+        }
 
         return $conversation;
     }
@@ -175,24 +196,33 @@ class ChatConversation
     }
 
     /**
-     * Order-independent key of a user pair; both users must be persisted.
+     * Order-independent key of a user pair; both users must be persisted. Two users with integer ids give
+     * `<lower id>:<higher id>` (as before 1.27); 1.27: when either implements ChatUserReferenceInterface (string
+     * references, `doctrine.user_reference: id`), `r` followed by 40 hex digits of the SHA-256 of both references (byte
+     * order, NUL separated), which fits the same column.
      *
      * @param ChatUserInterface $a One person
      * @param ChatUserInterface $b The other person
      *
      * @throws LogicException When the users are the same or not persisted
      *
-     * @return string `<lower id>:<higher id>`
+     * @return string The pair key
      */
     public static function directKeyFor(ChatUserInterface $a, ChatUserInterface $b): string
     {
-        $ids = [$a->getId(), $b->getId()];
-        if ($ids[0] === null || $ids[1] === null || $ids[0] === $ids[1]) {
+        $keys = [ChatUserReferences::key($a), ChatUserReferences::key($b)];
+        if ($keys[0] === null || $keys[1] === null || $keys[0] === $keys[1]) {
             throw new LogicException('A direct conversation needs two different persisted users.');
         }
-        sort($ids);
+        if (!$a instanceof ChatUserReferenceInterface && !$b instanceof ChatUserReferenceInterface) {
+            $ids = [(int) $a->getId(), (int) $b->getId()];
+            sort($ids);
 
-        return $ids[0] . ':' . $ids[1];
+            return $ids[0] . ':' . $ids[1];
+        }
+        sort($keys, SORT_STRING);
+
+        return self::HASHED_DIRECT_KEY . substr(hash('sha256', $keys[0] . "\0" . $keys[1]), 0, 40);
     }
 
     /**
@@ -256,13 +286,14 @@ class ChatConversation
     }
 
     /**
-     * Direct only: ids of both users.
+     * Direct only: ids of both users (integer pairs; 1.27: empty for a pair of string references, see
+     * directUserKeys()).
      *
      * @return list<int> The two user ids, lower first; empty for other kinds
      */
     public function directUserIds(): array
     {
-        if ($this->directKey === null) {
+        if ($this->directKey === null || $this->directUserLow !== null || str_starts_with($this->directKey, self::HASHED_DIRECT_KEY)) {
             return [];
         }
 
@@ -270,7 +301,22 @@ class ChatConversation
     }
 
     /**
-     * Direct only: whether the user is one of the pair.
+     * 1.27, direct only: the keys of both users (ChatUserReferences::key(): the id as a string, or the string
+     * reference), lower first.
+     *
+     * @return list<string> The two keys; empty for other kinds
+     */
+    public function directUserKeys(): array
+    {
+        if ($this->directUserLow !== null && $this->directUserHigh !== null) {
+            return [$this->directUserLow, $this->directUserHigh];
+        }
+
+        return array_map(strval(...), $this->directUserIds());
+    }
+
+    /**
+     * Direct only: whether the user is one of the pair (keys compared byte for byte).
      *
      * @param ChatUserInterface $user The user to check
      *
@@ -278,13 +324,14 @@ class ChatConversation
      */
     public function involvesDirectly(ChatUserInterface $user): bool
     {
-        $id = $user->getId();
+        $key = ChatUserReferences::key($user);
 
-        return $this->isDirect() && $id !== null && in_array($id, $this->directUserIds(), true);
+        return $this->isDirect() && $key !== null && in_array($key, $this->directUserKeys(), true);
     }
 
     /**
-     * Direct only: the other user's id, null when `$user` is not part of the pair.
+     * Direct only: the other user's id, null when `$user` is not part of the pair (1.27: and for a pair of string
+     * references, see peerKeyOf()).
      *
      * @param ChatUserInterface $user One of the pair
      *
@@ -292,12 +339,26 @@ class ChatConversation
      */
     public function peerIdOf(ChatUserInterface $user): ?int
     {
+        $peer = $this->directUserIds() === [] ? null : $this->peerKeyOf($user);
+
+        return $peer === null ? null : (int) $peer;
+    }
+
+    /**
+     * 1.27, direct only: the other user's key, null when `$user` is not part of the pair.
+     *
+     * @param ChatUserInterface $user One of the pair
+     *
+     * @return string|null The other user's key, or null
+     */
+    public function peerKeyOf(ChatUserInterface $user): ?string
+    {
         if (!$this->involvesDirectly($user)) {
             return null;
         }
-        [$low, $high] = $this->directUserIds();
+        [$low, $high] = $this->directUserKeys();
 
-        return $low === $user->getId() ? $high : $low;
+        return $low === ChatUserReferences::key($user) ? $high : $low;
     }
 
     /**

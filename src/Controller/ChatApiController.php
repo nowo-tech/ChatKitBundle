@@ -14,6 +14,7 @@ use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -154,7 +155,7 @@ final class ChatApiController extends AbstractController
             fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
         ));
         $ids              = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $unread           = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $unread           = $this->messages->countUnreadByConversation((string) ChatUserReferences::key($user), $ids);
         [$closed, $muted] = $this->participantStates($user, $ids);
         $list             = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => isset($closed[(int) $conversation->getId()]) === $archived));
         $ids              = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
@@ -163,7 +164,7 @@ final class ChatApiController extends AbstractController
         // their presence and status in one cache round trip (the custom text shows even to viewers who hide presence).
         $peerIds = [];
         foreach ($list as $conversation) {
-            $peerIds = [...$peerIds, ...$conversation->directUserIds()];
+            $peerIds = [...$peerIds, ...$conversation->directUserKeys()];
         }
         $peers    = $this->access->usersByIds(array_values(array_unique($peerIds)));
         $presence = $this->presence->statusOf(array_values($peers));
@@ -171,7 +172,7 @@ final class ChatApiController extends AbstractController
         $isAgent = $this->access->isSupportAgent($user);
         $people  = [];
         foreach ($list as $conversation) {
-            $peerId   = $conversation->peerIdOf($user);
+            $peerId   = $conversation->peerKeyOf($user);
             $people[] = $this->presenter->avatarPerson($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $isAgent);
         }
         $this->presenter->primeAvatars($people);
@@ -179,7 +180,7 @@ final class ChatApiController extends AbstractController
         $rows = [];
         foreach ($list as $conversation) {
             $id     = (int) $conversation->getId();
-            $peerId = $conversation->peerIdOf($user);
+            $peerId = $conversation->peerKeyOf($user);
             $rows[] = ['archived' => $archived] + $this->present($conversation, $user, $peerId === null ? null : ($peers[$peerId] ?? null), $unread[$id] ?? 0, $latest[$id] ?? null, $presence)
                 + ['mutedUntil' => isset($muted[$id]) ? $muted[$id]->format(DATE_ATOM) : null];
         }
@@ -276,7 +277,7 @@ final class ChatApiController extends AbstractController
             fn (ChatConversation $conversation): bool => $this->access->canView($conversation, $user),
         ));
         $ids      = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $list);
-        $unread   = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $unread   = $this->messages->countUnreadByConversation((string) ChatUserReferences::key($user), $ids);
         [$closed] = $this->participantStates($user, $ids);
         $read     = array_values(array_filter($list, static fn (ChatConversation $conversation): bool => ($unread[(int) $conversation->getId()] ?? 0) === 0 && !isset($closed[(int) $conversation->getId()])));
         $this->chat->archive($user, $read, true);
@@ -585,7 +586,7 @@ final class ChatApiController extends AbstractController
             $conversation,
             $user,
             $this->access->directPeer($conversation, $user),
-            $this->messages->countUnreadByConversation((int) $user->getId(), [$id])[$id] ?? 0,
+            $this->messages->countUnreadByConversation((string) ChatUserReferences::key($user), [$id])[$id] ?? 0,
             $this->messages->findLatest($conversation),
         ) + ['mutedUntil' => $mutedUntil instanceof DateTimeImmutable && $mutedUntil > $this->clock->now() ? $mutedUntil->format(DATE_ATOM) : null]]);
     }
@@ -676,7 +677,7 @@ final class ChatApiController extends AbstractController
         $query        = mb_strtolower(mb_substr(trim((string) $request->query->get('q', '')), 0, 80));
         $members      = array_values(array_filter(
             $this->recipients->of($conversation),
-            static fn (ChatUserInterface $member): bool => $member->getId() !== $user->getId()
+            static fn (ChatUserInterface $member): bool => !ChatUserReferences::same($member, $user)
                 && ($query === '' || str_contains(mb_strtolower($member->getChatDisplayName()), $query)),
         ));
         usort($members, static fn (ChatUserInterface $a, ChatUserInterface $b): int => strnatcasecmp($a->getChatDisplayName(), $b->getChatDisplayName()));
@@ -1243,7 +1244,7 @@ final class ChatApiController extends AbstractController
     /** Whether the user is the requester of the support conversation. */
     private function owns(ChatConversation $conversation, ChatUserInterface $user): bool
     {
-        return $conversation->isSupport() && $conversation->getSupportOwner()?->getId() === $user->getId();
+        return $conversation->isSupport() && ChatUserReferences::same($conversation->getSupportOwner(), $user);
     }
 
     /** A support conversation the caller may view (anything else → 404). */
@@ -1303,7 +1304,7 @@ final class ChatApiController extends AbstractController
     {
         $peerIds = $this->conversations->findDirectPeerIds($user);
 
-        return array_values(array_filter($peerIds === [] ? [] : $this->directory->findByIds($peerIds), $this->access->isReachable(...)));
+        return array_values(array_filter($peerIds === [] ? [] : $this->access->usersByIds($peerIds), $this->access->isReachable(...)));
     }
 
     /** Reciprocal: hiding your own presence also hides everyone else's. */
@@ -1322,12 +1323,12 @@ final class ChatApiController extends AbstractController
     {
         $allowed = [];
         foreach ($this->recipients->of($conversation) as $recipient) {
-            $allowed[(int) $recipient->getId()] = true;
+            $allowed[(string) ChatUserReferences::key($recipient)] = true;
         }
 
         return array_values(array_filter(
             $this->participants->findReaders($conversation, $user),
-            static fn (ChatParticipant $participant): bool => isset($allowed[(int) $participant->getUser()->getId()]),
+            static fn (ChatParticipant $participant): bool => isset($allowed[(string) ChatUserReferences::key($participant->getUser())]),
         ));
     }
 

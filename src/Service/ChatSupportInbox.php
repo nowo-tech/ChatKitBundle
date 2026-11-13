@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Service;
 
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
@@ -70,12 +71,12 @@ final readonly class ChatSupportInbox
         // 1.16: the requesters' pictures in one resolver call (only threads the agent sees).
         $this->presenter->primeAvatars(array_map(fn (ChatConversation $conversation): ?ChatUserInterface => $this->presenter->avatarPerson($conversation, $agent, null, true), $threads));
         $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $threads);
-        $unread = $this->messages->countUnreadByConversation((int) $agent->getId(), $ids);
+        $unread = $this->messages->countUnreadByConversation((string) ChatUserReferences::key($agent), $ids);
         $latest = $this->messages->findLatestByConversationIds($ids);
-        $counts = $this->conversations->countTicketsByOwner(array_values(array_unique(array_map(
-            static fn (ChatConversation $conversation): int => (int) $conversation->getSupportOwner()?->getId(),
+        $counts = $this->conversations->countTicketsByOwner(array_values(array_unique(array_filter(array_map(
+            static fn (ChatConversation $conversation): string => (string) ($conversation->getSupportOwner() instanceof ChatUserInterface ? ChatUserReferences::key($conversation->getSupportOwner()) : ''),
             $threads,
-        ))));
+        ), static fn (string $key): bool => $key !== ''))));
 
         return array_map(function (ChatConversation $conversation) use ($agent, $unread, $latest, $counts): array {
             $id    = (int) $conversation->getId();
@@ -83,7 +84,7 @@ final readonly class ChatSupportInbox
 
             return $this->presenter->conversation($conversation, $agent, null, null, true, $unread[$id] ?? 0, $latest[$id] ?? null, true) + [
                 'owner'        => $owner instanceof ChatUserInterface ? ['uuid' => $owner->getChatPublicId(), 'name' => $owner->getChatDisplayName(), 'email' => $owner->getChatEmail()] : null,
-                'ownerTickets' => $counts[(int) $owner?->getId()] ?? 0,
+                'ownerTickets' => $counts[$owner instanceof ChatUserInterface ? (string) ChatUserReferences::key($owner) : ''] ?? 0,
             ];
         }, $threads);
     }

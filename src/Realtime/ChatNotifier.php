@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Realtime;
 
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -53,13 +54,13 @@ final readonly class ChatNotifier
         }
         $others = array_values(array_filter(
             $this->recipients->of($message->getConversation()),
-            static fn (ChatUserInterface $user): bool => $user->getId() !== $message->getAuthor()?->getId(),
+            static fn (ChatUserInterface $user): bool => !ChatUserReferences::same($user, $message->getAuthor()),
         ));
         $this->digest?->schedule($others);
         if (!$this->pushEnabled) {
             return;
         }
-        $others = array_map(static fn (ChatUserInterface $user): int => (int) $user->getId(), $others);
+        $others = array_map(static fn (ChatUserInterface $user): int|string => ChatUserReferences::idOrKey((string) ChatUserReferences::key($user)), $others);
         if ($others === []) {
             return;
         }
@@ -118,7 +119,7 @@ final readonly class ChatNotifier
             'userName'         => $typist->getChatDisplayName(),
         ], array_values(array_filter(
             $this->recipients->of($conversation),
-            static fn (ChatUserInterface $user): bool => $user->getId() !== $typist->getId(),
+            static fn (ChatUserInterface $user): bool => !ChatUserReferences::same($user, $typist),
         )));
     }
 
