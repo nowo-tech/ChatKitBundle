@@ -15,7 +15,6 @@ use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Core\Authorization\Voter\Vote;
 use Symfony\Component\Security\Core\Authorization\Voter\Voter;
 
-use function assert;
 use function in_array;
 
 /**
@@ -88,8 +87,6 @@ final class ChatVoter extends Voter
         if ($subject instanceof ChatMessage) {
             return $this->voteOnMessage($attribute, $subject, $user);
         }
-
-        assert($subject instanceof ChatConversation);
 
         return match ($attribute) {
             self::VIEW     => $this->canView($subject, $user),
