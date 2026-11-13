@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.26.4](#to-1264)
   - [Exact channel keys (house rule LQ)](#exact-channel-keys-house-rule-lq)
 - [To 1.26.3](#to-1263)
 - [To 1.26.2](#to-1262)
@@ -64,6 +65,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.26.4
+
+From **1.26.3**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 ### Exact channel keys (house rule LQ)
 
