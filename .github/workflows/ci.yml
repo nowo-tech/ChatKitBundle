@@ -269,8 +269,9 @@ jobs:
         run: composer cs-check
 
   # GZ-M1: the channel row is written through DBAL, so it needs real databases and both id strategies and DBAL versions.
+  # House rule LQ: ChatChannelLookalikeTest proves look-alike channel keys stay apart on the same databases.
   database:
-    name: Channel race (${{ matrix.name }})
+    name: Channel race and look-alike keys (${{ matrix.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -281,6 +282,8 @@ jobs:
           - { name: 'Postgres 17 sequence, DBAL 4', url: 'postgresql://postgres:ci-not-secret@127.0.0.1:5432/race?serverVersion=17&charset=utf8', generation: 'sequence', dbal: '' }
           - { name: 'MySQL 8.4, DBAL 3', url: 'mysql://root:ci-not-secret@127.0.0.1:3306/race?serverVersion=8.4.0&charset=utf8mb4', generation: '', dbal: '^3.8.2' }
           - { name: 'Postgres 17 default, DBAL 3', url: 'postgresql://postgres:ci-not-secret@127.0.0.1:5432/race?serverVersion=17&charset=utf8', generation: '', dbal: '^3.8.2' }
+          - { name: 'MariaDB 11.4, DBAL 4', url: 'mysql://root:ci-not-secret@127.0.0.1:3307/race?serverVersion=11.4.0-MariaDB&charset=utf8mb4', generation: '', dbal: '' }
+          - { name: 'MariaDB 11.4, DBAL 3', url: 'mysql://root:ci-not-secret@127.0.0.1:3307/race?serverVersion=11.4.0-MariaDB&charset=utf8mb4', generation: '', dbal: '^3.8.2' }
     services:
       mysql:
         image: mysql:8.4
@@ -290,6 +293,15 @@ jobs:
         ports: ['3306:3306']
         options: >-
           --health-cmd "mysqladmin ping -h127.0.0.1 -uroot -pci-not-secret --silent"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: ci-not-secret
+          MARIADB_DATABASE: race
+        ports: ['3307:3306']
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
           --health-interval 5s --health-timeout 5s --health-retries 30
       postgres:
         image: postgres:17-alpine
@@ -321,12 +333,12 @@ jobs:
         if: ${{ matrix.dbal != '' }}
         run: composer require --dev --no-interaction --no-progress --with-all-dependencies "doctrine/dbal:${{ matrix.dbal }}"
 
-      - name: Run the race tests
+      - name: Run the race and look-alike key tests
         timeout-minutes: 10
         env:
           CHAT_KIT_RACE_DATABASE_URL: ${{ matrix.url }}
           CHAT_KIT_RACE_ID_GENERATION: ${{ matrix.generation }}
-        run: vendor/bin/phpunit --no-coverage --fail-on-skipped --filter ChatChannelRaceTest
+        run: vendor/bin/phpunit --no-coverage --fail-on-skipped --filter 'ChatChannelRaceTest|ChatChannelLookalikeTest'
 
   coverage:
     name: Code Coverage

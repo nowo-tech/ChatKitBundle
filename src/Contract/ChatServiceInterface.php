@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Contract;
 
 use DateTimeImmutable;
 use InvalidArgumentException;
+use LogicException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -40,6 +41,8 @@ interface ChatServiceInterface
      * @param ChatChannel $channel The application channel
      *
      * @throws ChatChannelDeniedException When a listener refuses to create it; nothing is written
+     * @throws LogicException When the channel key breaks the ChatChannelKey format rule (no padding or control
+     *                        characters); nothing is written
      *
      * @return ChatConversation The channel conversation
      */

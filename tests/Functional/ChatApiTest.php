@@ -174,6 +174,11 @@ final class ChatApiTest extends DatabaseTestCase
         self::assertSame('#Acme', $channel['title']);
         $this->postJson('/chat/api/channel', ['channelKey' => 'project:unknown'], $csrf);
         $this->assertStatus(404);
+        // House rule LQ: a look-alike of a usable key (padding, control or format characters) is an unknown channel.
+        foreach ([TestChannelProvider::KEY . ' ', ' ' . TestChannelProvider::KEY, TestChannelProvider::KEY . "\u{200B}"] as $lookAlike) {
+            $this->postJson('/chat/api/channel', ['channelKey' => $lookAlike], $csrf);
+            $this->assertStatus(404, $lookAlike);
+        }
         $this->postJson('/chat/api/conversations/' . $channel['uuid'] . '/messages', ['body' => 'Release today'], $csrf);
         $this->postJson('/chat/api/conversations/' . $channel['uuid'] . '/buzz', [], $csrf);
         $this->assertStatus(422);

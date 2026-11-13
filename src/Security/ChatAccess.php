@@ -14,6 +14,7 @@ use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
 use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Model\ChatChannelKey;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -97,10 +98,12 @@ final class ChatAccess implements ResetInterface
         if ($conversation->isSupport()) {
             return $this->isSupportAgent($user);
         }
-        $channel = $this->channel((string) $conversation->getChannelKey());
+        // The stored key, never the one the provider echoes back: channel() only returns a channel whose key is it.
+        $key     = (string) $conversation->getChannelKey();
+        $channel = $this->channel($key);
 
-        return $this->policy instanceof ChatPinPolicyInterface && $channel instanceof ChatChannel && $this->canWriteChannel($user, $channel->key)
-            && $this->policy->canPinInChannel($user, $channel);
+        return $this->policy instanceof ChatPinPolicyInterface && $channel instanceof ChatChannel && $channel->key === $key
+            && $this->canWriteChannel($user, $key) && $this->policy->canPinInChannel($user, $channel);
     }
 
     /**
@@ -127,15 +130,16 @@ final class ChatAccess implements ResetInterface
             return $this->isSupportAgent($user);
         }
         // 1.24: nobody changes the links of a read-only channel.
-        if (!$this->canWriteChannel($user, (string) $conversation->getChannelKey())) {
+        $key = (string) $conversation->getChannelKey();
+        if (!$this->canWriteChannel($user, $key)) {
             return false;
         }
         if ($channelMembers) {
             return true;
         }
-        $channel = $this->channel((string) $conversation->getChannelKey());
-        if (!$channel instanceof ChatChannel) {
-            // The provider no longer knows it (it changed between the calls): deny.
+        $channel = $this->channel($key);
+        if (!$channel instanceof ChatChannel || $channel->key !== $key) {
+            // The provider no longer knows it (it changed between the calls) or answered with a look-alike: deny.
             return false;
         }
         if ($this->policy instanceof ChatLinkPolicyInterface) {
@@ -199,7 +203,11 @@ final class ChatAccess implements ResetInterface
     }
 
     /**
-     * Looks a channel up by key through the provider (memoized for the request).
+     * Looks a channel up by key through the provider (memoized for the request). A key that breaks the ChatChannelKey
+     * format rule (whitespace at either end, control or format characters, over 120 bytes) is unknown without asking
+     * the provider, and so is a channel the provider returns with such a key or with any key other than the one asked
+     * for, byte for byte (a provider that folds case, accents or padding must not hand back a look-alike channel; house
+     * rule LQ: fail closed).
      *
      * @param string $key Channel key
      *
@@ -207,9 +215,12 @@ final class ChatAccess implements ResetInterface
      */
     public function channel(string $key): ?ChatChannel
     {
+        if (!ChatChannelKey::isValid($key)) {
+            return null;
+        }
         $channel = $this->memo('channel:' . $key, fn (): ChatChannel|false => $this->channelProvider->find($key) ?? false);
 
-        return $channel instanceof ChatChannel ? $channel : null;
+        return $channel instanceof ChatChannel && $channel->key === $key && ChatChannelKey::isValid($channel->key) ? $channel : null;
     }
 
     /**

@@ -10,6 +10,7 @@ use LogicException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
+use Nowo\ChatKitBundle\Model\ChatChannelKey;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 
@@ -139,18 +140,16 @@ class ChatConversation
     /**
      * Creates the conversation of an application channel.
      *
-     * @param string $key Channel key (1–120 characters)
+     * @param string $key Channel key (ChatChannelKey: 1–120 bytes, no padding or control characters)
      * @param DateTimeImmutable|null $createdAt Creation time; null for now
      *
-     * @throws LogicException When the key is empty or too long
+     * @throws LogicException When the key breaks the ChatChannelKey format rule
      *
      * @return self The new, unpersisted conversation
      */
     public static function channel(string $key, ?DateTimeImmutable $createdAt = null): self
     {
-        if ($key === '' || strlen($key) > self::CHANNEL_KEY_MAX_LENGTH) {
-            throw new LogicException('A channel key must be 1–120 characters.');
-        }
+        ChatChannelKey::assertValid($key);
         $conversation             = new self(ConversationKind::Channel, $createdAt);
         $conversation->channelKey = $key;
 

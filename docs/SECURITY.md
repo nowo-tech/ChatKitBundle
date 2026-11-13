@@ -137,6 +137,28 @@ dependencies current. Security fixes are released as patch versions of the suppo
 | Findings | CHAT-SEC-01 (Medium) revoked-access previews → **fixed** (`ChatAccess::canView()` on lists and digest); CHAT-SEC-02 (Medium) outdated security doc → **fixed** (this document); CHAT-SEC-03 (Low) push body text → **fixed** (`push_preview`, default off); CHAT-SEC-04 (Low) off-site support context → **fixed** (root-relative paths only, label sanitised); CHAT-SEC-05 (Low) 30 s recipient cache → **mitigated** (`ChatRecipients::forget()`, documented); CHAT-SEC-10 (Info) storage after session timeout → **fixed** (cleared on 401); CHAT-SEC-06 / 07 / 08 / 09 (Info) → documented above as host responsibilities / accepted |
 | Recorded in | `BUNDLES_SECURITY_ANALYSIS.md` (monorepo security report) |
 
+### Look-alike channel keys (house rule LQ)
+
+Affected: **1.0.0 to 1.26.3** (fixed in the next release), on **MySQL and MariaDB** only, when the host's
+`ChatChannelProviderInterface` uses channel keys that differ only in case or accents (any default `*_ai_ci` /
+`*_unicode_ci` / `*_general_ci` collation: MySQL 8.0 / 8.4 `utf8mb4_0900_ai_ci`, MariaDB 11 `utf8mb4_uca1400_ai_ci`) or
+only in trailing spaces (PAD SPACE collations: MariaDB's defaults, MySQL `utf8mb4_unicode_ci` / `utf8mb4_general_ci`,
+for example through a `default_table_options` collation). PostgreSQL and SQLite were never affected, nor were keys that
+cannot collide (`project:<uuid>` with canonical lowercase UUIDs). Severity **Low**: the keys come from the host, not
+from end users, and message access never depended on it.
+
+Impact: the first of two look-alike channels to be opened took the conversation; members of the other channel were
+handed it by `openChannel()` (a participant row and the conversation summary with the other channel's label, subtitle,
+icon and last activity time) and their own channel could never be created. They could not read or post its messages:
+`ChatAccess::canView()`, the voter, realtime recipients, push and digest all check the provider for the stored key.
+
+Fix: `===` re-check in `ChatConversationRepository::findChannel()` / `findListForUser()` and in the mention inbox
+queries; the `ChatChannelKey` rule refuses (never normalises) padded keys and control or format characters at
+`ChatAccess::channel()`, `ChatService::openChannel()` and `ChatConversation::channel()`; `ChannelKeyCollationListener`
+maps `channel_key` to `utf8mb4_0900_bin` (MySQL 8.0+), `utf8mb4_nopad_bin` (MariaDB) or `utf8mb4_bin` (MySQL 5.7). Hosts
+run the `ALTER TABLE` in [UPGRADING.md](UPGRADING.md#exact-channel-keys-house-rule-lq). Proven on MySQL 8.4 and
+MariaDB 11.8 by `ChatChannelLookalikeTest`.
+
 ### Motion batch (Appendix HW, 2026-11-07)
 
 Batch audit Appendix HW (2026-11-07), at `e212d9d`: Pass (good). No token or draft lost. HW-L5 and HW-L6 fixed at `0a68345`; delta audit: **Pass (good)**.
