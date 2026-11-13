@@ -64,6 +64,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **A folding user column refuses the write instead of the read (`doctrine.user_reference: string`).** The schema
+  guard checks the collation of the user columns once and keeps the pass, so a column altered or a migration rolled
+  back afterwards lets a read by user come back with a look-alike's row (`Bob`'s row for `bob`). Such a row was
+  dropped silently; it is now reported, once per user key and request, as a PSR-3 warning naming the column and both
+  references, and the write that would follow the read is refused:
+
+  - the reads keep degrading exactly as before — `ChatUserSettingsRepository::forUser()` returns unsaved defaults
+    (it runs from `ChatDockExtension::config()` on every page of the host and inside `ChatPersonalData::erase()`),
+    `ChatParticipantRepository::findOneFor()` and `ChatReactionRepository::findOneFor()` return null, and
+    `ChatUserSettingsRepository::forUsers()` now reports the rows it drops instead of ignoring them silently;
+  - `ChatService::participant()`, `ChatService::toggleReaction()` and `ChatUserSettingsRepository::save()` throw a
+    `LogicException` before `persist()`, where the insert would otherwise hit the look-alike's unique key inside the
+    flush and close the host `EntityManager` (which, under FrankenPHP with `kernel.reset` false, stays closed);
+  - `ChatAutoReplier` skips the automatic reply for that user instead of raising: it runs inside
+    `ChatService::send()`, after the message was flushed, and the person who sent it must not get an error.
+
+  Nothing changes in `relation` or `id` mode, nor while the user columns compare byte for byte.
+
 ## [1.27.0] - 2026-11-13
 
 Target 1.27.0 (minor; REQ-ARCH-001, with REQ-RUNTIME-002 and REQ-SEC-006 kept). Every change is additive: with an

@@ -71,6 +71,20 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Only `doctrine.user_reference: string`, and only on a database whose user columns fold although the schema check
+passed (a column altered, or a migration rolled back, after the first chat query of the process).
+
+A read by user that comes back with a look-alike's row still ignores it and degrades — unsaved defaults from
+`ChatUserSettingsRepository::forUser()`, null from the `findOneFor()` of the participant and reaction repositories —
+and now logs a PSR-3 **warning** naming the column and both references, once per user key and request. New: the write
+that would follow such a read throws a `LogicException` before `persist()`
+(`ChatService::participant()`, `ChatService::toggleReaction()`, `ChatUserSettingsRepository::save()`), because that
+insert would hit the look-alike's unique key inside the flush and close the host entity manager. `ChatAutoReplier`
+catches it and skips the automatic reply, so sending a message never fails for this.
+
+If those warnings appear, run the `ALTER TABLE` of ["String user references"](#to-1270) again: the chat is reading
+and writing on columns that treat `bob`, `Bob` and `bob ` as one person.
+
 ## To 1.27.0
 
 From **1.26.4**:

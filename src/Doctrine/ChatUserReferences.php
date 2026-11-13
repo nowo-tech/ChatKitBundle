@@ -119,6 +119,41 @@ final readonly class ChatUserReferences
         $this->guarded();
     }
 
+    /**
+     * 1.28: a read by user came back with another person's row, which only a folding user column can do. The caller
+     * ignores the row and degrades (null, or unsaved defaults); this warns once per user key in the request, and
+     * assertNoLookAlike() then refuses a write for the same user. Nothing outside `string` mode.
+     *
+     * @param string $where The column the row came from (`nowo_chat_participant.user_id`)
+     * @param ChatUserInterface $asked The user whose row was asked for
+     * @param ChatUserInterface|null $found The user whose row came back, when it is known
+     */
+    public function reportLookAlike(string $where, ChatUserInterface $asked, ?ChatUserInterface $found = null): void
+    {
+        $key = $this->isStringMode() ? self::key($asked) : null;
+        if ($key === null) {
+            return;
+        }
+        $this->guard?->sawLookAlike($where, $key, $found instanceof ChatUserInterface ? self::key($found) : null);
+    }
+
+    /**
+     * 1.28: fails closed right before a chat row is inserted for a user whose look-alike the same request already
+     * found. Without it the insert clashes with the look-alike's unique key inside the flush, which closes the entity
+     * manager. Nothing outside `string` mode, and nothing until a look-alike was actually seen.
+     *
+     * @param ChatUserInterface $user The user the row is written for
+     *
+     * @throws LogicException When a look-alike row was seen for this user in this request
+     */
+    public function assertNoLookAlike(ChatUserInterface $user): void
+    {
+        $key = $this->isStringMode() ? self::key($user) : null;
+        if ($key !== null) {
+            $this->guard?->assertNoLookAlike($key);
+        }
+    }
+
     private function guarded(): void
     {
         if ($this->isStringMode()) {

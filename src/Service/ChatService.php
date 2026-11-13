@@ -289,6 +289,8 @@ final readonly class ChatService implements ChatServiceInterface
         if ($existing instanceof ChatReaction) {
             $this->entityManager->remove($existing);
         } else {
+            // 1.28: refused before the insert when the read found a look-alike's reaction (folding user column).
+            $this->reactionRepository->assertInsertable($user);
             $this->entityManager->persist(new ChatReaction($message, $user, $emoji, $this->clock->now()));
         }
         $this->entityManager->flush();
@@ -363,6 +365,8 @@ final readonly class ChatService implements ChatServiceInterface
     {
         $participant = $this->participants->findOneFor($conversation, $user);
         if (!$participant instanceof ChatParticipant) {
+            // 1.28: refused before the insert when the read found a look-alike's row (folding user column).
+            $this->participants->assertInsertable($user);
             $participant = new ChatParticipant($conversation, $user, $this->clock->now());
             $this->entityManager->persist($participant);
         }
