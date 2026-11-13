@@ -97,8 +97,13 @@ This guide lists the changes integrators must apply when upgrading between versi
 
    ```sql
    SELECT id, uuid, HEX(channel_key) FROM nowo_chat_conversation
-   WHERE channel_key IS NOT NULL AND (channel_key <> TRIM(channel_key) OR channel_key REGEXP '[[:cntrl:]]');
+   WHERE channel_key IS NOT NULL
+     AND (CAST(channel_key AS BINARY) <> CAST(TRIM(channel_key) AS BINARY) OR channel_key REGEXP '[[:cntrl:]]');
    ```
+
+   The comparison is done on bytes because a PAD SPACE collation (MariaDB's default `utf8mb4_uca1400_ai_ci`,
+   `utf8mb4_unicode_ci`, `utf8mb4_general_ci`) calls `team:ops ` and `team:ops` equal, so a plain
+   `channel_key <> TRIM(channel_key)` misses every key with trailing spaces there.
 
    Participant rows that members of the other channel received in it grant nothing (`ChatAccess::canView()` checks
    the provider for the stored key); remove them if you want their unread counters gone:

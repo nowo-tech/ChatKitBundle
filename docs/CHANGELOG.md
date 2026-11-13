@@ -81,13 +81,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - a new `ChatChannelKey` format rule: 1–120 bytes of UTF-8, no whitespace at either end, no control, format,
     surrogate, private-use, line or paragraph separator character. `ChatAccess::channel()` treats a key that breaks it
     as unknown without asking the provider (the API answers 404), and `ChatService::openChannel()` /
-    `ChatConversation::channel()` throw a `LogicException` with nothing written. Keys are refused, never normalised;
+    `ChatConversation::channel()` throw a `LogicException` with nothing written. Keys are refused, never normalised.
+    A channel that `ChatChannelProviderInterface::find($key)` returns with any key other than `$key`, byte for byte (a
+    provider that folds case, accents or Unicode forms), is unknown too, so reading, writing, pinning and managing links
+    fail closed instead of going through the look-alike channel;
   - a new `ChannelKeyCollationListener` gives `channel_key` a binary NO PAD collation in the generated schema:
     `utf8mb4_0900_bin` on MySQL 8.0+, `utf8mb4_nopad_bin` on MariaDB, `utf8mb4_bin` on MySQL 5.7. Existing tables need
     the `ALTER TABLE` in [UPGRADING.md](UPGRADING.md#unreleased); until then a look-alike of an open channel fails
     with a unique-key error instead of opening the other conversation.
 
-  Regression tests: `ChatChannelKeyTest`, `ChannelKeyCollationListenerTest`, `ChatServiceTest`, `ChatApiTest` and
+  Regression tests: `ChatChannelKeyTest`, `ChannelKeyCollationListenerTest`, `ChatAccessLookAlikeChannelTest`,
+  `ChatServiceTest`, `ChatApiTest` and
   `ChatChannelLookalikeTest` (real MySQL / MariaDB / PostgreSQL in the CI `database` job, including a table still on
   `utf8mb4_unicode_ci`).
 
