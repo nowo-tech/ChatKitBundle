@@ -8,6 +8,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
@@ -262,7 +263,7 @@ final readonly class ChatSupportTickets
         if ($assignee instanceof ChatUserInterface && !$this->access->isSupportAgent($assignee)) {
             throw new InvalidArgumentException('assignee');
         }
-        if ($ticket->getAssignee()?->getId() === $assignee?->getId()) {
+        if ($ticket->getAssignee() === $assignee || ChatUserReferences::same($ticket->getAssignee(), $assignee)) {
             return false;
         }
         $ticket->assign($assignee);

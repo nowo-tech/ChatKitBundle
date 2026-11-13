@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Doctrine;
 
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Model\ChatUserReferenceInterface;
 use SensitiveParameter;
 
 /**
@@ -15,7 +16,7 @@ use SensitiveParameter;
  * the former user id cannot be recovered by hashing candidate ids. Call ChatPersonalData::erase() when you delete an
  * account so these rows do not stay behind.
  */
-final readonly class UnresolvedChatUser implements ChatUserInterface
+final readonly class UnresolvedChatUser implements ChatUserInterface, ChatUserReferenceInterface
 {
     /**
      * @param string $reference The stored reference (the former user's id)
@@ -36,6 +37,16 @@ final readonly class UnresolvedChatUser implements ChatUserInterface
     public function getId(): ?int
     {
         return ctype_digit($this->reference) ? (int) $this->reference : null;
+    }
+
+    /**
+     * 1.27: the stored reference, so the rows of a gone user still compare by exactly what they hold.
+     *
+     * @return string The reference
+     */
+    public function getChatUserReference(): string
+    {
+        return $this->reference;
     }
 
     /**

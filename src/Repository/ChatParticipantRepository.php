@@ -63,7 +63,7 @@ class ChatParticipantRepository extends ServiceEntityRepository
      * @param ChatConversation $conversation The conversation
      * @param DateTimeImmutable $now Current time
      *
-     * @return list<int> User ids
+     * @return list<int|string> User ids (1.27: or string references, ChatUserReferences::idOrKey())
      */
     public function mutedUserIds(ChatConversation $conversation, DateTimeImmutable $now): array
     {
@@ -75,7 +75,7 @@ class ChatParticipantRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleColumnResult();
 
-        return array_values(array_map(intval(...), $ids));
+        return array_values(array_map(ChatUserReferences::idOrKey(...), $ids));
     }
 
     /**
@@ -88,14 +88,17 @@ class ChatParticipantRepository extends ServiceEntityRepository
      */
     public function findOneFor(ChatConversation $conversation, ChatUserInterface $user): ?ChatParticipant
     {
-        return $this->findOneBy(['conversation' => $conversation] + $this->refs->criteria('user', $user));
+        $row = $this->findOneBy(['conversation' => $conversation] + $this->refs->criteria('user', $user));
+
+        // REQ-SEC-006 item 2: exactly this user's row (a folding collation may return a look-alike's).
+        return $row instanceof ChatParticipant && ChatUserReferences::same($row->getUser(), $user) ? $row : null;
     }
 
     /**
      * 1.24: the participant rows of these users in the conversation (both `doctrine.user_reference` modes).
      *
      * @param ChatConversation $conversation The conversation
-     * @param list<int> $userIds User ids
+     * @param list<int|string> $userIds User keys
      *
      * @return list<ChatParticipant> The rows
      */

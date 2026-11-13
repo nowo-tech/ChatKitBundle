@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Realtime;
 
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Psr\Cache\CacheItemPoolInterface;
@@ -95,7 +96,7 @@ final readonly class ChatPresence
         $status   = [];
         foreach ($this->cache->getItems(array_keys($byKey)) as $key => $item) {
             $user        = $byKey[$key];
-            $preferences = $settings[(int) $user->getId()];
+            $preferences = $settings[(string) ChatUserReferences::key($user)];
             $state       = $item->isHit() ? $item->get() : null;
             $seen        = is_array($state) && is_int($state['seen'] ?? null) ? $state['seen'] : null;
             $visible     = is_array($state) && is_int($state['visible'] ?? null) ? $state['visible'] : null;

@@ -188,7 +188,7 @@ final class ChatMentionsTest extends DatabaseTestCase
     }
 
     /**
-     * @return list<int>
+     * @return list<int|string>
      */
     private function mentionedIds(ChatMessage $message): array
     {

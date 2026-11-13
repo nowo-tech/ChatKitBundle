@@ -259,7 +259,10 @@ context, not as part of your domain model.
 - 1.24: with **`doctrine.user_reference: id`** the chat tables keep the user id as a string, without foreign keys or
   `resolve_target_entities`: the class implementing `ChatUserInterface` can be a plain object of your infrastructure
   layer, loaded by your `ChatDirectoryInterface::findByIds()` ([CONFIGURATION](CONFIGURATION.md#user-references-124),
-  migration in [UPGRADING](UPGRADING.md#to-1240)).
+  migration in [UPGRADING](UPGRADING.md#to-1240)). 1.27: a user known by a string (UUID, IdP subject) implements
+  `ChatUserReferenceInterface` too, and the directory `ChatUserReferenceDirectoryInterface::findByReferences()`
+  (exact answers only); the references are compared byte for byte (REQ-SEC-006).
+- 1.27: turn on `doctrine.private_entity_manager: true` so the chat never flushes your entity manager.
 - Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case, before the account is deleted
   (in id mode nothing cascades: `erase()` is how the rows go). For an account already gone, call
   `eraseFormerAccount($userId, $publicId, $displayName)` with what you kept of it: the public id scrubs the mention
@@ -336,9 +339,9 @@ final readonly class DirectoryAdapter implements ChatDirectoryInterface
 
 **Known limitations.**
 
-- User ids are integers: `ChatUserInterface::getId(): ?int` and `ChatDirectoryInterface::findByIds(list<int>)` stay
-  (UUID-keyed domain users need an integer surrogate). In id mode the columns are strings already, so a later version
-  can accept other identifiers without another migration.
+- In id mode, users with integer ids go through `ChatDirectoryInterface::findByIds()`; 1.27: users known by a string
+  implement `ChatUserReferenceInterface` and the directory `ChatUserReferenceDirectoryInterface` (no integer surrogate
+  needed; [CONFIGURATION](CONFIGURATION.md#user-references-124)).
 - The default `relation` mode still maps `user_class` through `resolve_target_entities` with foreign keys to your user
   table (choose `doctrine.user_reference: id` to avoid it).
 - `ChatServiceInterface` methods still take and return the bundle's entities; 1.27's `ChatMessagingInterface` is the

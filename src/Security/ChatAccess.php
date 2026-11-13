@@ -11,6 +11,8 @@ use Nowo\ChatKitBundle\Contract\ChatChannelWritePolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
+use Nowo\ChatKitBundle\Contract\ChatUserReferenceDirectoryInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
@@ -22,6 +24,8 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Contracts\Service\ResetInterface;
 
 use function array_key_exists;
+use function in_array;
+use function strlen;
 
 /**
  * The single place that decides reachability, on top of the application's policy and channel provider.
@@ -72,7 +76,7 @@ final class ChatAccess implements ResetInterface
             return $conversation->involvesDirectly($user);
         }
         if ($conversation->isSupport()) {
-            return $conversation->getSupportOwner()?->getId() === $user->getId() || $this->isSupportAgent($user);
+            return ChatUserReferences::same($conversation->getSupportOwner(), $user) || $this->isSupportAgent($user);
         }
 
         return $this->canUseChannel($user, (string) $conversation->getChannelKey());
@@ -160,7 +164,7 @@ final class ChatAccess implements ResetInterface
     public function isReachable(ChatUserInterface $user): bool
     {
         // 1.24: a placeholder for a user the directory no longer knows (`doctrine.user_reference: id`) never is.
-        return $user->getId() !== null && !$user instanceof UnresolvedChatUser && $this->policy->isReachable($user);
+        return ChatUserReferences::key($user) !== null && !$user instanceof UnresolvedChatUser && $this->policy->isReachable($user);
     }
 
     /**
@@ -172,7 +176,7 @@ final class ChatAccess implements ResetInterface
      */
     public function isSupportAgent(ChatUserInterface $user): bool
     {
-        return (bool) $this->memo('agent:' . $user->getId(), fn (): bool => $this->policy->isSupportAgent($user));
+        return (bool) $this->memo('agent:' . $this->memoKey($user), fn (): bool => $this->policy->isSupportAgent($user));
     }
 
     /**
@@ -185,7 +189,7 @@ final class ChatAccess implements ResetInterface
      */
     public function canOpenDirect(ChatUserInterface $actor, ChatUserInterface $other): bool
     {
-        return $this->isReachable($actor) && $this->isReachable($other) && $actor->getId() !== $other->getId()
+        return $this->isReachable($actor) && $this->isReachable($other) && !ChatUserReferences::same($actor, $other)
             && $this->policy->canMessage($actor, $other);
     }
 
@@ -200,7 +204,7 @@ final class ChatAccess implements ResetInterface
     public function canWriteDirect(ChatUserInterface $actor, ChatUserInterface $other): bool
     {
         return $this->canOpenDirect($actor, $other)
-            || ($this->isReachable($actor) && $this->isReachable($other) && $actor->getId() !== $other->getId() && $this->isSupportAgent($other));
+            || ($this->isReachable($actor) && $this->isReachable($other) && !ChatUserReferences::same($actor, $other) && $this->isSupportAgent($other));
     }
 
     /**
@@ -234,7 +238,7 @@ final class ChatAccess implements ResetInterface
      */
     public function canUseChannel(ChatUserInterface $user, string $key): bool
     {
-        return (bool) $this->memo('access:' . $user->getId() . ':' . $key, fn (): bool => $this->isReachable($user)
+        return (bool) $this->memo('access:' . $this->memoKey($user) . ':' . $key, fn (): bool => $this->isReachable($user)
             && ($channel = $this->channel($key)) instanceof ChatChannel
             && $this->channelProvider->canUse($user, $channel));
     }
@@ -251,7 +255,7 @@ final class ChatAccess implements ResetInterface
      */
     public function canWriteChannel(ChatUserInterface $user, string $key): bool
     {
-        return (bool) $this->memo('write:' . $user->getId() . ':' . $key, fn (): bool => $this->canUseChannel($user, $key)
+        return (bool) $this->memo('write:' . $this->memoKey($user) . ':' . $key, fn (): bool => $this->canUseChannel($user, $key)
             && ($channel = $this->channel($key)) instanceof ChatChannel
             && !$channel->readOnly
             && (!($policy = Ports::companion($this->channelProvider)) instanceof ChatChannelWritePolicyInterface || $policy->canWrite($user, $channel)));
@@ -267,39 +271,43 @@ final class ChatAccess implements ResetInterface
      */
     public function directPeer(ChatConversation $conversation, ChatUserInterface $actor): ?ChatUserInterface
     {
-        $peerId = $conversation->peerIdOf($actor);
+        $peer = $conversation->peerKeyOf($actor);
 
-        return $peerId === null ? null : ($this->usersByIds([$peerId])[$peerId] ?? null);
+        return $peer === null ? null : ($this->usersByIds([$peer])[$peer] ?? null);
     }
 
     /**
-     * Users by id through the directory, memoized for the current request: ids already loaded (or known to be
-     * gone) are not queried again, so list endpoints load every peer in one query and the per-row voter checks
-     * (`directPeer()`) hit the memo instead of the directory (no N+1).
+     * Users by key through the directory, memoized for the current request: keys already loaded (or known to be gone)
+     * are not queried again, so list endpoints load every peer in one query and the per-row voter checks
+     * (`directPeer()`) hit the memo instead of the directory (no N+1). 1.27: string references
+     * (ChatUserReferenceInterface) go through ChatUserReferenceDirectoryInterface::findByReferences() when the directory
+     * implements it; integer ids through ChatDirectoryInterface::findByIds(). Every user the directory returns is kept
+     * only when its key is exactly one of the asked keys (REQ-SEC-006 item 4).
      *
-     * @param list<int> $ids User ids
+     * @param list<int|string> $ids User keys (ChatUserReferences::key(); integer ids are accepted too)
      *
-     * @return array<int, ChatUserInterface> id => user; unknown ids are left out
+     * @return array<int|string, ChatUserInterface> key => user; unknown keys are left out
      */
     public function usersByIds(array $ids): array
     {
+        $keys    = array_values(array_unique(array_map(strval(...), $ids)));
         $request = $this->requests?->getMainRequest();
         if (!$request instanceof Request) {
-            return $this->loadUsers($ids);
+            return $this->loadUsers($keys);
         }
         $memo    = $request->attributes->get(self::MEMO, []);
-        $missing = array_values(array_unique(array_filter($ids, static fn (int $id): bool => !array_key_exists('user:' . $id, $memo))));
+        $missing = array_values(array_filter($keys, static fn (string $key): bool => !array_key_exists('user:' . $key, $memo)));
         if ($missing !== []) {
             $loaded = $this->loadUsers($missing);
-            foreach ($missing as $id) {
-                $memo['user:' . $id] = $loaded[$id] ?? false;
+            foreach ($missing as $key) {
+                $memo['user:' . $key] = $loaded[$key] ?? false;
             }
             $request->attributes->set(self::MEMO, $memo);
         }
         $users = [];
-        foreach ($ids as $id) {
-            if ($memo['user:' . $id] instanceof ChatUserInterface) {
-                $users[$id] = $memo['user:' . $id];
+        foreach ($keys as $key) {
+            if ($memo['user:' . $key] instanceof ChatUserInterface) {
+                $users[$key] = $memo['user:' . $key];
             }
         }
 
@@ -307,18 +315,42 @@ final class ChatAccess implements ResetInterface
     }
 
     /**
-     * @param list<int> $ids
+     * @param list<string> $keys
      *
-     * @return array<int, ChatUserInterface>
+     * @return array<int|string, ChatUserInterface>
      */
-    private function loadUsers(array $ids): array
+    private function loadUsers(array $keys): array
     {
-        $users = [];
-        foreach ($ids === [] ? [] : $this->directory->findByIds($ids) as $user) {
-            $users[(int) $user->getId()] = $user;
+        if ($keys === []) {
+            return [];
+        }
+        if ($this->directory instanceof ChatUserReferenceDirectoryInterface) {
+            $found = $this->directory->findByReferences($keys);
+        } else {
+            // Integer ids only: a canonical decimal key (no sign, no leading zero) is an id; anything else is unknown.
+            $ids   = array_values(array_filter($keys, static fn (string $key): bool => preg_match('/\A(?:0|[1-9][0-9]{0,18})\z/D', $key) === 1));
+            $found = $ids === [] ? [] : $this->directory->findByIds(array_map(intval(...), $ids));
+        }
+        $wanted = array_fill_keys($keys, true);
+        $users  = [];
+        foreach ($found as $user) {
+            $key = ChatUserReferences::key($user);
+            if ($key !== null && isset($wanted[$key]) && in_array($key, $keys, true)) {
+                $users[$key] = $user;
+            }
         }
 
         return $users;
+    }
+
+    /**
+     * A memo key part for a user that no other user can share: the key's length, then the key.
+     */
+    private function memoKey(ChatUserInterface $user): string
+    {
+        $key = (string) ChatUserReferences::key($user);
+
+        return strlen($key) . '#' . $key;
     }
 
     /**

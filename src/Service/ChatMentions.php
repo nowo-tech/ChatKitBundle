@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Service;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelMentionPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageMention;
@@ -130,7 +131,7 @@ final readonly class ChatMentions
         $mentioned = [];
         foreach (array_keys($tokens) as $publicId) {
             $member = $members[$publicId] ?? null;
-            if (count($mentioned) < self::MAX_MENTIONS && $member instanceof ChatUserInterface && $member->getId() !== $author->getId()
+            if (count($mentioned) < self::MAX_MENTIONS && $member instanceof ChatUserInterface && !ChatUserReferences::same($member, $author)
                 && $this->access->canView($conversation, $member)) {
                 $mentioned[$publicId] = $member;
             }
@@ -178,7 +179,7 @@ final readonly class ChatMentions
     private function groupMembers(ChatConversation $conversation, ChatUserInterface $author, string $group, array $members): array
     {
         $muted   = array_flip($this->participants?->mutedUserIds($conversation, $this->clock->now()) ?? []);
-        $members = array_filter($members, fn (ChatUserInterface $member): bool => $member->getId() !== $author->getId() && !isset($muted[(int) $member->getId()])
+        $members = array_filter($members, fn (ChatUserInterface $member): bool => !ChatUserReferences::same($member, $author) && !isset($muted[(string) ChatUserReferences::key($member)])
             && $this->access->canView($conversation, $member));
         if ($group === ChatMessage::MENTION_HERE) {
             $online  = $this->presence?->statusOf(array_values($members)) ?? [];
@@ -199,14 +200,14 @@ final readonly class ChatMentions
     public function sync(ChatMessage $message, array $users): array
     {
         $existing = $this->mentions->userIdsOf($message);
-        $keep     = array_map(static fn (ChatUserInterface $user): int => (int) $user->getId(), $users);
+        $keep     = array_map(static fn (ChatUserInterface $user): int|string => ChatUserReferences::idOrKey((string) ChatUserReferences::key($user)), $users);
         if (array_diff($existing, $keep) !== []) {
             // @igor-ignore - a repository DELETE query (database rows), not state held by this service.
             $this->mentions->removeFor($message, $keep);
         }
         $added = [];
         foreach ($users as $user) {
-            if (!in_array((int) $user->getId(), $existing, true)) {
+            if (!in_array(ChatUserReferences::idOrKey((string) ChatUserReferences::key($user)), $existing, true)) {
                 $this->entityManager->persist(new ChatMessageMention($message, $user, $message->getCreatedAt()));
                 $added[] = $user;
             }

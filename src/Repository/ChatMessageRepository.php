@@ -99,12 +99,12 @@ class ChatMessageRepository extends ServiceEntityRepository
      * Unread counts per conversation id for one user, one query: messages newer than the read cursor
      * and not written by the user. Conversations without a participant row count every foreign message.
      *
-     * @param int $userId Doctrine id of the reader
+     * @param int|string $userId Key of the reader (ChatUserReferences::key())
      * @param list<int> $conversationIds Conversations to count
      *
      * @return array<int, int> conversation id => unread count (conversations with none are left out)
      */
-    public function countUnreadByConversation(int $userId, array $conversationIds): array
+    public function countUnreadByConversation(int|string $userId, array $conversationIds): array
     {
         if ($conversationIds === []) {
             return [];

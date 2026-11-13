@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Push;
 
 use DateTimeImmutable;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -20,6 +21,8 @@ use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
 use Symfony\Contracts\Translation\TranslatorInterface;
+
+use function in_array;
 
 /**
  * Picks who gets a Web Push for a message, checked at delivery time: participants only (never everyone who
@@ -71,16 +74,21 @@ final readonly class ChatPushDispatcher
         if (!$message instanceof ChatMessage || $message->isDeleted() || $command->recipientIds === []) {
             return;
         }
-        $now          = $this->clock->now();
-        $participants = $this->participants->findForUserIds($message->getConversation(), $command->recipientIds);
-        $users        = array_map(static fn (ChatParticipant $participant): ChatUserInterface => $participant->getUser(), $participants);
-        $presence     = $this->presence->statusOf($users);
-        $settings     = $this->settings->forUsers($users);
+        $now    = $this->clock->now();
+        $wanted = array_map(strval(...), $command->recipientIds);
+        // REQ-SEC-006 item 2: only the rows of exactly these users (a folding collation may return look-alikes).
+        $participants = array_values(array_filter(
+            $this->participants->findForUserIds($message->getConversation(), $wanted),
+            static fn (ChatParticipant $participant): bool => in_array((string) ChatUserReferences::key($participant->getUser()), $wanted, true),
+        ));
+        $users    = array_map(static fn (ChatParticipant $participant): ChatUserInterface => $participant->getUser(), $participants);
+        $presence = $this->presence->statusOf($users);
+        $settings = $this->settings->forUsers($users);
 
         $recipients = [];
         foreach ($participants as $participant) {
             $user        = $participant->getUser();
-            $preferences = $settings[(int) $user->getId()];
+            $preferences = $settings[(string) ChatUserReferences::key($user)];
             if (!$this->access->isReachable($user) || !$preferences->isPushEnabled() || $preferences->getStatus($now) === 'dnd' || ($presence[$user->getChatPublicId()]['appOpen'] ?? false)) {
                 continue;
             }
@@ -90,7 +98,7 @@ final readonly class ChatPushDispatcher
             $recipients[] = $user;
         }
         if ($recipients !== []) {
-            $this->sender->send($recipients, fn (ChatUserInterface $user): array => $this->payload($message, $user, $settings[(int) $user->getId()]->isPushPreview()));
+            $this->sender->send($recipients, fn (ChatUserInterface $user): array => $this->payload($message, $user, $settings[(string) ChatUserReferences::key($user)]->isPushPreview()));
         }
     }
 
@@ -109,9 +117,9 @@ final readonly class ChatPushDispatcher
         $author       = $message->getAuthor();
         $authorName   = $author?->getChatDisplayName() ?? $this->translator->trans('chat.deleted_user', [], 'NowoChatKitBundle', $locale);
         $title        = match (true) {
-            $conversation->isChannel()                                                                     => '#' . ($this->access->channel((string) $conversation->getChannelKey())->label ?? '') . ' · ' . $authorName,
-            $conversation->isSupport() && $author?->getId() !== $conversation->getSupportOwner()?->getId() => $this->translator->trans('chat.support_title', [], 'NowoChatKitBundle', $locale),
-            default                                                                                        => $authorName,
+            $conversation->isChannel()                                                                         => '#' . ($this->access->channel((string) $conversation->getChannelKey())->label ?? '') . ' · ' . $authorName,
+            $conversation->isSupport() && !ChatUserReferences::same($author, $conversation->getSupportOwner()) => $this->translator->trans('chat.support_title', [], 'NowoChatKitBundle', $locale),
+            default                                                                                            => $authorName,
         };
         $body = match (true) {
             $message->isBuzz() => $this->translator->trans('chat.buzz_received', ['%name%' => $authorName], 'NowoChatKitBundle', $locale),

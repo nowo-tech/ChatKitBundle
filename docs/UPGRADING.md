@@ -119,6 +119,67 @@ closed by the bundle. No schema change. Check after enabling it:
 
 Setting it to `false` explicitly is deprecated (it becomes the only mode in 2.0); leaving it unset keeps 1.26 behaviour.
 
+### String user references (REQ-ARCH-001 rule 2, `doctrine.user_reference: id` only)
+
+Nothing changes for integer ids. To key chat users by a string (UUID, ULID, IdP subject) instead of an integer
+surrogate:
+
+1. Your chat user class implements `ChatUserReferenceInterface::getChatUserReference(): string` (1–64 characters, no
+   whitespace at either end, no control or format characters; `getId()` may return null).
+2. Your `ChatDirectoryInterface` also implements `ChatUserReferenceDirectoryInterface::findByReferences(list<string>)`,
+   returning users whose reference is **exactly** one of those asked (no case, accent, padding or Unicode-normalisation
+   folding; the bundle drops any other answer).
+3. Generate a migration: in id mode `nowo_chat_conversation` gains two nullable columns, `direct_user_low` and
+   `direct_user_high` (`VARCHAR(64)`), and on MySQL / MariaDB every user reference column gets the binary NO PAD
+   collation (required before you store string references: the default collations fold `Bob`, `bob`, `bób` and `bob `).
+
+**Before the `ALTER` (MySQL / MariaDB): look for references that the old collation folds together.** Integer ids cannot
+collide; run these only if string references were already written (e.g. by a custom import). `TRIM`, `DISTINCT`,
+`LOWER` and `COLLATE …_ai_ci` fold too, so compare the bytes:
+
+```sql
+-- Participant rows: references equal under the column's collation but different bytes.
+SELECT a.user_id, HEX(a.user_id), b.user_id, HEX(b.user_id)
+  FROM nowo_chat_participant a JOIN nowo_chat_participant b
+    ON a.user_id = b.user_id AND CAST(a.user_id AS BINARY) <> CAST(b.user_id AS BINARY)
+ GROUP BY a.user_id, b.user_id;
+-- The same check for the other user columns: nowo_chat_message.author_id / deleted_by_id / pinned_by_id,
+-- nowo_chat_reaction.user_id, nowo_chat_message_mention.user_id, nowo_chat_user_settings.user_id,
+-- nowo_chat_quick_reply.user_id, nowo_chat_conversation.support_owner_id / assignee_id / resolved_by_id,
+-- nowo_chat_conversation_link.created_by_id.
+```
+
+Then (adapt the table names to `doctrine.table_name_prefix` / `table_prefix`; MariaDB: `utf8mb4_nopad_bin`; MySQL 5.7:
+`utf8mb4_bin`):
+
+```sql
+ALTER TABLE nowo_chat_conversation
+    ADD direct_user_low VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    ADD direct_user_high VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    MODIFY support_owner_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    MODIFY assignee_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    MODIFY resolved_by_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL;
+ALTER TABLE nowo_chat_participant MODIFY user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE nowo_chat_message
+    MODIFY author_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    MODIFY deleted_by_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL,
+    MODIFY pinned_by_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL;
+ALTER TABLE nowo_chat_reaction MODIFY user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE nowo_chat_message_mention MODIFY user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE nowo_chat_user_settings MODIFY user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE nowo_chat_quick_reply MODIFY user_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL;
+ALTER TABLE nowo_chat_conversation_link MODIFY created_by_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin DEFAULT NULL;
+```
+
+`doctrine:migrations:diff` generates the same (the collation comes from the bundle's schema listener). Until the
+`ALTER`, the bundle's PHP re-checks keep look-alikes apart on the lookups that return rows (participant row, settings,
+quick replies, mentions, reactions, support threads, push recipients, erasure); counts (unread badges) and list pages
+may still include a look-alike's rows on a folding column, so string references **require** the `ALTER`.
+
+Also: `ChatAccess::usersByIds()` now returns users keyed by `ChatUserReferences::key()` (the integer id stays an
+integer array key), `ChatConversation::directUserKeys()` / `peerKeyOf()` work for both kinds of pairs, and
+`ChatPersonalData::eraseFormerAccount()` takes the string reference of a gone account.
+
 ### Calling the chat by id
 
 New `ChatMessagingInterface` (autowire it): the same operations as `ChatServiceInterface` by public uuid, answering

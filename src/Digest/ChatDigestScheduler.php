@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Digest;
 
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -46,7 +47,7 @@ final readonly class ChatDigestScheduler
                 continue;
             }
             $this->cache->save($pending->set(true)->expiresAfter($this->delayMinutes * 60));
-            $this->bus->dispatch(new SendChatDigestMessage((int) $user->getId()), [new DelayStamp($this->delayMinutes * 60_000)]);
+            $this->bus->dispatch(new SendChatDigestMessage(ChatUserReferences::idOrKey((string) ChatUserReferences::key($user))), [new DelayStamp($this->delayMinutes * 60_000)]);
         }
     }
 }

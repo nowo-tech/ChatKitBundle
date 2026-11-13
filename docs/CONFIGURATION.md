@@ -221,8 +221,15 @@ In id mode the indexes the foreign keys gave are mapped explicitly (`idx_nowo_ch
 `idx_nowo_chat_msg_deleted_by`, `idx_nowo_chat_msg_pinned_by`, `idx_nowo_chat_conv_resolved_by`,
 `idx_nowo_chat_conv_link_by`, `idx_nowo_chat_reaction_user`; renamed by `table_name_prefix` / `table_prefix`), and every
 entity exposes `get<Relation>Reference()` (e.g. `ChatMessage::getAuthorReference()`) to read the stored id without
-loading the user. User ids are still integers (`ChatUserInterface::getId(): ?int`); the columns are strings so a later
-version can accept other identifiers without another migration. [UPGRADING](UPGRADING.md#to-1240) has the migration.
+loading the user. [UPGRADING](UPGRADING.md#to-1240) has the migration.
+
+1.27: **string references.** A chat user that implements `ChatUserReferenceInterface` is stored by its
+`getChatUserReference()` (1–64 characters, refused with whitespace at either end or control / format characters),
+loaded through `ChatUserReferenceDirectoryInterface::findByReferences()` (every answer re-checked byte for byte), and
+compared exactly everywhere; direct pairs of such users keep both references in `direct_user_low` /
+`direct_user_high`. On MySQL / MariaDB every user reference column gets the binary NO PAD collation in id mode
+(REQ-SEC-006); existing tables need the `ALTER` of [UPGRADING](UPGRADING.md#unreleased) before string references are
+stored. Integer ids keep working unchanged. Not available in `relation` mode (the build fails).
 
 ## Private entity manager (1.27)
 

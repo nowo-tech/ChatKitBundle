@@ -21,7 +21,7 @@ use Symfony\Contracts\Service\ResetInterface;
  */
 class ChatUserSettingsRepository extends ServiceEntityRepository implements ResetInterface
 {
-    /** @var array<int, ChatUserSettings> user id => settings loaded in this request */
+    /** @var array<int|string, ChatUserSettings> user key => settings loaded in this request */
     private array $memo = [];
 
     /**
@@ -45,7 +45,7 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
      */
     public function forUser(ChatUserInterface $user): ChatUserSettings
     {
-        $id = $user->getId();
+        $id = ChatUserReferences::key($user);
         if ($id === null) {
             return new ChatUserSettings($user);
         }
@@ -56,7 +56,13 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
             return $memo;
         }
 
-        return $this->memo[$id] = $this->findOneBy($this->refs->criteria('user', $user)) ?? new ChatUserSettings($user);
+        $found = $this->findOneBy($this->refs->criteria('user', $user));
+        // REQ-SEC-006 item 2: the row of exactly this user (a folding collation may return a look-alike's row).
+        if ($found instanceof ChatUserSettings && !ChatUserReferences::same($found->getUser(), $user)) {
+            $found = null;
+        }
+
+        return $this->memo[$id] = $found ?? new ChatUserSettings($user);
     }
 
     /**
@@ -72,13 +78,13 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
      *
      * @param list<ChatUserInterface> $users The users
      *
-     * @return array<int, ChatUserSettings> user id => settings
+     * @return array<int|string, ChatUserSettings> user key (ChatUserReferences::key()) => settings
      */
     public function forUsers(array $users): array
     {
         $byId = [];
         foreach ($users as $user) {
-            $byId[(int) $user->getId()] = new ChatUserSettings($user);
+            $byId[(string) ChatUserReferences::key($user)] = new ChatUserSettings($user);
         }
         if ($byId === []) {
             return [];
@@ -86,11 +92,15 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
         /** @var list<ChatUserSettings> $rows */
         $rows = $this->createQueryBuilder('s')
             ->where($this->refs->identity('s', 'user') . ' IN (:ids)')
-            ->setParameter('ids', $this->refs->ids(array_keys($byId)))
+            ->setParameter('ids', $this->refs->ids(array_map(strval(...), array_keys($byId))))
             ->getQuery()
             ->getResult();
         foreach ($rows as $settings) {
-            $byId[(int) $settings->getUser()->getId()] = $settings;
+            $key = (string) ChatUserReferences::key($settings->getUser());
+            // REQ-SEC-006 item 2: only rows of the asked users, byte for byte.
+            if (isset($byId[$key]) && ChatUserReferences::same($byId[$key]->getUser(), $settings->getUser())) {
+                $byId[$key] = $settings;
+            }
         }
 
         return $byId;

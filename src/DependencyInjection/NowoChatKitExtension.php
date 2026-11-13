@@ -16,6 +16,7 @@ use Nowo\ChatKitBundle\Doctrine\PrivateEntityManagerMiddleware;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Model\ChatUserReferenceInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
@@ -30,7 +31,9 @@ use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
 
 use function array_key_exists;
+use function is_a;
 use function is_array;
+use function is_string;
 use function sprintf;
 
 /**
@@ -184,6 +187,11 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.doctrine.user_reference', $profile['doctrine']['user_reference']);
         if ($profile['doctrine']['user_reference'] !== ChatUserReferences::ID) {
             $container->removeDefinition(UserReferenceListener::class);
+            // 1.27: string references exist only in id mode (relation mode keys every row by the entity's integer id).
+            $userClass = $profile['user_class'];
+            if (is_string($userClass) && is_a($userClass, ChatUserReferenceInterface::class, true)) {
+                throw new InvalidConfigurationException(sprintf('nowo_chat_kit: %s implements %s, which needs "doctrine.user_reference: id" (the relation mode keys the chat rows by the integer id).', $userClass, ChatUserReferenceInterface::class));
+            }
         }
         $this->registerTableNames($container, $configs, $config['default_profile'], $profile['doctrine']);
         $this->registerPrivateEntityManager($container, $profile['doctrine']['private_entity_manager'], $profile['doctrine']['entity_manager']);

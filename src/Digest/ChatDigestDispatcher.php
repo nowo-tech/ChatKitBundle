@@ -6,6 +6,8 @@ namespace Nowo\ChatKitBundle\Digest;
 
 use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Contract\ChatUserReferenceDirectoryInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatDigestItem;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -22,6 +24,8 @@ use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+
+use function is_int;
 
 /**
  * The delayed digest check: still unread conversations the user takes part in, the user reachable, opted in,
@@ -69,7 +73,12 @@ final readonly class ChatDigestDispatcher
      */
     public function __invoke(SendChatDigestMessage $command): void
     {
-        $user = $this->directory->findByIds([$command->userId])[0] ?? null;
+        // 1.27: a string reference too (ChatUserReferenceInterface); the answer must be exactly that user.
+        $key   = (string) $command->userId;
+        $found = is_int($command->userId) && !$this->directory instanceof ChatUserReferenceDirectoryInterface
+            ? $this->directory->findByIds([$command->userId])
+            : array_values($this->access->usersByIds([$key]));
+        $user = $found !== [] && ChatUserReferences::key($found[0]) === $key ? $found[0] : null;
         if ($user === null || !$this->access->isReachable($user) || !$this->settings->forUser($user)->isEmailDigest()) {
             return;
         }
@@ -93,7 +102,7 @@ final readonly class ChatDigestDispatcher
                 $ids = array_values(array_diff($ids, [$id]));
             }
         }
-        $unread = $this->messages->countUnreadByConversation((int) $user->getId(), $ids);
+        $unread = $this->messages->countUnreadByConversation((string) ChatUserReferences::key($user), $ids);
         $latest = $this->messages->findLatestByConversationIds($ids);
         $items  = [];
         foreach ($conversations as $conversation) {

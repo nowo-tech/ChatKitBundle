@@ -27,6 +27,9 @@ use function in_array;
  */
 class ChatConversationRepository extends ServiceEntityRepository
 {
+    /** 1.27: rows read to find the newest exact owner match (REQ-SEC-006 item 6) before giving up. */
+    private const int EXACT_SCAN = 50;
+
     /** Support threads opened but never written to are not in the inbox (nor counted). */
     private const string HAS_MESSAGES = 'EXISTS (SELECT 1 FROM ' . ChatMessage::class . ' hm WHERE hm.conversation = c)';
 
@@ -116,7 +119,14 @@ class ChatConversationRepository extends ServiceEntityRepository
      */
     public function findSupportFor(ChatUserInterface $owner): ?ChatConversation
     {
-        return $this->findOneBy($this->refs->criteria('supportOwner', $owner), ['lastMessageAt' => 'DESC', 'id' => 'DESC']);
+        // REQ-SEC-006 item 2: exactly this owner's (the newest exact one when a folding collation returns look-alikes).
+        foreach ($this->findBy($this->refs->criteria('supportOwner', $owner), ['lastMessageAt' => 'DESC', 'id' => 'DESC'], self::EXACT_SCAN) as $row) {
+            if (ChatUserReferences::same($row->getSupportOwner(), $owner)) {
+                return $row;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -128,7 +138,13 @@ class ChatConversationRepository extends ServiceEntityRepository
      */
     public function findSupportDraft(ChatUserInterface $owner): ?ChatConversation
     {
-        return $this->findOneBy($this->refs->criteria('supportOwner', $owner) + ['ticketNumber' => null], ['id' => 'DESC']);
+        foreach ($this->findBy($this->refs->criteria('supportOwner', $owner) + ['ticketNumber' => null], ['id' => 'DESC'], self::EXACT_SCAN) as $row) {
+            if (ChatUserReferences::same($row->getSupportOwner(), $owner)) {
+                return $row;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -151,7 +167,7 @@ class ChatConversationRepository extends ServiceEntityRepository
             ->getQuery()
             ->getResult();
 
-        return $rows;
+        return array_values(array_filter($rows, static fn (ChatConversation $row): bool => ChatUserReferences::same($row->getSupportOwner(), $owner)));
     }
 
     /**
@@ -220,7 +236,7 @@ class ChatConversationRepository extends ServiceEntityRepository
      * @param ChatUserInterface $user The user
      * @param int $limit Maximum number of peers
      *
-     * @return list<int> Doctrine ids of the peers
+     * @return list<int|string> Ids of the peers (1.27: or string references, ChatUserReferences::idOrKey())
      */
     public function findDirectPeerIds(ChatUserInterface $user, int $limit = 200): array
     {
@@ -236,7 +252,7 @@ class ChatConversationRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleColumnResult();
 
-        return array_values(array_map(intval(...), $ids));
+        return array_values(array_map(ChatUserReferences::idOrKey(...), $ids));
     }
 
     /**
@@ -291,9 +307,9 @@ class ChatConversationRepository extends ServiceEntityRepository
     /**
      * Number of tickets of each requester.
      *
-     * @param list<int> $ownerIds Doctrine ids of the requesters
+     * @param list<int|string> $ownerIds Keys of the requesters
      *
-     * @return array<int, int> owner id => ticket count (owners without tickets are left out)
+     * @return array<int|string, int> owner key => ticket count (owners without tickets are left out)
      */
     public function countTicketsByOwner(array $ownerIds): array
     {
@@ -310,7 +326,7 @@ class ChatConversationRepository extends ServiceEntityRepository
             ->getArrayResult();
         $counts = [];
         foreach ($rows as $row) {
-            $counts[(int) $row['owner']] = (int) $row['total'];
+            $counts[(string) $row['owner']] = (int) $row['total'];
         }
 
         return $counts;

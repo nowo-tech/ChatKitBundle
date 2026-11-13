@@ -382,7 +382,7 @@ jobs:
         env:
           CHAT_KIT_RACE_DATABASE_URL: ${{ matrix.url }}
           CHAT_KIT_RACE_ID_GENERATION: ${{ matrix.generation }}
-        run: vendor/bin/phpunit --no-coverage --fail-on-skipped --filter 'ChatChannelRaceTest|ChatChannelLookalikeTest'
+        run: vendor/bin/phpunit --no-coverage --fail-on-skipped --filter 'ChatChannelRaceTest|ChatChannelLookalikeTest|ChatUserReferenceLookalikeTest'
 
   coverage:
     name: Code Coverage

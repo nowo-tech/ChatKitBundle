@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Service;
 
 use LogicException;
 use Nowo\ChatKitBundle\Contract\ChatReferenceProviderInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatReference;
@@ -58,7 +59,7 @@ final class ChatReferences implements ResetInterface
     /** @var array<string, ChatReferenceProviderInterface>|null */
     private ?array $byKey = null;
 
-    /** @var array<int, array<string, ChatReference|false>> viewer id => `type:id` => card (false: not readable) */
+    /** @var array<int|string, array<string, ChatReference|false>> viewer key => `type:id` => card (false: not readable) */
     private array $resolved = [];
 
     /**
@@ -104,7 +105,7 @@ final class ChatReferences implements ResetInterface
     {
         $audience = [$user];
         $peer     = $conversation->isDirect() ? $this->access->directPeer($conversation, $user) : null;
-        if ($peer instanceof ChatUserInterface && $peer->getId() !== $user->getId()) {
+        if ($peer instanceof ChatUserInterface && !ChatUserReferences::same($peer, $user)) {
             $audience[] = $peer;
         }
 
@@ -339,7 +340,7 @@ final class ChatReferences implements ResetInterface
      */
     private function resolveFor(ChatUserInterface $viewer, array $tokens): array
     {
-        $viewerId = (int) $viewer->getId();
+        $viewerId = (string) ChatUserReferences::key($viewer);
         $cache    = $this->resolved[$viewerId] ?? [];
         $missing  = [];
         foreach ($tokens as $token) {

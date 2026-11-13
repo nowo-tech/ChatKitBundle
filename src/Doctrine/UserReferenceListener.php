@@ -70,6 +70,15 @@ final class UserReferenceListener implements ResetInterface
         ChatReaction::class         => ['user_id' => 'idx_nowo_chat_reaction_user'],
     ];
 
+    /**
+     * 1.27: reference columns that are not relations (class => field => column), mapped in id mode only.
+     *
+     * @var array<class-string, array<string, string>>
+     */
+    public const array EXTRA_FIELDS = [
+        ChatConversation::class => ['directUserLow' => 'direct_user_low', 'directUserHigh' => 'direct_user_high'],
+    ];
+
     /** @var WeakMap<object, true> Entities whose users are set already. */
     private WeakMap $resolved;
 
@@ -123,6 +132,16 @@ final class UserReferenceListener implements ResetInterface
                 $table['indexes'][$index] = ['columns' => [$column]];
             }
         }
+        // 1.27: the two references of a direct pair of string references (ChatUserReferenceInterface).
+        foreach (self::EXTRA_FIELDS[$class] ?? [] as $field => $column) {
+            $metadata->mapField([
+                'fieldName'  => $field,
+                'columnName' => $column,
+                'type'       => 'string',
+                'length'     => ChatUserReferences::REFERENCE_LENGTH,
+                'nullable'   => true,
+            ]);
+        }
         $metadata->setPrimaryTable($table);
     }
 
@@ -139,20 +158,21 @@ final class UserReferenceListener implements ResetInterface
             return;
         }
         $pending = $this->pending($event->getObjectManager(), $entity);
-        $ids     = [];
+        $refs    = [];
         foreach ($pending as $entity) {
             foreach (array_keys(self::RELATIONS[$entity::class]) as $relation) {
                 $reference = $this->property($entity::class, $relation . 'Ref')->getValue($entity);
-                if (is_string($reference) && ctype_digit($reference)) {
-                    $ids[(int) $reference] = (int) $reference;
+                if (is_string($reference)) {
+                    $refs[$reference] = $reference;
                 }
             }
         }
-        $users = $ids === [] ? [] : ($this->access)()->usersByIds(array_values($ids));
+        // 1.27: string references too (ChatUserReferenceInterface); ChatAccess re-checks every answer byte for byte.
+        $users = $refs === [] ? [] : ($this->access)()->usersByIds(array_values(array_map(strval(...), $refs)));
         foreach ($pending as $entity) {
             foreach (self::RELATIONS[$entity::class] as $relation => $nullable) {
                 $reference = $this->property($entity::class, $relation . 'Ref')->getValue($entity);
-                $user      = is_string($reference) ? ($users[(int) $reference] ?? null) : null;
+                $user      = is_string($reference) ? ($users[$reference] ?? null) : null;
                 if (!$user instanceof ChatUserInterface && is_string($reference) && !$nullable) {
                     $user = new UnresolvedChatUser($reference, $this->secret);
                 }

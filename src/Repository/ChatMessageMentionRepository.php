@@ -43,7 +43,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
      *
      * @param ChatMessage $message The message (a new, unpersisted message has none)
      *
-     * @return list<int> User ids
+     * @return list<int|string> User ids (1.27: or string references, ChatUserReferences::idOrKey())
      */
     public function userIdsOf(ChatMessage $message): array
     {
@@ -58,14 +58,14 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleColumnResult();
 
-        return array_map(intval(...), $ids);
+        return array_values(array_map(ChatUserReferences::idOrKey(...), $ids));
     }
 
     /**
      * Removes the message's mentions of everyone except the kept users (all of them when none is kept).
      *
      * @param ChatMessage $message The message
-     * @param list<int> $keepUserIds User ids whose mention stays
+     * @param list<int|string> $keepUserIds User keys whose mention stays
      *
      * @return int Rows removed
      */
@@ -211,7 +211,10 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
      */
     public function findOneForUser(ChatUserInterface $user, int $id): ?ChatMessageMention
     {
-        return $this->findOneBy(['id' => $id] + $this->refs->criteria('user', $user));
+        $row = $this->findOneBy(['id' => $id] + $this->refs->criteria('user', $user));
+
+        // REQ-SEC-006 item 2: exactly this user's row.
+        return $row instanceof ChatMessageMention && ChatUserReferences::same($row->getUser(), $user) ? $row : null;
     }
 
     /**

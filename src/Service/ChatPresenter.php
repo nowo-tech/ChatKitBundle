@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Service;
 
 use DateTimeImmutable;
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
@@ -90,7 +91,7 @@ final readonly class ChatPresenter
         }
         $owner = $conversation->isSupport() ? $conversation->getSupportOwner() : null;
 
-        return $viewerIsAgent && $owner instanceof ChatUserInterface && $owner->getId() !== $viewer->getId() ? $owner : null;
+        return $viewerIsAgent && $owner instanceof ChatUserInterface && !ChatUserReferences::same($owner, $viewer) ? $owner : null;
     }
 
     /**
@@ -328,7 +329,7 @@ final readonly class ChatPresenter
         $owner  = $conversation->getSupportOwner();
         $number = $this->policy->format($conversation->getTicketNumber());
         $ticket = $number === null ? null : $number . ' · ' . $this->topics->label($conversation->getTicketTopic());
-        if ($viewerIsAgent && $owner instanceof ChatUserInterface && $owner->getId() !== $viewer->getId()) {
+        if ($viewerIsAgent && $owner instanceof ChatUserInterface && !ChatUserReferences::same($owner, $viewer)) {
             return [$owner->getChatDisplayName(), $ticket ?? $this->trans('chat.support_thread'), $owner->getChatInitials()];
         }
 
