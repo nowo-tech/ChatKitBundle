@@ -42,7 +42,8 @@ final readonly class ChatUserReferences
     /**
      * 1.27: `id` with string references (ChatUserReferenceInterface): every chat user is keyed by its string reference,
      * the direct pairs keep both references (`direct_user_low` / `direct_user_high`), the user columns must be binary NO
-     * PAD on MySQL / MariaDB (checked once per connection and database before the first query by user, StringReferenceSchemaGuard).
+     * PAD on MySQL / MariaDB (checked once per connection and request before the first query by user,
+     * StringReferenceSchemaGuard).
      */
     public const string STRING = 'string';
 
@@ -122,27 +123,6 @@ final readonly class ChatUserReferences
     public function assertExact(): void
     {
         $this->guarded();
-    }
-
-    /**
-     * 1.27.1 (audit AOJ2-L2): a single-row read by user came back with another person's row, which only a folding user
-     * column can do. The caller would now insert its own row and hit the look-alike's unique key inside the flush,
-     * closing the entity manager (and, under FrankenPHP with `kernel.reset` false, leaving it closed). In `string` mode
-     * this fails closed before the insert, with the same message as the schema check, and forgets the guard's passed
-     * check so the next call re-reads the schema; the other modes keep ignoring the row.
-     *
-     * @param string $where The column the row came from (`nowo_chat_participant.user_id`)
-     *
-     * @throws LogicException In `string` mode
-     */
-    public function assertNoLookAlike(string $where): void
-    {
-        if (!$this->isStringMode()) {
-            return;
-        }
-        $this->guard?->reset();
-
-        throw new LogicException(sprintf('nowo_chat_kit: doctrine.user_reference "string" needs the user columns to compare byte for byte, but %s still folds: a read by user returned another user\'s row. Run the ALTER TABLE of UPGRADING.md ("String user references") before using the chat.', $where));
     }
 
     private function guarded(): void

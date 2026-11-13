@@ -80,22 +80,34 @@ From **1.27.0**:
 composer update nowo-tech/chat-kit-bundle
 ```
 
-Nothing to do: no configuration, schema or contract changes. Three notes:
+No configuration, schema or contract change. Four notes:
 
-1. **Rebuilt browser assets.** `src/Resources/public/js/nowo-chat.js` ships the dock fix, so hosts that copy or bundle
-   the asset themselves (`php bin/console assets:install`, an importmap or an asset build) must pick up the new file.
-   Hosts whose page scroller is an inner element (a fixed header with a scrolling main column) and that mark a static
-   footer with `data-nowo-chat-avoid` get the dock resting on top of that footer instead of covering it; nothing to
-   configure.
-2. **`doctrine.user_reference: string` only.** The schema check of `StringReferenceSchemaGuard` is now kept per
-   connection and per `DATABASE()` instead of once per process. A host that switches database at runtime pays one
-   `SELECT DATABASE()` per check instead of trusting a pass made against another schema, and a read that returns a
-   look-alike user's row now throws the same "still fold" `LogicException` as the schema check (before, it was ignored
-   and the write that followed could clash on a unique key and close the entity manager).
-3. **`doctrine.user_reference: id` or `string` with integer ids above 10^18.** User ids of 19 digits up to
-   `PHP_INT_MAX` are treated as integer ids again and resolved through `ChatDirectoryInterface::findByIds()`. A host
-   with snowflake-style ids that worked around the 18-digit limit by implementing `ChatUserReferenceDirectoryInterface`
-   can keep it: that interface is still preferred when present.
+1. **Rebuilt browser assets.** `src/Resources/public/js/nowo-chat.js` carries the dock fix, so a host that copies or
+   bundles the asset itself (`bin/console assets:install`, an importmap, its own asset build) must pick up the new
+   file. Hosts whose page scroller is an inner element — a fixed header above a scrolling main column — and that mark
+   a static footer with `data-nowo-chat-avoid` now get the dock resting on top of that footer instead of covering it.
+   Nothing to configure.
+2. **`doctrine.user_reference: string` on MySQL 8 / MariaDB: check the collation of your user columns.**
+   `utf8mb4_bin` is a binary but **PAD SPACE** collation there (`'bob '` equals `'bob'`), so it no longer counts as
+   exact and the schema guard refuses it, naming the columns and the collations it does accept. Use
+   `utf8mb4_0900_bin` on MySQL 8 and later, `utf8mb4_nopad_bin` on MariaDB; `utf8mb4_bin` stays accepted on MySQL 5.7,
+   which has no NO PAD collation and where the reference format rule (no leading or trailing whitespace) keeps the
+   comparison exact. If you ran the `ALTER TABLE` of "String user references" with `utf8mb4_bin` on MySQL 8 or
+   MariaDB, run it again with the right collation before deploying. PostgreSQL and SQLite are unaffected.
+3. **`doctrine.user_reference: string`: the schema check now runs once per request**, not once per process, because
+   `ChatRequestBoundaryListener` clears it at every request, command and message boundary. That is one
+   `information_schema` read per request that touches the chat (and none in a request that does not), and a database
+   switched between two requests of the same worker is checked again instead of trusting the earlier pass. The pass is
+   held per `Connection` object: it does not distinguish the same database name on a different server, nor a
+   `USE other_db` issued on that connection inside one request.
+4. **`doctrine.user_reference: id` / `string` with integer ids of 19 digits.** `ChatUserReferences::isCanonicalId()`
+   now accepts up to 19 digits bounded by `ChatUserReferences::MAX_ID` (`9223372036854775807`), so snowflake-style
+   bigint ids (>= 10^18) are resolved through `ChatDirectoryInterface::findByIds()` again instead of being dropped.
+   Note the type change that follows: for such a key `ChatUserReferences::idOrKey()` returns an **`int`** where 1.27.0
+   returned a `string`, and that value reaches the Mercure payloads, `SendChatDigestMessage` and `ChatMentions`. A
+   host that compares those values loosely is unaffected; one that compares them with `===` against a string, or
+   serialises them and expects a quoted JSON value, must accept the integer form. Anything above `PHP_INT_MAX` stays
+   a string reference.
 
 ## To 1.27.0
 
@@ -177,7 +189,7 @@ string (UUID, ULID, IdP subject) instead of an integer surrogate:
    folding; the bundle drops any other answer).
 4. Migrate: `nowo_chat_conversation` gains two nullable columns, `direct_user_low` and `direct_user_high`
    (`VARCHAR(64)`), and on MySQL / MariaDB every user reference column gets the binary NO PAD collation. **This is
-   enforced (audit OJ-M1):** on MySQL / MariaDB the bundle checks once per process (`information_schema`) that the
+   enforced (audit OJ-M1):** on MySQL / MariaDB the bundle checks once per request (`information_schema`) that the
    columns exist and compare byte for byte, and until then every chat query or write by user throws a `LogicException`
    naming the columns (fail closed: a folding column would let look-alikes read each other's rows, and a unique-key
    clash between them would close the entity manager). Existing `id`-mode stored values (integer ids) must be rewritten
@@ -199,8 +211,11 @@ SELECT a.user_id, HEX(a.user_id), b.user_id, HEX(b.user_id)
 -- nowo_chat_conversation_link.created_by_id.
 ```
 
-Then (adapt the table names to `doctrine.table_name_prefix` / `table_prefix`; MariaDB: `utf8mb4_nopad_bin`; MySQL 5.7:
-`utf8mb4_bin`):
+Then (adapt the table names to `doctrine.table_name_prefix` / `table_prefix`). The collation to use is
+`utf8mb4_0900_bin` on MySQL 8 and later and `utf8mb4_nopad_bin` on MariaDB. **`utf8mb4_bin` is accepted on MySQL 5.7
+only** (1.27.1): it is a binary but PAD SPACE collation, so on MySQL 8 and on MariaDB `'bob '` still equals `'bob'`
+and the guard refuses it; 5.7 has no NO PAD collation at all, and there the reference format rule — no leading or
+trailing whitespace — is what keeps the comparison exact:
 
 ```sql
 ALTER TABLE nowo_chat_conversation

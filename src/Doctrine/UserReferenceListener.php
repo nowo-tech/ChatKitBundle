@@ -43,7 +43,9 @@ use function is_string;
 #[AsDoctrineListener(event: Events::loadClassMetadata, priority: 16)]
 #[AsDoctrineListener(event: Events::postLoad)]
 #[AsDoctrineListener(event: Events::prePersist)]
-#[AsDoctrineListener(event: Events::onFlush)]
+// 1.27.1 (audit AOY-L3): a low priority runs the kind check last, after any host listener that still sets a user
+// field and recomputes its change set on `onFlush` — which is what `preUpdate` checked for free.
+#[AsDoctrineListener(event: Events::onFlush, priority: -512)]
 final class UserReferenceListener implements ResetInterface
 {
     /**

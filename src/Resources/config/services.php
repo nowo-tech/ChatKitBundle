@@ -117,6 +117,9 @@ return static function (ContainerConfigurator $container): void {
             service(ChatAvatars::class)->ignoreOnUninitialized(),
             service(ChatUserSettingsRepository::class)->ignoreOnUninitialized(),
             service(UserReferenceListener::class)->ignoreOnUninitialized(),
+            // 1.27.1 (audit AOY-M2): the schema pass of the `string` mode guard. One check per request instead of one
+            // per query by user, and a database switched between two requests is checked again. May be removed.
+            service(StringReferenceSchemaGuard::class)->ignoreOnUninitialized(),
         ]));
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).

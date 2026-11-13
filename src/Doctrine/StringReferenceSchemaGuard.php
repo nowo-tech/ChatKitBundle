@@ -7,6 +7,9 @@ namespace Nowo\ChatKitBundle\Doctrine;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
+use Doctrine\DBAL\Platforms\AbstractPlatform;
+use Doctrine\DBAL\Platforms\MariaDBPlatform;
+use Doctrine\DBAL\Platforms\MySQL80Platform;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
@@ -22,24 +25,28 @@ use function sprintf;
 
 /**
  * 1.27 (audit OJ-M1, REQ-SEC-006; `doctrine.user_reference: string` only): fail closed when the user reference columns
- * still fold. On MySQL / MariaDB the bundle checks once per connection and database (information_schema) that every user column of its
- * tables has a binary NO PAD collation (`utf8mb4_0900_bin`, `utf8mb4_nopad_bin`; `utf8mb4_bin` on MySQL 5.7, whose
- * trailing spaces ChatUserReference refuses). Until the `ALTER TABLE` of UPGRADING.md has run, every query and write by
- * user throws a LogicException instead: a folding column would let `bob` read `Bob`'s rows, and a unique-key violation
- * between look-alikes would close the entity manager (a denial of service in a kept-alive worker). PostgreSQL and SQLite
- * compare exactly and are never queried.
+ * still fold. On MySQL / MariaDB the bundle checks (information_schema) that every user column of its tables has a
+ * collation that compares byte for byte without padding: `utf8mb4_0900_bin` on MySQL 8 and later,
+ * `utf8mb4_nopad_bin` on MariaDB, and `utf8mb4_bin` on MySQL 5.7 only — 1.27.1 (REQ-SEC-006): `utf8mb4_bin` is PAD
+ * SPACE on MySQL 8 and on MariaDB, where `'bob '` equals `'bob'`, so it is no longer accepted there; 5.7 has no NO PAD
+ * collation at all, and there the ChatUserReference format rule, which refuses leading and trailing spaces, closes the
+ * gap. Until the `ALTER TABLE` of UPGRADING.md has run, every query and write by user throws a LogicException
+ * instead: a folding column would let `bob` read `Bob`'s rows, and a unique-key violation between look-alikes would
+ * close the entity manager (a denial of service in a kept-alive worker). PostgreSQL and SQLite compare exactly and are
+ * never queried.
  *
- * Only a passed check is kept (a fact about the schema, not request data), and 1.27.1 (audit AOJ2-L2) it is kept per
- * connection and per `DATABASE()`: a process that switches database at runtime (a multi-tenant host, a reconnect to
- * another schema) or whose migration was rolled back checks the new schema instead of trusting the old pass. reset()
- * forgets everything.
- */
-final class StringReferenceSchemaGuard implements ResetInterface
+ * Only a passed check is kept (a fact about the schema, not request data), per connection object, and only until the
+ * next request / command / message boundary: ChatRequestBoundaryListener resets this service like the bundle's memos
+ * (1.27.1, audit AOY-M2), so the schema is read once per request instead of once per query by user and a database
+ * switched between two requests of the same worker is checked again. The pass says nothing more than "this Connection
+ * object passed": it does not distinguish the same database name on another server, nor a `USE other_db` issued on the
+ * connection inside one request (audit AOY-L2).
+ */ final class StringReferenceSchemaGuard implements ResetInterface
 {
-    /** Collations that compare user references byte for byte. */
+    /** Every collation this guard accepts on some platform; exactFor() is what it applies to one. */
     public const array EXACT = ['utf8mb4_0900_bin', 'utf8mb4_nopad_bin', 'utf8mb4_bin', 'binary'];
 
-    /** @var WeakMap<Connection, string> Connections whose current database passed the check (connection => database). */
+    /** @var WeakMap<Connection, true> Connections whose schema passed the check in this request. */
     private WeakMap $ready;
 
     /**
@@ -52,16 +59,35 @@ final class StringReferenceSchemaGuard implements ResetInterface
     }
 
     /**
-     * Forgets a passed check (the next query checks again).
+     * Forgets the passed checks (the next query of the next request checks again). ChatRequestBoundaryListener calls
+     * this at every request, command and message boundary, and so does `kernel.reset`.
      */
     public function reset(): void
     {
-        // @igor-ignore - Process-level schema fact (never request data); reset() and a failing check clear it.
+        // @igor-ignore - Schema fact (never request data), kept for one request and cleared at every boundary.
         $this->ready = new WeakMap();
     }
 
     /**
-     * Checks the user columns once per connection and database.
+     * The collations that compare a user reference byte for byte on this platform (1.27.1, REQ-SEC-006).
+     * `utf8mb4_bin` is PAD SPACE on MySQL 8 and on MariaDB, so only MySQL 5.7, which has no NO PAD collation, may use
+     * it; there the ChatUserReference format rule refuses the trailing spaces that would fold.
+     *
+     * @param AbstractPlatform $platform The database platform
+     *
+     * @return list<string> The accepted collation names
+     */
+    public static function exactFor(AbstractPlatform $platform): array
+    {
+        return match (true) {
+            $platform instanceof MariaDBPlatform => ['utf8mb4_nopad_bin', 'binary'],
+            $platform instanceof MySQL80Platform => ['utf8mb4_0900_bin', 'binary'],
+            default                              => ['utf8mb4_bin', 'binary'],
+        };
+    }
+
+    /**
+     * Checks the user columns once per connection and request.
      *
      * @throws LogicException When a user column of the chat tables still folds
      */
@@ -72,16 +98,17 @@ final class StringReferenceSchemaGuard implements ResetInterface
             return;
         }
         $connection = $manager->getConnection();
-        if (!$connection->getDatabasePlatform() instanceof AbstractMySQLPlatform) {
-            // PostgreSQL / SQLite compare exactly: nothing to check and nothing to remember.
+        if (isset($this->ready[$connection])) {
             return;
         }
-        // The database this connection is on right now: `USE other_db` and a reconnect to another schema both change it,
-        // and the columns of that schema have never been checked (audit AOJ2-L2). One cheap query saves eight below.
-        $database = (string) $connection->fetchOne('SELECT DATABASE()');
-        if (($this->ready[$connection] ?? null) === $database) {
+        $platform = $connection->getDatabasePlatform();
+        if (!$platform instanceof AbstractMySQLPlatform) {
+            // @igor-ignore - Schema fact of one request: PostgreSQL / SQLite compare exactly.
+            $this->ready[$connection] = true;
+
             return;
         }
+        $exact   = self::exactFor($platform);
         $folding = [];
         $missing = [];
         foreach (array_keys(UserReferenceListener::RELATIONS) as $class) {
@@ -102,7 +129,7 @@ final class StringReferenceSchemaGuard implements ResetInterface
             ) as $row) {
                 $found[]   = (string) ($row['c'] ?? $row['C'] ?? '');
                 $collation = $row['n'] ?? $row['N'] ?? null;
-                if (!is_string($collation) || !in_array($collation, self::EXACT, true)) {
+                if (!is_string($collation) || !in_array($collation, $exact, true)) {
                     $folding[] = $table . '.' . ($row['c'] ?? $row['C'] ?? '?') . ' (' . (is_string($collation) ? $collation : 'no collation') . ')';
                 }
             }
@@ -116,9 +143,9 @@ final class StringReferenceSchemaGuard implements ResetInterface
             throw new LogicException(sprintf('nowo_chat_kit: doctrine.user_reference "string" needs these columns, which the database does not have yet: %s. Run the migration of UPGRADING.md ("String user references").', implode(', ', $missing)));
         }
         if ($folding !== []) {
-            throw new LogicException(sprintf('nowo_chat_kit: doctrine.user_reference "string" needs the user columns to compare byte for byte, but these still fold: %s. Run the ALTER TABLE of UPGRADING.md ("String user references") before using the chat.', implode(', ', $folding)));
+            throw new LogicException(sprintf('nowo_chat_kit: doctrine.user_reference "string" needs the user columns to compare byte for byte, but these still fold: %s. Accepted here: %s. Run the ALTER TABLE of UPGRADING.md ("String user references") before using the chat.', implode(', ', $folding), implode(', ', $exact)));
         }
-        // @igor-ignore - Process-level schema fact (never request data), cleared by reset().
-        $this->ready[$connection] = $database;
+        // @igor-ignore - Schema fact (never request data), cleared at every request boundary by reset().
+        $this->ready[$connection] = true;
     }
 }

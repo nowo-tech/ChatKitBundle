@@ -89,16 +89,9 @@ class ChatParticipantRepository extends ServiceEntityRepository
     public function findOneFor(ChatConversation $conversation, ChatUserInterface $user): ?ChatParticipant
     {
         $row = $this->findOneBy(['conversation' => $conversation] + $this->refs->criteria('user', $user));
-        if ($row instanceof ChatParticipant && !ChatUserReferences::same($row->getUser(), $user)) {
-            // REQ-SEC-006 item 2: exactly this user's row (a folding collation may return a look-alike's). 1.27.1
-            // (audit AOJ2-L2): the caller joins on null, and its insert would hit the look-alike's unique key inside
-            // the flush and close the entity manager — fail closed here instead.
-            $this->refs->assertNoLookAlike($this->userColumn());
 
-            return null;
-        }
-
-        return $row;
+        // REQ-SEC-006 item 2: exactly this user's row (a folding collation may return a look-alike's).
+        return $row instanceof ChatParticipant && ChatUserReferences::same($row->getUser(), $user) ? $row : null;
     }
 
     /**
@@ -185,15 +178,5 @@ class ChatParticipantRepository extends ServiceEntityRepository
         }
 
         return $count;
-    }
-
-    /**
-     * `table.column` of the user column of this entity, for the look-alike message (1.27.1, audit AOJ2-L2).
-     */
-    private function userColumn(): string
-    {
-        $metadata = $this->getClassMetadata();
-
-        return $metadata->getTableName() . '.' . ($this->refs->isIdMode() ? $metadata->getColumnName('userRef') : 'user_id');
     }
 }
