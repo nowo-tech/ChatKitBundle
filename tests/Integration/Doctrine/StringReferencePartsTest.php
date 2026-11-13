@@ -12,6 +12,7 @@ use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\SendChatDigestMessage;
 use Nowo\ChatKitBundle\Doctrine\ChannelKeyCollationListener;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
+use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ErasedChatUserReference;
@@ -29,6 +30,7 @@ use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefChatUser;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -151,14 +153,14 @@ final class StringReferencePartsTest extends DatabaseTestCase
     /**
      * @param class-string $userClass
      */
-    #[\PHPUnit\Framework\Attributes\DataProvider('wrongKinds')]
+    #[DataProvider('wrongKinds')]
     public function testAUserClassOfTheWrongKindFailsTheBuild(string $mode, string $userClass, string $message): void
     {
-        $container = new \Symfony\Component\DependencyInjection\ContainerBuilder();
+        $container = new ContainerBuilder();
         $container->setParameter('kernel.secret', 'x');
-        $this->expectException(\Symfony\Component\Config\Definition\Exception\InvalidConfigurationException::class);
+        $this->expectException(InvalidConfigurationException::class);
         $this->expectExceptionMessage($message);
-        (new \Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension())->load([['profiles' => ['default' => ['user_class' => $userClass, 'doctrine' => ['user_reference' => $mode]]]]], $container);
+        (new NowoChatKitExtension())->load([['profiles' => ['default' => ['user_class' => $userClass, 'doctrine' => ['user_reference' => $mode]]]]], $container);
     }
 
     public function testUsersOfTheOtherKindAreUnreachableAndRefused(): void
@@ -186,7 +188,7 @@ final class StringReferencePartsTest extends DatabaseTestCase
 
     public function testTheGuardPassesOnExactPlatforms(): void
     {
-        $guard = $this->get(\Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard::class);
+        $guard = $this->get(StringReferenceSchemaGuard::class);
         $guard->assertReady();
         $guard->reset();
         $guard->assertReady();

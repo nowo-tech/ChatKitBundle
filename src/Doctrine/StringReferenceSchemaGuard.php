@@ -95,7 +95,7 @@ final class StringReferenceSchemaGuard implements ResetInterface
                 $found[]   = (string) ($row['c'] ?? $row['C'] ?? '');
                 $collation = $row['n'] ?? $row['N'] ?? null;
                 if (!is_string($collation) || !in_array($collation, self::EXACT, true)) {
-                    $folding[] = $table . '.' . (string) ($row['c'] ?? $row['C'] ?? '?') . ' (' . (is_string($collation) ? $collation : 'no collation') . ')';
+                    $folding[] = $table . '.' . ($row['c'] ?? $row['C'] ?? '?') . ' (' . (is_string($collation) ? $collation : 'no collation') . ')';
                 }
             }
             foreach ($columns as $column) {

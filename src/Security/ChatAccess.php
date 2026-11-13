@@ -166,7 +166,7 @@ final class ChatAccess implements ResetInterface
     {
         // 1.24: a placeholder for a user the directory no longer knows (`doctrine.user_reference: id`) never is.
         return ChatUserReferences::key($user) !== null && !$user instanceof UnresolvedChatUser
-            && ($this->refs === null || $this->refs->fitsKind($user)) && $this->policy->isReachable($user);
+            && (!$this->refs instanceof ChatUserReferences || $this->refs->fitsKind($user)) && $this->policy->isReachable($user);
     }
 
     /**

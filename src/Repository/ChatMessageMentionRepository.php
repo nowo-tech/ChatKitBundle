@@ -191,7 +191,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
                 ->getQuery()
                 ->getResult();
             foreach ($rows as $mention) {
-                if (count($kept) < $limit && self::exactChannel($mention->getMessage()->getConversation(), $channelKeys) && ChatUserReferences::same($mention->getUser(), $user)) {
+                if (count($kept) < $limit && $this->exactChannel($mention->getMessage()->getConversation(), $channelKeys) && ChatUserReferences::same($mention->getUser(), $user)) {
                     $kept[] = $mention;
                 }
             }
@@ -227,6 +227,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             ->select('c.channelKey AS k', 'COUNT(mm.id) AS n')
             ->groupBy('c.id');
         if ($this->refs->isIdMode()) {
+            // @igor-ignore - A query builder created in this call, not shared state.
             $qb->addSelect('mm.userRef AS ref')->addGroupBy('mm.userRef');
         }
         /** @var list<array{k: string|null, n: int|string, ref?: string|null}> $rows */
@@ -247,7 +248,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
      *
      * @param list<string> $channelKeys
      */
-    private static function exactChannel(ChatConversation $conversation, array $channelKeys): bool
+    private function exactChannel(ChatConversation $conversation, array $channelKeys): bool
     {
         return !$conversation->isChannel() || in_array($conversation->getChannelKey(), $channelKeys, true);
     }
@@ -293,6 +294,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             ->groupBy('m.conversation');
         if ($this->refs->isIdMode()) {
             // 1.27 (audit OJ-M1): counted per stored reference, kept only for exactly this user.
+            // @igor-ignore - A query builder created in this call, not shared state.
             $qb->addSelect('mm.userRef AS ref')->addGroupBy('mm.userRef');
         }
         /** @var list<array{cid: int|string, n: int|string, ref?: string|null}> $rows */

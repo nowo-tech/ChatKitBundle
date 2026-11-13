@@ -174,6 +174,10 @@ final class UserReferenceListener implements ResetInterface
 
     private function checkKinds(object $entity): void
     {
+        if (isset(self::RELATIONS[$entity::class])) {
+            // 1.27 (audit OJ-M1): no chat row is written by user while the user columns fold (`string` mode).
+            $this->refs->assertExact();
+        }
         foreach (array_keys(self::RELATIONS[$entity::class] ?? []) as $relation) {
             $property = $this->property($entity::class, $relation);
             $user     = $property->isInitialized($entity) ? $property->getValue($entity) : null;

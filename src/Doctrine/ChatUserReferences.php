@@ -109,8 +109,16 @@ final readonly class ChatUserReferences
     }
 
     /**
-     * 1.27 (audit OJ-M1): before a query by user in `string` mode, the user columns must compare byte for byte.
+     * 1.27 (audit OJ-M1): before a query or a write by user in `string` mode, the user columns must compare byte for byte
+     * (StringReferenceSchemaGuard); nothing in the other modes.
+     *
+     * @throws LogicException When the user columns still fold
      */
+    public function assertExact(): void
+    {
+        $this->guarded();
+    }
+
     private function guarded(): void
     {
         if ($this->isStringMode()) {
