@@ -64,6 +64,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Patch on top of 1.27.0: the dock no longer covers a host footer that scrolls inside an inner scroller, and three Low
+findings of the audit OJ re-verification (AOJ2) in the opt-in `doctrine.user_reference: string` mode. See
+[UPGRADING](UPGRADING.md#to-1271).
+
+### Fixed
+
+- **The dock follows an inner scroller (owner report through Symfony Beacon).** `ChatDock` measured the elements marked
+  `data-nowo-chat-avoid` (the host footer, the Symfony web debug toolbar) on a non-capturing `scroll` listener on
+  `window`. Scroll events do not bubble, so in a host whose page scroller is an inner element — Beacon's `.app-main`
+  column under a fixed header — the measurement never ran again after load, and `--nowo-chat-toolbar-offset` stayed at
+  its load-time value: with a static (non-fixed) footer the open dock or panel covered the footer as soon as it scrolled
+  into view. The listener now captures (still passive, still throttled with `requestAnimationFrame`), so the dock sits
+  flush with the bottom edge while the footer is out of view and lifts by exactly the footer's visible height as it
+  scrolls in.
+- **A chat user of the wrong kind no longer closes the host entity manager (audit AOJ2-L1).** The kind check of
+  `Doctrine\UserReferenceListener` (`doctrine.user_reference: id` and `string`) ran on `preUpdate`, which Doctrine
+  dispatches inside the unit of work's transaction: its `LogicException` closed the host `EntityManager`, and under
+  FrankenPHP with `kernel.reset` false (REQ-RUNTIME-002) that manager stayed closed for every later request served by
+  the same worker. The check now runs on `onFlush`, before the transaction is opened, so the manager stays open.
+- **The user-column schema check is kept per connection and database (audit AOJ2-L2).**
+  `Doctrine\StringReferenceSchemaGuard` cached its passed check for the whole process, so a runtime database switch
+  (multi-tenant host, a reconnect to another schema) or a rolled-back migration kept running against columns that had
+  never been checked. The pass is now keyed on the connection and on `DATABASE()`. A look-alike row found by a read by
+  user (`ChatParticipantRepository::findOneFor()`, `ChatReactionRepository::findOneFor()`,
+  `ChatUserSettingsRepository::forUser()`) also fails closed in `string` mode instead of letting the insert that would
+  follow clash with the look-alike's unique key inside a flush, which would close the entity manager too.
+- **Snowflake-style bigint user ids are ids again (audit AOJ2-L3).** `ChatUserReferences::isCanonicalId()` accepted at
+  most 18 digits, so a host whose user ids are >= 10^18 (still below `PHP_INT_MAX`) lost those users in
+  `ChatAccess::loadUsers()` — the directory was never asked for them. It now accepts up to 19 digits, bounded by
+  `ChatUserReferences::MAX_ID` (`9223372036854775807`) with a string comparison, so anything above `PHP_INT_MAX` stays a
+  reference instead of saturating to an id.
+
 ## [1.27.0] - 2026-11-13
 
 Target 1.27.0 (minor; REQ-ARCH-001, with REQ-RUNTIME-002 and REQ-SEC-006 kept). Every change is additive: with an

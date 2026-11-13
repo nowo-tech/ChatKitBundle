@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.27.1](#to-1271)
 - [To 1.27.0](#to-1270)
   - [Framework-free port twins (REQ-ARCH-001 rule 3)](#framework-free-port-twins-req-arch-001-rule-3)
   - [Private entity manager (REQ-ARCH-001 rule 6, opt-in)](#private-entity-manager-req-arch-001-rule-6-opt-in)
@@ -70,6 +71,31 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.27.1
+
+From **1.27.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+Nothing to do: no configuration, schema or contract changes. Three notes:
+
+1. **Rebuilt browser assets.** `src/Resources/public/js/nowo-chat.js` ships the dock fix, so hosts that copy or bundle
+   the asset themselves (`php bin/console assets:install`, an importmap or an asset build) must pick up the new file.
+   Hosts whose page scroller is an inner element (a fixed header with a scrolling main column) and that mark a static
+   footer with `data-nowo-chat-avoid` get the dock resting on top of that footer instead of covering it; nothing to
+   configure.
+2. **`doctrine.user_reference: string` only.** The schema check of `StringReferenceSchemaGuard` is now kept per
+   connection and per `DATABASE()` instead of once per process. A host that switches database at runtime pays one
+   `SELECT DATABASE()` per check instead of trusting a pass made against another schema, and a read that returns a
+   look-alike user's row now throws the same "still fold" `LogicException` as the schema check (before, it was ignored
+   and the write that followed could clash on a unique key and close the entity manager).
+3. **`doctrine.user_reference: id` or `string` with integer ids above 10^18.** User ids of 19 digits up to
+   `PHP_INT_MAX` are treated as integer ids again and resolved through `ChatDirectoryInterface::findByIds()`. A host
+   with snowflake-style ids that worked around the 18-digit limit by implementing `ChatUserReferenceDirectoryInterface`
+   can keep it: that interface is still preferred when present.
 
 ## To 1.27.0
 

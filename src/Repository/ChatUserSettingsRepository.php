@@ -59,6 +59,9 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
         $found = $this->findOneBy($this->refs->criteria('user', $user));
         // REQ-SEC-006 item 2: the row of exactly this user (a folding collation may return a look-alike's row).
         if ($found instanceof ChatUserSettings && !ChatUserReferences::same($found->getUser(), $user)) {
+            // 1.27.1 (audit AOJ2-L2): defaults saved later would hit the look-alike's unique user key inside the
+            // flush and close the entity manager; fail closed before the insert instead.
+            $this->refs->assertNoLookAlike($this->userColumn());
             $found = null;
         }
 
@@ -116,5 +119,15 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
         $manager = $this->getEntityManager();
         $manager->persist($settings);
         $manager->flush();
+    }
+
+    /**
+     * `table.column` of the user column of this entity, for the look-alike message (1.27.1, audit AOJ2-L2).
+     */
+    private function userColumn(): string
+    {
+        $metadata = $this->getClassMetadata();
+
+        return $metadata->getTableName() . '.' . ($this->refs->isIdMode() ? $metadata->getColumnName('userRef') : 'user_id');
     }
 }

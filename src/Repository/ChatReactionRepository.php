@@ -43,9 +43,15 @@ class ChatReactionRepository extends ServiceEntityRepository
     public function findOneFor(ChatMessage $message, ChatUserInterface $user, string $emoji): ?ChatReaction
     {
         $row = $this->findOneBy(['message' => $message, 'emoji' => $emoji] + $this->refs->criteria('user', $user));
+        if ($row instanceof ChatReaction && !ChatUserReferences::same($row->getUser(), $user)) {
+            // REQ-SEC-006 item 2: exactly this user's reaction. 1.27.1 (audit AOJ2-L2): the insert that would follow
+            // hits the look-alike's unique key inside the flush and closes the entity manager.
+            $this->refs->assertNoLookAlike($this->userColumn());
 
-        // REQ-SEC-006 item 2: exactly this user's reaction.
-        return $row instanceof ChatReaction && ChatUserReferences::same($row->getUser(), $user) ? $row : null;
+            return null;
+        }
+
+        return $row;
     }
 
     /**
@@ -78,5 +84,15 @@ class ChatReactionRepository extends ServiceEntityRepository
         }
 
         return $summary;
+    }
+
+    /**
+     * `table.column` of the user column of this entity, for the look-alike message (1.27.1, audit AOJ2-L2).
+     */
+    private function userColumn(): string
+    {
+        $metadata = $this->getClassMetadata();
+
+        return $metadata->getTableName() . '.' . ($this->refs->isIdMode() ? $metadata->getColumnName('userRef') : 'user_id');
     }
 }
