@@ -63,6 +63,61 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.27.0 (minor; REQ-ARCH-001, with REQ-RUNTIME-002 and REQ-SEC-006 kept). Every change is additive: with an
+unchanged configuration and unchanged host services the bundle behaves exactly as 1.26.4. See
+[UPGRADING](UPGRADING.md#unreleased).
+
+### Added
+
+- **Framework-free host ports (REQ-ARCH-001 rules 1 and 3).** Each host port typed with a Symfony class has a 1.27 twin
+  that takes a bundle value object instead:
+
+  | Deprecated (removed in 2.0) | 1.27 twin |
+  |---|---|
+  | `Contract\ChatChannelProviderInterface` (`Request` in `contextChannel()`) | `Contract\ChatChannelSourceInterface` (`Model\ChatRequestContext`) |
+  | `Contract\ChatRealtimeInterface` (`Request` in `browserHubUrl()`) | `Contract\ChatRealtimeTransportInterface` (`Model\ChatRequestContext`) |
+  | `Contract\CurrentChatUserResolverInterface` (`UserInterface`) | `Contract\ChatParticipantResolverInterface` (`Model\ChatSecurityUser`) |
+
+  `ChatRequestContext` carries the method, scheme, host, port, base path, path, route with its scalar parameters, the
+  scalar query parameters and the locale (never a header, a cookie, the session or the body, so a host may log it);
+  `ChatSecurityUser` the user class (no Doctrine proxy), the id the object reports, the identifier and the role names.
+- **Selection rule.** A service implementing the deprecated interface is asked exactly as in 1.26, also when it
+  implements the twin too. A service implementing only the twin is asked through an internal gate (`Port\*Gate`, built
+  by `Port\Ports`). The application aliases either id: the deprecated one, or the twin's (used when the deprecated id
+  still points at the bundle's default). The optional `ChatChannelWritePolicyInterface` and
+  `ChatChannelMentionPolicyInterface` are read on the twin behind the gate. `DependencyInjection\Compiler\ChatKitPortsPass`
+  fails the build when a port service implements neither interface; a service whose class is only known at runtime (a
+  factory) is checked when built and fails closed (`LogicException`).
+- **`Contract\ChatMessagingInterface`** (default `Service\ChatMessaging`, REQ-ARCH-001 rule 1): the application service by
+  public uuid, answering with read-only views (`ChatConversationView`, `ChatMessageView`, the new
+  `Model\ChatParticipantView`) — `openDirect`, `openChannel`, `openSupport`, `send`, `buzz`, `edit`, `delete`,
+  `toggleReaction`, `resolveSupport`, `reopenSupport`, `markRead`, `join`, `pin`, `postSystemLine`, `mute`, `archive`.
+  It loads the rows, re-checks every uuid byte for byte (REQ-SEC-006 item 2: an unknown or look-alike uuid throws
+  `Service\ChatNotFoundException` before anything is written) and calls `ChatServiceInterface`, so a decoration of that
+  interface applies to both. `ChatServiceInterface` stays the entity form for standard hosts (not deprecated).
+- Docs: a "Standard Symfony host" section next to the DDD one in USAGE.
+
+### Deprecated
+
+- `ChatChannelProviderInterface`, `ChatRealtimeInterface` and `CurrentChatUserResolverInterface` (`@deprecated`;
+  Symfony's DebugClassLoader reports an application class implementing one in debug mode). They keep working unchanged
+  until 2.0. No runtime deprecation is triggered.
+
+### Tests
+
+- `PortsTest` (deprecated, both, twin only, neither; the gates pass the values through; the companions stay on the
+  twin), `ChatRequestContextsTest`, `ChatKitPortsPassTest` (aliases of either id, inner definitions, factory services,
+  neither fails the build).
+- `ChatTwinPortsEquivalenceTest`: the same scenario (guest, stranger, reader, lead: dock configuration with the page
+  channel, channel open, writes refused by the write policy, `@channel`, the realtime endpoint, unknown and look-alike
+  channel keys, the conversation list) on a kernel with the 1.26 test ports and on one with their twins only
+  (`tests/Support/TwinPorts`) gives identical observations.
+- **Twin replay** (`CHAT_KIT_PORTS=twin`, a CI job): the whole suite runs with the test kernel's channel provider and
+  realtime transport behind their twins only (aliased under the deprecated ids) and the current-user resolver through
+  `ChatParticipantResolverInterface`.
+- `ChatMessagingTest`: every method by uuid, same rows and events as the entity service, views equal to
+  `ChatConversationView::of()`, unknown / upper-case / padded uuids refused with nothing written.
+
 ## [1.26.4] - 2026-11-13
 
 ### Security

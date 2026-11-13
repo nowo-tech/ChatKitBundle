@@ -11,6 +11,9 @@ use Symfony\Component\HttpFoundation\Request;
 /**
  * Group conversations defined by the application (e.g. one channel per project). Optional: the default
  * provider has no channels.
+ *
+ * @deprecated since 1.27, implement ChatChannelSourceInterface instead (no HttpFoundation / Security types, REQ-ARCH-001 rule 3); removed
+ *             in 2.0. A service implementing this interface keeps working unchanged until then.
  */
 interface ChatChannelProviderInterface
 {

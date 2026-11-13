@@ -66,6 +66,42 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Target 1.27.0, from **1.26.4**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+Nothing to change: with the same configuration and the same services the bundle behaves as 1.26.4. No schema change.
+
+### Framework-free port twins (REQ-ARCH-001 rule 3)
+
+`ChatChannelProviderInterface`, `ChatRealtimeInterface` and `CurrentChatUserResolverInterface` are deprecated (removed
+in 2.0) and keep working unchanged. To move a service, implement the twin and alias either id to it:
+
+| Deprecated | Implement instead | Change |
+|---|---|---|
+| `ChatChannelProviderInterface` | `ChatChannelSourceInterface` | `contextChannel(ChatUserInterface $user, ChatRequestContext $page)`: read `$page->path`, `$page->route`, `$page->routeParam('slug')`, `$page->query` instead of the `Request` |
+| `ChatRealtimeInterface` | `ChatRealtimeTransportInterface` | `browserHubUrl(ChatRequestContext $request)`: `$request->origin()` is `Request::getSchemeAndHttpHost()` |
+| `CurrentChatUserResolverInterface` | `ChatParticipantResolverInterface` | `resolve(?ChatSecurityUser $user)`: map `$user->identifier` (or `$user->id`) to the participant; the security user object is not passed |
+
+```yaml
+# config/services.yaml — either line works
+Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface: '@App\Chat\ProjectChannels'
+Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface: '@App\Chat\ProjectChannels'
+```
+
+Keep the write and mention policies (`ChatChannelWritePolicyInterface`, `ChatChannelMentionPolicyInterface`) on the
+same class. A class implementing both the old interface and the twin is asked through the old one until 2.0. A port
+service that implements neither now fails the container build (it failed at the first call before).
+
+### Calling the chat by id
+
+New `ChatMessagingInterface` (autowire it): the same operations as `ChatServiceInterface` by public uuid, answering
+with `ChatConversationView` / `ChatMessageView` / `ChatParticipantView`. `edit()`, `delete()`, `toggleReaction()` and
+`pin()` take the conversation uuid and the message uuid. An unknown uuid throws `ChatNotFoundException`
+(`$what`, `$uuid`). `ChatServiceInterface` is not deprecated.
+
 ## To 1.26.4
 
 From **1.26.3**:

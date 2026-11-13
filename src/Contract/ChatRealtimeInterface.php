@@ -9,6 +9,9 @@ use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Realtime transport (Mercure by default). Topics are private and per user; the bundle decides recipients.
+ *
+ * @deprecated since 1.27, implement ChatRealtimeTransportInterface instead (no HttpFoundation / Security types, REQ-ARCH-001 rule 3); removed
+ *             in 2.0. A service implementing this interface keeps working unchanged until then.
  */
 interface ChatRealtimeInterface
 {

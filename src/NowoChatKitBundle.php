@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle;
 
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\ChatKitPortsPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\RealtimeTransportPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
@@ -37,6 +38,8 @@ final class NowoChatKitBundle extends Bundle
     {
         parent::build($container);
         $container->addCompilerPass(new RealtimeTransportPass());
+        // 1.27: the framework-free port twins (after the realtime transport is chosen).
+        $container->addCompilerPass(new ChatKitPortsPass());
         $container->addCompilerPass(new TwigPathsPass());
     }
 

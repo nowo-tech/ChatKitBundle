@@ -13,6 +13,9 @@ use Symfony\Component\Security\Core\User\UserInterface;
  * DTO or a wrapper (common in hexagonal applications) aliases this interface to its own resolver, e.g. one that loads
  * the participant from ChatDirectoryInterface by the security user's identifier. Used by ChatVoter, the dock (Twig) and
  * every chat controller; keep it cheap (memoize per request; no state across requests in worker mode).
+ *
+ * @deprecated since 1.27, implement ChatParticipantResolverInterface instead (no HttpFoundation / Security types, REQ-ARCH-001 rule 3); removed
+ *             in 2.0. A service implementing this interface keeps working unchanged until then.
  */
 interface CurrentChatUserResolverInterface
 {

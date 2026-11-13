@@ -11,6 +11,7 @@ use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
@@ -36,6 +37,7 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Nowo\ChatKitBundle\Service\ChatMentions;
+use Nowo\ChatKitBundle\Service\ChatMessaging;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
@@ -73,6 +75,9 @@ return static function (ContainerConfigurator $container): void {
             '../../Http/ChatApiException.php',
             '../../Service/ChatChannelDeniedException.php',
             '../../Realtime/ChatTopics.php',
+            // 1.27: the port gates and value copies are built by Ports (ChatKitPortsPass), never autowired.
+            '../../Port',
+            '../../Service/ChatNotFoundException.php',
             '../../Avatar/AvatarUrlPolicy.php',
             '../../Doctrine/UnresolvedChatUser.php',
         ]);
@@ -111,6 +116,8 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).
     $services->alias(ChatServiceInterface::class, ChatService::class);
+    // 1.27: the same service by public uuid, answering with views (REQ-ARCH-001 rule 1; DDD hosts).
+    $services->alias(ChatMessagingInterface::class, ChatMessaging::class);
     // 1.24: who the signed-in user is in the chat (default: the security user when it implements ChatUserInterface).
     $services->alias(CurrentChatUserResolverInterface::class, SecurityChatUserResolver::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);

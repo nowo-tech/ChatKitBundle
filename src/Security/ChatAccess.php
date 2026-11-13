@@ -16,6 +16,7 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatChannelKey;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\Ports;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Contracts\Service\ResetInterface;
@@ -253,7 +254,7 @@ final class ChatAccess implements ResetInterface
         return (bool) $this->memo('write:' . $user->getId() . ':' . $key, fn (): bool => $this->canUseChannel($user, $key)
             && ($channel = $this->channel($key)) instanceof ChatChannel
             && !$channel->readOnly
-            && (!$this->channelProvider instanceof ChatChannelWritePolicyInterface || $this->channelProvider->canWrite($user, $channel)));
+            && (!($policy = Ports::companion($this->channelProvider)) instanceof ChatChannelWritePolicyInterface || $policy->canWrite($user, $channel)));
     }
 
     /**

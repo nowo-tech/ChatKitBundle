@@ -270,6 +270,49 @@ jobs:
 
   # GZ-M1: the channel row is written through DBAL, so it needs real databases and both id strategies and DBAL versions.
   # House rule LQ: ChatChannelLookalikeTest proves look-alike channel keys stay apart on the same databases.
+  # 1.27 (REQ-ARCH-001): the whole suite replayed with the host ports behind their framework-free twins only.
+  replay:
+    name: Suite replay (${{ matrix.name }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: 'twin ports', env: 'CHAT_KIT_PORTS=twin' }
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php-8.4-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-8.4-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-interaction
+
+      - name: Run the suite
+        env:
+          SYMFONY_DEPRECATIONS_HELPER: max[direct]=0
+        run: env ${{ matrix.env }} vendor/bin/phpunit --no-coverage
+
   database:
     name: Channel race and look-alike keys (${{ matrix.name }})
     runs-on: ubuntu-latest

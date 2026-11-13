@@ -124,6 +124,7 @@ and `make -C demo/symfony8 demo-screenshots` (see [docs/CONTRIBUTING.md](docs/CO
 - [Installation](docs/INSTALLATION.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Usage](docs/USAGE.md)
+  - [Standard Symfony host](docs/USAGE.md#standard-symfony-host)
   - [Using it from a DDD / hexagonal application](docs/USAGE.md#using-it-from-a-ddd--hexagonal-application)
 - [Contributing](docs/CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
