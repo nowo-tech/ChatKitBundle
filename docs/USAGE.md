@@ -238,7 +238,10 @@ context, not as part of your domain model.
   messages are named by their public uuids and every answer is a read-only view (`ChatConversationView`,
   `ChatMessageView`, `ChatParticipantView`), never an entity. It loads the rows (compared byte for byte; an unknown or
   look-alike uuid throws `ChatNotFoundException` before anything is written) and calls `ChatServiceInterface`, so a
-  decoration of that interface applies to both. Authorization stays your job, as with `ChatServiceInterface`.
+  decoration of that interface applies to both. Unlike `ChatServiceInterface`, it authorizes its actor with the API's
+  rules (view, send, pin, edit and delete own messages within the window, resolve for agents); a forbidden conversation
+  or message throws the same `ChatNotFoundException` as an unknown one. `can($actor, $conversationUuid, $action,
+  $messageUuid)` answers the same question without acting, so you can authorize by uuid without loading entities.
 - 1.27: **framework-free port twins** (REQ-ARCH-001 rule 3). Three ports were typed with Symfony classes; each has a
   twin that takes a bundle value object instead, and the old interface is deprecated (removed in 2.0):
 
