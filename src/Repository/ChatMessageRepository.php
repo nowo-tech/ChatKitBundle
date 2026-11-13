@@ -116,10 +116,10 @@ class ChatMessageRepository extends ServiceEntityRepository
         $participants = $em->getClassMetadata(ChatParticipant::class)->getTableName();
         // 1.27 (audit OJ-M1, REQ-SEC-006 item 6): with user references on MySQL / MariaDB the user columns are compared
         // byte for byte in SQL too (a folding legacy column would count a look-alike's read cursor or messages).
-        $exact        = $this->refs->isIdMode() && $em->getConnection()->getDatabasePlatform() instanceof AbstractMySQLPlatform;
-        $sameUser     = $exact ? ' AND CAST(p.user_id AS BINARY) = CAST(:user AS BINARY)' : '';
-        $otherAuthor  = $exact ? 'CAST(m.author_id AS BINARY) <> CAST(:user AS BINARY)' : 'm.author_id <> :user';
-        $rows         = $em->getConnection()->fetchAllAssociative(
+        $exact       = $this->refs->isIdMode() && $em->getConnection()->getDatabasePlatform() instanceof AbstractMySQLPlatform;
+        $sameUser    = $exact ? ' AND CAST(p.user_id AS BINARY) = CAST(:user AS BINARY)' : '';
+        $otherAuthor = $exact ? 'CAST(m.author_id AS BINARY) <> CAST(:user AS BINARY)' : 'm.author_id <> :user';
+        $rows        = $em->getConnection()->fetchAllAssociative(
             'SELECT m.conversation_id AS cid, COUNT(m.id) AS n
                FROM ' . $messages . ' m
           LEFT JOIN ' . $participants . ' p ON p.conversation_id = m.conversation_id AND p.user_id = :user' . $sameUser . '

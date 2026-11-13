@@ -87,9 +87,11 @@ final readonly class ChatUserReferences
     public function assertKind(ChatUserInterface $user): void
     {
         if (!$this->fitsKind($user)) {
-            throw new LogicException($this->isStringMode()
+            $message = $this->isStringMode()
                 ? sprintf('nowo_chat_kit: doctrine.user_reference is "string": every chat user must implement %s (%s does not).', ChatUserReferenceInterface::class, $user::class)
-                : sprintf('nowo_chat_kit: %s implements %s, which needs doctrine.user_reference "string".', $user::class, ChatUserReferenceInterface::class));
+                : sprintf('nowo_chat_kit: %s implements %s, which needs doctrine.user_reference "string".', $user::class, ChatUserReferenceInterface::class);
+
+            throw new LogicException($message);
         }
     }
 

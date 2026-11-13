@@ -18,6 +18,7 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
 use function array_filter;
 use function array_slice;
+use function count;
 use function in_array;
 
 /**
@@ -246,9 +247,9 @@ class ChatConversationRepository extends ServiceEntityRepository
         $peers  = [];
         $offset = 0;
         do {
-            /** @var list<array{mine: int|string, other: int|string}> $rows */
+            /** @var list<array{mineRef: int|string, otherRef: int|string}> $rows */
             $rows = $this->getEntityManager()->createQueryBuilder()
-                ->select($this->refs->identity('mine', 'user') . ' AS mine', $this->refs->identity('other', 'user') . ' AS other')
+                ->select($this->refs->identity('mine', 'user') . ' AS mineRef', $this->refs->identity('other', 'user') . ' AS otherRef')
                 ->from(ChatParticipant::class, 'mine')
                 ->innerJoin('mine.conversation', 'c')
                 ->innerJoin(ChatParticipant::class, 'other', 'WITH', 'other.conversation = c AND ' . $this->refs->field('other', 'user') . ' <> ' . $this->refs->field('mine', 'user'))
@@ -261,8 +262,8 @@ class ChatConversationRepository extends ServiceEntityRepository
                 ->getQuery()
                 ->getArrayResult();
             foreach ($rows as $row) {
-                if (count($peers) < $limit && (string) $row['mine'] === $key && (string) $row['other'] !== $key) {
-                    $peers[] = ChatUserReferences::idOrKey((string) $row['other']);
+                if (count($peers) < $limit && (string) $row['mineRef'] === $key && (string) $row['otherRef'] !== $key) {
+                    $peers[] = ChatUserReferences::idOrKey((string) $row['otherRef']);
                 }
             }
             $offset += $limit;

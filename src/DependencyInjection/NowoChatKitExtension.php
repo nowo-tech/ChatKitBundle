@@ -193,9 +193,11 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         // 1.27 (audit OJ-L1): string references only in `string` mode, and integer users never in it.
         $userClass = $profile['user_class'];
         if (is_string($userClass) && class_exists($userClass) && is_a($userClass, ChatUserReferenceInterface::class, true) !== ($userReference === ChatUserReferences::STRING)) {
-            throw new InvalidConfigurationException($userReference === ChatUserReferences::STRING
-                ? sprintf('nowo_chat_kit: doctrine.user_reference is "string" but %s does not implement %s.', $userClass, ChatUserReferenceInterface::class)
-                : sprintf('nowo_chat_kit: %s implements %s, which needs "doctrine.user_reference: string".', $userClass, ChatUserReferenceInterface::class));
+            $message = $userReference === ChatUserReferences::STRING
+                ? 'nowo_chat_kit: doctrine.user_reference is "string" but %s does not implement %s.'
+                : 'nowo_chat_kit: %s implements %s, which needs "doctrine.user_reference: string".';
+
+            throw new InvalidConfigurationException(sprintf($message, $userClass, ChatUserReferenceInterface::class));
         }
         if ($userReference !== ChatUserReferences::STRING) {
             $container->removeDefinition(StringReferenceSchemaGuard::class);

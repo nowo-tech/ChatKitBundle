@@ -17,6 +17,7 @@ use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
 use function array_key_exists;
+use function count;
 use function in_array;
 
 /**
