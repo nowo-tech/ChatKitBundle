@@ -73,6 +73,25 @@ UUIDs (no sequential ids in URLs).
 The bundle logs **no message content and no personal data**: failed hub publishes (`ChatPublisher`: the event type and the
 exception, never the payload), and `nowo:chat:purge` start / end with counts, and on failure the exception class and message (no message content). Host senders should follow the same rule.
 
+1.28 (`doctrine.user_reference: string` only, REQ-OBS-001): when a user column folds behind a passed schema check, the
+bundle logs one **warning** per column and user in the request (`StringReferenceSchemaGuard`) and refuses the write that
+would follow with `ChatUserLookAlikeException`. Both carry the column name (`nowo_chat_participant.user_id`) and a
+**keyed hash** of the user reference — the first 16 hex digits of HMAC-SHA256 under `kernel.secret` — never the reference
+itself, which in that mode is host-defined and often an e-mail address or a username. The hash is stable in one
+installation, so log lines can be correlated; reading a reference back needs the secret (hash a known reference with
+`StringReferenceSchemaGuard::hashOf()` to find its lines).
+
+Which references the bundle treats as possibly one key to a folding column (`ChatUserReferences::mayFold()`, used only
+to avoid a write that could clash, never to merge two users): equal after compatibility decomposition (NFKD), removal
+of combining marks, Unicode case folding and removal of trailing spaces — `bob` / `Bob` / `BÓB` / `ｂｏｂ` / `bob `, and
+`straße` / `STRASSE`. Its limits: it does not fold what some collations still equate, such as `ß` / `s`
+(`utf8mb4_general_ci`), `Æ` / `AE` or zero-width characters; without the intl extension (`Normalizer`) it folds only case
+and trailing spaces. Pairs it misses are only partly covered: once a read by user meets the look-alike's row, the
+read degrades and the write into that column is refused as above, but the two writes that have no read before them —
+a new direct conversation (`ChatService::create()`) and one message's mention rows (`ChatMentions::sync()`) — still
+write both rows in one flush, clash on the unique key and close the entity manager, exactly as in 1.27.x. Only the
+binary NO PAD collation of UPGRADING ("String user references") removes every such pair.
+
 ## Dependencies
 
 `composer audit` runs in CI (`Composer audit (Critical/High)` step) and before each release; Dependabot keeps

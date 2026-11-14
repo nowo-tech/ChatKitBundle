@@ -12,6 +12,7 @@ use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -54,6 +55,9 @@ use function is_string;
 final readonly class ChatService implements ChatServiceInterface
 {
     private const string CHANNEL_INSERT_SAVEPOINT = 'nowo_chat_channel_insert';
+
+    /** 1.28 (audit PV-D1): the savepoint of a new conversation between look-alikes inside the caller's transaction. */
+    private const string LOOK_ALIKE_SAVEPOINT = 'nowo_chat_look_alike_create';
 
     /**
      * Builds the service from the entity manager, repositories, renderer, notifier and the offered reactions.
@@ -169,8 +173,11 @@ final readonly class ChatService implements ChatServiceInterface
         $body                       = $this->links?->normalizeCards($body) ?? $body;
         $body                       = $this->references?->validate($conversation, $author, $body) ?? $body;
         [$body, $mentioned, $group] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, [], null];
-        $now                        = $this->clock->now();
-        $message                    = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
+        // 1.28 (audit PV-D7): the author's participant row first, so a look-alike refusal comes before any write (the
+        // mention sync may flush the message early).
+        $participant = $this->participant($conversation, $author);
+        $now         = $this->clock->now();
+        $message     = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
         $message->mentionAll($group);
         $this->entityManager->persist($message);
         // 1.19: the message's links go to the index of the Links panel (flushed with the message).
@@ -178,7 +185,7 @@ final readonly class ChatService implements ChatServiceInterface
         $mentioned = $this->mentions?->sync($message, $mentioned) ?? [];
         $conversation->touch($now);
         $reopened = $this->supportTransition($conversation, $author);
-        $this->publish($message, $author);
+        $this->publish($message, $author, $participant);
         if ($reopened) {
             $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $author));
             if ($conversation->isTicket()) {
@@ -205,11 +212,14 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function buzz(ChatUserInterface $author, ChatConversation $conversation): ChatMessage
     {
-        $message = ChatMessage::buzz($conversation, $author, $this->clock->now());
+        // 1.28 (audit PV-L7): the author's participant row first, as in send(), so a look-alike refusal leaves no buzz
+        // pending in the unit of work for a later flush (the next request of a worker) to store.
+        $participant = $this->participant($conversation, $author);
+        $message     = ChatMessage::buzz($conversation, $author, $this->clock->now());
         $this->entityManager->persist($message);
         $conversation->touch($message->getCreatedAt());
 
-        return $this->publish($message, $author);
+        return $this->publish($message, $author, $participant);
     }
 
     /**
@@ -289,6 +299,8 @@ final readonly class ChatService implements ChatServiceInterface
         if ($existing instanceof ChatReaction) {
             $this->entityManager->remove($existing);
         } else {
+            // 1.28: refused before the insert when the read found a look-alike's reaction (folding user column).
+            $this->reactionRepository->assertInsertable($user);
             $this->entityManager->persist(new ChatReaction($message, $user, $emoji, $this->clock->now()));
         }
         $this->entityManager->flush();
@@ -363,6 +375,8 @@ final readonly class ChatService implements ChatServiceInterface
     {
         $participant = $this->participants->findOneFor($conversation, $user);
         if (!$participant instanceof ChatParticipant) {
+            // 1.28: refused before the insert when the read found a look-alike's row (folding user column).
+            $this->participants->assertInsertable($user);
             $participant = new ChatParticipant($conversation, $user, $this->clock->now());
             $this->entityManager->persist($participant);
         }
@@ -520,9 +534,9 @@ final readonly class ChatService implements ChatServiceInterface
         return $body;
     }
 
-    private function publish(ChatMessage $message, ChatUserInterface $author): ChatMessage
+    private function publish(ChatMessage $message, ChatUserInterface $author, ?ChatParticipant $participant = null): ChatMessage
     {
-        $participant = $this->participant($message->getConversation(), $author);
+        $participant ??= $this->participant($message->getConversation(), $author);
         $this->entityManager->flush();
         // The author has read everything up to their own message.
         $participant->markReadUpTo((int) $message->getId());
@@ -626,15 +640,91 @@ final readonly class ChatService implements ChatServiceInterface
      * Persist a new conversation with its participant rows. Two simultaneous first messages to the same pair
      * hit the unique key and one request fails; the client retries the open call, which then finds it.
      *
+     * 1.28 (audit PV-L2, `string` mode): a participant whose reference may fold onto an earlier one's (`Bob` next to
+     * `bob`) is written only after the others are stored and a read showed the user column keeps them apart. On a
+     * column that folds that read returns the look-alike's row and ChatUserLookAlikeException is thrown: the two
+     * inserts would otherwise clash inside one flush and close the entity manager. On exact columns both rows are
+     * written, one flush later. Audit PV-D1: both phases run in one transaction (a savepoint inside the caller's own),
+     * rolled back on the refusal, and the conversation and rows written by the first phase are detached, so nothing
+     * half-written stays and no cleanup statement can hide the refusal. Audit PV-L6: pending changes of the caller are
+     * flushed before that transaction starts, so a refusal never rolls them back.
+     *
      * @param list<ChatUserInterface> $participants
+     *
+     * @throws ChatUserLookAlikeException When the participant column folds two of the participants into one
      */
     private function create(ChatConversation $conversation, array $participants): ChatConversation
     {
-        $this->entityManager->persist($conversation);
+        $first = [];
+        $later = [];
         foreach ($participants as $user) {
-            $this->entityManager->persist(new ChatParticipant($conversation, $user, $this->clock->now()));
+            if ($this->participants->mayClash($user, $first)) {
+                $later[] = $user;
+            } else {
+                $first[] = $user;
+            }
         }
+        if ($later === []) {
+            $this->entityManager->persist($conversation);
+            foreach ($first as $user) {
+                $this->entityManager->persist(new ChatParticipant($conversation, $user, $this->clock->now()));
+            }
+            $this->entityManager->flush();
+
+            return $conversation;
+        }
+
+        // Audit PV-L6: the caller's pending work is written first, outside what a refusal rolls back; otherwise the
+        // rollback would remove its rows while the entities stay managed with ids, and no later flush would write them.
         $this->entityManager->flush();
+        $connection = $this->entityManager->getConnection();
+        $savepoint  = $connection->isTransactionActive() ? self::LOOK_ALIKE_SAVEPOINT : null;
+        if ($savepoint === null) {
+            $connection->beginTransaction();
+        } else {
+            $connection->createSavepoint($savepoint);
+        }
+        $rows = [];
+        try {
+            $this->entityManager->persist($conversation);
+            foreach ($first as $user) {
+                $this->entityManager->persist($rows[] = new ChatParticipant($conversation, $user, $this->clock->now()));
+            }
+            $this->entityManager->flush();
+            foreach ($later as $user) {
+                // A folding column answers the look-alike's row: findOneFor() reports it and assertInsertable() refuses.
+                $this->participants->findOneFor($conversation, $user);
+                $this->participants->assertInsertable($user);
+            }
+            foreach ($later as $user) {
+                $this->entityManager->persist(new ChatParticipant($conversation, $user, $this->clock->now()));
+            }
+            $this->entityManager->flush();
+        } catch (ChatUserLookAlikeException $refused) {
+            if ($savepoint === null) {
+                $connection->rollBack();
+            } else {
+                $connection->rollbackSavepoint($savepoint);
+                $connection->releaseSavepoint($savepoint);
+            }
+            foreach ([...$rows, $conversation] as $entity) {
+                $this->entityManager->detach($entity);
+            }
+
+            throw $refused;
+        } catch (Throwable $failure) {
+            // Anything else (a lost race on the pair, a closed connection): the transaction is the caller's to see fail.
+            if ($savepoint === null && $connection->isTransactionActive()) {
+                $connection->rollBack();
+            }
+
+            throw $failure;
+        }
+        if ($savepoint === null) {
+            $connection->commit();
+        } else {
+            $connection->releaseSavepoint($savepoint);
+        }
 
         return $conversation;
     }

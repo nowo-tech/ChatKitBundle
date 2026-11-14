@@ -65,6 +65,72 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.28.0 (minor; behaviour change in `doctrine.user_reference: string` only). See [UPGRADING](UPGRADING.md#unreleased).
+
+### Added
+
+- `Doctrine\ChatUserLookAlikeException` (extends `LogicException`, so existing `catch (LogicException)` blocks keep
+  working): the refusal described below. `StringReferenceSchemaGuard::hashOf()` gives the keyed hash the warning and
+  the exception show instead of a reference.
+- `ChatParticipantRepository::assertInsertable()` / `mayClash()`, `ChatReactionRepository::assertInsertable()`,
+  `ChatMessageMentionRepository::keyedByReference()` / `reportLookAlike()`, `ChatUserReferences::reportLookAlike()` /
+  `assertNoLookAlike()` / `mayFold()`.
+
+### Changed
+
+- **A folding user column refuses the write instead of the read (`doctrine.user_reference: string`).** The schema
+  guard checks the collation of the user columns once per request and connection and keeps the pass for that request
+  (1.27.1), so a column altered or a migration rolled back after the check, or a connection switched to another
+  database inside the request, still lets a read by user come back with a look-alike's row (`Bob`'s row for `bob`).
+  Such a row was dropped silently; it is now reported as a PSR-3 warning, once per column and asked user in the
+  request, and the write that would follow the read into **that column** is refused:
+
+  - the reads keep degrading exactly as before — `ChatUserSettingsRepository::forUser()` returns unsaved defaults
+    (it runs from `ChatDockExtension::config()` on every page of the host and inside `ChatPersonalData::erase()`),
+    `ChatParticipantRepository::findOneFor()` and `ChatReactionRepository::findOneFor()` return null, and
+    `ChatUserSettingsRepository::forUsers()` now reports the rows it drops instead of ignoring them silently, against
+    the user who was asked for (the one whose first save would clash), never the row's owner (audit PV-L1);
+  - `ChatService::participant()` (and the methods that create a participant row through it: `openChannel()`, `send()`,
+    `buzz()`, `markRead()`, `mute()` with an end, `archive()`), `ChatService::toggleReaction()` and
+    `ChatUserSettingsRepository::save()` throw `ChatUserLookAlikeException` before `persist()`, where the insert would
+    otherwise hit the look-alike's unique key inside the flush and close the host `EntityManager` (which, under
+    FrankenPHP with `kernel.reset` false, stays closed). A look-alike seen in one table never refuses writes to another
+    table, which may compare exactly (audit PV-L1);
+  - `ChatAutoReplier` skips the automatic reply for that user instead of raising: it runs inside
+    `ChatService::send()`, after the message was flushed, and the person who sent it must not get an error. It catches
+    only `ChatUserLookAlikeException` (audit PV-I1).
+
+  Nothing changes in `relation` or `id` mode, nor while the user columns compare byte for byte.
+- **The two writes by user reference without a preceding read never reach a clashing flush (audit PV-L2, `string`
+  mode).** Both clashed and closed the entity manager in 1.27.x:
+  - `ChatService::openDirect()` between two references a folding column could take for one (`bob` / `Bob`, accents,
+    width, trailing spaces) stores the second participant row only after a read showed the column keeps them apart.
+    The caller's pending changes are flushed first; then both steps run in one transaction (a savepoint inside the
+    caller's own): on a folding column it is rolled back, the half-written conversation is detached and
+    `ChatUserLookAlikeException` is thrown; on an exact column both rows are written as before (one flush later).
+  - `ChatService::send()` and `ChatService::buzz()` create the author's participant row before anything else, so a
+    look-alike author is refused before the message is persisted or flushed and nothing stays pending for a later
+    flush (audits PV-D7, PV-L7); `ChatSupportTickets::open()` detaches the new ticket when its owner is refused.
+  - `ChatMentions::sync()`, when a message mentions two such references, flushes the first mention row and reads the
+    column before writing the second. On an exact column both people keep their own row (unread badge, mentions list)
+    and are notified once. On a folding column the message keeps one row; the second person is notified once and
+    counts as already mentioned on later edits, so `edit()` never repeats `ChatMentionEvent`; an edit never adds a row
+    next to the look-alike's row a folding delete kept. Each case is reported as a look-alike.
+  - What "may fold" means is `ChatUserReferences::mayFold()`; its limits are in [SECURITY.md](SECURITY.md#logging).
+
+### Security
+
+- **The look-alike warning and refusal log no user reference (audit PV-L3, REQ-OBS-001).** They name the column and a
+  keyed hash of the reference (HMAC-SHA256 under `kernel.secret` over `nowo_chat_lookalike|` and the reference, first
+  16 hex digits); see
+  [SECURITY.md](SECURITY.md#logging).
+- **The GDPR export returns exactly the user's own rows (audit PV-L4, REQ-SEC-006 item 2).**
+  `ChatPersonalData::export()` read the user's messages, pins, quick replies and pinned links with `= :user` only, so
+  on a user column that folds behind a passed schema check the export of `Bob` included `bob`'s messages, pins, quick
+  replies and links. Each list is now filtered byte for byte, like `erase()` and every other read by user. Affected:
+  1.27.0 and 1.27.1, `doctrine.user_reference: string` only, and only on a user column that folds although the schema
+  check passed (the integer-id modes compare exactly).
+
 ## [1.27.1] - 2026-11-13
 
 Patch on top of 1.27.0: the dock no longer covers a host footer that scrolls inside an inner scroller, one REQ-SEC-006

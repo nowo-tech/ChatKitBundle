@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
+use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -89,9 +90,15 @@ class ChatParticipantRepository extends ServiceEntityRepository
     public function findOneFor(ChatConversation $conversation, ChatUserInterface $user): ?ChatParticipant
     {
         $row = $this->findOneBy(['conversation' => $conversation] + $this->refs->criteria('user', $user));
+        if ($row instanceof ChatParticipant && !ChatUserReferences::same($row->getUser(), $user)) {
+            // REQ-SEC-006 item 2: exactly this user's row (a folding collation may return a look-alike's). 1.28: the
+            // read degrades to null and warns; assertInsertable() refuses the write that follows.
+            $this->refs->reportLookAlike($this->userColumn(), $user);
 
-        // REQ-SEC-006 item 2: exactly this user's row (a folding collation may return a look-alike's).
-        return $row instanceof ChatParticipant && ChatUserReferences::same($row->getUser(), $user) ? $row : null;
+            return null;
+        }
+
+        return $row;
     }
 
     /**
@@ -178,5 +185,53 @@ class ChatParticipantRepository extends ServiceEntityRepository
         }
 
         return $count;
+    }
+
+    /**
+     * 1.28: refuses to insert a participant row for a user whose look-alike this request already found in the table,
+     * because the insert would clash with that row's unique key inside the flush and close the entity manager.
+     *
+     * @param ChatUserInterface $user The user the row would be written for
+     *
+     * @throws ChatUserLookAlikeException When a look-alike row of that user was read in this table in this request
+     */
+    public function assertInsertable(ChatUserInterface $user): void
+    {
+        $this->refs->assertNoLookAlike($this->userColumn(), $user);
+    }
+
+    /**
+     * 1.28 (audit PV-L2): whether a new participant row for `$user` could clash with the row of one of `$others` on a
+     * user column that folds (references equal but for case, accents, width or trailing spaces). Never outside
+     * `string` mode. ChatService::create() then writes that row only after a read proved the column exact.
+     *
+     * @param ChatUserInterface $user The user about to get a row
+     * @param list<ChatUserInterface> $others The users already getting one
+     *
+     * @return bool True when the two rows may be one row to a folding column
+     */
+    public function mayClash(ChatUserInterface $user, array $others): bool
+    {
+        $key = $this->refs->isStringMode() ? ChatUserReferences::key($user) : null;
+        if ($key === null) {
+            return false;
+        }
+        foreach ($others as $other) {
+            if (ChatUserReferences::mayFold($key, (string) ChatUserReferences::key($other))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * `table.column` of the user column of this entity, for the look-alike warning (1.28).
+     */
+    private function userColumn(): string
+    {
+        $metadata = $this->getClassMetadata();
+
+        return $metadata->getTableName() . '.' . ($this->refs->isIdMode() ? $metadata->getColumnName('userRef') : 'user_id');
     }
 }

@@ -72,6 +72,39 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Target 1.28.0, from **1.27.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+Only `doctrine.user_reference: string`, and only on a database whose user columns fold although the schema check
+passed (a column altered, or a migration rolled back, after the check of the request, or a connection switched to
+another database inside the request; since 1.27.1 the check runs once per request and connection).
+
+A read by user that comes back with a look-alike's row still ignores it and degrades — unsaved defaults from
+`ChatUserSettingsRepository::forUser()`, null from the `findOneFor()` of the participant and reaction repositories —
+and now logs a PSR-3 **warning** naming the column and a keyed hash of the asked user's reference (never the
+reference itself; see SECURITY.md "Logging"), once per column and user key and request. New: the write into that same
+column that would follow such a read throws `ChatUserLookAlikeException` (a `LogicException`) before `persist()`
+(`ChatService::participant()` and the methods that go through it, `ChatService::toggleReaction()`,
+`ChatUserSettingsRepository::save()`), because that insert would hit the look-alike's unique key inside the flush and
+close the host entity manager. `ChatAutoReplier` catches it and skips the automatic reply, so sending a message never
+fails for this. Writes to other tables are not affected.
+
+Two writes that have no read before them are protected too: `ChatService::openDirect()` between two references that a
+folding column could take for one (`bob` / `Bob`) throws `ChatUserLookAlikeException` and writes nothing when the
+participant column folds (inside one transaction, so nothing is left behind), and `ChatMentions::sync()` writes the
+second of two such mention rows only after a read shows the column keeps them apart: on a folding column the message
+keeps one row and the second person is notified once. On exact columns nothing visible changes: both participant
+rows and both mention rows are written, and everyone is notified once.
+
+`ChatPersonalData::export()` now filters every list byte for byte, so on a folding column the export never contains a
+look-alike's messages, pins, quick replies or links (it did in 1.27.0 and 1.27.1). Nothing to change in the host.
+
+If those warnings appear, run the `ALTER TABLE` of ["String user references"](#to-1270) again: the chat is reading
+and writing on columns that treat `bob`, `Bob` and `bob ` as one person.
+
 ## To 1.27.1
 
 From **1.27.0**:

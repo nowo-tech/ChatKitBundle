@@ -190,7 +190,10 @@ final readonly class ChatMentions
     }
 
     /**
-     * Makes the message's mention rows match the mentioned members (persisted, not flushed).
+     * Makes the message's mention rows match the mentioned members (persisted, not flushed). 1.28, `string` mode: when
+     * two mentioned references may fold onto each other (`bob` / `Bob`), the first row is flushed and a read decides:
+     * an exact column stores both rows; a folding one stores one row, notifies the second person once and treats them
+     * as already mentioned afterwards (audit PV-D4).
      *
      * @param ChatMessage $message The stored or new message
      * @param list<ChatUserInterface> $users The members the text mentions now
@@ -201,19 +204,68 @@ final readonly class ChatMentions
     {
         $existing = $this->mentions->userIdsOf($message);
         $keep     = array_map(static fn (ChatUserInterface $user): int|string => ChatUserReferences::idOrKey((string) ChatUserReferences::key($user)), $users);
-        if (array_diff($existing, $keep) !== []) {
+        $removed  = array_diff($existing, $keep) !== [];
+        if ($removed) {
             // @igor-ignore - a repository DELETE query (database rows), not state held by this service.
             $this->mentions->removeFor($message, $keep);
         }
-        $added = [];
+        // 1.28 (audit PV-L2 / PV-D4, `string` mode): the rows this message holds now. A new row whose key may fold onto
+        // one of them is written only once a read proved the column keeps the two apart (exact columns: every person
+        // keeps their own row); a folding column would clash inside the flush and close the entity manager.
+        $stored  = $this->mentions->keyedByReference() ? array_map(strval(...), $removed ? $this->mentions->userIdsOf($message) : $existing) : null;
+        $kept    = $stored === null ? [] : array_intersect($stored, array_map(strval(...), $keep));
+        $pending = [];
+        $added   = [];
         foreach ($users as $user) {
-            if (!in_array(ChatUserReferences::idOrKey((string) ChatUserReferences::key($user)), $existing, true)) {
-                $this->entityManager->persist(new ChatMessageMention($message, $user, $message->getCreatedAt()));
-                $added[] = $user;
+            $key = (string) ChatUserReferences::key($user);
+            if (in_array(ChatUserReferences::idOrKey($key), $existing, true)) {
+                continue;
             }
+            if ($stored !== null) {
+                $clash = $this->foldsOnto($key, [...$stored, ...$pending]);
+                if ($clash !== null) {
+                    if (in_array($clash, $pending, true)) {
+                        // The row it may fold onto is not stored yet: store it, then ask the column.
+                        $this->entityManager->flush();
+                        $stored  = [...$stored, ...$pending];
+                        $pending = [];
+                    }
+                    if ($this->mentions->holdsLookAlikeOf($message, $user)) {
+                        // The column folds: no second row. A look-alike that already held this message's mention before
+                        // this sync counts as this user's (no new notification on every edit); otherwise notify.
+                        if (!in_array($clash, $kept, true)) {
+                            $added[] = $user;
+                        }
+
+                        continue;
+                    }
+                }
+                $pending[] = $key;
+            }
+            $added[] = $user;
+            $this->entityManager->persist(new ChatMessageMention($message, $user, $message->getCreatedAt()));
         }
 
         return $added;
+    }
+
+    /**
+     * 1.28 (audit PV-L2): the stored key a new mention row's key may fold onto, if any.
+     *
+     * @param string $key The new row's user key
+     * @param list<string> $stored The keys of the message's rows
+     *
+     * @return string|null The stored key, or null when the new row cannot clash
+     */
+    private function foldsOnto(string $key, array $stored): ?string
+    {
+        foreach ($stored as $other) {
+            if (ChatUserReferences::mayFold($other, $key)) {
+                return $other;
+            }
+        }
+
+        return null;
     }
 
     /**

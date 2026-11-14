@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Repository;
 
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -43,9 +44,15 @@ class ChatReactionRepository extends ServiceEntityRepository
     public function findOneFor(ChatMessage $message, ChatUserInterface $user, string $emoji): ?ChatReaction
     {
         $row = $this->findOneBy(['message' => $message, 'emoji' => $emoji] + $this->refs->criteria('user', $user));
+        if ($row instanceof ChatReaction && !ChatUserReferences::same($row->getUser(), $user)) {
+            // REQ-SEC-006 item 2: exactly this user's reaction. 1.28: the read degrades to null and warns;
+            // assertInsertable() refuses the write that follows.
+            $this->refs->reportLookAlike($this->userColumn(), $user);
 
-        // REQ-SEC-006 item 2: exactly this user's reaction.
-        return $row instanceof ChatReaction && ChatUserReferences::same($row->getUser(), $user) ? $row : null;
+            return null;
+        }
+
+        return $row;
     }
 
     /**
@@ -78,5 +85,28 @@ class ChatReactionRepository extends ServiceEntityRepository
         }
 
         return $summary;
+    }
+
+    /**
+     * 1.28: refuses to insert a reaction row for a user whose look-alike this request already found in the table,
+     * because the insert would clash with that row's unique key inside the flush and close the entity manager.
+     *
+     * @param ChatUserInterface $user The user the row would be written for
+     *
+     * @throws ChatUserLookAlikeException When a look-alike row of that user was read in this table in this request
+     */
+    public function assertInsertable(ChatUserInterface $user): void
+    {
+        $this->refs->assertNoLookAlike($this->userColumn(), $user);
+    }
+
+    /**
+     * `table.column` of the user column of this entity, for the look-alike warning (1.28).
+     */
+    private function userColumn(): string
+    {
+        $metadata = $this->getClassMetadata();
+
+        return $metadata->getTableName() . '.' . ($this->refs->isIdMode() ? $metadata->getColumnName('userRef') : 'user_id');
     }
 }

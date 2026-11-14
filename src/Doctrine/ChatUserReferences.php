@@ -7,17 +7,25 @@ namespace Nowo\ChatKitBundle\Doctrine;
 use Doctrine\ORM\QueryBuilder;
 use InvalidArgumentException;
 use LogicException;
+use Normalizer;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Model\ChatUserReference;
 use Nowo\ChatKitBundle\Model\ChatUserReferenceInterface;
 
 use function array_map;
 use function array_values;
+use function class_exists;
 use function is_string;
+use function mb_check_encoding;
+use function mb_convert_case;
 use function preg_match;
+use function preg_replace;
+use function rtrim;
 use function sprintf;
 use function strcmp;
 use function strlen;
+
+use const MB_CASE_FOLD;
 
 /**
  * 1.24: how the bundle's tables point at users (`doctrine.user_reference`).
@@ -123,6 +131,68 @@ final readonly class ChatUserReferences
     public function assertExact(): void
     {
         $this->guarded();
+    }
+
+    /**
+     * 1.28: a read by user came back with another person's row, which only a folding user column can do. The caller
+     * ignores the row and degrades (null, or unsaved defaults); this warns once per column and user key in the request,
+     * and assertNoLookAlike() then refuses a write for the same user into the same column. Nothing outside `string`
+     * mode.
+     *
+     * @param string $where The column the row came from (`nowo_chat_participant.user_id`)
+     * @param ChatUserInterface $asked The user whose row was ASKED for (audit PV-L1: never the owner of the row)
+     */
+    public function reportLookAlike(string $where, ChatUserInterface $asked): void
+    {
+        $key = $this->isStringMode() ? self::key($asked) : null;
+        if ($key !== null) {
+            $this->guard?->sawLookAlike($where, $key);
+        }
+    }
+
+    /**
+     * 1.28: fails closed right before a chat row is inserted into `$where` for a user whose look-alike the same
+     * request already found in that column. Without it the insert clashes with the look-alike's unique key inside the
+     * flush, which closes the entity manager. Nothing outside `string` mode, and nothing until a look-alike was
+     * actually seen in that column.
+     *
+     * @param string $where The column the row is written into (`nowo_chat_participant.user_id`)
+     * @param ChatUserInterface $user The user the row is written for
+     *
+     * @throws ChatUserLookAlikeException When a look-alike row was seen for this user in this column in this request
+     */
+    public function assertNoLookAlike(string $where, ChatUserInterface $user): void
+    {
+        $key = $this->isStringMode() ? self::key($user) : null;
+        if ($key !== null) {
+            $this->guard?->assertNoLookAlike($where, $key);
+        }
+    }
+
+    /**
+     * 1.28 (audit PV-L2): whether two different keys may be one key to a folding user column — equal once compatibility
+     * decomposed, stripped of combining marks, case folded and stripped of trailing spaces (what `*_ci`, `*_ai_ci` and
+     * PAD SPACE collations ignore). Only ever used to avoid a write that could clash; never to treat two users as one.
+     *
+     * @param string $a One key
+     * @param string $b The other
+     *
+     * @return bool True when the keys differ but may fold onto each other
+     */
+    public static function mayFold(string $a, string $b): bool
+    {
+        return $a !== $b && self::fold($a) === self::fold($b);
+    }
+
+    /**
+     * The folded form of a key, for mayFold() only.
+     */
+    private static function fold(string $key): string
+    {
+        $decomposed = class_exists(Normalizer::class) ? Normalizer::normalize($key, Normalizer::FORM_KD) : false;
+        $folded     = is_string($decomposed) ? (preg_replace('/\p{Mn}+/u', '', $decomposed) ?? $decomposed) : $key;
+
+        return rtrim(mb_check_encoding($folded, 'UTF-8') ? mb_convert_case($folded, MB_CASE_FOLD, 'UTF-8') : $folded, ' ');
     }
 
     private function guarded(): void

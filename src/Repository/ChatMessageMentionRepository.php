@@ -347,4 +347,48 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
 
         return $qb;
     }
+
+    /**
+     * 1.28 (audit PV-L2): whether mention rows are keyed by string references, the only mode where a user column may
+     * fold two people into one key.
+     *
+     * @return bool True in `string` mode
+     */
+    public function keyedByReference(): bool
+    {
+        return $this->refs->isStringMode();
+    }
+
+    /**
+     * 1.28 (audit PV-D4): whether the user column answers a look-alike's row of this message to a query for `$user` —
+     * proof that it folds. A query for a user without a row on an exact column finds nothing. The look-alike is
+     * reported (warned once per column and user in the request).
+     *
+     * @param ChatMessage $message The message (its rows are stored)
+     * @param ChatUserInterface $user The user who has no row of their own on it
+     *
+     * @return bool True when the column folds `$user` onto another person's row
+     */
+    public function holdsLookAlikeOf(ChatMessage $message, ChatUserInterface $user): bool
+    {
+        $row = $this->findOneBy(['message' => $message] + $this->refs->criteria('user', $user));
+        if (!$row instanceof ChatMessageMention || ChatUserReferences::same($row->getUser(), $user)) {
+            return false;
+        }
+        $this->reportLookAlike($user);
+
+        return true;
+    }
+
+    /**
+     * 1.28 (audit PV-L2): a mention row for `$asked` was not written because the user column kept a look-alike's row
+     * that a byte-for-byte delete would have removed: the column folds. Warns like the other look-alike reads.
+     *
+     * @param ChatUserInterface $asked The user whose mention row was skipped
+     */
+    public function reportLookAlike(ChatUserInterface $asked): void
+    {
+        $metadata = $this->getClassMetadata();
+        $this->refs->reportLookAlike($metadata->getTableName() . '.' . ($this->refs->isIdMode() ? $metadata->getColumnName('userRef') : 'user_id'), $asked);
+    }
 }

@@ -19,6 +19,7 @@ use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
+use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefChatUser;
@@ -216,6 +217,55 @@ final class ChatUserReferenceLookalikeTest extends TestCase
         self::assertSame([(int) $withBob->getId()], array_keys($this->get(ChatParticipantRepository::class)->findForUser($bob, $ids)));
         self::assertSame(1, $mentions->markReadUpTo($bob, $withBob, PHP_INT_MAX, new DateTimeImmutable()));
         self::assertSame(1, $mentions->countForUser($bigB, [], false), 'Bob\'s mention stays unread');
+    }
+
+    public function testAFoldingColumnBehindAPassedCheckDegradesOnReadAndRefusesTheWrite(): void
+    {
+        // 1.28: the schema was checked and passed, then a botched migration made the user columns fold again. Reads
+        // must keep working (the settings read runs on every page of the host and inside the GDPR erasure), and the
+        // writes that would follow such a read must be refused before they clash with the look-alike's unique key
+        // inside the flush, which would close the entity manager.
+        if (!$this->em->getConnection()->getDatabasePlatform() instanceof AbstractMySQLPlatform) {
+            self::assertNull(ChannelKeyCollationListener::collationFor($this->em->getConnection()->getDatabasePlatform()));
+
+            return;
+        }
+        [$ana, $bob, $bigB] = $this->people();
+        $chat               = $this->chat();
+        $withBob            = $chat->openDirect($ana, $bob);
+        $message            = $chat->send($ana, $withBob, 'hi');
+        $chat->toggleReaction($bob, $message, '👍');
+        $settings = $this->get(ChatUserSettingsRepository::class);
+        $settings->save($settings->forUser($bob));
+        $this->get(StringReferenceSchemaGuard::class)->assertReady();
+        $this->fold();
+        $settings->reset();
+
+        // Reads: Bob gets none of bob's rows and no exception.
+        self::assertNull($this->get(ChatParticipantRepository::class)->findOneFor($withBob, $bigB));
+        self::assertNull($this->get(ChatReactionRepository::class)->findOneFor($message, $bigB, '👍'));
+        $defaults = $settings->forUser($bigB);
+        self::assertNull($defaults->getId(), 'unsaved defaults, not bob\'s row');
+        self::assertSame([], $this->get(ChatParticipantRepository::class)->findForUser($bigB, [(int) $withBob->getId()]));
+        self::assertTrue($this->em->isOpen());
+
+        // Writes for that same user are refused, one by one, and the manager stays open.
+        foreach ([
+            'participant' => static fn () => $chat->participant($withBob, $bigB),
+            'reaction'    => static fn () => $chat->toggleReaction($bigB, $message, '👍'),
+            'settings'    => static fn () => $settings->save($defaults),
+        ] as $what => $write) {
+            try {
+                $write();
+                self::fail($what . ' was written onto a look-alike\'s row');
+            } catch (LogicException $exception) {
+                self::assertStringContainsString('look-alike', $exception->getMessage(), $what);
+            }
+            self::assertTrue($this->em->isOpen(), $what . ': no unique-key clash closed the entity manager');
+        }
+
+        // Everyone else keeps working on the same request.
+        self::assertNotNull($chat->send($ana, $withBob, 'still working')->getId());
     }
 
     private function fold(): void

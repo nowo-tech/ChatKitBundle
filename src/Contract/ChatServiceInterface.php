@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Contract;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use LogicException;
+use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -28,6 +29,9 @@ interface ChatServiceInterface
      * @param ChatUserInterface $actor The user who opens it
      * @param ChatUserInterface $other The other person
      *
+     * @throws ChatUserLookAlikeException 1.28, `string` user references only: the participant row would go
+     *                                    into a user column that folds onto a look-alike's row (refused before the flush)
+     *
      * @return ChatConversation The direct conversation
      */
     public function openDirect(ChatUserInterface $actor, ChatUserInterface $other): ChatConversation;
@@ -43,6 +47,8 @@ interface ChatServiceInterface
      * @throws ChatChannelDeniedException When a listener refuses to create it; nothing is written
      * @throws LogicException When the channel key breaks the ChatChannelKey format rule (no padding or control
      *                        characters); nothing is written
+     * @throws ChatUserLookAlikeException 1.28, `string` user references only: the participant row would go
+     *                                    into a user column that folds onto a look-alike's row (refused before the flush)
      *
      * @return ChatConversation The channel conversation
      */
@@ -71,6 +77,8 @@ interface ChatServiceInterface
      * @param string $body Raw Markdown text
      *
      * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link` (1.19: a link card with a link that is not accepted)
+     * @throws ChatUserLookAlikeException 1.28, `string` user references only: the participant row would go
+     *                                    into a user column that folds onto a look-alike's row (refused before the flush)
      *
      * @return ChatMessage The stored message
      */
@@ -81,6 +89,9 @@ interface ChatServiceInterface
      *
      * @param ChatUserInterface $author The user who buzzes
      * @param ChatConversation $conversation The conversation
+     *
+     * @throws ChatUserLookAlikeException 1.28, `string` user references only: the participant row would go
+     *                                    into a user column that folds onto a look-alike's row (refused before the flush)
      *
      * @return ChatMessage The stored buzz message
      */
@@ -114,6 +125,8 @@ interface ChatServiceInterface
      * @param string $emoji One of the offered emojis
      *
      * @throws InvalidArgumentException `reaction` when the emoji is not offered
+     * @throws ChatUserLookAlikeException 1.28, `string` user references only: the participant or reaction row would go
+     *                                    into a user column that folds onto a look-alike's row (refused before the flush)
      *
      * @return array<string, list<string>> the message's reactions after the change
      */
@@ -143,6 +156,9 @@ interface ChatServiceInterface
      * @param ChatConversation $conversation The conversation
      * @param int $messageId Id of the last message read
      *
+     * @throws ChatUserLookAlikeException 1.28, `string` user references only: the participant row would go
+     *                                    into a user column that folds onto a look-alike's row (refused before the flush)
+     *
      * @return bool True when the cursor moved (it never goes back)
      */
     public function markRead(ChatUserInterface $user, ChatConversation $conversation, int $messageId): bool;
@@ -152,6 +168,9 @@ interface ChatServiceInterface
      *
      * @param ChatConversation $conversation The conversation
      * @param ChatUserInterface $user The user
+     *
+     * @throws ChatUserLookAlikeException 1.28, `string` user references only: the participant row would go
+     *                                    into a user column that folds onto a look-alike's row (refused before the flush)
      *
      * @return ChatParticipant The existing or newly persisted (not flushed) row
      */
@@ -195,6 +214,9 @@ interface ChatServiceInterface
      * @param ChatConversation $conversation The conversation
      * @param DateTimeImmutable|null $until Mute end; null to unmute
      *
+     * @throws ChatUserLookAlikeException 1.28, `string` user references only: the participant row would go
+     *                                    into a user column that folds onto a look-alike's row (refused before the flush)
+     *
      * @return ChatParticipant|null The user's participant row; null when unmuting without one
      */
     public function mute(ChatUserInterface $user, ChatConversation $conversation, ?DateTimeImmutable $until): ?ChatParticipant;
@@ -205,6 +227,9 @@ interface ChatServiceInterface
      * @param ChatUserInterface $user The user
      * @param list<ChatConversation> $conversations The conversations
      * @param bool $archived True to close, false to reopen
+     *
+     * @throws ChatUserLookAlikeException 1.28, `string` user references only: the participant row would go
+     *                                    into a user column that folds onto a look-alike's row (refused before the flush)
      */
     public function archive(ChatUserInterface $user, array $conversations, bool $archived): void;
 }

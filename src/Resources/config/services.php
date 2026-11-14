@@ -79,6 +79,7 @@ return static function (ContainerConfigurator $container): void {
             // 1.27: the port gates and value copies are built by Ports (ChatKitPortsPass), never autowired.
             '../../Port',
             '../../Service/ChatNotFoundException.php',
+            '../../Doctrine/ChatUserLookAlikeException.php',
             '../../Avatar/AvatarUrlPolicy.php',
             '../../Doctrine/UnresolvedChatUser.php',
             // 1.27: registered by the extension only with doctrine.private_entity_manager: true.
@@ -100,6 +101,9 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$prefix', param('nowo_chat_kit.doctrine.table_prefix'))
         ->arg('$tableNamePrefix', param('nowo_chat_kit.doctrine.table_name_prefix'));
     // 1.24: `doctrine.user_reference` (the extension removes the listener in the default `relation` mode).
+    // 1.28 (audit PV-L3): the look-alike warning and refusal carry a keyed hash of the reference, never the reference.
+    $services->get(StringReferenceSchemaGuard::class)
+        ->arg('$secret', param('kernel.secret'));
     $services->get(ChatUserReferences::class)
         ->arg('$mode', param('nowo_chat_kit.doctrine.user_reference'))
         // 1.27 (audit OJ-M1): `string` mode only (the extension removes the guard otherwise).
