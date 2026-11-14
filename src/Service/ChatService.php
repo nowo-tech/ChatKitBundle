@@ -56,6 +56,9 @@ final readonly class ChatService implements ChatServiceInterface
 {
     private const string CHANNEL_INSERT_SAVEPOINT = 'nowo_chat_channel_insert';
 
+    /** 1.28 (audit PV-D1): the savepoint of a new conversation between look-alikes inside the caller's transaction. */
+    private const string LOOK_ALIKE_SAVEPOINT = 'nowo_chat_look_alike_create';
+
     /**
      * Builds the service from the entity manager, repositories, renderer, notifier and the offered reactions.
      *
@@ -633,9 +636,11 @@ final readonly class ChatService implements ChatServiceInterface
      *
      * 1.28 (audit PV-L2, `string` mode): a participant whose reference may fold onto an earlier one's (`Bob` next to
      * `bob`) is written only after the others are stored and a read showed the user column keeps them apart. On a
-     * column that folds that read returns the look-alike's row, the conversation is removed again and
-     * ChatUserLookAlikeException is thrown: the two inserts would otherwise clash inside one flush and close the entity
-     * manager. On exact columns both rows are written, one flush later.
+     * column that folds that read returns the look-alike's row and ChatUserLookAlikeException is thrown: the two
+     * inserts would otherwise clash inside one flush and close the entity manager. On exact columns both rows are
+     * written, one flush later. Audit PV-D1: both phases run in one transaction (a savepoint inside the caller's own),
+     * rolled back on the refusal, and the conversation and rows written by the first phase are detached, so nothing
+     * half-written stays and no cleanup statement can hide the refusal.
      *
      * @param list<ChatUserInterface> $participants
      *
@@ -652,34 +657,64 @@ final readonly class ChatService implements ChatServiceInterface
                 $first[] = $user;
             }
         }
-        $this->entityManager->persist($conversation);
-        $rows = [];
-        foreach ($first as $user) {
-            $this->entityManager->persist($rows[] = new ChatParticipant($conversation, $user, $this->clock->now()));
-        }
-        $this->entityManager->flush();
         if ($later === []) {
+            $this->entityManager->persist($conversation);
+            foreach ($first as $user) {
+                $this->entityManager->persist(new ChatParticipant($conversation, $user, $this->clock->now()));
+            }
+            $this->entityManager->flush();
+
             return $conversation;
         }
+
+        $connection = $this->entityManager->getConnection();
+        $savepoint  = $connection->isTransactionActive() ? self::LOOK_ALIKE_SAVEPOINT : null;
+        if ($savepoint === null) {
+            $connection->beginTransaction();
+        } else {
+            $connection->createSavepoint($savepoint);
+        }
+        $rows = [];
         try {
+            $this->entityManager->persist($conversation);
+            foreach ($first as $user) {
+                $this->entityManager->persist($rows[] = new ChatParticipant($conversation, $user, $this->clock->now()));
+            }
+            $this->entityManager->flush();
             foreach ($later as $user) {
                 // A folding column answers the look-alike's row: findOneFor() reports it and assertInsertable() refuses.
                 $this->participants->findOneFor($conversation, $user);
                 $this->participants->assertInsertable($user);
             }
-        } catch (ChatUserLookAlikeException $refused) {
-            foreach ($rows as $row) {
-                $this->entityManager->remove($row);
+            foreach ($later as $user) {
+                $this->entityManager->persist(new ChatParticipant($conversation, $user, $this->clock->now()));
             }
-            $this->entityManager->remove($conversation);
             $this->entityManager->flush();
+        } catch (ChatUserLookAlikeException $refused) {
+            if ($savepoint === null) {
+                $connection->rollBack();
+            } else {
+                $connection->rollbackSavepoint($savepoint);
+                $connection->releaseSavepoint($savepoint);
+            }
+            foreach ([...$rows, $conversation] as $entity) {
+                $this->entityManager->detach($entity);
+            }
 
             throw $refused;
+        } catch (Throwable $failure) {
+            // Anything else (a lost race on the pair, a closed connection): the transaction is the caller's to see fail.
+            if ($savepoint === null && $connection->isTransactionActive()) {
+                $connection->rollBack();
+            }
+
+            throw $failure;
         }
-        foreach ($later as $user) {
-            $this->entityManager->persist(new ChatParticipant($conversation, $user, $this->clock->now()));
+        if ($savepoint === null) {
+            $connection->commit();
+        } else {
+            $connection->releaseSavepoint($savepoint);
         }
-        $this->entityManager->flush();
 
         return $conversation;
     }

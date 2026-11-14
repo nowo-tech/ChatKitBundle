@@ -6,14 +6,18 @@ namespace Nowo\ChatKitBundle\Tests\Integration\Doctrine;
 
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Event\OnFlushEventArgs;
+use Doctrine\ORM\Events;
 use Doctrine\ORM\Tools\SchemaTool;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
@@ -23,6 +27,7 @@ use Nowo\ChatKitBundle\Tests\Support\Ddd\RefChatUser;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefDirectory;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 use function array_column;
@@ -128,12 +133,76 @@ final class StringReferenceLookAlikeWritesTest extends TestCase
             self::assertStringNotContainsString('Bob', $exception->getMessage());
         }
         self::assertTrue($this->em->isOpen(), 'no clash closed the entity manager');
+        self::assertSame([], $this->em->getUnitOfWork()->getIdentityMap()[ChatConversation::class] ?? [], 'the rolled-back conversation is detached');
         self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_conversation'), 'nothing half-written is left');
         self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_participant'));
 
         // Everybody else keeps working on the same manager.
         $ana = $this->make('ana');
         self::assertNotNull($chat->send($ana, $chat->openDirect($ana, $bob), 'hi')->getId());
+    }
+
+    /** PV-D1: inside the host's transaction the refusal rolls back to a savepoint; the host's own work commits. */
+    public function testARefusedDirectConversationInsideAHostTransactionLeavesTheTransactionUsable(): void
+    {
+        $chat       = $this->get(ChatServiceInterface::class);
+        $ana        = $this->make('ana');
+        $bob        = $this->make('bob');
+        $bigB       = $this->make('Bob');
+        $connection = $this->em->getConnection();
+        $this->fold('nowo_chat_participant', 'user_id');
+
+        $connection->beginTransaction();
+        $chat->openDirect($ana, $bob);
+        try {
+            $chat->openDirect($bob, $bigB);
+            self::fail('refused');
+        } catch (ChatUserLookAlikeException) {
+        }
+        self::assertTrue($connection->isTransactionActive(), 'the host transaction is still open');
+        self::assertSame(1, $connection->getTransactionNestingLevel());
+        $connection->commit();
+
+        self::assertTrue($this->em->isOpen());
+        self::assertSame(1, (int) $connection->fetchOne('SELECT COUNT(*) FROM nowo_chat_conversation'), 'ana and bob\'s conversation committed, nothing else');
+        self::assertSame(['ana', 'bob'], $connection->fetchFirstColumn('SELECT user_id FROM nowo_chat_participant ORDER BY user_id'));
+    }
+
+    /** PV-D1: on an exact column inside the host's transaction both rows are written through the savepoint. */
+    public function testCaseVariantsInsideAHostTransactionOnAnExactColumn(): void
+    {
+        $connection = $this->em->getConnection();
+        $connection->beginTransaction();
+        $conversation = $this->get(ChatServiceInterface::class)->openDirect($this->make('bob'), $this->make('Bob'));
+        self::assertSame(1, $connection->getTransactionNestingLevel());
+        $connection->commit();
+
+        self::assertSame(['Bob', 'bob'], $connection->fetchFirstColumn('SELECT user_id FROM nowo_chat_participant WHERE conversation_id = ? ORDER BY user_id', [$conversation->getId()]));
+    }
+
+    /** PV-D1: any other failure of the second step rolls the conversation back and surfaces unchanged. */
+    public function testAnotherFailureOfTheSecondStepRollsBackAndSurfaces(): void
+    {
+        $this->em->getEventManager()->addEventListener(Events::onFlush, new class {
+            public function onFlush(OnFlushEventArgs $args): void
+            {
+                foreach ($args->getObjectManager()->getUnitOfWork()->getScheduledEntityInsertions() as $entity) {
+                    if ($entity instanceof ChatParticipant && ChatUserReferences::key($entity->getUser()) === 'Bob') {
+                        throw new RuntimeException('second step failed');
+                    }
+                }
+            }
+        });
+        try {
+            $this->get(ChatServiceInterface::class)->openDirect($this->make('bob'), $this->make('Bob'));
+            self::fail('the failure must surface');
+        } catch (RuntimeException $failure) {
+            self::assertSame('second step failed', $failure->getMessage());
+        }
+        $connection = $this->em->getConnection();
+        self::assertFalse($connection->isTransactionActive());
+        self::assertSame(0, (int) $connection->fetchOne('SELECT COUNT(*) FROM nowo_chat_conversation'), 'no orphan conversation');
+        self::assertSame(0, (int) $connection->fetchOne('SELECT COUNT(*) FROM nowo_chat_participant'));
     }
 
     /** PV-L2: on exact columns two references that differ only by case are two people, as before. */
@@ -163,6 +232,30 @@ final class StringReferenceLookAlikeWritesTest extends TestCase
         self::assertCount(2, $added, 'both people are still notified');
         self::assertTrue($this->em->isOpen());
         self::assertSame(['bob'], $this->em->getConnection()->fetchFirstColumn('SELECT user_id FROM nowo_chat_message_mention'));
+
+        // PV-D4: the next edit with the same mentions notifies nobody again.
+        self::assertSame([], $this->get(ChatMentions::class)->sync($message, [$bob, $bigB]));
+        $this->em->flush();
+        self::assertSame(['bob'], $this->em->getConnection()->fetchFirstColumn('SELECT user_id FROM nowo_chat_message_mention'));
+    }
+
+    /** PV-D4: on an exact column both case variants keep their own row and are notified once, however often it is edited. */
+    public function testOnAnExactColumnCaseVariantsKeepTheirMentionRowsAndAreNotifiedOnce(): void
+    {
+        $chat     = $this->get(ChatServiceInterface::class);
+        $mentions = $this->get(ChatMentions::class);
+        $ana      = $this->make('ana');
+        $bob      = $this->make('bob');
+        $bigB     = $this->make('Bob');
+        $message  = $chat->send($ana, $chat->openDirect($ana, $bob), 'hi');
+
+        self::assertSame([$bob, $bigB], $mentions->sync($message, [$bob, $bigB]));
+        $this->em->flush();
+        foreach ([1, 2] as $edit) {
+            self::assertSame([], $mentions->sync($message, [$bob, $bigB]), 'edit ' . $edit . ' notifies nobody again');
+            $this->em->flush();
+        }
+        self::assertSame(['Bob', 'bob'], $this->em->getConnection()->fetchFirstColumn('SELECT user_id FROM nowo_chat_message_mention ORDER BY user_id'), 'each has an unread badge and a mentions list entry');
     }
 
     /** PV-L2: an edit that swaps a mention for its look-alike never clashes with the row the folding delete kept. */
