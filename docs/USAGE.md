@@ -885,6 +885,12 @@ page; one for a single message) and keeps the answer for that request only, so a
 service account) shows on the next request, also in FrankenPHP worker mode. Do not run a query per author, and keep
 no state in the provider between requests. A provider that throws gives no badge and a `warning` log line.
 
+**Badges are public.** Every reader of a message sees the same badges. Decide them from the author alone — never from
+the signed-in user (no badge only admins see, nothing that depends on who is looking) and never with data the
+author's readers may not see: the realtime payload of a message is built once, in the author's request (or the
+request that edits or deletes it), and sent as is to every recipient of the conversation. A message deleted by a
+moderator keeps its author's badges on the tombstone (the author line stays, as it does today).
+
 **Standard Symfony host** — the provider reads your user entity by id:
 
 ```php

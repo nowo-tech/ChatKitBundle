@@ -16,6 +16,11 @@ use Nowo\ChatKitBundle\Model\ChatAuthorRef;
  * badges go back as {@see ChatAuthorBadge} values (plain text, an allow-listed variant); never HTML. The bundle asks
  * once per response for the authors it shows and keeps the answer for that request only. Must not run a query per
  * author. Keep no state across requests (FrankenPHP worker mode).
+ *
+ * Badges are public: every reader of a message sees the same ones. Decide them from the author alone, never from the
+ * signed-in user (no "visible to admins only" badge, no badge that depends on who is looking): the realtime payload of
+ * a message is built once, in the author's request (or the one that edits or deletes it), and sent as is to every
+ * recipient. A message removed by a moderator keeps its author's badges on the tombstone.
  */
 interface ChatAuthorBadgeProviderInterface
 {
