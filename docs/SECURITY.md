@@ -86,8 +86,11 @@ to avoid a write that could clash, never to merge two users): equal after compat
 of combining marks, Unicode case folding and removal of trailing spaces — `bob` / `Bob` / `BÓB` / `ｂｏｂ` / `bob `, and
 `straße` / `STRASSE`. Its limits: it does not fold what some collations still equate, such as `ß` / `s`
 (`utf8mb4_general_ci`), `Æ` / `AE` or zero-width characters; without the intl extension (`Normalizer`) it folds only case
-and trailing spaces. Such pairs are caught by the read-time look-alike check instead (the read degrades, the write into
-that column is refused), and the binary NO PAD collation of UPGRADING ("String user references") removes them all.
+and trailing spaces. Pairs it misses are only partly covered: once a read by user meets the look-alike's row, the
+read degrades and the write into that column is refused as above, but the two writes that have no read before them —
+a new direct conversation (`ChatService::create()`) and one message's mention rows (`ChatMentions::sync()`) — still
+write both rows in one flush, clash on the unique key and close the entity manager, exactly as in 1.27.x. Only the
+binary NO PAD collation of UPGRADING ("String user references") removes every such pair.
 
 ## Dependencies
 
