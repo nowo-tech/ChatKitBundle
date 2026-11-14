@@ -66,6 +66,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.29.0 (minor, additive; nothing changes without a provider). See [UPGRADING](UPGRADING.md#unreleased).
+
+### Added
+
+- **Author badges** (Beacon spec 234): the application can show pills next to a message author's name — an *Agent* pill
+  on messages written by service accounts, for example — in the dock, the full page and the message API. Alias the new
+  framework-free port `Contract\ChatAuthorBadgeProviderInterface::badgesForMany(list<ChatAuthorRef>): array<string,
+  list<ChatAuthorBadge>>` (default `Badge\NoChatAuthorBadges`: no badge, never asked).
+  - Value objects: `Model\ChatAuthorRef` (`reference`: the stored user key, compared byte for byte; `publicId`) and
+    `Model\ChatAuthorBadge` (`label` plain text 1–40 characters, `variant` from `Enum\ChatAuthorBadgeVariant`
+    `neutral|info|success|warning|agent`, optional plain-text `title` ≤ 120 characters). Control, format and bidi
+    characters and unknown variants are refused; the host never supplies HTML or CSS classes.
+  - One provider call per response for the authors it shows (message pages, pins, posted messages, the full page);
+    a single message costs one call; the realtime event of a send shares the request's answer. The answer is kept for
+    the request only (`Badge\ChatAuthorBadges`, `ResetInterface`, emptied by `ChatRequestBoundaryListener`), so
+    FrankenPHP worker mode with the kernel reset off never shows one request's badges in another. A failing provider
+    gives no badge and a `warning` log line (exception class only).
+  - Keyed by the exact stored reference in every `doctrine.user_reference` mode: a badge never attaches to a
+    look-alike's messages (`Bob` / `bob` / `bób` in `string` mode), unasked keys and values that are not badges are
+    ignored, and a message whose loaded author does not carry the key stored on its row gets none.
+  - JSON: messages gain **`authorBadges`** (`[{label, variant, title}]`) only when the author has badges — in the
+    message API (`GET` pages, one message, send, edit, pins, support topic) and in the realtime `message` /
+    `message_updated` events. Without badges the shape is 1.28's.
+  - Full page: `_author_badges.html.twig` (block **`nowo_chat_author_badges`**) after the author's name in `page.html.twig`
+    and `page_legacy.html.twig`, labels and titles escaped. Dock: `<template data-nowo-chat-template="author-badge">`
+    (block **`nowo_chat_template_author_badge`** in `_templates.html.twig`), rendered only when a provider is aliased
+    (Twig global `nowo_chat_author_badges`); `nowo-chat.js` checks the payload again (allow-listed variant, lengths)
+    and sets the label with `textContent` and the title with `setAttribute`, never `innerHTML`. In a direct thread
+    the author line appears for an author with badges. CSS: `.nowo-chat-author-badge` and `--<variant>` modifiers.
+- Tests: golden files of the page, the legacy page, the message API and the realtime payloads captured on 1.28.0
+  (byte-identical without a provider), XSS, N+1 (query count), worker mode (two requests, two users, one kernel),
+  standard, DDD (`id`) and `string` hosts, Vitest for the dock.
+
 ## [1.28.0] - 2026-11-14
 
 Target 1.28.0 (minor; behaviour change in `doctrine.user_reference: string` only). See [UPGRADING](UPGRADING.md#to-1280).

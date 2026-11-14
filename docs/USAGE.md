@@ -16,6 +16,7 @@
 - [References](#references)
 - [Link previews](#link-previews)
 - [Profile pictures](#profile-pictures)
+- [Author badges](#author-badges)
 - [Email digest](#email-digest)
 - [Customising the markup](#customising-the-markup)
 - [Theme tokens](#theme-tokens)
@@ -167,6 +168,14 @@ public function urlsFor(array $users, int $size): array;               // public
 ```
 
 See [Profile pictures](#profile-pictures).
+
+### `ChatAuthorBadgeProviderInterface` (optional, 1.29)
+
+```php
+public function badgesForMany(array $authors): array;   // list<ChatAuthorRef> => reference => list<ChatAuthorBadge>, one call per response
+```
+
+See [Author badges](#author-badges).
 
 ### `ChatReferenceProviderInterface` (optional, one per kind of item)
 
@@ -856,6 +865,87 @@ final class AvatarUrlResolver implements ChatAvatarUrlResolverInterface
 JSON fields: `avatarUrl` on conversation summaries (also in the support inbox and the page context), contacts and
 members; `authorAvatarUrl` on messages (also in realtime events); `me.avatarUrl` in the dock config.
 
+## Author badges
+
+1.29 (Beacon spec 234): pills next to a message author's name, decided by your application — typically an **Agent**
+pill on messages written by service accounts (API tokens, MCP agents). They show in the dock, on the full page and in
+the message JSON (`authorBadges`, also in realtime events). Without a provider nothing is asked and every output is
+exactly as in 1.28.
+
+The port is framework-free (REQ-ARCH-001 rule 3): authors come as `ChatAuthorRef` (`reference`: the key the chat
+stores for the user — the integer id as a string in the `relation` and `id` modes, the `ChatUserReferenceInterface`
+reference in `string` mode; `publicId`), badges go back as `ChatAuthorBadge` values. Answer by `reference` **exactly
+as given** (byte for byte: `Bob` and `bob` are two people); keys you were not asked about and values that are not a
+`ChatAuthorBadge` are ignored. `ChatAuthorBadge` takes plain text only — `label` 1–40 characters, an optional `title`
+(tooltip) up to 120 characters, a `variant` among `neutral`, `info`, `success`, `warning`, `agent` — and refuses
+control, format and bidi characters; the bundle escapes both texts, so never pass HTML.
+
+The bundle asks once per response for the authors it shows (one call for a page of messages, the pinned bar, the full
+page; one for a single message) and keeps the answer for that request only, so a change (an account turned into a
+service account) shows on the next request, also in FrankenPHP worker mode. Do not run a query per author, and keep
+no state in the provider between requests. A provider that throws gives no badge and a `warning` log line.
+
+**Standard Symfony host** — the provider reads your user entity by id:
+
+```php
+// src/Chat/ServiceAccountBadges.php
+final readonly class ServiceAccountBadges implements ChatAuthorBadgeProviderInterface
+{
+    public function __construct(private UserRepository $users) {}
+
+    public function badgesForMany(array $authors): array
+    {
+        $ids    = array_map(static fn (ChatAuthorRef $author): int => (int) $author->reference, $authors);
+        $badges = [];
+        foreach ($this->users->findServiceAccountIds($ids) as $id) {   // one query
+            $badges[(string) $id] = [new ChatAuthorBadge('Agent', ChatAuthorBadgeVariant::Agent, 'Service account')];
+        }
+
+        return $badges;
+    }
+}
+```
+
+```yaml
+# config/services.yaml
+Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface: '@App\Chat\ServiceAccountBadges'
+```
+
+**DDD / hexagonal host** (`doctrine.user_reference: id` or `string`) — an infrastructure adapter over your own
+read model; the domain never sees the bundle:
+
+```php
+// src/Infrastructure/Chat/AgentBadges.php
+final readonly class AgentBadges implements ChatAuthorBadgeProviderInterface
+{
+    public function __construct(private ServiceAccountQuery $accounts) {}   // your application port
+
+    public function badgesForMany(array $authors): array
+    {
+        $references = array_map(static fn (ChatAuthorRef $author): string => $author->reference, $authors);
+        $badges     = [];
+        foreach ($this->accounts->agentsAmong($references) as $agent) {   // exact match, one query
+            $badges[$agent->reference] = [new ChatAuthorBadge('Agent', 'agent', $agent->tokenName)];
+        }
+
+        return $badges;
+    }
+}
+```
+
+**Markup.** Full page: `_author_badges.html.twig`, block `nowo_chat_author_badges`, prints
+`<span class="nowo-chat-author-badge nowo-chat-author-badge--<variant>" data-variant title>label</span>` after the
+name (`page.html.twig` and `page_legacy.html.twig`). Dock: the `<template data-nowo-chat-template="author-badge">` of
+block `nowo_chat_template_author_badge` in `_templates.html.twig` (rendered only when a provider is aliased; the
+script puts the label in its `data-part="label"` element, or the element itself, with `textContent`, and adds the
+variant class and the title). In a direct thread, where the dock normally hides the author line, it appears for an
+author with badges. Override either block like any other ([Overridable templates](#overridable-templates)) or restyle
+the `.nowo-chat-author-badge` classes.
+
+**JSON.** `authorBadges: [{label, variant, title}]` on a message whose author has badges (absent otherwise), in every
+message answer of the [JSON API](#json-api) and in the realtime `message` / `message_updated` events. Bot and system
+lines, deleted accounts and erased authors never have badges.
+
 ## Email digest
 
 ```yaml
@@ -912,7 +1002,8 @@ application's copy always wins.
 | `<subpath>` | What it renders | Blocks |
 | --- | --- | --- |
 | `dock.html.twig` | Dock root (config attribute) and assets | `nowo_chat_assets`, `nowo_chat_root`, `nowo_chat_sidebar_dialogs` (1.25) |
-| `_templates.html.twig` | Every `<template>` the dock clones | `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`, `_sidebar` (1.25), `nowo_chat_icons` |
+| `_templates.html.twig` | Every `<template>` the dock clones | `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`, `_author_badge` (1.29, only with a badge provider), `_sidebar` (1.25), `nowo_chat_icons` |
+| `_author_badges.html.twig` | 1.29: the author badges after a name on the full page | `nowo_chat_author_badges` |
 | `page.html.twig` | Full-page chat (list + thread + composer form), UiKit layout | `nowo_ui_document_title`, `nowo_ui_styles`, `nowo_ui_scripts`, `nowo_chat_page_script` (the `nowo-chat.js` tag), `nowo_ui_page_header`, `nowo_ui_content`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
 | `page_legacy.html.twig` | Deprecated 1.x page (only with the deprecated `page_layout`) | `title`, `stylesheets`, `javascripts`, `body`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
 | `page_layout.html.twig` | Deprecated 1.x default layout of `page_legacy.html.twig` | `title`, `stylesheets`, `javascripts`, `body` |
@@ -1534,6 +1625,9 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | GET | `/api/conversations/{uuid}/pins` · POST / DELETE `/api/conversations/{uuid}/messages/{messageUuid}/pin` | pinned messages, pin / unpin (1.10) |
 | GET / POST | `/api/conversations/{uuid}/pinned-links` · PATCH / DELETE `/api/conversations/{uuid}/pinned-links/{linkUuid}` | pinned links (1.19, [Links](#links)) |
 | GET | `/api/conversations/{uuid}/links?q=&provider=&before=` | the Links panel (1.19) |
+
+1.29: every message object may carry `authorBadges` (`[{label, variant, title}]`, plain text; absent when the author
+has none), see [Author badges](#author-badges).
 
 ### Pagination and limits
 
