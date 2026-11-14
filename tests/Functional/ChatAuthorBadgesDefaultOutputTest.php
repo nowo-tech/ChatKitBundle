@@ -53,7 +53,7 @@ class ChatAuthorBadgesDefaultOutputTest extends DatabaseTestCase
         $channel = $chat->openChannel($ana, new ChatChannel(TestChannelProvider::KEY, 'Acme'));
         $chat->send($luis, $channel, 'Hola **Ana**');
         $chat->send($ana, $channel, 'hi');
-        $chat->buzz($luis, $chat->openDirect($ana, $luis));
+        $chat->buzz($luis, $channel);
         $realtime            = $this->get(RecordingRealtime::class);
         $realtime->published = [];
         $chat->send($luis, $channel, 'live');

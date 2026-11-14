@@ -30,7 +30,7 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function setUp(): void
     {
-        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts());
+        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges());
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
@@ -61,6 +61,14 @@ abstract class DatabaseTestCase extends TestCase
      * 1.27: whether the kernel wires the host ports through their framework-free twins only (tests/Support/TwinPorts).
      */
     protected function twinPorts(): bool
+    {
+        return false;
+    }
+
+    /**
+     * 1.29: whether the kernel aliases ChatAuthorBadgeProviderInterface to TestAuthorBadgeProvider.
+     */
+    protected function authorBadges(): bool
     {
         return false;
     }
