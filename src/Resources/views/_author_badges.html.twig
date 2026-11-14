@@ -1,0 +1,15 @@
+{#-
+    1.29 (Beacon spec 234): what follows a message author's name on the full chat page (page.html.twig and the 1.x
+    page_legacy.html.twig): the application's badges (ChatAuthorBadgeProviderInterface), each printed escaped (never HTML
+    from the application), with a class per allow-listed variant. Included only for authors that have badges, so a host
+    without a provider renders exactly what 1.28 rendered.
+
+    To draw them differently, create templates/bundles/NowoChatKitBundle/_author_badges.html.twig, extend
+    '@!NowoChatKitBundle/_author_badges.html.twig' and redefine the block nowo_chat_author_badges (see USAGE). The dock
+    draws its badges from the `author-badge` <template> of _templates.html.twig (block nowo_chat_template_author_badge).
+
+    Included with with_context = false. Variables: badges (non-empty list of {label, variant, title}).
+-#}
+{%- block nowo_chat_author_badges -%}
+    {%- for badge in badges %} <span class="nowo-chat-author-badge nowo-chat-author-badge--{{ badge.variant }}" data-variant="{{ badge.variant }}"{% if badge.title %} title="{{ badge.title }}"{% endif %}>{{ badge.label }}</span>{% endfor -%}
+{%- endblock -%}

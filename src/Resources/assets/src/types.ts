@@ -42,6 +42,16 @@ export interface ConversationSummary {
   mutedUntil?: string | null;
 }
 
+/** 1.29: how an author badge looks (ChatAuthorBadgeVariant). */
+export type AuthorBadgeVariant = 'neutral' | 'info' | 'success' | 'warning' | 'agent';
+
+/** 1.29 (Beacon spec 234): a pill next to a message author's name (ChatAuthorBadge). */
+export interface AuthorBadge {
+  label: string;
+  variant: AuthorBadgeVariant;
+  title: string | null;
+}
+
 export interface ChatMessage {
   id: number;
   uuid: string;
@@ -50,6 +60,8 @@ export interface ChatMessage {
   authorInitials: string;
   /** 1.16: the author's picture; null: the initials. */
   authorAvatarUrl?: string | null;
+  /** 1.29: the application's badges of the author (e.g. "Agent"); absent when it has none. Plain text, rendered with textContent. */
+  authorBadges?: AuthorBadge[];
   mine: boolean;
   /** `pin` (1.10): "X pinned a message" line (`pinnedMessage` = its uuid). */
   /** `system` (1.24): a line posted by the application (no author), shown centered. */

@@ -5,8 +5,11 @@ declare(strict_types=1);
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Avatar\NullChatAvatarUrlResolver;
+use Nowo\ChatKitBundle\Badge\ChatAuthorBadges;
+use Nowo\ChatKitBundle\Badge\NoChatAuthorBadges;
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
+use Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
@@ -119,6 +122,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$memos', iterator([
             service(ChatReferences::class)->ignoreOnUninitialized(),
             service(ChatAvatars::class)->ignoreOnUninitialized(),
+            // 1.29: the author badges of the request.
+            service(ChatAuthorBadges::class)->ignoreOnUninitialized(),
             service(ChatUserSettingsRepository::class)->ignoreOnUninitialized(),
             service(UserReferenceListener::class)->ignoreOnUninitialized(),
             // 1.27.1 (audit AOY-M2): the schema pass of the `string` mode guard. One check per request instead of one
@@ -138,6 +143,8 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatSupportTopicProviderInterface::class, ConfiguredSupportTopicProvider::class);
     // 1.16: profile pictures; the application aliases the interface to its own resolver.
     $services->alias(ChatAvatarUrlResolverInterface::class, NullChatAvatarUrlResolver::class);
+    // 1.29 (Beacon spec 234): author badges; the application aliases the interface to its own provider.
+    $services->alias(ChatAuthorBadgeProviderInterface::class, NoChatAuthorBadges::class);
     $services->set(NullChatRealtime::class);
     if (interface_exists(HubInterface::class)) {
         $services->alias(ChatRealtimeInterface::class, MercureChatRealtime::class);

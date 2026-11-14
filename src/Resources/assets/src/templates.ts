@@ -4,8 +4,9 @@
  * application's UX Icons (<template data-nowo-chat-icon>) or the built-in SVG, unless they already hold one.
  */
 import { attachAvatarImage } from './avatar';
+import { appendAuthorBadges } from './badges';
 import { builtinIcon, h, hasBuiltinIcon } from './dom';
-import type { VisibleStatus } from './types';
+import type { AuthorBadge, VisibleStatus } from './types';
 
 /** Serial suffix that keeps the ids of cloned form controls unique (several windows clone the same template). */
 let serial = 0;
@@ -90,6 +91,16 @@ export class Templates {
       element.append(this.icon(kind === 'channel' ? 'hash' : 'lifebuoy', size === 'sm' ? 14 : 16));
     }
     return element;
+  }
+
+  /**
+   * 1.29: appends author badges to an author element (the application's `author-badge` template when the page has it).
+   *
+   * @param target The author element.
+   * @param badges The checked badges (authorBadges()).
+   */
+  authorBadges(target: HTMLElement, badges: AuthorBadge[]): void {
+    appendAuthorBadges(target, badges, this.root);
   }
 
   /**

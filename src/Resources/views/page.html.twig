@@ -113,7 +113,7 @@
                         {% for message in messages %}
                             <li class="nowo-chat-msg{{ message.mine ? ' nowo-chat-msg--mine' }}{{ (message.mentionsMe ?? false) ? ' nowo-chat-msg--mentioned' }}{{ message.kind == 'buzz' ? ' nowo-chat-page__buzz' }}"{% if loop.last %} id="nowo-chat-latest"{% endif %}>
                                 <div class="nowo-chat-msg__content">
-                                    {% if not message.mine %}<p class="nowo-chat-msg__author">{{ message.authorName }}</p>{% endif %}
+                                    {% if not message.mine %}<p class="nowo-chat-msg__author">{{ message.authorName }}{% if message.authorBadges is defined %}{{ include('@NowoChatKitBundle/_author_badges.html.twig', {badges: message.authorBadges}, with_context: false) }}{% endif %}</p>{% endif %}
                                     {% if message.kind == 'buzz' %}
                                         <p class="nowo-chat-buzz-line">{{ 'chat.buzz_sent'|trans({'%name%': message.authorName}) }}</p>
                                     {% elseif message.deleted %}

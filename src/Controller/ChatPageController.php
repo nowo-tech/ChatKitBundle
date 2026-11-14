@@ -228,6 +228,8 @@ final class ChatPageController extends AbstractController
             ...array_map(fn (ChatConversation $conversation): ?ChatUserInterface => $this->presenter->avatarPerson($conversation, $user, $this->access->directPeer($conversation, $user), $isAgent), $current instanceof ChatConversation ? [...$list, $current] : $list),
             ...array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $page),
         ]);
+        // 1.29: the page's author badges in one provider call.
+        $this->presenter->primeAuthorBadges($page);
         $rows = [];
         foreach ($list as $conversation) {
             $id = (int) $conversation->getId();

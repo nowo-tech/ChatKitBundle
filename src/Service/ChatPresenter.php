@@ -6,16 +6,19 @@ namespace Nowo\ChatKitBundle\Service;
 
 use DateTimeImmutable;
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
+use Nowo\ChatKitBundle\Badge\ChatAuthorBadges;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
+use Nowo\ChatKitBundle\Model\ChatAuthorBadge;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Support\ChatSupportPolicy;
 use Nowo\ChatKitBundle\Support\ChatSupportTopics;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
+use function array_map;
 use function is_string;
 
 use const DATE_ATOM;
@@ -39,6 +42,7 @@ final readonly class ChatPresenter
      * @param ChatSupportPolicy $policy Readable ticket numbers and the read-only rule
      * @param ChatReferences|null $references Fills #reference cards for the viewer; null leaves the slots empty
      * @param ChatAvatars|null $avatars 1.16: profile picture URLs of the request; null gives null everywhere
+     * @param ChatAuthorBadges|null $authorBadges 1.29: the author badges of the request; null gives none
      */
     public function __construct(
         private ChatMarkdownRenderer $markdown,
@@ -47,6 +51,7 @@ final readonly class ChatPresenter
         private ChatSupportPolicy $policy,
         private ?ChatReferences $references = null,
         private ?ChatAvatars $avatars = null,
+        private ?ChatAuthorBadges $authorBadges = null,
     ) {
     }
 
@@ -59,6 +64,17 @@ final readonly class ChatPresenter
     public function primeAvatars(iterable $users): void
     {
         $this->avatars?->prime($users);
+    }
+
+    /**
+     * 1.29 (Beacon spec 234): resolves the author badges of a response's messages in one provider call (none without
+     * an application provider). Callers pass only messages the viewer may read; message() then reads the memo.
+     *
+     * @param iterable<ChatMessage> $messages The messages of the response
+     */
+    public function primeAuthorBadges(iterable $messages): void
+    {
+        $this->authorBadges?->prime($messages);
     }
 
     /**
@@ -197,6 +213,8 @@ final readonly class ChatPresenter
         // 1.24: `@channel` / `@here` (only stored when the application allowed it).
         $all = $message->isDeleted() ? null : $message->getMentionAll();
         $bot = $message->isBot();
+        // 1.29: the host's badges of the author (plain text, allow-listed variant); none for bot and system lines.
+        $badges = $bot || $system ? [] : $this->authorBadges?->of($message) ?? [];
         // #references: cards the viewer may open, the neutral chip for the rest; empty slots without a viewer.
         $filled = $bot || $system || $message->isDeleted() || !$this->references instanceof ChatReferences
             ? ['html' => $message->getBodyHtml(), 'references' => [], 'pending' => false]
@@ -233,7 +251,9 @@ final readonly class ChatPresenter
             // 1.10: pinned to the top of the conversation; a pin line names the message it is about.
             'pinned'        => $message->getPinnedAt() instanceof DateTimeImmutable,
             'pinnedMessage' => $message->getPinnedMessageUuid(),
-        ] + ($all === null ? [] : ['mentionAll' => $all]);
+        ] + ($all === null ? [] : ['mentionAll' => $all])
+            // 1.29 (Beacon spec 234): only when the author has badges, so a host without a provider sees 1.28's shape.
+            + ($badges === [] ? [] : ['authorBadges' => array_map(static fn (ChatAuthorBadge $badge): array => $badge->toArray(), $badges)]);
     }
 
     /**
