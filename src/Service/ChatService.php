@@ -12,6 +12,7 @@ use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -630,12 +631,52 @@ final readonly class ChatService implements ChatServiceInterface
      * Persist a new conversation with its participant rows. Two simultaneous first messages to the same pair
      * hit the unique key and one request fails; the client retries the open call, which then finds it.
      *
+     * 1.28 (audit PV-L2, `string` mode): a participant whose reference may fold onto an earlier one's (`Bob` next to
+     * `bob`) is written only after the others are stored and a read showed the user column keeps them apart. On a
+     * column that folds that read returns the look-alike's row, the conversation is removed again and
+     * ChatUserLookAlikeException is thrown: the two inserts would otherwise clash inside one flush and close the entity
+     * manager. On exact columns both rows are written, one flush later.
+     *
      * @param list<ChatUserInterface> $participants
+     *
+     * @throws ChatUserLookAlikeException When the participant column folds two of the participants into one
      */
     private function create(ChatConversation $conversation, array $participants): ChatConversation
     {
-        $this->entityManager->persist($conversation);
+        $first = [];
+        $later = [];
         foreach ($participants as $user) {
+            if ($this->participants->mayClash($user, $first)) {
+                $later[] = $user;
+            } else {
+                $first[] = $user;
+            }
+        }
+        $this->entityManager->persist($conversation);
+        $rows = [];
+        foreach ($first as $user) {
+            $this->entityManager->persist($rows[] = new ChatParticipant($conversation, $user, $this->clock->now()));
+        }
+        $this->entityManager->flush();
+        if ($later === []) {
+            return $conversation;
+        }
+        try {
+            foreach ($later as $user) {
+                // A folding column answers the look-alike's row: findOneFor() reports it and assertInsertable() refuses.
+                $this->participants->findOneFor($conversation, $user);
+                $this->participants->assertInsertable($user);
+            }
+        } catch (ChatUserLookAlikeException $refused) {
+            foreach ($rows as $row) {
+                $this->entityManager->remove($row);
+            }
+            $this->entityManager->remove($conversation);
+            $this->entityManager->flush();
+
+            throw $refused;
+        }
+        foreach ($later as $user) {
             $this->entityManager->persist(new ChatParticipant($conversation, $user, $this->clock->now()));
         }
         $this->entityManager->flush();

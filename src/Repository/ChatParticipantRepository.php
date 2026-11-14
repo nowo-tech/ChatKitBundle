@@ -7,8 +7,8 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
-use LogicException;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
+use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -93,7 +93,7 @@ class ChatParticipantRepository extends ServiceEntityRepository
         if ($row instanceof ChatParticipant && !ChatUserReferences::same($row->getUser(), $user)) {
             // REQ-SEC-006 item 2: exactly this user's row (a folding collation may return a look-alike's). 1.28: the
             // read degrades to null and warns; assertInsertable() refuses the write that follows.
-            $this->refs->reportLookAlike($this->userColumn(), $user, $row->getUser());
+            $this->refs->reportLookAlike($this->userColumn(), $user);
 
             return null;
         }
@@ -193,11 +193,36 @@ class ChatParticipantRepository extends ServiceEntityRepository
      *
      * @param ChatUserInterface $user The user the row would be written for
      *
-     * @throws LogicException When a look-alike row of that user was read in this request
+     * @throws ChatUserLookAlikeException When a look-alike row of that user was read in this table in this request
      */
     public function assertInsertable(ChatUserInterface $user): void
     {
-        $this->refs->assertNoLookAlike($user);
+        $this->refs->assertNoLookAlike($this->userColumn(), $user);
+    }
+
+    /**
+     * 1.28 (audit PV-L2): whether a new participant row for `$user` could clash with the row of one of `$others` on a
+     * user column that folds (references equal but for case, accents, width or trailing spaces). Never outside
+     * `string` mode. ChatService::create() then writes that row only after a read proved the column exact.
+     *
+     * @param ChatUserInterface $user The user about to get a row
+     * @param list<ChatUserInterface> $others The users already getting one
+     *
+     * @return bool True when the two rows may be one row to a folding column
+     */
+    public function mayClash(ChatUserInterface $user, array $others): bool
+    {
+        $key = $this->refs->isStringMode() ? ChatUserReferences::key($user) : null;
+        if ($key === null) {
+            return false;
+        }
+        foreach ($others as $other) {
+            if (ChatUserReferences::mayFold($key, (string) ChatUserReferences::key($other))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

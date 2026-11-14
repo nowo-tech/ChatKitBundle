@@ -84,11 +84,22 @@ another database inside the request; since 1.27.1 the check runs once per reques
 
 A read by user that comes back with a look-alike's row still ignores it and degrades — unsaved defaults from
 `ChatUserSettingsRepository::forUser()`, null from the `findOneFor()` of the participant and reaction repositories —
-and now logs a PSR-3 **warning** naming the column and both references, once per user key and request. New: the write
-that would follow such a read throws a `LogicException` before `persist()`
-(`ChatService::participant()`, `ChatService::toggleReaction()`, `ChatUserSettingsRepository::save()`), because that
-insert would hit the look-alike's unique key inside the flush and close the host entity manager. `ChatAutoReplier`
-catches it and skips the automatic reply, so sending a message never fails for this.
+and now logs a PSR-3 **warning** naming the column and a keyed hash of the asked user's reference (never the
+reference itself; see SECURITY.md "Logging"), once per column and user key and request. New: the write into that same
+column that would follow such a read throws `ChatUserLookAlikeException` (a `LogicException`) before `persist()`
+(`ChatService::participant()` and the methods that go through it, `ChatService::toggleReaction()`,
+`ChatUserSettingsRepository::save()`), because that insert would hit the look-alike's unique key inside the flush and
+close the host entity manager. `ChatAutoReplier` catches it and skips the automatic reply, so sending a message never
+fails for this. Writes to other tables are not affected.
+
+Two writes that have no read before them are protected too: `ChatService::openDirect()` between two references that a
+folding column could take for one (`bob` / `Bob`) throws `ChatUserLookAlikeException` and writes nothing when the
+participant column folds, and `ChatMentions::sync()` stores one mention row per message for such references (everyone
+is still notified). On exact columns the direct conversation is created as before; the only visible change is that a
+single message mentioning both `bob` and `Bob` stores the first one's mention row only.
+
+`ChatPersonalData::export()` now filters every list byte for byte, so on a folding column the export never contains a
+look-alike's messages, pins, quick replies or links (it did in 1.27.0 and 1.27.1). Nothing to change in the host.
 
 If those warnings appear, run the `ALTER TABLE` of ["String user references"](#to-1270) again: the chat is reading
 and writing on columns that treat `bob`, `Bob` and `bob ` as one person.

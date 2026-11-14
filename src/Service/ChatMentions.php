@@ -201,19 +201,57 @@ final readonly class ChatMentions
     {
         $existing = $this->mentions->userIdsOf($message);
         $keep     = array_map(static fn (ChatUserInterface $user): int|string => ChatUserReferences::idOrKey((string) ChatUserReferences::key($user)), $users);
-        if (array_diff($existing, $keep) !== []) {
+        $removed  = array_diff($existing, $keep) !== [];
+        if ($removed) {
             // @igor-ignore - a repository DELETE query (database rows), not state held by this service.
             $this->mentions->removeFor($message, $keep);
         }
-        $added = [];
+        // 1.28 (audit PV-L2, `string` mode): the rows this message holds now. A row the delete should have removed but
+        // kept is a look-alike's that a folding column took for a kept user's.
+        $stored    = $this->mentions->keyedByReference() ? array_map(strval(...), $removed ? $this->mentions->userIdsOf($message) : $existing) : null;
+        $survivors = $stored === null ? [] : array_diff($stored, array_map(strval(...), $keep));
+        $added     = [];
         foreach ($users as $user) {
-            if (!in_array(ChatUserReferences::idOrKey((string) ChatUserReferences::key($user)), $existing, true)) {
-                $this->entityManager->persist(new ChatMessageMention($message, $user, $message->getCreatedAt()));
-                $added[] = $user;
+            if (in_array(ChatUserReferences::idOrKey((string) ChatUserReferences::key($user)), $existing, true)) {
+                continue;
             }
+            $added[] = $user;
+            if ($stored !== null) {
+                $clash = $this->foldsOnto((string) ChatUserReferences::key($user), $stored);
+                if ($clash !== null) {
+                    // One row per set of references a folding column could take for one key: a second row would clash
+                    // inside the flush and close the entity manager. The user is still notified.
+                    if (in_array($clash, $survivors, true)) {
+                        $this->mentions->reportLookAlike($user);
+                    }
+
+                    continue;
+                }
+                $stored[] = (string) ChatUserReferences::key($user);
+            }
+            $this->entityManager->persist(new ChatMessageMention($message, $user, $message->getCreatedAt()));
         }
 
         return $added;
+    }
+
+    /**
+     * 1.28 (audit PV-L2): the stored key a new mention row's key may fold onto, if any.
+     *
+     * @param string $key The new row's user key
+     * @param list<string> $stored The keys of the message's rows
+     *
+     * @return string|null The stored key, or null when the new row cannot clash
+     */
+    private function foldsOnto(string $key, array $stored): ?string
+    {
+        foreach ($stored as $other) {
+            if (ChatUserReferences::mayFold($other, $key)) {
+                return $other;
+            }
+        }
+
+        return null;
     }
 
     /**

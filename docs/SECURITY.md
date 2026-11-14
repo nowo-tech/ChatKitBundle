@@ -73,6 +73,14 @@ UUIDs (no sequential ids in URLs).
 The bundle logs **no message content and no personal data**: failed hub publishes (`ChatPublisher`: the event type and the
 exception, never the payload), and `nowo:chat:purge` start / end with counts, and on failure the exception class and message (no message content). Host senders should follow the same rule.
 
+1.28 (`doctrine.user_reference: string` only, REQ-OBS-001): when a user column folds behind a passed schema check, the
+bundle logs one **warning** per column and user in the request (`StringReferenceSchemaGuard`) and refuses the write that
+would follow with `ChatUserLookAlikeException`. Both carry the column name (`nowo_chat_participant.user_id`) and a
+**keyed hash** of the user reference — the first 16 hex digits of HMAC-SHA256 under `kernel.secret` — never the reference
+itself, which in that mode is host-defined and often an e-mail address or a username. The hash is stable in one
+installation, so log lines can be correlated; reading a reference back needs the secret (hash a known reference with
+`StringReferenceSchemaGuard::hashOf()` to find its lines).
+
 ## Dependencies
 
 `composer audit` runs in CI (`Composer audit (Critical/High)` step) and before each release; Dependabot keeps

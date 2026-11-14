@@ -7,7 +7,7 @@ namespace Nowo\ChatKitBundle\AutoReply;
 use DateInterval;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
-use LogicException;
+use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -82,10 +82,11 @@ final readonly class ChatAutoReplier
             if (!$participant instanceof ChatParticipant) {
                 try {
                     $this->participants->assertInsertable($candidate);
-                } catch (LogicException) {
+                } catch (ChatUserLookAlikeException) {
                     // 1.28: a folding user column holds a look-alike's row, so this insert would clash and close the
                     // entity manager. This runs inside ChatService::send(), after the message was flushed: skip the
-                    // automatic reply (the guard already warned) instead of answering 500 to whoever wrote it.
+                    // automatic reply (the guard already warned) instead of answering 500 to whoever wrote it. Only
+                    // this refusal is swallowed (audit PV-I1); any other failure still surfaces.
                     continue;
                 }
                 $participant = new ChatParticipant($conversation, $candidate, $now);

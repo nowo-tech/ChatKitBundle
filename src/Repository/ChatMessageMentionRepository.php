@@ -347,4 +347,27 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
 
         return $qb;
     }
+
+    /**
+     * 1.28 (audit PV-L2): whether mention rows are keyed by string references, the only mode where a user column may
+     * fold two people into one key.
+     *
+     * @return bool True in `string` mode
+     */
+    public function keyedByReference(): bool
+    {
+        return $this->refs->isStringMode();
+    }
+
+    /**
+     * 1.28 (audit PV-L2): a mention row for `$asked` was not written because the user column kept a look-alike's row
+     * that a byte-for-byte delete would have removed: the column folds. Warns like the other look-alike reads.
+     *
+     * @param ChatUserInterface $asked The user whose mention row was skipped
+     */
+    public function reportLookAlike(ChatUserInterface $asked): void
+    {
+        $metadata = $this->getClassMetadata();
+        $this->refs->reportLookAlike($metadata->getTableName() . '.' . ($this->refs->isIdMode() ? $metadata->getColumnName('userRef') : 'user_id'), $asked);
+    }
 }

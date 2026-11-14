@@ -6,7 +6,7 @@ namespace Nowo\ChatKitBundle\Repository;
 
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
-use LogicException;
+use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -47,7 +47,7 @@ class ChatReactionRepository extends ServiceEntityRepository
         if ($row instanceof ChatReaction && !ChatUserReferences::same($row->getUser(), $user)) {
             // REQ-SEC-006 item 2: exactly this user's reaction. 1.28: the read degrades to null and warns;
             // assertInsertable() refuses the write that follows.
-            $this->refs->reportLookAlike($this->userColumn(), $user, $row->getUser());
+            $this->refs->reportLookAlike($this->userColumn(), $user);
 
             return null;
         }
@@ -93,11 +93,11 @@ class ChatReactionRepository extends ServiceEntityRepository
      *
      * @param ChatUserInterface $user The user the row would be written for
      *
-     * @throws LogicException When a look-alike row of that user was read in this request
+     * @throws ChatUserLookAlikeException When a look-alike row of that user was read in this table in this request
      */
     public function assertInsertable(ChatUserInterface $user): void
     {
-        $this->refs->assertNoLookAlike($user);
+        $this->refs->assertNoLookAlike($this->userColumn(), $user);
     }
 
     /**

@@ -133,6 +133,9 @@ final readonly class ChatPersonalData
             ->setParameter('user', $this->refs->value($user))
             ->orderBy('m.id', 'ASC')
             ->getQuery()->getResult();
+        // 1.28 (audit PV-L4, REQ-SEC-006 item 2): exactly this user's rows. A folding user column also answers a
+        // look-alike's rows to `= :user`, and an export must never hand one person another person's data.
+        $messages = array_values(array_filter($messages, static fn (ChatMessage $message): bool => ChatUserReferences::same($message->getAuthor(), $user)));
         $settings = $this->settings->forUser($user);
         $now      = $this->clock->now();
         /** @var list<ChatMessage> $pins */
@@ -142,6 +145,13 @@ final readonly class ChatPersonalData
             ->setParameter('user', $this->refs->value($user))
             ->orderBy('m.pinnedAt', 'ASC')
             ->getQuery()->getResult();
+        $pins = array_values(array_filter($pins, static fn (ChatMessage $message): bool => ChatUserReferences::same($message->getPinnedBy(), $user)));
+        /** @var list<ChatQuickReply> $quickReplies */
+        $quickReplies = $this->entityManager->getRepository(ChatQuickReply::class)->findBy($this->refs->criteria('user', $user), ['id' => 'ASC']);
+        $quickReplies = array_values(array_filter($quickReplies, static fn (ChatQuickReply $reply): bool => ChatUserReferences::same($reply->getUser(), $user)));
+        /** @var list<ChatConversationLink> $links */
+        $links = $this->entityManager->getRepository(ChatConversationLink::class)->findBy($this->refs->criteria('createdBy', $user), ['id' => 'ASC']);
+        $links = array_values(array_filter($links, static fn (ChatConversationLink $link): bool => ChatUserReferences::same($link->getCreatedBy(), $user)));
 
         return [
             'settings' => [
@@ -168,7 +178,7 @@ final readonly class ChatPersonalData
             ],
             'quick_replies' => array_map(
                 static fn (ChatQuickReply $reply): array => ['title' => $reply->getTitle(), 'text' => $reply->getBody()],
-                $this->entityManager->getRepository(ChatQuickReply::class)->findBy($this->refs->criteria('user', $user), ['id' => 'ASC']),
+                $quickReplies,
             ),
             'messages' => array_map(static fn (ChatMessage $message): array => [
                 'conversation_uuid' => $message->getConversation()->getUuid(),
@@ -191,7 +201,7 @@ final readonly class ChatPersonalData
                 'title'             => $link->getTitle(),
                 'created_at'        => $link->getCreatedAt()->format(DATE_ATOM),
                 'updated_at'        => $link->getUpdatedAt()?->format(DATE_ATOM),
-            ], $this->entityManager->getRepository(ChatConversationLink::class)->findBy($this->refs->criteria('createdBy', $user), ['id' => 'ASC'])),
+            ], $links),
         ];
     }
 

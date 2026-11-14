@@ -19,10 +19,12 @@ use Symfony\Contracts\Service\ResetInterface;
 use WeakMap;
 
 use function array_keys;
+use function hash_hmac;
 use function implode;
 use function in_array;
 use function is_string;
 use function sprintf;
+use function substr;
 
 /**
  * 1.27 (audit OJ-M1, REQ-SEC-006; `doctrine.user_reference: string` only): fail closed when the user reference columns
@@ -45,8 +47,11 @@ use function sprintf;
  *
  * 1.28 it also carries the look-alike rows seen in this request: a read by user that comes back with another person's
  * row behind a passed check (a migration rolled back, a column altered later) warns and degrades — the reader gets
- * null or unsaved defaults, as before — while a write that would insert a row for that same user fails closed, because
- * that insert would clash with the look-alike's unique key inside the flush and close the entity manager.
+ * null or unsaved defaults, as before — while a write that would insert a row for that same user into that same column
+ * fails closed (ChatUserLookAlikeException), because that insert would clash with the look-alike's unique key inside
+ * the flush and close the entity manager. The other tables, which may compare exactly, stay writable (audit PV-L1).
+ * Neither the warning nor the exception carries a user reference: they name the column and a keyed hash of the
+ * reference (audit PV-L3, REQ-OBS-001), enough to correlate lines without logging an e-mail address or a username.
  */
 final class StringReferenceSchemaGuard implements ResetInterface
 {
@@ -56,16 +61,18 @@ final class StringReferenceSchemaGuard implements ResetInterface
     /** @var WeakMap<Connection, true> Connections whose schema passed the check in this request. */
     private WeakMap $ready;
 
-    /** @var array<string, string> 1.28: user key => the column a look-alike row came from, in this request. */
+    /** @var array<string, true> 1.28: `column` NUL `user key` of the look-alike rows seen in this request. */
     private array $lookAlikes = [];
 
     /**
      * @param ManagerRegistry $doctrine Finds the manager (and connection) of the chat entities
      * @param LoggerInterface|null $logger Where the look-alike warnings go
+     * @param string $secret Keys the hash of a reference in the warning and the exception (`kernel.secret`)
      */
     public function __construct(
         private readonly ManagerRegistry $doctrine,
         private readonly ?LoggerInterface $logger = null,
+        private readonly string $secret = '',
     ) {
         $this->ready = new WeakMap();
     }
@@ -84,45 +91,59 @@ final class StringReferenceSchemaGuard implements ResetInterface
 
     /**
      * 1.28: a read by user came back with another person's row, which only a folding user column can do. The read
-     * degrades (null, or unsaved defaults) and this warns once per user key in the request: the settings read runs on
-     * every page of the host (ChatDockExtension::config()) and inside the GDPR erasure, so it must never answer 500.
-     * A write for the same user is then refused by assertNoLookAlike().
+     * degrades (null, or unsaved defaults) and this warns once per column and user key in the request: the settings
+     * read runs on every page of the host (ChatDockExtension::config()) and inside the GDPR erasure, so it must never
+     * answer 500. A write for the same user into the same column is then refused by assertNoLookAlike().
      *
      * @param string $where The column the row came from (`nowo_chat_participant.user_id`)
-     * @param string $key The user key that was asked for
-     * @param string|null $found The key of the row that came back, when it is known
+     * @param string $key The key of the user that was ASKED for (never the owner of the row that came back)
      */
-    public function sawLookAlike(string $where, string $key, ?string $found = null): void
+    public function sawLookAlike(string $where, string $key): void
     {
-        if (isset($this->lookAlikes[$key])) {
+        $seen = $where . "\0" . $key;
+        if (isset($this->lookAlikes[$seen])) {
             return;
         }
         // @igor-ignore - Request data, cleared by reset() at every request / command / message boundary.
-        $this->lookAlikes[$key] = $where;
-        $this->logger?->warning('nowo_chat_kit: {column} compares user references loosely: the row of "{found}" came back for "{reference}". The chat ignores that row, and a write for that user is refused. Run the ALTER TABLE of UPGRADING.md ("String user references").', [
-            'column'    => $where,
-            'reference' => $key,
-            'found'     => $found ?? 'another user',
+        $this->lookAlikes[$seen] = true;
+        $this->logger?->warning('nowo_chat_kit: {column} compares user references loosely: a look-alike\'s row came back for the user reference with hash {reference_hash}. The chat ignores that row, and a write for that user into this column is refused. Run the ALTER TABLE of UPGRADING.md ("String user references").', [
+            'column'         => $where,
+            'reference_hash' => $this->hashOf($key),
         ]);
     }
 
     /**
-     * 1.28: refuses the insert that would follow a read which found a look-alike's row, because it would clash with
-     * that row's unique key inside the flush and close the entity manager (and, under FrankenPHP with `kernel.reset`
-     * false, leave it closed for every later request of the worker).
+     * 1.28: refuses the insert into `$where` that would follow a read which found a look-alike's row in that column,
+     * because it would clash with that row's unique key inside the flush and close the entity manager (and, under
+     * FrankenPHP with `kernel.reset` false, leave it closed for every later request of the worker).
      *
+     * @param string $where The column the row is about to be written into (`nowo_chat_participant.user_id`)
      * @param string $key The user key a chat row is about to be written for
      *
-     * @throws LogicException When a look-alike row was seen for this user in this request
+     * @throws ChatUserLookAlikeException When a look-alike row was seen for this user in this column in this request
      */
-    public function assertNoLookAlike(string $key): void
+    public function assertNoLookAlike(string $where, string $key): void
     {
-        $where = $this->lookAlikes[$key] ?? null;
-        if ($where === null) {
+        if (!isset($this->lookAlikes[$where . "\0" . $key])) {
             return;
         }
 
-        throw new LogicException(sprintf('nowo_chat_kit: refusing to write a chat row for "%s": %s compares user references loosely and already holds a look-alike\'s row. Run the ALTER TABLE of UPGRADING.md ("String user references").', $key, $where));
+        throw new ChatUserLookAlikeException(sprintf('nowo_chat_kit: refusing to write a chat row for the user reference with hash %s: %s compares user references loosely and already holds a look-alike\'s row. Run the ALTER TABLE of UPGRADING.md ("String user references").', $this->hashOf($key), $where));
+    }
+
+    /**
+     * 1.28 (audit PV-L3): what the warning and the exception show instead of a reference — the first 16 hex digits of
+     * its HMAC-SHA256 under `kernel.secret`. The same reference always gives the same hash in one installation, so log
+     * lines can be correlated, but the reference cannot be read back or guessed from a list of e-mail addresses
+     * without the secret.
+     *
+     * @param string $key A user key
+     *
+     * @return string The hash
+     */
+    public function hashOf(string $key): string
+    {
+        return substr(hash_hmac('sha256', $key, $this->secret), 0, 16);
     }
 
     /**
