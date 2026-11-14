@@ -360,6 +360,27 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
     }
 
     /**
+     * 1.28 (audit PV-D4): whether the user column answers a look-alike's row of this message to a query for `$user` —
+     * proof that it folds. A query for a user without a row on an exact column finds nothing. The look-alike is
+     * reported (warned once per column and user in the request).
+     *
+     * @param ChatMessage $message The message (its rows are stored)
+     * @param ChatUserInterface $user The user who has no row of their own on it
+     *
+     * @return bool True when the column folds `$user` onto another person's row
+     */
+    public function holdsLookAlikeOf(ChatMessage $message, ChatUserInterface $user): bool
+    {
+        $row = $this->findOneBy(['message' => $message] + $this->refs->criteria('user', $user));
+        if (!$row instanceof ChatMessageMention || ChatUserReferences::same($row->getUser(), $user)) {
+            return false;
+        }
+        $this->reportLookAlike($user);
+
+        return true;
+    }
+
+    /**
      * 1.28 (audit PV-L2): a mention row for `$asked` was not written because the user column kept a look-alike's row
      * that a byte-for-byte delete would have removed: the column folds. Warns like the other look-alike reads.
      *
