@@ -73,6 +73,26 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Target 1.29.0, from **1.28.0**: additive, no migration, no configuration change.
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+- **Nothing changes until you alias the new port.** Without a `ChatAuthorBadgeProviderInterface` alias the page, the
+  dock markup, the message API and the realtime payloads are byte for byte those of 1.28.0 (golden tests).
+- **Author badges (optional).** Implement `Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface` and alias it
+  ([USAGE — Author badges](USAGE.md#author-badges)). Answer by `ChatAuthorRef::$reference` exactly as given, in one
+  query for the whole batch; keep no state between requests.
+- **JSON consumers.** Messages may carry a new `authorBadges` array (`{label, variant, title}`); it is absent when the
+  author has none. Render `label` / `title` as text only.
+- **Template overrides.** If you override `page.html.twig` / `page_legacy.html.twig` (`nowo_chat_page_thread`) or the
+  dock's `nowo_chat_template_messages` block, your copies keep working without badges; to show them, include
+  `@NowoChatKitBundle/_author_badges.html.twig` after the author's name (page) or keep the
+  `nowo_chat_template_author_badge` block (dock; without it the script draws a plain `span`). Restyle with the
+  `.nowo-chat-author-badge` classes.
+- **Assets.** Rebuild or re-install `nowo-chat.js` / `nowo-chat.css` (`assets:install`) if you bundle them yourself.
+
 ## To 1.28.0
 
 From **1.27.1**:

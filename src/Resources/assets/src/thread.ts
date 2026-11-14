@@ -4,6 +4,7 @@
  * edited or deleted during the edit window; everyone who can write can react.
  */
 import { ChatApiError, type ChatApi } from './api';
+import { authorBadges } from './badges';
 import { h, prefersReducedMotion, setBadge } from './dom';
 import { applyFormat, type Format, formatHelp, QuickRepliesMenu, shortcutFormat } from './composer-tools';
 import { emojiPicker, insertAtCaret } from './emoji';
@@ -1815,7 +1816,12 @@ export class ThreadView {
     } else {
       avatarSlot.replaceWith(h('span', { class: 'nowo-chat-avatar-spacer' }));
     }
-    text(article, 'author', groupStart && !message.mine && this.summary.kind !== 'direct' ? message.authorName : null);
+    // 1.29: the author's badges (checked again, textContent only); in a direct thread they bring the name line with them.
+    const badges = message.mine || message.kind === 'system' ? [] : authorBadges(message.authorBadges);
+    const author = text(article, 'author', groupStart && !message.mine && (this.summary.kind !== 'direct' || badges.length > 0) ? message.authorName : null);
+    if (!author.hidden && badges.length > 0) {
+      templates.authorBadges(author, badges);
+    }
 
     const bubble = part(article, 'bubble');
     if (message.deleted) {

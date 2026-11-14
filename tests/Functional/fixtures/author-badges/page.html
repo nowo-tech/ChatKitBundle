@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>#Acme</title>
+            <script src="/bundles/nowouikit/js/nowo-ui-theme-boot.js" data-nowo-ui-theme-boot></script>
+
+                        <link rel="stylesheet" href="/bundles/nowouikit/css/nowo-ui.css">
+    
+    <link rel="stylesheet" href="/bundles/nowochatkit/css/nowo-chat.css">
+</head>
+<body class="nowo-ui-body">
+            <div class="nowo-ui-page nowo-ui-page--admin">
+                <main class="nowo-ui-content" id="nowo-ui-content" data-nowo-ui-bundle="NowoChatKitBundle">
+                        <div class="nowo-ui-page-header d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3" data-nowo-ui-region="header">
+    <div class="nowo-ui-page-header__text">            
+                                <h1 class="nowo-ui-page-header__title h3 mb-1">Messages</h1>
+            </div>
+        </div>
+
+                                
+                                <div class="nowo-ui-section mb-4 nowo-chat-page has-current" data-testid="chat-page" data-nowo-ui-region="section" data-nowo-chat-page-mode data-nowo-chat-current="<uuid>" data-nowo-chat-read-url="/chat/api/conversations/<uuid>/read" data-nowo-chat-read-id="4" data-nowo-chat-read-csrf="<csrf>">
+                    <nav class="nowo-chat-page__list" aria-label="Messaging">
+                                                                                <button type="button" class="nowo-chat-page__status" data-nowo-chat-status-open data-status="available" aria-haspopup="dialog" data-testid="chat-page-status">
+                            <span class="nowo-chat-status-dot nowo-chat-status-dot--available" aria-hidden="true"></span>
+                            <span class="nowo-chat-page__status-label">Available</span>
+                                                    </button>
+                                                                                    <a class="nowo-ui-btn nowo-ui-btn--link btn btn-link nowo-chat-page__archived-link" href="/chat/?archived=1" data-testid="chat-page-archived-link">Closed</a>
+                                <ul role="list">
+                                            <li>
+                            <a class="nowo-chat-page__row is-current" href="/chat/<uuid>" aria-current="page">
+                                <span class="nowo-chat-page__row-title">#Acme</span>
+                                <span class="nowo-chat-page__row-preview">live</span>
+                                                            </a>
+                                                        <button type="button" class="nowo-chat-page__row-archive" data-nowo-chat-archive="<uuid>" aria-label="Close — #Acme" title="Close the conversation with #Acme">Close</button>
+                        </li>
+                                    </ul>
+            </nav>
+                            <section class="nowo-chat-page__thread" aria-label="Conversation with #Acme">
+                                    <header class="nowo-chat-page__header">
+                        <a class="nowo-ui-btn nowo-ui-btn--link btn btn-link nowo-chat-page__back" href="/chat/">Back</a>
+                        <h2>#Acme</h2>
+                        <p class="nowo-ui-muted text-muted">Channel</p>                                                                    </header>
+                                                            <ol class="nowo-chat-page__messages" role="list">
+                                                    <li class="nowo-chat-msg">
+                                <div class="nowo-chat-msg__content">
+                                    <p class="nowo-chat-msg__author">Luis &lt;b&gt;</p>                                                                                                                    <div class="nowo-chat-bubble"><p>Hola <strong>Ana</strong></p></div>
+                                                                        <span class="nowo-chat-msg__meta"><time datetime="<time>" title="<time>"><time></time></span>
+                                </div>
+                            </li>
+                                                    <li class="nowo-chat-msg nowo-chat-msg--mine">
+                                <div class="nowo-chat-msg__content">
+                                                                                                                                                        <div class="nowo-chat-bubble"><p>hi</p></div>
+                                                                        <span class="nowo-chat-msg__meta"><time datetime="<time>" title="<time>"><time></time></span>
+                                </div>
+                            </li>
+                                                    <li class="nowo-chat-msg nowo-chat-page__buzz">
+                                <div class="nowo-chat-msg__content">
+                                    <p class="nowo-chat-msg__author">Luis &lt;b&gt;</p>                                                                            <p class="nowo-chat-buzz-line">Luis &lt;b&gt; sent a buzz</p>
+                                                                        <span class="nowo-chat-msg__meta"><time datetime="<time>" title="<time>"><time></time></span>
+                                </div>
+                            </li>
+                                                    <li class="nowo-chat-msg" id="nowo-chat-latest">
+                                <div class="nowo-chat-msg__content">
+                                    <p class="nowo-chat-msg__author">Luis &lt;b&gt;</p>                                                                                                                    <div class="nowo-chat-bubble"><p>live</p></div>
+                                                                        <span class="nowo-chat-msg__meta"><time datetime="<time>" title="<time>"><time></time></span>
+                                </div>
+                            </li>
+                                            </ol>
+                                                                    <form name="nowo_chat_message" method="post" action="/chat/<uuid>" class="nowo-ui-form nowo-chat-page__composer">
+                                                                                                <div><label class="nowo-chat-sr-only required" for="nowo_chat_message_body">Write a message…</label><textarea id="nowo_chat_message_body" name="nowo_chat_message[body]" required="required" rows="3" maxlength="4000" placeholder="Write a message…"></textarea></div>
+                                                                                                                                <input type="hidden" id="nowo_chat_message__token" name="nowo_chat_message[_token]" data-controller="csrf-protection" value="<csrf>" />
+                                                                                        <button type="submit" class="nowo-ui-btn nowo-ui-btn--primary btn btn-primary">Send</button>
+                        </form>
+                                                </section>
+            </div>
+        </main>
+            </div>
+                                <script src="/bundles/nowouikit/js/nowo-ui-modal.js" defer></script>
+    <script src="/bundles/nowouikit/js/nowo-ui-confirm.js" defer></script>
+    <script src="/bundles/nowouikit/js/nowo-ui-dialog.js" defer></script>
+    <script src="/bundles/nowouikit/js/nowo-ui-toast.js" defer></script>
+    <script src="/bundles/nowouikit/js/nowo-ui-tabs.js" defer></script>
+    <script src="/bundles/nowouikit/js/nowo-ui-theme.js" defer></script>
+    <script src="/bundles/nowouikit/js/nowo-ui-popover.js" defer></script>
+    <script src="/bundles/nowouikit/js/nowo-ui-segmented.js" defer></script>
+    <script src="/bundles/nowouikit/js/nowo-ui-autosubmit.js" defer></script>
+    <script src="/bundles/nowouikit/js/nowo-ui-avatar.js" defer></script>
+
+            
+                <script src="/bundles/nowochatkit/js/nowo-chat.js" defer></script>
+    </body>
+</html>

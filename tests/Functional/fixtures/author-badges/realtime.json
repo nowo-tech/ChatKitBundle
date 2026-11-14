@@ -1,0 +1,34 @@
+[
+    {
+        "topics": [
+            "/nowo-chat/users/<uuid>",
+            "/nowo-chat/users/<uuid>"
+        ],
+        "payload": {
+            "type": "message",
+            "conversationUuid": "<uuid>",
+            "message": {
+                "id": 4,
+                "uuid": "<uuid>",
+                "authorUuid": "<uuid>",
+                "authorName": "Luis <b>",
+                "authorInitials": "L",
+                "authorAvatarUrl": null,
+                "mine": false,
+                "kind": "text",
+                "html": "<p>live</p>",
+                "createdAt": "<time>",
+                "edited": false,
+                "deleted": false,
+                "moderated": false,
+                "reactions": [],
+                "mentions": [],
+                "mentionsMe": false,
+                "references": [],
+                "refsPending": false,
+                "pinned": false,
+                "pinnedMessage": null
+            }
+        }
+    }
+]

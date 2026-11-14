@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Tests\Support;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
+use Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
@@ -19,6 +20,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\CountingAvatarResolver;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingPushSender;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestAccessPolicy;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestAuthorBadgeProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestGrantReferenceProvider;
@@ -87,6 +89,7 @@ final class TestKernel extends Kernel
         private readonly bool $sidebarProviders = false,
         private readonly bool $grantReferences = false,
         private readonly bool $twinPortsKernel = false,
+        private readonly bool $authorBadges = false,
     ) {
         // Own environment for the routing.controllers-only host: its container class must not collide with the
         // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir).
@@ -169,7 +172,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), self::privateEntityManager()])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), self::privateEntityManager(), $this->authorBadges])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -237,6 +240,11 @@ final class TestKernel extends Kernel
             $services->set(TestGrantReferenceProvider::class)->autoconfigure();
         }
         // 1.25: two sidebar section providers (autoconfigured; priority order), only for the tests that ask for them.
+        // 1.29: an author badge provider, only for the tests that ask for one (the others run with the default).
+        if ($this->authorBadges) {
+            $services->set(TestAuthorBadgeProvider::class);
+            $services->alias(ChatAuthorBadgeProviderInterface::class, TestAuthorBadgeProvider::class);
+        }
         if ($this->sidebarProviders) {
             $services->set(TestSidebarProvider::class)->autoconfigure();
             $services->set(TestSecondSidebarProvider::class)->autoconfigure();

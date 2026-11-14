@@ -784,6 +784,33 @@
   font-weight: 600;
 }
 
+/* 1.29 (Beacon spec 234): author badges (ChatAuthorBadgeProviderInterface), one class per allow-listed variant. */
+.nowo-chat-author-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: var(--nowo-chat-radius-pill);
+  background: var(--nowo-chat-surface-muted);
+  color: var(--nowo-chat-muted);
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: 1px;
+}
+.nowo-chat-author-badge--info,
+.nowo-chat-author-badge--agent {
+  background: var(--nowo-chat-mist);
+  color: var(--nowo-chat-text);
+}
+.nowo-chat-author-badge--success {
+  background: color-mix(in srgb, var(--nowo-chat-accent) 14%, transparent);
+  color: var(--nowo-chat-accent-strong);
+}
+.nowo-chat-author-badge--warning {
+  background: color-mix(in srgb, var(--nowo-chat-warn) 22%, transparent);
+  color: var(--nowo-chat-text);
+}
+
 .nowo-chat-bubble {
   padding: 7px 11px;
   border-radius: var(--nowo-chat-radius-bubble);

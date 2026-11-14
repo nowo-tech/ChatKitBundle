@@ -232,6 +232,39 @@ describe('ThreadView', () => {
     expect(q('.nowo-chat-buzz-line.is-new')).not.toBeNull();
   });
 
+  it('1.29: shows the author badges of a message as text, also when realtime updates it', () => {
+    const { view, q } = setup({ kind: 'channel' });
+    const agent = msg({ uuid: 'b1', authorName: 'Deploy bot', authorBadges: [{ label: '<script>alert(1)</script>', variant: 'agent', title: '"><img src=x>' }] });
+    view.merge([agent], false);
+    const author = q('.nowo-chat-msg__author');
+    expect(author.hidden).toBe(false);
+    expect(author.textContent).toBe('Deploy bot <script>alert(1)</script>');
+    expect(author.querySelector('script')).toBeNull();
+    expect(author.querySelector('img')).toBeNull();
+    expect(q('.nowo-chat-author-badge--agent').getAttribute('title')).toBe('"><img src=x>');
+
+    // A message_updated event without the field: the badge goes.
+    view.update({ ...agent, authorBadges: undefined, html: '<p>edited</p>' });
+    expect(q('.nowo-chat-author-badge')).toBeNull();
+    expect(q('.nowo-chat-msg__author').textContent).toBe('Deploy bot');
+
+    // A malformed or unknown variant is dropped.
+    view.merge([msg({ authorUuid: 'x', authorName: 'Eve', authorBadges: [{ label: 'Admin', variant: 'danger' as never, title: null }] })], false);
+    expect(view.element.querySelectorAll('.nowo-chat-author-badge')).toHaveLength(0);
+  });
+
+  it('1.29: in a direct thread the name line appears only for an author with badges; never on own messages', () => {
+    const { view } = setup();
+    view.merge([msg({ uuid: 'd1' })], false);
+    expect((view.element.querySelector('.nowo-chat-msg__author') as HTMLElement).hidden).toBe(true);
+    view.merge([msg({ uuid: 'd2', authorUuid: 'bot', authorName: 'Deploy bot', authorBadges: [{ label: 'Agent', variant: 'agent', title: null }] })], false);
+    const authors = [...view.element.querySelectorAll<HTMLElement>('.nowo-chat-msg__author')].filter((author) => !author.hidden);
+    expect(authors.map((author) => author.textContent)).toEqual(['Deploy bot Agent']);
+
+    view.merge([msg({ uuid: 'd3', mine: true, authorUuid: 'me', authorBadges: [{ label: 'Agent', variant: 'agent', title: null }] })], false);
+    expect(view.element.querySelectorAll('.nowo-chat-msg--mine .nowo-chat-author-badge')).toHaveLength(0);
+  });
+
   it('shows "Seen by" for the newest own message in channels', () => {
     const { view, q } = setup({ kind: 'channel' });
     const other = msg();

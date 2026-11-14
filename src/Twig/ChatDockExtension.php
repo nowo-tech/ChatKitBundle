@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Twig;
 
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
+use Nowo\ChatKitBundle\Badge\ChatAuthorBadges;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
@@ -92,6 +93,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param ChatSidebar|null $sidebar 1.25: the host sections (the full-page chat is grouped when a provider exists)
      * @param bool $dialogRuntime 1.26: the dock loads UiKit's dialog runtime for the sidebar actions (`web_ui.dock.dialog_runtime`)
      * @param Packages|null $packages 1.26: asset packages (the URL of UiKit's js/nowo-ui-dialog.js); null without symfony/asset
+     * @param ChatAuthorBadges|null $authorBadges 1.29: whether the application gives author badges; null: it does not
      */
     public function __construct(
         private readonly Security $security,
@@ -125,6 +127,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly ?ChatSidebar $sidebar = null,
         private readonly bool $dialogRuntime = false,
         private readonly ?Packages $packages = null,
+        private readonly ?ChatAuthorBadges $authorBadges = null,
     ) {
     }
 
@@ -144,13 +147,19 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
 
     /**
      * Twig globals: `nowo_chat_kit_page_layout` (deprecated), the layout the 1.x chat page (`page_legacy.html.twig`)
-     * extends; the 1.5 page extends the UiKit layout (`web_ui.layout_template`).
+     * extends; the 1.5 page extends the UiKit layout (`web_ui.layout_template`). 1.29: `nowo_chat_author_badges`, true
+     * when the application aliased ChatAuthorBadgeProviderInterface (the dock's `author-badge` template is rendered only
+     * then, so the dock markup of a host without badges is unchanged).
      *
      * @return array<string, mixed> The globals
      */
     public function getGlobals(): array
     {
-        return ['nowo_chat_kit_page_layout' => $this->pageLayout ?? Configuration::LEGACY_PAGE_LAYOUT];
+        return [
+            'nowo_chat_kit_page_layout' => $this->pageLayout ?? Configuration::LEGACY_PAGE_LAYOUT,
+            // 1.29: whether the application gives author badges (the dock template of a badge is rendered only then).
+            'nowo_chat_author_badges' => $this->authorBadges?->enabled() ?? false,
+        ];
     }
 
     /**

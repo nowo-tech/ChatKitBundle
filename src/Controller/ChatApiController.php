@@ -433,6 +433,8 @@ final class ChatApiController extends AbstractController
             $this->presenter->avatarPerson($conversation, $user, null, $this->access->isSupportAgent($user)),
             ...array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $posted),
         ]);
+        // 1.29: their authors' badges in one provider call.
+        $this->presenter->primeAuthorBadges($posted);
 
         return $this->json([
             'conversation' => $this->present($conversation, $user),
@@ -645,6 +647,8 @@ final class ChatApiController extends AbstractController
         $this->references->prime($user, $page);
         // 1.16: the page's authors in one resolver call.
         $this->presenter->primeAvatars(array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $page));
+        // 1.29: and their badges in one provider call.
+        $this->presenter->primeAuthorBadges($page);
 
         return $this->json([
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, $reactions[(int) $message->getId()] ?? []), $page),
@@ -1263,6 +1267,7 @@ final class ChatApiController extends AbstractController
     {
         $pinned = $this->messages->findPinned($conversation);
         $this->presenter->primeAvatars(array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $pinned));
+        $this->presenter->primeAuthorBadges($pinned);
 
         return [
             'pins'   => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $pinned),

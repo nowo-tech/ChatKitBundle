@@ -333,7 +333,11 @@
                 {{ ui.icon_button('trash', 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'delete') }}
             </div>
         </article>
-    </template>
+    </template>{% if nowo_chat_author_badges|default(false) %}{% block nowo_chat_template_author_badge %}
+    {# 1.29 (Beacon spec 234): one author badge (only when the application gives badges). The script adds the
+     # nowo-chat-author-badge--<variant> class and the title, and sets the label with textContent in data-part="label". #}
+    <template data-nowo-chat-template="author-badge"><span class="nowo-chat-author-badge" data-part="label"></span></template>{% endblock %}{% endif %}
+
     {# Card for a link the viewer may see (issue, document …), from the application's preview provider. #}
     <template data-nowo-chat-template="link-preview">
         <a class="nowo-chat-preview" target="_blank" rel="noopener">
