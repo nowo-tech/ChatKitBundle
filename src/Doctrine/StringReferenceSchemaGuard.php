@@ -58,6 +58,9 @@ final class StringReferenceSchemaGuard implements ResetInterface
     /** Every collation this guard accepts on some platform; exactFor() is what it applies to one. */
     public const array EXACT = ['utf8mb4_0900_bin', 'utf8mb4_nopad_bin', 'utf8mb4_bin', 'binary'];
 
+    /** 1.28 (audit PV-D5): domain prefix of the hashed reference, so this HMAC under `kernel.secret` is never another one. */
+    public const string HASH_DOMAIN = 'nowo_chat_lookalike|';
+
     /** @var WeakMap<Connection, true> Connections whose schema passed the check in this request. */
     private WeakMap $ready;
 
@@ -133,9 +136,9 @@ final class StringReferenceSchemaGuard implements ResetInterface
 
     /**
      * 1.28 (audit PV-L3): what the warning and the exception show instead of a reference — the first 16 hex digits of
-     * its HMAC-SHA256 under `kernel.secret`. The same reference always gives the same hash in one installation, so log
-     * lines can be correlated, but the reference cannot be read back or guessed from a list of e-mail addresses
-     * without the secret.
+     * its HMAC-SHA256 under `kernel.secret`, over HASH_DOMAIN followed by the reference (audit PV-D5). The same
+     * reference always gives the same hash in one installation, so log lines can be correlated, but the reference
+     * cannot be read back or guessed from a list of e-mail addresses without the secret.
      *
      * @param string $key A user key
      *
@@ -143,7 +146,7 @@ final class StringReferenceSchemaGuard implements ResetInterface
      */
     public function hashOf(string $key): string
     {
-        return substr(hash_hmac('sha256', $key, $this->secret), 0, 16);
+        return substr(hash_hmac('sha256', self::HASH_DOMAIN . $key, $this->secret), 0, 16);
     }
 
     /**

@@ -104,18 +104,22 @@ Target 1.28.0 (minor; behaviour change in `doctrine.user_reference: string` only
 - **The two writes by user reference without a preceding read never reach a clashing flush (audit PV-L2, `string`
   mode).** Both clashed and closed the entity manager in 1.27.x:
   - `ChatService::openDirect()` between two references a folding column could take for one (`bob` / `Bob`, accents,
-    width, trailing spaces) stores the second participant row only after a read showed the column keeps them apart. On
-    a folding column the conversation is removed again and `ChatUserLookAlikeException` is thrown; on an exact column
-    both rows are written as before (one flush later).
-  - `ChatMentions::sync()` keeps one mention row per message for such references, and on an edit never adds a row
-    next to the look-alike's row a folding delete kept (that case is reported as a look-alike). Every mentioned person
-    is still notified. On an exact column this means a message that mentions both `bob` and `Bob` stores the mention
-    row of the first one only.
+    width, trailing spaces) stores the second participant row only after a read showed the column keeps them apart.
+    Both steps run in one transaction (a savepoint inside the caller's own): on a folding column it is rolled back, the
+    half-written conversation is detached and `ChatUserLookAlikeException` is thrown; on an exact column both rows are
+    written as before (one flush later).
+  - `ChatMentions::sync()`, when a message mentions two such references, flushes the first mention row and reads the
+    column before writing the second. On an exact column both people keep their own row (unread badge, mentions list)
+    and are notified once. On a folding column the message keeps one row; the second person is notified once and
+    counts as already mentioned on later edits, so `edit()` never repeats `ChatMentionEvent`; an edit never adds a row
+    next to the look-alike's row a folding delete kept. Each case is reported as a look-alike.
+  - What "may fold" means is `ChatUserReferences::mayFold()`; its limits are in [SECURITY.md](SECURITY.md#logging).
 
 ### Security
 
 - **The look-alike warning and refusal log no user reference (audit PV-L3, REQ-OBS-001).** They name the column and a
-  keyed hash of the reference (HMAC-SHA256 under `kernel.secret`, first 16 hex digits); see
+  keyed hash of the reference (HMAC-SHA256 under `kernel.secret` over `nowo_chat_lookalike|` and the reference, first
+  16 hex digits); see
   [SECURITY.md](SECURITY.md#logging).
 - **The GDPR export returns exactly the user's own rows (audit PV-L4, REQ-SEC-006 item 2).**
   `ChatPersonalData::export()` read the user's messages, pins, quick replies and pinned links with `= :user` only, so

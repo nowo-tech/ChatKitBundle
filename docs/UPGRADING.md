@@ -94,9 +94,10 @@ fails for this. Writes to other tables are not affected.
 
 Two writes that have no read before them are protected too: `ChatService::openDirect()` between two references that a
 folding column could take for one (`bob` / `Bob`) throws `ChatUserLookAlikeException` and writes nothing when the
-participant column folds, and `ChatMentions::sync()` stores one mention row per message for such references (everyone
-is still notified). On exact columns the direct conversation is created as before; the only visible change is that a
-single message mentioning both `bob` and `Bob` stores the first one's mention row only.
+participant column folds (inside one transaction, so nothing is left behind), and `ChatMentions::sync()` writes the
+second of two such mention rows only after a read shows the column keeps them apart: on a folding column the message
+keeps one row and the second person is notified once. On exact columns nothing visible changes: both participant
+rows and both mention rows are written, and everyone is notified once.
 
 `ChatPersonalData::export()` now filters every list byte for byte, so on a folding column the export never contains a
 look-alike's messages, pins, quick replies or links (it did in 1.27.0 and 1.27.1). Nothing to change in the host.

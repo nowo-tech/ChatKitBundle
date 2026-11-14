@@ -81,6 +81,14 @@ itself, which in that mode is host-defined and often an e-mail address or a user
 installation, so log lines can be correlated; reading a reference back needs the secret (hash a known reference with
 `StringReferenceSchemaGuard::hashOf()` to find its lines).
 
+Which references the bundle treats as possibly one key to a folding column (`ChatUserReferences::mayFold()`, used only
+to avoid a write that could clash, never to merge two users): equal after compatibility decomposition (NFKD), removal
+of combining marks, Unicode case folding and removal of trailing spaces — `bob` / `Bob` / `BÓB` / `ｂｏｂ` / `bob `, and
+`straße` / `STRASSE`. Its limits: it does not fold what some collations still equate, such as `ß` / `s`
+(`utf8mb4_general_ci`), `Æ` / `AE` or zero-width characters; without the intl extension (`Normalizer`) it folds only case
+and trailing spaces. Such pairs are caught by the read-time look-alike check instead (the read degrades, the write into
+that column is refused), and the binary NO PAD collation of UPGRADING ("String user references") removes them all.
+
 ## Dependencies
 
 `composer audit` runs in CI (`Composer audit (Critical/High)` step) and before each release; Dependabot keeps

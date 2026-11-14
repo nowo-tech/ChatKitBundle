@@ -83,7 +83,8 @@ final class StringReferenceLookAlikeTest extends TestCase
             self::assertStringNotContainsStringIgnoringCase('alice', $exception->getMessage());
         }
 
-        // A keyed hash: stable for one secret, different under another, 16 hex digits.
+        // A keyed, domain-separated hash (audit PV-D5): stable for one secret, different under another, 16 hex digits.
+        self::assertSame(substr(hash_hmac('sha256', 'nowo_chat_lookalike|alice@example.com', 'test-secret'), 0, 16), $guard->hashOf('alice@example.com'));
         self::assertMatchesRegularExpression('/\A[0-9a-f]{16}\z/', $guard->hashOf('alice@example.com'));
         self::assertSame($guard->hashOf('alice@example.com'), $guard->hashOf('alice@example.com'));
         $other = new StringReferenceSchemaGuard($this->createMock(ManagerRegistry::class), null, 'another-secret');
