@@ -173,8 +173,11 @@ final readonly class ChatService implements ChatServiceInterface
         $body                       = $this->links?->normalizeCards($body) ?? $body;
         $body                       = $this->references?->validate($conversation, $author, $body) ?? $body;
         [$body, $mentioned, $group] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, [], null];
-        $now                        = $this->clock->now();
-        $message                    = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
+        // 1.28 (audit PV-D7): the author's participant row first, so a look-alike refusal comes before any write (the
+        // mention sync may flush the message early).
+        $participant = $this->participant($conversation, $author);
+        $now         = $this->clock->now();
+        $message     = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
         $message->mentionAll($group);
         $this->entityManager->persist($message);
         // 1.19: the message's links go to the index of the Links panel (flushed with the message).
@@ -182,7 +185,7 @@ final readonly class ChatService implements ChatServiceInterface
         $mentioned = $this->mentions?->sync($message, $mentioned) ?? [];
         $conversation->touch($now);
         $reopened = $this->supportTransition($conversation, $author);
-        $this->publish($message, $author);
+        $this->publish($message, $author, $participant);
         if ($reopened) {
             $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $author));
             if ($conversation->isTicket()) {
@@ -528,9 +531,9 @@ final readonly class ChatService implements ChatServiceInterface
         return $body;
     }
 
-    private function publish(ChatMessage $message, ChatUserInterface $author): ChatMessage
+    private function publish(ChatMessage $message, ChatUserInterface $author, ?ChatParticipant $participant = null): ChatMessage
     {
-        $participant = $this->participant($message->getConversation(), $author);
+        $participant ??= $this->participant($message->getConversation(), $author);
         $this->entityManager->flush();
         // The author has read everything up to their own message.
         $participant->markReadUpTo((int) $message->getId());
@@ -640,7 +643,8 @@ final readonly class ChatService implements ChatServiceInterface
      * inserts would otherwise clash inside one flush and close the entity manager. On exact columns both rows are
      * written, one flush later. Audit PV-D1: both phases run in one transaction (a savepoint inside the caller's own),
      * rolled back on the refusal, and the conversation and rows written by the first phase are detached, so nothing
-     * half-written stays and no cleanup statement can hide the refusal.
+     * half-written stays and no cleanup statement can hide the refusal. Audit PV-L6: pending changes of the caller are
+     * flushed before that transaction starts, so a refusal never rolls them back.
      *
      * @param list<ChatUserInterface> $participants
      *
@@ -667,6 +671,9 @@ final readonly class ChatService implements ChatServiceInterface
             return $conversation;
         }
 
+        // Audit PV-L6: the caller's pending work is written first, outside what a refusal rolls back; otherwise the
+        // rollback would remove its rows while the entities stay managed with ids, and no later flush would write them.
+        $this->entityManager->flush();
         $connection = $this->entityManager->getConnection();
         $savepoint  = $connection->isTransactionActive() ? self::LOOK_ALIKE_SAVEPOINT : null;
         if ($savepoint === null) {

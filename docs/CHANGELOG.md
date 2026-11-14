@@ -105,9 +105,11 @@ Target 1.28.0 (minor; behaviour change in `doctrine.user_reference: string` only
   mode).** Both clashed and closed the entity manager in 1.27.x:
   - `ChatService::openDirect()` between two references a folding column could take for one (`bob` / `Bob`, accents,
     width, trailing spaces) stores the second participant row only after a read showed the column keeps them apart.
-    Both steps run in one transaction (a savepoint inside the caller's own): on a folding column it is rolled back, the
-    half-written conversation is detached and `ChatUserLookAlikeException` is thrown; on an exact column both rows are
-    written as before (one flush later).
+    The caller's pending changes are flushed first; then both steps run in one transaction (a savepoint inside the
+    caller's own): on a folding column it is rolled back, the half-written conversation is detached and
+    `ChatUserLookAlikeException` is thrown; on an exact column both rows are written as before (one flush later).
+  - `ChatService::send()` creates the author's participant row before anything else, so a look-alike author is refused
+    before the message is persisted or flushed (audit PV-D7).
   - `ChatMentions::sync()`, when a message mentions two such references, flushes the first mention row and reads the
     column before writing the second. On an exact column both people keep their own row (unread badge, mentions list)
     and are notified once. On a folding column the message keeps one row; the second person is notified once and

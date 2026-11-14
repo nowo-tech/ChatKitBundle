@@ -168,6 +168,66 @@ final class StringReferenceLookAlikeWritesTest extends TestCase
         self::assertSame(['ana', 'bob'], $connection->fetchFirstColumn('SELECT user_id FROM nowo_chat_participant ORDER BY user_id'));
     }
 
+    /** PV-L6: the host's pending work survives a refused conversation between look-alikes (no host transaction). */
+    public function testTheHostsPendingWorkSurvivesARefusal(): void
+    {
+        $bob  = $this->make('bob');
+        $bigB = $this->make('Bob');
+        $this->fold('nowo_chat_participant', 'user_id');
+        $this->em->persist(new ChatQuickReply($bob, 'host title', 'host body'));
+        try {
+            $this->get(ChatServiceInterface::class)->openDirect($bob, $bigB);
+            self::fail('refused');
+        } catch (ChatUserLookAlikeException) {
+        }
+        $this->em->flush();
+
+        self::assertSame(['host body'], $this->em->getConnection()->fetchFirstColumn('SELECT body FROM nowo_chat_quick_reply'));
+    }
+
+    /** PV-L6: the same inside the host's transaction (savepoint path). */
+    public function testTheHostsPendingWorkSurvivesARefusalInsideAHostTransaction(): void
+    {
+        $bob        = $this->make('bob');
+        $bigB       = $this->make('Bob');
+        $connection = $this->em->getConnection();
+        $this->fold('nowo_chat_participant', 'user_id');
+        $connection->beginTransaction();
+        $this->em->persist(new ChatQuickReply($bob, 'host title', 'host body'));
+        try {
+            $this->get(ChatServiceInterface::class)->openDirect($bob, $bigB);
+            self::fail('refused');
+        } catch (ChatUserLookAlikeException) {
+        }
+        $this->em->flush();
+        $connection->commit();
+
+        self::assertSame(['host body'], $connection->fetchFirstColumn('SELECT body FROM nowo_chat_quick_reply'));
+    }
+
+    /** PV-D7: a message whose author is refused as a look-alike is never stored, not even by a later flush. */
+    public function testARefusedAuthorsMessageIsNeverStored(): void
+    {
+        $chat    = $this->get(ChatServiceInterface::class);
+        $ana     = $this->make('ana');
+        $bob     = $this->make('bob');
+        $bigB    = $this->make('Bob');
+        $withBob = $chat->openDirect($ana, $bob);
+        $this->fold('nowo_chat_participant', 'user_id');
+        $this->em->clear();
+        $withBob = $this->em->getRepository(ChatConversation::class)->findOneBy(['uuid' => $withBob->getUuid()]) ?? self::fail('conversation');
+
+        try {
+            $chat->send($bigB, $withBob, 'unannounced?');
+            self::fail('the look-alike author must be refused');
+        } catch (ChatUserLookAlikeException) {
+        }
+        $this->em->flush();
+
+        self::assertTrue($this->em->isOpen());
+        self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message'));
+    }
+
     /** PV-D1: on an exact column inside the host's transaction both rows are written through the savepoint. */
     public function testCaseVariantsInsideAHostTransactionOnAnExactColumn(): void
     {
