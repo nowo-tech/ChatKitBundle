@@ -16,6 +16,8 @@ use function array_values;
 use function is_string;
 use function preg_match;
 use function sprintf;
+use function strcmp;
+use function strlen;
 
 /**
  * 1.24: how the bundle's tables point at users (`doctrine.user_reference`).
@@ -40,12 +42,16 @@ final readonly class ChatUserReferences
     /**
      * 1.27: `id` with string references (ChatUserReferenceInterface): every chat user is keyed by its string reference,
      * the direct pairs keep both references (`direct_user_low` / `direct_user_high`), the user columns must be binary NO
-     * PAD on MySQL / MariaDB (checked once per process before the first query by user, StringReferenceSchemaGuard).
+     * PAD on MySQL / MariaDB (checked once per connection and request before the first query by user,
+     * StringReferenceSchemaGuard).
      */
     public const string STRING = 'string';
 
     /** Longest user reference stored in id mode. */
     public const int REFERENCE_LENGTH = 64;
+
+    /** PHP_INT_MAX as the bundle writes it: the largest integer id a user key may hold (1.27.1, audit AOJ2-L3). */
+    public const string MAX_ID = '9223372036854775807';
 
     /**
      * @param string $mode `relation` or `id`
@@ -305,8 +311,12 @@ final readonly class ChatUserReferences
     }
 
     /**
-     * 1.27 (audit OJ-L2): whether a key is an integer id as the bundle writes it: a canonical decimal of at most 18
-     * digits (no sign, no leading zero; always within PHP_INT_MAX). The one rule for every place that turns keys into ids.
+     * 1.27 (audit OJ-L2): whether a key is an integer id as the bundle writes it: a canonical decimal (no sign, no
+     * leading zero) that fits in a PHP integer. The one rule for every place that turns keys into ids.
+     *
+     * 1.27.1 (audit AOJ2-L3): up to 19 digits, bounded by PHP_INT_MAX, so a host with snowflake-style bigint ids
+     * (>= 10^18) keeps its users instead of silently losing them. The bound is a string comparison: `(int)` would
+     * saturate at PHP_INT_MAX and make 9223372036854775808 look like a valid id.
      *
      * @param string $key A user key
      *
@@ -314,7 +324,12 @@ final readonly class ChatUserReferences
      */
     public static function isCanonicalId(string $key): bool
     {
-        return preg_match('/\A(?:0|[1-9][0-9]{0,17})\z/D', $key) === 1;
+        if (preg_match('/\A(?:0|[1-9][0-9]{0,18})\z/D', $key) !== 1) {
+            return false;
+        }
+
+        // Shorter than PHP_INT_MAX always fits; at its 19 digits, equal length makes the byte order the numeric order.
+        return strlen($key) < strlen(self::MAX_ID) || strcmp($key, self::MAX_ID) <= 0;
     }
 
     /**

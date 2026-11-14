@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.27.1] - 2026-11-13](#1271---2026-11-13)
 - [[1.27.0] - 2026-11-13](#1270---2026-11-13)
 - [[1.26.4] - 2026-11-13](#1264---2026-11-13)
 - [[1.26.3] - 2026-11-11](#1263---2026-11-11)
@@ -64,11 +65,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.28.0 (minor; behaviour change in `doctrine.user_reference: string` only). See [UPGRADING](UPGRADING.md#unreleased).
+
 ### Changed
 
 - **A folding user column refuses the write instead of the read (`doctrine.user_reference: string`).** The schema
-  guard checks the collation of the user columns once and keeps the pass, so a column altered or a migration rolled
-  back afterwards lets a read by user come back with a look-alike's row (`Bob`'s row for `bob`). Such a row was
+  guard checks the collation of the user columns once per request and connection and keeps the pass for that request
+  (1.27.1), so a column altered or a migration rolled back after the check, or a connection switched to another
+  database inside the request, still lets a read by user come back with a look-alike's row (`Bob`'s row for `bob`). Such a row was
   dropped silently; it is now reported, once per user key and request, as a PSR-3 warning naming the column and both
   references, and the write that would follow the read is refused:
 
@@ -83,6 +87,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     `ChatService::send()`, after the message was flushed, and the person who sent it must not get an error.
 
   Nothing changes in `relation` or `id` mode, nor while the user columns compare byte for byte.
+
+## [1.27.1] - 2026-11-13
+
+Patch on top of 1.27.0: the dock no longer covers a host footer that scrolls inside an inner scroller, one REQ-SEC-006
+collation fix and the findings of the audit OJ re-verification (AOJ2) and of audit OY. See
+[UPGRADING](UPGRADING.md#to-1271).
+
+### Fixed
+
+- **The dock follows an inner scroller (owner report through Symfony Beacon).** `ChatDock` measured the elements marked
+  `data-nowo-chat-avoid` (the host footer, the Symfony web debug toolbar) on a non-capturing `scroll` listener on
+  `window`. Scroll events do not bubble, so in a host whose page scroller is an inner element — a fixed header above a
+  scrolling main column — the measurement never ran again after load and `--nowo-chat-toolbar-offset` stayed at its
+  load-time value: with a static (non-fixed) footer the open dock or panel covered the footer as soon as it scrolled
+  into view. The listener now captures (still passive, still throttled with `requestAnimationFrame`), so the dock sits
+  flush with the bottom edge while the footer is out of view and lifts by exactly the footer's visible height as it
+  scrolls in.
+- **`utf8mb4_bin` is no longer accepted as an exact collation on MySQL 8 or MariaDB (REQ-SEC-006).** It is a binary
+  but PAD SPACE collation there, so `'bob '` still equals `'bob'` and `StringReferenceSchemaGuard` could pass while
+  the user columns folded. `StringReferenceSchemaGuard::exactFor()` now accepts `utf8mb4_0900_bin` on MySQL 8 and
+  later, `utf8mb4_nopad_bin` on MariaDB and `utf8mb4_bin` only on MySQL 5.7, which has no NO PAD collation and where
+  the reference format rule refuses the trailing spaces that would fold; the refusal names the collations it accepts.
+  The `ALTER TABLE` advice in UPGRADING is corrected to match.
+- **A chat user of the wrong kind no longer closes the host entity manager (audit AOJ2-L1).** The kind check of
+  `Doctrine\UserReferenceListener` (`doctrine.user_reference: id` and `string`) ran on `preUpdate`, which Doctrine
+  dispatches inside the unit of work's transaction: its `LogicException` closed the host `EntityManager`, and under
+  FrankenPHP with `kernel.reset` false (REQ-RUNTIME-002) that manager stayed closed for every later request served by
+  the same worker. The check now runs on `onFlush`, before the transaction is opened, at a low priority (audit
+  AOY-L3) so that a host listener which still sets a user field on `onFlush` is checked too, as `preUpdate` did.
+- **The user-column schema check is kept for one request, per connection (audits AOJ2-L2, AOY-M2, AOY-L2).**
+  `StringReferenceSchemaGuard` cached its passed check for the whole process, so a database switched at runtime or a
+  rolled-back migration kept running against columns that had never been checked. The guard is now reset by
+  `ChatRequestBoundaryListener` at every request, command and message boundary, like the bundle's other memos: one
+  `information_schema` read per request that touches the chat, no query added to the path of every query by user, and
+  no pass carried across a database switch between requests. The pass is held per `Connection` object and does not
+  distinguish the same database name on another server.
+- **Snowflake-style bigint user ids are ids again (audit AOJ2-L3).** `ChatUserReferences::isCanonicalId()` accepted at
+  most 18 digits, so a host whose user ids are >= 10^18 (still below `PHP_INT_MAX`) lost those users in
+  `ChatAccess::loadUsers()` — the directory was never asked for them. It now accepts up to 19 digits, bounded by the
+  new `ChatUserReferences::MAX_ID` (`9223372036854775807`) with a string comparison, so anything above `PHP_INT_MAX`
+  stays a reference instead of saturating to an id. For such a key `idOrKey()` returns an `int` where 1.27.0 returned
+  a `string` (audit AOY-L4); see [UPGRADING](UPGRADING.md#to-1271).
 
 ## [1.27.0] - 2026-11-13
 
@@ -1501,7 +1547,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.27.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.27.1...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0

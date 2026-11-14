@@ -30,9 +30,9 @@ use function sprintf;
 
 /**
  * 1.28 (`doctrine.user_reference: string`): what the chat does when the user columns fold behind a schema check that
- * already passed — a column altered, or a migration rolled back, after the first query of the process. The reads
- * degrade (null, unsaved defaults) and warn; the writes that would follow are refused before they clash with the
- * look-alike's unique key inside the flush and close the entity manager.
+ * already passed — a column altered, or a migration rolled back, after the check of the request (1.27.1: one check
+ * per request and connection). The reads degrade (null, unsaved defaults) and warn; the writes that would follow are
+ * refused before they clash with the look-alike's unique key inside the flush and close the entity manager.
  *
  * The folding column is real: SQLite's `COLLATE NOCASE` is to `bob` / `Bob` what a host's default
  * `utf8mb4_general_ci` is on MySQL. ChatUserReferenceLookalikeTest runs the same story on a MySQL / MariaDB server.
