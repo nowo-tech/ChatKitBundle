@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <title>#Acme</title>
+            <link rel="stylesheet" href="/host.css">
+    <link rel="stylesheet" href="/bundles/nowochatkit/css/nowo-chat.css">
+            
+    <script src="/bundles/nowochatkit/js/nowo-chat.js" defer></script>
+    </head>
+    <body>
+            <div class="nowo-chat-page has-current" data-testid="chat-page" data-nowo-chat-read-url="/chat/api/conversations/<uuid>/read" data-nowo-chat-read-id="4" data-nowo-chat-read-csrf="<csrf>">
+                    <nav class="nowo-chat-page__list" aria-label="Messaging">
+                <h1 class="nowo-chat-page__heading">Messages</h1>
+                                <ul role="list">
+                                            <li>
+                            <a class="nowo-chat-page__row is-current" href="/chat/<uuid>" aria-current="page">
+                                <span class="nowo-chat-page__row-title">#Acme</span>
+                                <span class="nowo-chat-page__row-preview">live</span>
+                                                            </a>
+                        </li>
+                                            <li>
+                            <a class="nowo-chat-page__row is-unread" href="/chat/<uuid>">
+                                <span class="nowo-chat-page__row-title">Luis &lt;b&gt;</span>
+                                <span class="nowo-chat-page__row-preview"></span>
+                                <span class="nowo-chat-badge"><span aria-hidden="true">1</span><span class="nowo-chat-sr-only">Unread messages: 1</span></span>                            </a>
+                        </li>
+                                    </ul>
+            </nav>
+                            <section class="nowo-chat-page__thread" aria-label="Conversation with #Acme">
+                                    <header class="nowo-chat-page__header">
+                        <a class="nowo-chat-page__back" href="/chat/">Back</a>
+                        <h2>#Acme</h2>
+                        <p>Channel</p>
+                    </header>
+                                                            <ol class="nowo-chat-page__messages" role="list">
+                                                    <li class="nowo-chat-msg">
+                                <div class="nowo-chat-msg__content">
+                                    <p class="nowo-chat-msg__author">Luis &lt;b&gt;</p>                                                                                                                    <div class="nowo-chat-bubble"><p>Hola <strong>Ana</strong></p></div>
+                                                                        <span class="nowo-chat-msg__meta"><time datetime="<time>" title="<time>"><time></time></span>
+                                </div>
+                            </li>
+                                                    <li class="nowo-chat-msg nowo-chat-msg--mine">
+                                <div class="nowo-chat-msg__content">
+                                                                                                                                                        <div class="nowo-chat-bubble"><p>hi</p></div>
+                                                                        <span class="nowo-chat-msg__meta"><time datetime="<time>" title="<time>"><time></time></span>
+                                </div>
+                            </li>
+                                                    <li class="nowo-chat-msg" id="nowo-chat-latest">
+                                <div class="nowo-chat-msg__content">
+                                    <p class="nowo-chat-msg__author">Luis &lt;b&gt;</p>                                                                                                                    <div class="nowo-chat-bubble"><p>live</p></div>
+                                                                        <span class="nowo-chat-msg__meta"><time datetime="<time>" title="<time>"><time></time></span>
+                                </div>
+                            </li>
+                                            </ol>
+                                                                    <form name="nowo_chat_message" method="post" action="/chat/<uuid>" class="nowo-chat-page__composer">
+                                                                                                <div><label class="nowo-chat-sr-only required" for="nowo_chat_message_body">Write a message…</label><textarea id="nowo_chat_message_body" name="nowo_chat_message[body]" required="required" rows="3" maxlength="4000" placeholder="Write a message…"></textarea></div>
+                                                                                                                                <input type="hidden" id="nowo_chat_message__token" name="nowo_chat_message[_token]" data-controller="csrf-protection" value="<csrf>" />
+                                                                                        <button type="submit">Send</button>
+                        </form>
+                                                </section>
+            </div>
+                                                    <div class="nowo-chat" data-nowo-ui-bundle="NowoChatKitBundle" data-nowo-chat-config="&#x7B;&quot;userUuid&quot;&#x3A;&quot;<uuid>&quot;,&quot;me&quot;&#x3A;&#x7B;&quot;name&quot;&#x3A;&quot;Ana&quot;,&quot;initials&quot;&#x3A;&quot;A&quot;,&quot;avatarUrl&quot;&#x3A;null&#x7D;,&quot;csrf&quot;&#x3A;&quot;<csrf>&quot;,&quot;locale&quot;&#x3A;&quot;en&quot;,&quot;contextChannel&quot;&#x3A;null,&quot;pollMs&quot;&#x3A;4000,&quot;maxLength&quot;&#x3A;4000,&quot;editWindowSeconds&quot;&#x3A;900,&quot;reactions&quot;&#x3A;&#x5B;&quot;&#x5C;ud83d&#x5C;udc4d&quot;,&quot;&#x5C;u2764&#x5C;ufe0f&quot;,&quot;&#x5C;ud83d&#x5C;ude02&quot;,&quot;&#x5C;ud83d&#x5C;ude2e&quot;,&quot;&#x5C;ud83d&#x5C;ude22&quot;,&quot;&#x5C;ud83c&#x5C;udf89&quot;&#x5D;,&quot;endpoints&quot;&#x3A;&#x7B;&quot;conversations&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&quot;,&quot;contacts&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;contacts&quot;,&quot;direct&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;direct&quot;,&quot;channel&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;channel&quot;,&quot;support&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;support&quot;,&quot;supportInbox&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;support&#x5C;&#x2F;inbox&quot;,&quot;supportTickets&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;support&#x5C;&#x2F;tickets&quot;,&quot;supportTopic&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;support&#x5C;&#x2F;__uuid__&#x5C;&#x2F;topic&quot;,&quot;supportResume&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;support&#x5C;&#x2F;__uuid__&#x5C;&#x2F;resume&quot;,&quot;supportStatus&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;support&#x5C;&#x2F;__uuid__&#x5C;&#x2F;status&quot;,&quot;supportAssign&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;support&#x5C;&#x2F;__uuid__&#x5C;&#x2F;assign&quot;,&quot;linkPreviews&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;link-previews&quot;,&quot;page&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;__uuid__&quot;,&quot;conversation&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&quot;,&quot;messages&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;messages&quot;,&quot;members&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;members&quot;,&quot;references&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;references&quot;,&quot;message&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;messages&#x5C;&#x2F;__message__&quot;,&quot;reactions&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;messages&#x5C;&#x2F;__message__&#x5C;&#x2F;reactions&quot;,&quot;read&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;read&quot;,&quot;typing&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;typing&quot;,&quot;buzz&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;buzz&quot;,&quot;resolve&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;resolve&quot;,&quot;realtime&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;realtime&quot;,&quot;presence&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;presence&quot;,&quot;status&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;status&quot;,&quot;settings&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;settings&quot;,&quot;archive&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;archive&quot;,&quot;archiveRead&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;archive-read&quot;,&quot;pins&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;pins&quot;,&quot;autoReply&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;auto-reply&quot;,&quot;quickReplies&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;quick-replies&quot;,&quot;pin&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;messages&#x5C;&#x2F;__message__&#x5C;&#x2F;pin&quot;,&quot;mute&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;mute&quot;,&quot;csrf&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;csrf&quot;,&quot;pinnedLinks&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;pinned-links&quot;,&quot;pinnedLink&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;pinned-links&#x5C;&#x2F;__link__&quot;,&quot;links&quot;&#x3A;&quot;&#x5C;&#x2F;chat&#x5C;&#x2F;api&#x5C;&#x2F;conversations&#x5C;&#x2F;__uuid__&#x5C;&#x2F;links&quot;&#x7D;,&quot;prefs&quot;&#x3A;&#x7B;&quot;sound&quot;&#x3A;&quot;pop&quot;,&quot;sounds&quot;&#x3A;&#x7B;&quot;message&quot;&#x3A;&quot;pop&quot;,&quot;mention&quot;&#x3A;&quot;chime&quot;,&quot;buzz&quot;&#x3A;&quot;buzz&quot;,&quot;support&quot;&#x3A;&quot;ding&quot;&#x7D;,&quot;volume&quot;&#x3A;80,&quot;backgroundOnly&quot;&#x3A;false,&quot;buzz&quot;&#x3A;true,&quot;buzzOpenWindow&quot;&#x3A;true,&quot;openOnMessage&quot;&#x3A;false,&quot;sendKey&quot;&#x3A;&quot;enter&quot;,&quot;pushPreview&quot;&#x3A;true,&quot;presence&quot;&#x3A;true,&quot;push&quot;&#x3A;false,&quot;emailDigest&quot;&#x3A;true&#x7D;,&quot;status&quot;&#x3A;&#x7B;&quot;status&quot;&#x3A;&quot;available&quot;,&quot;text&quot;&#x3A;null,&quot;emoji&quot;&#x3A;null,&quot;expiresAt&quot;&#x3A;null&#x7D;,&quot;autoReply&quot;&#x3A;&#x7B;&quot;enabled&quot;&#x3A;false,&quot;text&quot;&#x3A;&quot;&quot;,&quot;when&quot;&#x3A;&quot;status&quot;,&quot;from&quot;&#x3A;null,&quot;until&quot;&#x3A;null,&quot;mentions&quot;&#x3A;false&#x7D;,&quot;autoAwayMinutes&quot;&#x3A;10,&quot;isAgent&quot;&#x3A;false,&quot;linkPreviews&quot;&#x3A;true,&quot;references&quot;&#x3A;true,&quot;supportEmojis&quot;&#x3A;true,&quot;dock&quot;&#x3A;&#x7B;&quot;overlay&quot;&#x3A;&quot;hide&quot;,&quot;watchAriaModal&quot;&#x3A;false&#x7D;,&quot;links&quot;&#x3A;&#x7B;&quot;enabled&quot;&#x3A;true,&quot;allowHttp&quot;&#x3A;false,&quot;maxPinned&quot;&#x3A;20,&quot;titleMaxLength&quot;&#x3A;120,&quot;urlMaxLength&quot;&#x3A;2048,&quot;providers&quot;&#x3A;&#x5B;&#x7B;&quot;key&quot;&#x3A;&quot;teams&quot;,&quot;label&quot;&#x3A;&quot;Microsoft&#x20;Teams&quot;,&quot;icon&quot;&#x3A;&quot;provider_teams&quot;,&quot;fallbackIcon&quot;&#x3A;&quot;video&quot;,&quot;hosts&quot;&#x3A;&#x5B;&quot;teams.microsoft.com&quot;,&quot;teams.live.com&quot;&#x5D;&#x7D;,&#x7B;&quot;key&quot;&#x3A;&quot;meet&quot;,&quot;label&quot;&#x3A;&quot;Google&#x20;Meet&quot;,&quot;icon&quot;&#x3A;&quot;provider_meet&quot;,&quot;fallbackIcon&quot;&#x3A;&quot;video&quot;,&quot;hosts&quot;&#x3A;&#x5B;&quot;meet.google.com&quot;&#x5D;&#x7D;,&#x7B;&quot;key&quot;&#x3A;&quot;zoom&quot;,&quot;label&quot;&#x3A;&quot;Zoom&quot;,&quot;icon&quot;&#x3A;&quot;provider_zoom&quot;,&quot;fallbackIcon&quot;&#x3A;&quot;video&quot;,&quot;hosts&quot;&#x3A;&#x5B;&quot;zoom.us&quot;,&quot;zoom.com&quot;&#x5D;&#x7D;,&#x7B;&quot;key&quot;&#x3A;&quot;jitsi&quot;,&quot;label&quot;&#x3A;&quot;Jitsi&#x20;Meet&quot;,&quot;icon&quot;&#x3A;&quot;provider_jitsi&quot;,&quot;fallbackIcon&quot;&#x3A;&quot;video&quot;,&quot;hosts&quot;&#x3A;&#x5B;&quot;meet.jit.si&quot;,&quot;8x8.vc&quot;&#x5D;&#x7D;,&#x7B;&quot;key&quot;&#x3A;&quot;webex&quot;,&quot;label&quot;&#x3A;&quot;Webex&quot;,&quot;icon&quot;&#x3A;&quot;provider_webex&quot;,&quot;fallbackIcon&quot;&#x3A;&quot;video&quot;,&quot;hosts&quot;&#x3A;&#x5B;&quot;webex.com&quot;&#x5D;&#x7D;&#x5D;&#x7D;,&quot;i18n&quot;&#x3A;&#x7B;&quot;launcher&quot;&#x3A;&quot;Messaging&quot;,&quot;new_message&quot;&#x3A;&quot;New&#x20;message&quot;,&quot;search&quot;&#x3A;&quot;Search&#x20;conversations&quot;,&quot;search_people&quot;&#x3A;&quot;Search&#x20;people&quot;,&quot;filter_all&quot;&#x3A;&quot;All&quot;,&quot;filter_unread&quot;&#x3A;&quot;Unread&quot;,&quot;filter_support&quot;&#x3A;&quot;Support&quot;,&quot;empty_title&quot;&#x3A;&quot;No&#x20;conversations&#x20;yet&quot;,&quot;empty_body&quot;&#x3A;&quot;Message&#x20;the&#x20;people&#x20;you&#x20;work&#x20;with,&#x20;talk&#x20;in&#x20;your&#x20;channels,&#x20;or&#x20;ask&#x20;support&#x20;for&#x20;help.&quot;,&quot;no_results&quot;&#x3A;&quot;No&#x20;conversations&#x20;match.&quot;,&quot;no_people&quot;&#x3A;&quot;Nobody&#x20;matches.&quot;,&quot;support_thread&quot;&#x3A;&quot;Support&quot;,&quot;support_resolved&quot;&#x3A;&quot;Resolved&#x20;by&#x20;support&quot;,&quot;deleted_user&quot;&#x3A;&quot;Deleted&#x20;user&quot;,&quot;you&quot;&#x3A;&quot;You&quot;,&quot;composer_placeholder&quot;&#x3A;&quot;Write&#x20;a&#x20;message&#x5C;u2026&quot;,&quot;composer_hint&quot;&#x3A;&quot;Enter&#x20;to&#x20;send&#x20;&#x5C;u00b7&#x20;Shift&#x2B;Enter&#x20;for&#x20;a&#x20;new&#x20;line&quot;,&quot;send&quot;&#x3A;&quot;Send&quot;,&quot;sending&quot;&#x3A;&quot;Sending&#x5C;u2026&quot;,&quot;failed&quot;&#x3A;&quot;Not&#x20;sent&quot;,&quot;retry&quot;&#x3A;&quot;Retry&quot;,&quot;minimise&quot;&#x3A;&quot;Minimise&quot;,&quot;tuck&quot;&#x3A;&quot;Hide&#x20;to&#x20;the&#x20;side&quot;,&quot;untuck&quot;&#x3A;&quot;Show&#x20;messaging&quot;,&quot;expand&quot;&#x3A;&quot;Expand&quot;,&quot;close&quot;&#x3A;&quot;Close&quot;,&quot;back&quot;&#x3A;&quot;Back&quot;,&quot;read_only&quot;&#x3A;&quot;You&#x20;can&#x20;no&#x20;longer&#x20;message&#x20;this&#x20;person.&quot;,&quot;today&quot;&#x3A;&quot;Today&quot;,&quot;yesterday&quot;&#x3A;&quot;Yesterday&quot;,&quot;new_messages&quot;&#x3A;&quot;New&#x20;messages&quot;,&quot;jump_latest&quot;&#x3A;&quot;Jump&#x20;to&#x20;latest&quot;,&quot;loading&quot;&#x3A;&quot;Loading&#x5C;u2026&quot;,&quot;deleted_message&quot;&#x3A;&quot;This&#x20;message&#x20;was&#x20;deleted&quot;,&quot;deleted_message_mine&quot;&#x3A;&quot;You&#x20;deleted&#x20;this&#x20;message&quot;,&quot;just_now&quot;&#x3A;&quot;now&quot;,&quot;edit_hint&quot;&#x3A;&quot;Esc&#x20;to&#x20;cancel&#x20;&#x5C;u00b7&#x20;Enter&#x20;to&#x20;save&quot;,&quot;moderated_message&quot;&#x3A;&quot;Removed&#x20;by&#x20;a&#x20;moderator&quot;,&quot;edited&quot;&#x3A;&quot;edited&quot;,&quot;people_recent&quot;&#x3A;&quot;Recent&quot;,&quot;people_search&quot;&#x3A;&quot;People&quot;,&quot;via_group&quot;&#x3A;&quot;Group&#x20;&#x5C;u00b7&#x20;&#x25;name&#x25;&quot;,&quot;via_project&quot;&#x3A;&quot;Project&#x20;&#x5C;u00b7&#x20;&#x25;name&#x25;&quot;,&quot;more_tabs&quot;&#x3A;&quot;&#x2B;&#x25;count&#x25;&quot;,&quot;unread&quot;&#x3A;&quot;Unread&#x20;messages&#x3A;&#x20;&#x25;count&#x25;&quot;,&quot;reconnecting&quot;&#x3A;&quot;Reconnecting&#x5C;u2026&quot;,&quot;too_long&quot;&#x3A;&quot;The&#x20;message&#x20;is&#x20;too&#x20;long&#x20;&#x28;max.&#x20;&#x25;max&#x25;&#x20;characters&#x29;.&quot;,&quot;rate_limited&quot;&#x3A;&quot;You&#x20;are&#x20;sending&#x20;messages&#x20;too&#x20;fast.&#x20;Wait&#x20;a&#x20;moment.&quot;,&quot;error&quot;&#x3A;&quot;Something&#x20;went&#x20;wrong.&#x20;Try&#x20;again.&quot;,&quot;start_chat&quot;&#x3A;&quot;Start&#x20;a&#x20;conversation&quot;,&quot;conversation_label&quot;&#x3A;&quot;Conversation&#x20;with&#x20;&#x25;name&#x25;&quot;,&quot;messages_label&quot;&#x3A;&quot;Messages&quot;,&quot;typing_one&quot;&#x3A;&quot;&#x25;name&#x25;&#x20;is&#x20;typing&#x5C;u2026&quot;,&quot;typing_two&quot;&#x3A;&quot;&#x25;first&#x25;&#x20;and&#x20;&#x25;second&#x25;&#x20;are&#x20;typing&#x5C;u2026&quot;,&quot;typing_many&quot;&#x3A;&quot;Several&#x20;people&#x20;are&#x20;typing&#x5C;u2026&quot;,&quot;buzz&quot;&#x3A;&quot;Buzz&quot;,&quot;buzz_sent&quot;&#x3A;&quot;&#x25;name&#x25;&#x20;sent&#x20;a&#x20;buzz&quot;,&quot;buzz_received&quot;&#x3A;&quot;&#x25;name&#x25;&#x20;sent&#x20;you&#x20;a&#x20;buzz&quot;,&quot;buzz_too_soon&quot;&#x3A;&quot;Wait&#x20;a&#x20;few&#x20;seconds&#x20;before&#x20;buzzing&#x20;again.&quot;,&quot;seen&quot;&#x3A;&quot;Seen&quot;,&quot;seen_by&quot;&#x3A;&quot;Seen&#x20;by&#x20;&#x25;names&#x25;&quot;,&quot;online&quot;&#x3A;&quot;Online&quot;,&quot;emoji&quot;&#x3A;&quot;Emoji&quot;,&quot;mention_list&quot;&#x3A;&quot;Mention&#x20;someone&quot;,&quot;reference_restricted&quot;&#x3A;&quot;Content&#x20;not&#x20;visible&quot;,&quot;reference_list&quot;&#x3A;&quot;Insert&#x20;a&#x20;reference&quot;,&quot;reference_commands&quot;&#x3A;&quot;Commands&quot;,&quot;emoji_recent&quot;&#x3A;&quot;Recent&quot;,&quot;emoji_smileys&quot;&#x3A;&quot;Smileys&quot;,&quot;emoji_gestures&quot;&#x3A;&quot;Gestures&quot;,&quot;emoji_objects&quot;&#x3A;&quot;Objects&quot;,&quot;emoji_symbols&quot;&#x3A;&quot;Symbols&quot;,&quot;resolve&quot;&#x3A;&quot;Mark&#x20;resolved&quot;,&quot;reconnected&quot;&#x3A;&quot;Back&#x20;online&quot;,&quot;session_stale&quot;&#x3A;&quot;Your&#x20;session&#x20;changed.&#x20;Reload&#x20;the&#x20;page&#x20;to&#x20;keep&#x20;chatting.&quot;,&quot;settings_title&quot;&#x3A;&quot;Chat&quot;,&quot;settings_intro&quot;&#x3A;&quot;Sounds,&#x20;notifications&#x20;and&#x20;presence&#x20;for&#x20;messages.&quot;,&quot;settings_sound&quot;&#x3A;&quot;New-message&#x20;sound&quot;,&quot;settings_sound_help&quot;&#x3A;&quot;Plays&#x20;when&#x20;a&#x20;message&#x20;arrives&#x20;while&#x20;the&#x20;tab&#x20;is&#x20;in&#x20;the&#x20;background&#x20;or&#x20;the&#x20;conversation&#x20;is&#x20;minimised.&quot;,&quot;settings_sound_none&quot;&#x3A;&quot;None&quot;,&quot;settings_sound_pop&quot;&#x3A;&quot;Pop&quot;,&quot;settings_sound_chime&quot;&#x3A;&quot;Chime&quot;,&quot;settings_sound_ding&quot;&#x3A;&quot;Ding&quot;,&quot;settings_preview&quot;&#x3A;&quot;Play&quot;,&quot;settings_push&quot;&#x3A;&quot;Push&#x20;notifications&#x20;for&#x20;new&#x20;messages&quot;,&quot;settings_push_help&quot;&#x3A;&quot;Only&#x20;while&#x20;the&#x20;app&#x20;is&#x20;not&#x20;open&#x20;in&#x20;any&#x20;tab.&#x20;Your&#x20;browser&#x20;must&#x20;allow&#x20;notifications.&quot;,&quot;settings_buzz&quot;&#x3A;&quot;Receive&#x20;buzzes&quot;,&quot;settings_buzz_help&quot;&#x3A;&quot;A&#x20;buzz&#x20;opens&#x20;and&#x20;shakes&#x20;the&#x20;conversation&#x20;window&#x20;and&#x20;plays&#x20;a&#x20;sound&#x20;&#x28;even&#x20;when&#x20;the&#x20;message&#x20;sound&#x20;is&#x20;off&#x29;.&quot;,&quot;settings_presence&quot;&#x3A;&quot;Show&#x20;when&#x20;I&#x20;am&#x20;online&quot;,&quot;settings_presence_help&quot;&#x3A;&quot;When&#x20;off,&#x20;nobody&#x20;sees&#x20;your&#x20;online&#x20;dot&#x20;and&#x20;you&#x20;do&#x20;not&#x20;see&#x20;theirs.&quot;,&quot;settings_email_digest&quot;&#x3A;&quot;Email&#x20;me&#x20;about&#x20;unread&#x20;messages&quot;,&quot;settings_email_digest_help&quot;&#x3A;&quot;At&#x20;most&#x20;one&#x20;email&#x20;per&#x20;hour,&#x20;only&#x20;for&#x20;messages&#x20;still&#x20;unread&#x20;a&#x20;while&#x20;after&#x20;they&#x20;arrive.&quot;,&quot;settings_save&quot;&#x3A;&quot;Save&#x20;chat&#x20;settings&quot;,&quot;auto_reply&quot;&#x3A;&quot;Automatic&#x20;reply&quot;,&quot;auto_reply_enabled&quot;&#x3A;&quot;Send&#x20;an&#x20;automatic&#x20;reply&quot;,&quot;auto_reply_text&quot;&#x3A;&quot;Message&quot;,&quot;auto_reply_when&quot;&#x3A;&quot;When&quot;,&quot;auto_reply_when_status&quot;&#x3A;&quot;While&#x20;I&#x20;am&#x20;away,&#x20;busy&#x20;or&#x20;in&#x20;do&#x20;not&#x20;disturb&quot;,&quot;auto_reply_when_range&quot;&#x3A;&quot;Between&#x20;two&#x20;dates&#x20;&#x28;out&#x20;of&#x20;office&#x29;&quot;,&quot;auto_reply_from&quot;&#x3A;&quot;From&quot;,&quot;auto_reply_until&quot;&#x3A;&quot;Until&quot;,&quot;auto_reply_mentions&quot;&#x3A;&quot;Also&#x20;answer&#x20;&#x40;mentions&#x20;in&#x20;channels&quot;,&quot;auto_reply_save&quot;&#x3A;&quot;Save&#x20;automatic&#x20;reply&quot;,&quot;auto_reply_invalid&quot;&#x3A;&quot;Write&#x20;the&#x20;message&#x20;&#x28;at&#x20;most&#x20;500&#x20;characters&#x29;&#x20;and,&#x20;for&#x20;two&#x20;dates,&#x20;an&#x20;end&#x20;after&#x20;the&#x20;start.&quot;,&quot;auto_reply_marker&quot;&#x3A;&quot;Automatic&#x20;reply&quot;,&quot;quick_replies&quot;&#x3A;&quot;Quick&#x20;replies&quot;,&quot;quick_replies_empty&quot;&#x3A;&quot;No&#x20;quick&#x20;replies&#x20;yet&#x3A;&#x20;save&#x20;the&#x20;texts&#x20;you&#x20;send&#x20;often.&quot;,&quot;quick_reply_add&quot;&#x3A;&quot;New&#x20;quick&#x20;reply&quot;,&quot;quick_reply_title&quot;&#x3A;&quot;Title&quot;,&quot;quick_reply_text&quot;&#x3A;&quot;Text&quot;,&quot;quick_reply_invalid&quot;&#x3A;&quot;A&#x20;title&#x20;&#x28;at&#x20;most&#x20;80&#x20;characters&#x29;&#x20;and&#x20;a&#x20;text&#x20;&#x28;at&#x20;most&#x20;2000&#x29;&#x20;are&#x20;needed.&quot;,&quot;format_toolbar&quot;&#x3A;&quot;Formatting&quot;,&quot;format_bold_button&quot;&#x3A;&quot;Bold&#x20;&#x28;Ctrl&#x2B;B&#x29;&quot;,&quot;format_italic_button&quot;&#x3A;&quot;Italic&#x20;&#x28;Ctrl&#x2B;I&#x29;&quot;,&quot;format_strike_button&quot;&#x3A;&quot;Strikethrough&quot;,&quot;format_code_button&quot;&#x3A;&quot;Code&quot;,&quot;format_link_button&quot;&#x3A;&quot;Link&#x20;&#x28;Ctrl&#x2B;K&#x29;&quot;,&quot;format_quote_button&quot;&#x3A;&quot;Quote&quot;,&quot;format_list_button&quot;&#x3A;&quot;List&quot;,&quot;format_help_button&quot;&#x3A;&quot;Formatting&#x20;help&quot;,&quot;format_bold&quot;&#x3A;&quot;bold&quot;,&quot;format_italic&quot;&#x3A;&quot;italic&quot;,&quot;format_strike&quot;&#x3A;&quot;strikethrough&quot;,&quot;format_code&quot;&#x3A;&quot;code&quot;,&quot;format_code_block&quot;&#x3A;&quot;code&#x20;block&quot;,&quot;format_link&quot;&#x3A;&quot;link&#x20;with&#x20;your&#x20;text&quot;,&quot;format_quote&quot;&#x3A;&quot;quote&quot;,&quot;format_list&quot;&#x3A;&quot;list&quot;,&quot;format_autolink&quot;&#x3A;&quot;links&#x20;and&#x20;e-mail&#x20;addresses&#x20;are&#x20;detected&quot;,&quot;status_presets&quot;&#x3A;&quot;Suggestions&quot;,&quot;status_preset_lunch&quot;&#x3A;&quot;Lunch&quot;,&quot;status_preset_meeting&quot;&#x3A;&quot;In&#x20;a&#x20;meeting&quot;,&quot;status_preset_home&quot;&#x3A;&quot;Working&#x20;from&#x20;home&quot;,&quot;status_preset_sick&quot;&#x3A;&quot;Sick&quot;,&quot;status_preset_holiday&quot;&#x3A;&quot;On&#x20;holiday&quot;,&quot;status_preset_focus&quot;&#x3A;&quot;Focusing&quot;,&quot;status_preset_call&quot;&#x3A;&quot;In&#x20;a&#x20;call&quot;,&quot;status_preset_presenting&quot;&#x3A;&quot;Presenting&quot;,&quot;status_preset_reviewing&quot;&#x3A;&quot;Reviewing&quot;,&quot;status_preset_commuting&quot;&#x3A;&quot;Commuting&quot;,&quot;status_preset_remote&quot;&#x3A;&quot;Working&#x20;remotely&quot;,&quot;status_preset_office&quot;&#x3A;&quot;At&#x20;the&#x20;office&quot;,&quot;status_preset_training&quot;&#x3A;&quot;In&#x20;training&quot;,&quot;status_preset_support&quot;&#x3A;&quot;On&#x20;support&#x20;duty&quot;,&quot;status_preset_trip&quot;&#x3A;&quot;On&#x20;a&#x20;business&#x20;trip&quot;,&quot;status_preset_coffee&quot;&#x3A;&quot;Coffee&#x20;break&quot;,&quot;status_preset_back_soon&quot;&#x3A;&quot;Back&#x20;soon&quot;,&quot;status_preset_doctor&quot;&#x3A;&quot;Doctor&#x27;s&#x20;appointment&quot;,&quot;status_preset_offline&quot;&#x3A;&quot;Offline&#x20;for&#x20;the&#x20;day&quot;,&quot;status_preset_parental&quot;&#x3A;&quot;Parental&#x20;leave&quot;,&quot;status_group_work&quot;&#x3A;&quot;Work&quot;,&quot;status_group_personal&quot;&#x3A;&quot;Personal&quot;,&quot;status_more&quot;&#x3A;&quot;More&#x20;statuses&quot;,&quot;status_more_placeholder&quot;&#x3A;&quot;Choose&#x20;a&#x20;status&#x5C;u2026&quot;,&quot;status_emoji_pick&quot;&#x3A;&quot;Choose&#x20;an&#x20;emoji&quot;,&quot;status_custom_emoji&quot;&#x3A;&quot;Custom&#x20;status&#x20;&#x25;emoji&#x25;&quot;,&quot;filter_archived&quot;&#x3A;&quot;Closed&quot;,&quot;archive_read&quot;&#x3A;&quot;Close&#x20;all&#x20;read&#x20;conversations&quot;,&quot;close_conversation&quot;&#x3A;&quot;Close&#x20;the&#x20;conversation&#x20;with&#x20;&#x25;name&#x25;&quot;,&quot;reopen_conversation&quot;&#x3A;&quot;Reopen&#x20;the&#x20;conversation&#x20;with&#x20;&#x25;name&#x25;&quot;,&quot;close_short&quot;&#x3A;&quot;Close&quot;,&quot;reopen&quot;&#x3A;&quot;Reopen&quot;,&quot;archived_one&quot;&#x3A;&quot;Conversation&#x20;closed.&quot;,&quot;unarchived_one&quot;&#x3A;&quot;Conversation&#x20;reopened.&quot;,&quot;archived_many&quot;&#x3A;&quot;&#x25;count&#x25;&#x20;conversations&#x20;closed.&quot;,&quot;archived_empty&quot;&#x3A;&quot;No&#x20;closed&#x20;conversations.&#x20;A&#x20;closed&#x20;one&#x20;comes&#x20;back&#x20;when&#x20;a&#x20;new&#x20;message&#x20;arrives.&quot;,&quot;undo&quot;&#x3A;&quot;Undo&quot;,&quot;pin&quot;&#x3A;&quot;Pin&quot;,&quot;unpin&quot;&#x3A;&quot;Unpin&quot;,&quot;pinned_line&quot;&#x3A;&quot;&#x25;name&#x25;&#x20;pinned&#x20;a&#x20;message&quot;,&quot;pinned_show&quot;&#x3A;&quot;Pinned&#x20;message&#x3A;&#x20;&#x25;text&#x25;.&#x20;Show&#x20;it&quot;,&quot;pinned_all&quot;&#x3A;&quot;All&#x20;pinned&#x20;&#x28;&#x25;count&#x25;&#x29;&quot;,&quot;pinned_gone&quot;&#x3A;&quot;That&#x20;message&#x20;is&#x20;no&#x20;longer&#x20;in&#x20;the&#x20;conversation.&quot;,&quot;too_many_pins&quot;&#x3A;&quot;This&#x20;conversation&#x20;already&#x20;has&#x20;the&#x20;most&#x20;pinned&#x20;messages.&#x20;Unpin&#x20;one&#x20;first.&quot;,&quot;composer_hint_ctrl&quot;&#x3A;&quot;Ctrl&#x2B;Enter&#x20;to&#x20;send&#x20;&#x5C;u00b7&#x20;Enter&#x20;for&#x20;a&#x20;new&#x20;line&quot;,&quot;settings_sound_bell&quot;&#x3A;&quot;Bell&quot;,&quot;settings_sound_blip&quot;&#x3A;&quot;Blip&quot;,&quot;settings_sound_knock&quot;&#x3A;&quot;Knock&quot;,&quot;settings_sound_buzz&quot;&#x3A;&quot;Buzz&quot;,&quot;settings_sound_message&quot;&#x3A;&quot;New&#x20;message&quot;,&quot;settings_sound_mention&quot;&#x3A;&quot;&#x40;mention&quot;,&quot;settings_sound_buzz_event&quot;&#x3A;&quot;Buzz&quot;,&quot;settings_sound_support&quot;&#x3A;&quot;Support&#x20;reply&quot;,&quot;settings_sounds&quot;&#x3A;&quot;Sounds&quot;,&quot;settings_volume&quot;&#x3A;&quot;Volume&quot;,&quot;settings_background_only&quot;&#x3A;&quot;Play&#x20;sounds&#x20;only&#x20;when&#x20;the&#x20;tab&#x20;is&#x20;in&#x20;the&#x20;background&quot;,&quot;settings_buzz_open&quot;&#x3A;&quot;A&#x20;buzz&#x20;opens&#x20;the&#x20;conversation&quot;,&quot;settings_buzz_open_help&quot;&#x3A;&quot;Off&#x3A;&#x20;the&#x20;buzz&#x20;rings&#x20;and&#x20;shakes&#x20;the&#x20;window&#x20;only&#x20;when&#x20;it&#x20;is&#x20;already&#x20;open.&quot;,&quot;settings_open_on_message&quot;&#x3A;&quot;Open&#x20;the&#x20;conversation&#x20;when&#x20;a&#x20;message&#x20;arrives&quot;,&quot;settings_open_on_message_help&quot;&#x3A;&quot;Off&#x3A;&#x20;only&#x20;the&#x20;unread&#x20;badge.&quot;,&quot;settings_send_key&quot;&#x3A;&quot;Send&#x20;messages&#x20;with&quot;,&quot;settings_send_key_enter&quot;&#x3A;&quot;Enter&#x20;&#x28;Shift&#x2B;Enter&#x3A;&#x20;new&#x20;line&#x29;&quot;,&quot;settings_send_key_ctrl_enter&quot;&#x3A;&quot;Ctrl&#x5C;&#x2F;&#x5C;u2318&#x2B;Enter&#x20;&#x28;Enter&#x3A;&#x20;new&#x20;line&#x29;&quot;,&quot;settings_push_preview&quot;&#x3A;&quot;Show&#x20;the&#x20;message&#x20;text&#x20;in&#x20;push&#x20;notifications&quot;,&quot;settings_push_preview_help&quot;&#x3A;&quot;Off&#x3A;&#x20;the&#x20;notification&#x20;only&#x20;says&#x20;&#x5C;&quot;New&#x20;message&#x5C;&quot;&#x20;&#x28;lock&#x20;screens&#x20;show&#x20;nothing&#x20;private&#x29;.&quot;,&quot;settings_saved&quot;&#x3A;&quot;Chat&#x20;setting&#x20;saved.&quot;,&quot;settings_save_error&quot;&#x3A;&quot;Could&#x20;not&#x20;save&#x20;the&#x20;chat&#x20;setting.&quot;,&quot;status_menu&quot;&#x3A;&quot;Your&#x20;chat&#x20;status&quot;,&quot;status_yours&quot;&#x3A;&quot;Your&#x20;status&#x3A;&#x20;&#x25;status&#x25;&quot;,&quot;status_available&quot;&#x3A;&quot;Available&quot;,&quot;status_available_hint&quot;&#x3A;&quot;Others&#x20;see&#x20;you&#x20;online&quot;,&quot;status_busy&quot;&#x3A;&quot;Busy&quot;,&quot;status_busy_hint&quot;&#x3A;&quot;Online,&#x20;but&#x20;focused&quot;,&quot;status_away&quot;&#x3A;&quot;Away&quot;,&quot;status_away_hint&quot;&#x3A;&quot;Also&#x20;set&#x20;automatically&#x20;when&#x20;you&#x20;are&#x20;idle&quot;,&quot;status_dnd&quot;&#x3A;&quot;Do&#x20;not&#x20;disturb&quot;,&quot;status_dnd_hint&quot;&#x3A;&quot;No&#x20;sounds,&#x20;buzzes&#x20;or&#x20;push&#x20;&#x5C;u2014&#x20;only&#x20;the&#x20;badge&quot;,&quot;status_invisible&quot;&#x3A;&quot;Invisible&quot;,&quot;status_invisible_hint&quot;&#x3A;&quot;Others&#x20;see&#x20;you&#x20;offline&quot;,&quot;status_offline&quot;&#x3A;&quot;Offline&quot;,&quot;status_custom&quot;&#x3A;&quot;Custom&#x20;status&quot;,&quot;status_emoji&quot;&#x3A;&quot;Status&#x20;emoji&quot;,&quot;status_text&quot;&#x3A;&quot;What&#x20;is&#x20;your&#x20;status&#x3F;&quot;,&quot;status_clear_after&quot;&#x3A;&quot;Clear&#x20;after&quot;,&quot;status_clear_never&quot;&#x3A;&quot;Never&quot;,&quot;status_clear_30m&quot;&#x3A;&quot;30&#x20;minutes&quot;,&quot;status_clear_1h&quot;&#x3A;&quot;1&#x20;hour&quot;,&quot;status_clear_2h&quot;&#x3A;&quot;2&#x20;hours&quot;,&quot;status_clear_4h&quot;&#x3A;&quot;4&#x20;hours&quot;,&quot;status_clear_today&quot;&#x3A;&quot;Today&quot;,&quot;status_clear_week&quot;&#x3A;&quot;This&#x20;week&quot;,&quot;status_clear&quot;&#x3A;&quot;Clear&#x20;status&quot;,&quot;status_error&quot;&#x3A;&quot;Could&#x20;not&#x20;save&#x20;your&#x20;status.&#x20;Try&#x20;again.&quot;,&quot;filter_label&quot;&#x3A;&quot;Filter&#x20;conversations&quot;,&quot;sent&quot;&#x3A;&quot;Sent&quot;,&quot;filter_channels&quot;&#x3A;&quot;Channels&quot;,&quot;support_title&quot;&#x3A;&quot;Support&quot;,&quot;support_hint&quot;&#x3A;&quot;Report&#x20;a&#x20;problem&#x20;or&#x20;ask&#x20;for&#x20;help&quot;,&quot;channel&quot;&#x3A;&quot;Channel&quot;,&quot;browse_channels&quot;&#x3A;&quot;Browse&#x20;or&#x20;create&#x20;channels&quot;,&quot;sidebar_recent&quot;&#x3A;&quot;Recent&quot;,&quot;sidebar_unread&quot;&#x3A;&quot;Unread&quot;,&quot;sidebar_show&quot;&#x3A;&quot;Show&quot;,&quot;sidebar_conversations&quot;&#x3A;&quot;Direct&#x20;messages&#x20;and&#x20;groups&quot;,&quot;sidebar_empty&quot;&#x3A;&quot;No&#x20;conversations&#x20;yet.&quot;,&quot;sidebar_no_unread&quot;&#x3A;&quot;You&#x20;are&#x20;all&#x20;caught&#x20;up.&quot;,&quot;sidebar_muted&quot;&#x3A;&quot;Muted&quot;,&quot;sidebar_mentions&quot;&#x3A;&quot;Unread&#x20;mentions&#x3A;&#x20;&#x25;count&#x25;&quot;,&quot;channel_read_only&quot;&#x3A;&quot;This&#x20;channel&#x20;is&#x20;read&#x20;only.&quot;,&quot;mute&quot;&#x3A;&quot;Mute&#x20;conversation&quot;,&quot;unmute&quot;&#x3A;&quot;Unmute&#x20;conversation&quot;,&quot;muted&quot;&#x3A;&quot;Muted&quot;,&quot;people_group&quot;&#x3A;&quot;Your&#x20;groups&quot;,&quot;people_project&quot;&#x3A;&quot;Your&#x20;projects&quot;,&quot;people_other&quot;&#x3A;&quot;People&quot;,&quot;react&quot;&#x3A;&quot;React&quot;,&quot;reactions_label&quot;&#x3A;&quot;Reactions&quot;,&quot;edit&quot;&#x3A;&quot;Edit&quot;,&quot;delete&quot;&#x3A;&quot;Delete&quot;,&quot;delete_confirm&quot;&#x3A;&quot;Delete&#x20;this&#x20;message&#x3F;&quot;,&quot;save&quot;&#x3A;&quot;Save&quot;,&quot;cancel&quot;&#x3A;&quot;Cancel&quot;,&quot;links_attach&quot;&#x3A;&quot;Attach&#x20;link&quot;,&quot;links_panel&quot;&#x3A;&quot;Links&quot;,&quot;links_bar&quot;&#x3A;&quot;Pinned&#x20;links&quot;,&quot;links_pinned&quot;&#x3A;&quot;Pinned&quot;,&quot;links_shared&quot;&#x3A;&quot;Shared&#x20;in&#x20;messages&quot;,&quot;links_add&quot;&#x3A;&quot;Add&#x20;link&quot;,&quot;links_add_button&quot;&#x3A;&quot;Add&quot;,&quot;links_edit&quot;&#x3A;&quot;Edit&#x20;link&quot;,&quot;links_edit_named&quot;&#x3A;&quot;Edit&#x20;&#x5C;u201c&#x25;label&#x25;&#x5C;u201d&quot;,&quot;links_remove&quot;&#x3A;&quot;Remove&quot;,&quot;links_url&quot;&#x3A;&quot;URL&quot;,&quot;links_title&quot;&#x3A;&quot;Title&#x20;&#x28;optional&#x29;&quot;,&quot;links_detected&quot;&#x3A;&quot;Detected&#x3A;&#x20;&#x25;provider&#x25;&quot;,&quot;links_insert&quot;&#x3A;&quot;Insert&quot;,&quot;links_copy&quot;&#x3A;&quot;Copy&#x20;link&quot;,&quot;links_copied&quot;&#x3A;&quot;Link&#x20;copied&quot;,&quot;links_open&quot;&#x3A;&quot;Open&quot;,&quot;links_goto&quot;&#x3A;&quot;Go&#x20;to&#x20;message&quot;,&quot;links_search&quot;&#x3A;&quot;Search&#x20;links&quot;,&quot;links_filter&quot;&#x3A;&quot;Provider&quot;,&quot;links_filter_all&quot;&#x3A;&quot;All&quot;,&quot;links_filter_other&quot;&#x3A;&quot;Other&quot;,&quot;links_empty&quot;&#x3A;&quot;No&#x20;links&#x20;in&#x20;this&#x20;conversation&#x20;yet.&quot;,&quot;links_no_results&quot;&#x3A;&quot;No&#x20;links&#x20;match.&quot;,&quot;links_load_more&quot;&#x3A;&quot;Load&#x20;more&quot;,&quot;links_invalid_url&quot;&#x3A;&quot;Enter&#x20;a&#x20;valid&#x20;web&#x20;address&#x20;&#x28;https&#x3A;&#x5C;&#x2F;&#x5C;&#x2F;&#x5C;u2026&#x29;.&quot;,&quot;links_http_forbidden&quot;&#x3A;&quot;Only&#x20;secure&#x20;links&#x20;&#x28;https&#x3A;&#x5C;&#x2F;&#x5C;&#x2F;&#x29;&#x20;are&#x20;allowed.&quot;,&quot;links_url_too_long&quot;&#x3A;&quot;The&#x20;link&#x20;is&#x20;too&#x20;long&#x20;&#x28;maximum&#x20;&#x25;max&#x25;&#x20;characters&#x29;.&quot;,&quot;links_invalid_title&quot;&#x3A;&quot;The&#x20;title&#x20;is&#x20;too&#x20;long&#x20;&#x28;maximum&#x20;&#x25;max&#x25;&#x20;characters&#x29;.&quot;,&quot;links_too_many&quot;&#x3A;&quot;This&#x20;conversation&#x20;already&#x20;has&#x20;the&#x20;maximum&#x20;of&#x20;&#x25;max&#x25;&#x20;pinned&#x20;links.&quot;,&quot;links_forbidden&quot;&#x3A;&quot;You&#x20;cannot&#x20;change&#x20;the&#x20;links&#x20;of&#x20;this&#x20;conversation.&quot;,&quot;links_not_found&quot;&#x3A;&quot;This&#x20;link&#x20;no&#x20;longer&#x20;exists.&quot;,&quot;links_shared_by&quot;&#x3A;&quot;&#x25;name&#x25;&#x20;&#x5C;u00b7&#x20;&#x25;date&#x25;&quot;,&quot;reported_from&quot;&#x3A;&quot;Reported&#x20;from&quot;,&quot;page_title&quot;&#x3A;&quot;Messages&quot;,&quot;page_select&quot;&#x3A;&quot;Pick&#x20;a&#x20;conversation.&quot;,&quot;popout&quot;&#x3A;&quot;Open&#x20;in&#x20;a&#x20;page&quot;,&quot;support_bot&quot;&#x3A;&quot;Support&#x20;assistant&quot;,&quot;support_no_topic&quot;&#x3A;&quot;No&#x20;topic&quot;,&quot;support_status_open&quot;&#x3A;&quot;Open&quot;,&quot;support_status_waiting&quot;&#x3A;&quot;Waiting&#x20;for&#x20;you&quot;,&quot;support_status_resolved&quot;&#x3A;&quot;Resolved&quot;,&quot;support_status_closed&quot;&#x3A;&quot;Closed&quot;,&quot;support_greeting&quot;&#x3A;&quot;Hi&#x21;&#x20;What&#x20;can&#x20;we&#x20;help&#x20;you&#x20;with&#x3F;&#x20;Pick&#x20;a&#x20;topic&#x20;&#x5C;u2014&#x20;you&#x20;can&#x20;also&#x20;type&#x20;your&#x20;question&#x20;first.&quot;,&quot;support_topics_label&quot;&#x3A;&quot;Topic&#x20;of&#x20;your&#x20;request&quot;,&quot;support_resume_question&quot;&#x3A;&quot;Your&#x20;last&#x20;ticket&#x20;&#x25;number&#x25;&#x20;&#x28;&#x25;topic&#x25;&#x20;&#x5C;u00b7&#x20;&#x25;status&#x25;,&#x20;last&#x20;message&#x20;&#x25;date&#x25;&#x29;&#x3A;&#x20;continue&#x20;it&#x20;or&#x20;open&#x20;a&#x20;new&#x20;one&#x3F;&quot;,&quot;support_continue&quot;&#x3A;&quot;Continue&#x20;&#x25;number&#x25;&quot;,&quot;support_new_ticket&quot;&#x3A;&quot;New&#x20;ticket&quot;,&quot;support_previous_tickets&quot;&#x3A;&quot;Your&#x20;tickets&quot;,&quot;support_reopen&quot;&#x3A;&quot;Reopen&quot;,&quot;support_read_only_ticket&quot;&#x3A;&quot;This&#x20;ticket&#x20;is&#x20;closed.&#x20;Open&#x20;Support&#x20;to&#x20;start&#x20;a&#x20;new&#x20;one.&quot;,&quot;support_ticket_label&quot;&#x3A;&quot;Ticket&#x20;&#x25;number&#x25;&#x20;&#x5C;u00b7&#x20;&#x25;topic&#x25;&#x20;&#x5C;u00b7&#x20;&#x25;status&#x25;&quot;&#x7D;&#x7D;" data-testid="chat-dock">
+            
+    <template data-nowo-chat-template="dock">
+        <div class="nowo-chat-dock">
+            <section class="nowo-chat-panel" data-part="panel" aria-label="Messaging">
+                <div class="nowo-chat-panel__header">
+                                        <button type="button" class="nowo-chat-me" data-part="me" aria-haspopup="dialog" aria-expanded="false" aria-controls="nowo-chat-status-menu" hidden>
+                        <span class="nowo-chat-me__avatar" data-part="me-avatar"></span>
+                        <span class="nowo-chat-status-dot" data-part="me-dot" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="nowo-chat-launcher" data-part="launcher" aria-expanded="false" aria-controls="nowo-chat-panel-body">
+                        <span class="nowo-chat-launcher__icon" aria-hidden="true"><span data-icon="chat" data-icon-size="20"></span></span>
+                        <span class="nowo-chat-launcher__label">Messaging</span>
+                        <span class="nowo-chat-badge" data-part="launcher-badge" hidden></span>
+                        <span class="nowo-chat-launcher__chevron" data-part="launcher-chevron"></span>
+                    </button>
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__compose" data-part="compose" aria-label="New message" title="New message"><span data-icon="compose"></span></button>
+
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__tuck" data-part="tuck" aria-label="Hide to the side" title="Hide to the side"><span data-icon="tuck"></span></button>
+
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__close" data-part="close-panel" aria-label="Close" title="Close"><span data-icon="close"></span></button>
+
+                </div>
+                <p class="nowo-chat-status" role="status" data-part="status" hidden></p>
+                <div class="nowo-chat-panel__body" id="nowo-chat-panel-body" data-part="panel-body">
+                    <div class="nowo-chat-panel__list">
+                        <div class="nowo-chat-search-wrap">
+                            <span data-icon="search" data-icon-size="16"></span>
+                                                        <input type="search" id="nowo_chat_search_query" name="nowo_chat_search[query]" class="nowo-chat-search" data-part="search" autocomplete="off" placeholder="Search conversations" aria-label="Search conversations" />
+                        </div>
+                        <div class="nowo-chat-filters" role="group" aria-label="Filter conversations" data-part="filters">
+                            <button type="button" class="nowo-chat-chip" aria-pressed="true" data-filter="all">All</button>
+                            <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="unread">Unread</button>
+                            <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="channel">Channels</button>
+                            <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="support">Support</button>
+                                                        <button type="button" class="nowo-chat-chip" aria-pressed="false" data-filter="archived">Closed</button>
+                                <button type="button" class="nowo-chat-icon-btn nowo-chat-filters__archive-read" data-part="archive-read" aria-label="Close all read conversations" title="Close all read conversations"><span data-icon="archive"></span></button>
+
+                        </div>
+                        <ul class="nowo-chat-list" role="list" data-part="list"></ul>
+                    </div>
+                    <div class="nowo-chat-picker" data-part="picker" hidden>
+                        <div class="nowo-chat-picker__bar">
+                                <button type="button" class="nowo-chat-icon-btn nowo-chat-picker__back" data-part="picker-back" aria-label="Back" title="Back"><span data-icon="back"></span></button>
+
+                            <p class="nowo-chat-picker__title">New message</p>
+                        </div>
+                                                <div class="nowo-chat-search-wrap">
+                            <span data-icon="search" data-icon-size="16"></span>
+                                                        <input type="search" id="nowo_chat_search_people" name="nowo_chat_search[people]" class="nowo-chat-search" data-part="picker-input" autocomplete="off" placeholder="Search people" aria-label="Search people" />
+                        </div>
+                        <div class="nowo-chat-picker__results" data-part="picker-results"></div>
+                    </div>
+                </div>
+            </section>
+                        <div class="nowo-chat-overflow" data-part="overflow" hidden>
+                <button type="button" class="nowo-chat-overflow__btn" data-part="overflow-btn" aria-controls="nowo-chat-overflow-list" aria-expanded="false"></button>
+                <ul class="nowo-chat-overflow__menu" id="nowo-chat-overflow-list" data-part="overflow-menu" hidden></ul>
+            </div>
+        </div>
+    </template>
+
+            <template data-nowo-chat-template="status-menu">
+                <div class="nowo-chat-status-menu" id="nowo-chat-status-menu" role="dialog" aria-labelledby="nowo-chat-status-menu-title" data-testid="nowo-chat-status-menu" hidden>
+            <header class="nowo-chat-status-menu__header">
+                <h2 class="nowo-chat-status-menu__title" id="nowo-chat-status-menu-title">Your chat status</h2>
+                <button type="button" class="nowo-chat-icon-btn nowo-chat-status-menu__close" data-part="status-close" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </header>
+            <div class="nowo-chat-status-menu__body">
+                <div class="nowo-chat-status-menu__options" role="menu" aria-labelledby="nowo-chat-status-menu-title">
+                                            <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="available">
+                            <span class="nowo-chat-status-dot nowo-chat-status-dot--available" aria-hidden="true"></span>
+                            <span class="nowo-chat-status-option__text">
+                                <span class="nowo-chat-status-option__label">Available</span>
+                                <span class="nowo-chat-status-option__hint">Others see you online</span>
+                            </span>
+                        </button>
+                                            <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="busy">
+                            <span class="nowo-chat-status-dot nowo-chat-status-dot--busy" aria-hidden="true"></span>
+                            <span class="nowo-chat-status-option__text">
+                                <span class="nowo-chat-status-option__label">Busy</span>
+                                <span class="nowo-chat-status-option__hint">Online, but focused</span>
+                            </span>
+                        </button>
+                                            <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="away">
+                            <span class="nowo-chat-status-dot nowo-chat-status-dot--away" aria-hidden="true"></span>
+                            <span class="nowo-chat-status-option__text">
+                                <span class="nowo-chat-status-option__label">Away</span>
+                                <span class="nowo-chat-status-option__hint">Also set automatically when you are idle</span>
+                            </span>
+                        </button>
+                                            <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="dnd">
+                            <span class="nowo-chat-status-dot nowo-chat-status-dot--dnd" aria-hidden="true"></span>
+                            <span class="nowo-chat-status-option__text">
+                                <span class="nowo-chat-status-option__label">Do not disturb</span>
+                                <span class="nowo-chat-status-option__hint">No sounds, buzzes or push — only the badge</span>
+                            </span>
+                        </button>
+                                            <button type="button" class="nowo-chat-status-option" role="menuitemradio" aria-checked="false" tabindex="-1" data-status="invisible">
+                            <span class="nowo-chat-status-dot nowo-chat-status-dot--offline" aria-hidden="true"></span>
+                            <span class="nowo-chat-status-option__text">
+                                <span class="nowo-chat-status-option__label">Invisible</span>
+                                <span class="nowo-chat-status-option__hint">Others see you offline</span>
+                            </span>
+                        </button>
+                                    </div>
+                <form name="nowo_chat_status" method="post" class="nowo-chat-status-form" data-part="status-form" id="nowo-chat-status-form">
+                    <p class="nowo-chat-status-form__title">Custom status</p>
+                                                                <div class="nowo-chat-status-presets" role="group" aria-label="Suggestions">
+                                                            <button type="button" class="nowo-chat-status-preset" data-preset-emoji="🍕" data-preset-text="Lunch" data-preset-clear-after="1h"><span aria-hidden="true">🍕</span> Lunch</button>
+                                                            <button type="button" class="nowo-chat-status-preset" data-preset-emoji="📅" data-preset-text="In a meeting" data-preset-clear-after="1h"><span aria-hidden="true">📅</span> In a meeting</button>
+                                                            <button type="button" class="nowo-chat-status-preset" data-preset-emoji="🏠" data-preset-text="Working from home" data-preset-clear-after="today"><span aria-hidden="true">🏠</span> Working from home</button>
+                                                            <button type="button" class="nowo-chat-status-preset" data-preset-emoji="🤒" data-preset-text="Sick" data-preset-clear-after="today"><span aria-hidden="true">🤒</span> Sick</button>
+                                                            <button type="button" class="nowo-chat-status-preset" data-preset-emoji="🌴" data-preset-text="On holiday" data-preset-clear-after="week"><span aria-hidden="true">🌴</span> On holiday</button>
+                                                    </div>
+                                                                <div class="nowo-chat-status-form__row nowo-chat-status-form__more-row">
+                            <label for="nowo_chat_status_moreStatus">More statuses</label>
+                            <select id="nowo_chat_status_moreStatus" name="nowo_chat_status[moreStatus]" class="nowo-chat-status-form__clear-after nowo-chat-status-form__more" data-part="status-more"><option value="">Choose a status…</option><optgroup label="Work">
+                <option value="0-0" data-preset-emoji="🎧" data-preset-text="Focusing" data-preset-clear-after="2h">🎧 Focusing</option><option value="0-1" data-preset-emoji="📞" data-preset-text="In a call" data-preset-clear-after="1h">📞 In a call</option><option value="0-2" data-preset-emoji="🎤" data-preset-text="Presenting" data-preset-clear-after="1h">🎤 Presenting</option><option value="0-3" data-preset-emoji="🔍" data-preset-text="Reviewing" data-preset-clear-after="1h">🔍 Reviewing</option><option value="0-4" data-preset-emoji="🚆" data-preset-text="Commuting" data-preset-clear-after="1h">🚆 Commuting</option><option value="0-5" data-preset-emoji="💻" data-preset-text="Working remotely" data-preset-clear-after="today">💻 Working remotely</option><option value="0-6" data-preset-emoji="🏢" data-preset-text="At the office" data-preset-clear-after="today">🏢 At the office</option><option value="0-7" data-preset-emoji="📚" data-preset-text="In training" data-preset-clear-after="today">📚 In training</option><option value="0-8" data-preset-emoji="🛟" data-preset-text="On support duty" data-preset-clear-after="today">🛟 On support duty</option><option value="0-9" data-preset-emoji="✈️" data-preset-text="On a business trip" data-preset-clear-after="week">✈️ On a business trip</option></optgroup><optgroup label="Personal">
+                <option value="1-0" data-preset-emoji="☕" data-preset-text="Coffee break" data-preset-clear-after="30m">☕ Coffee break</option><option value="1-1" data-preset-emoji="⏳" data-preset-text="Back soon" data-preset-clear-after="30m">⏳ Back soon</option><option value="1-2" data-preset-emoji="🩺" data-preset-text="Doctor&#039;s appointment" data-preset-clear-after="2h">🩺 Doctor&#039;s appointment</option><option value="1-3" data-preset-emoji="🌙" data-preset-text="Offline for the day" data-preset-clear-after="today">🌙 Offline for the day</option><option value="1-4" data-preset-emoji="🤒" data-preset-text="Sick" data-preset-clear-after="today">🤒 Sick</option><option value="1-5" data-preset-emoji="🌴" data-preset-text="On holiday" data-preset-clear-after="week">🌴 On holiday</option><option value="1-6" data-preset-emoji="🍼" data-preset-text="Parental leave" data-preset-clear-after="week">🍼 Parental leave</option></optgroup></select>
+                        </div>
+                                        <div class="nowo-chat-status-form__row">
+                                                <input type="text" id="nowo_chat_status_emoji" name="nowo_chat_status[emoji]" class="nowo-chat-status-form__emoji" data-part="status-emoji" maxlength="16" autocomplete="off" inputmode="text" placeholder="🙂" aria-label="Status emoji" title="Status emoji" />
+                                                <button type="button" class="nowo-chat-icon-btn nowo-chat-status-form__emoji-pick" data-part="status-emoji-pick" aria-expanded="false" aria-label="Choose an emoji" title="Choose an emoji"><span data-icon="smile"></span></button>
+                                                <input type="text" id="nowo_chat_status_text" name="nowo_chat_status[text]" class="nowo-chat-status-form__text" data-part="status-text" maxlength="80" autocomplete="off" placeholder="What is your status?" aria-label="What is your status?" />
+                    </div>
+                    <div class="nowo-chat-status-form__picker" data-part="status-emoji-panel"></div>
+                    <div class="nowo-chat-status-form__row">
+                        <label for="nowo_chat_status_clearAfter" class="required">Clear after</label>
+                        <select id="nowo_chat_status_clearAfter" name="nowo_chat_status[clearAfter]" class="nowo-chat-status-form__clear-after" data-part="status-clear-after"><option value="never" selected="selected">Never</option><option value="30m">30 minutes</option><option value="1h">1 hour</option><option value="2h">2 hours</option><option value="4h">4 hours</option><option value="today">Today</option><option value="week">This week</option></select>
+                    </div>
+                    <p class="nowo-chat-status-form__error" role="alert" data-part="status-error" hidden></p>
+                                        <details class="nowo-chat-auto-reply" data-part="auto-reply">
+                        <summary>Automatic reply</summary>
+                        <div class="nowo-chat-auto-reply__check"><input type="checkbox" id="nowo_chat_status_autoReplyEnabled" name="nowo_chat_status[autoReplyEnabled]" data-part="auto-reply-enabled" value="1" /> <label for="nowo_chat_status_autoReplyEnabled">Send an automatic reply</label></div>
+                        <label for="nowo_chat_status_autoReplyText">Message</label>
+                        <textarea id="nowo_chat_status_autoReplyText" name="nowo_chat_status[autoReplyText]" class="nowo-chat-auto-reply__text" data-part="auto-reply-text" maxlength="500" rows="3"></textarea>
+                        <label for="nowo_chat_status_autoReplyWhen" class="required">When</label>
+                        <select id="nowo_chat_status_autoReplyWhen" name="nowo_chat_status[autoReplyWhen]" class="nowo-chat-status-form__clear-after" data-part="auto-reply-when"><option value="status" selected="selected">While I am away, busy or in do not disturb</option><option value="range">Between two dates (out of office)</option></select>
+                        <div class="nowo-chat-auto-reply__range" data-part="auto-reply-range" hidden>
+                            <label for="nowo_chat_status_autoReplyFrom">From</label>
+                            <input type="datetime-local" id="nowo_chat_status_autoReplyFrom" name="nowo_chat_status[autoReplyFrom]" class="nowo-chat-status-form__clear-after" data-part="auto-reply-from" />
+                            <label for="nowo_chat_status_autoReplyUntil">Until</label>
+                            <input type="datetime-local" id="nowo_chat_status_autoReplyUntil" name="nowo_chat_status[autoReplyUntil]" class="nowo-chat-status-form__clear-after" data-part="auto-reply-until" />
+                        </div>
+                        <div class="nowo-chat-auto-reply__check"><input type="checkbox" id="nowo_chat_status_autoReplyMentions" name="nowo_chat_status[autoReplyMentions]" data-part="auto-reply-mentions" value="1" /> <label for="nowo_chat_status_autoReplyMentions">Also answer @mentions in channels</label></div>
+                        <p class="nowo-chat-status-form__error" role="alert" data-part="auto-reply-error" hidden></p>
+                        <span class="nowo-chat-status-form__actions">
+                                                        <button type="button" class="nowo-chat-status-form__secondary" data-part="auto-reply-save">Save automatic reply</button>
+                        </span>
+                    </details>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                <input type="hidden" id="nowo_chat_status__token" name="nowo_chat_status[_token]" data-controller="csrf-protection" value="<csrf>" />
+                                                            </form>
+            </div>
+            <footer class="nowo-chat-status-menu__footer">
+                <button type="button" class="nowo-chat-status-form__clear" data-part="status-clear">Clear status</button>
+                <button type="button" class="nowo-chat-status-form__cancel" data-part="status-cancel">Cancel</button>
+                <button type="submit" form="nowo-chat-status-form" class="nowo-chat-status-form__save">Save</button>
+            </footer>
+        </div>
+    </template>
+
+        <template data-nowo-chat-template="row">
+        <li>
+            <button type="button" class="nowo-chat-row" data-part="row">
+                <span data-part="avatar"></span>
+                <span class="nowo-chat-row__text">
+                    <span class="nowo-chat-row__top">
+                        <span class="nowo-chat-row__title" data-part="title"></span>
+                        <span class="nowo-chat-row__tag" data-part="tag" hidden>Support</span>
+                        <time class="nowo-chat-row__time" data-part="time"></time>
+                    </span>
+                    <span class="nowo-chat-row__bottom">
+                        <span class="nowo-chat-row__preview" data-part="preview"></span>
+                        <span class="nowo-chat-badge" data-part="badge" hidden></span>
+                    </span>
+                </span>
+            </button>
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-row__archive" data-part="row-archive"><span data-icon="archive" data-icon-size="16"></span></button>
+        </li>
+    </template>
+
+        <template data-nowo-chat-template="list-state">
+        <li class="nowo-chat-list__state">
+            <p class="nowo-chat-list__empty-title" data-part="title"></p>
+            <p data-part="body" hidden></p>
+            <button type="button" class="nowo-chat-list__start" data-part="start" hidden>Start a conversation</button>
+        </li>
+    </template>
+
+        <template data-nowo-chat-template="picker-section">
+        <div class="nowo-chat-picker__section">
+            <p class="nowo-chat-picker__heading" data-part="heading" hidden></p>
+            <div data-part="items"></div>
+        </div>
+    </template>
+    <template data-nowo-chat-template="picker-row">
+        <button type="button" class="nowo-chat-row" data-part="row">
+            <span data-part="avatar"></span>
+            <span class="nowo-chat-row__text">
+                <span class="nowo-chat-row__title" data-part="title"></span>
+                <span class="nowo-chat-row__preview" data-part="preview"></span>
+            </span>
+        </button>
+    </template>
+    <template data-nowo-chat-template="picker-state"><p class="nowo-chat-list__state" data-part="text"></p></template>
+
+    <template data-nowo-chat-template="overflow-item">
+        <li>
+            <button type="button" class="nowo-chat-overflow__item" data-part="row">
+                <span data-part="avatar"></span>
+                <span data-part="title"></span>
+            </button>
+        </li>
+    </template>
+
+        <template data-nowo-chat-template="window">
+        <section class="nowo-chat-window" role="dialog">
+            <header class="nowo-chat-window__header">
+                    <button type="button" class="nowo-chat-icon-btn nowo-chat-window__back" data-part="back" aria-label="Back" title="Back"><span data-icon="back"></span></button>
+
+                <button type="button" class="nowo-chat-window__identity" data-part="identity" aria-expanded="true">
+                    <span class="nowo-chat-window__avatar" data-part="avatar"></span>
+                    <span class="nowo-chat-window__names">
+                        <span class="nowo-chat-window__title" data-part="title"></span>
+                        <span class="nowo-chat-window__subtitle" data-part="subtitle"></span>
+                    </span>
+                    <span class="nowo-chat-badge" data-part="badge" hidden></span>
+                </button>
+                <span class="nowo-chat-window__actions">
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-window__resolve" data-part="resolve" aria-label="Mark resolved" title="Mark resolved"><span data-icon="check"></span></button>
+
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-window__mute" data-part="mute" aria-label="Mute conversation" title="Mute conversation"><span data-icon="bell"></span></button>
+
+                    <a class="nowo-chat-icon-btn nowo-chat-window__popout" data-part="popout" aria-label="Open in a page" title="Open in a page"><span data-icon="external"></span></a>
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-window__buzz" data-part="buzz" aria-label="Buzz" title="Buzz"><span data-icon="buzz"></span></button>
+
+                        <button type="button" class="nowo-chat-icon-btn " data-part="minimise" aria-label="Minimise" title="Minimise"><span data-icon="chevronDown"></span></button>
+
+                        <button type="button" class="nowo-chat-icon-btn " data-part="close" aria-label="Close" title="Close"><span data-icon="close"></span></button>
+
+                </span>
+            </header>
+                        <a class="nowo-chat-window__context" data-part="context" title="Reported from" hidden><span data-icon="link" data-icon-size="14"></span> <span data-part="context-label"></span></a>
+            <div class="nowo-chat-window__main">
+                <div class="nowo-chat-window__body" data-part="body">
+                                        <div class="nowo-chat-thread" role="log" aria-live="off" aria-label="Messages" data-part="log"></div>
+                                        <div class="nowo-chat-support" data-part="support" aria-live="polite" hidden></div>
+                </div>
+                <button type="button" class="nowo-chat-jump" data-part="jump" hidden></button>
+                <p class="nowo-chat-typing" aria-live="polite" data-part="typing" hidden></p>
+                <p class="nowo-chat-notice" data-part="notice" hidden></p>
+                                <form name="nowo_chat_composer" method="post" class="nowo-chat-composer" data-part="composer" novalidate="novalidate">
+                                        <div class="nowo-chat-composer__tools" data-part="composer-tools">
+                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-part="format-toggle" aria-label="Formatting" title="Formatting"><span data-icon="format"></span></button>
+
+                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-part="quick-replies" aria-label="Quick replies" title="Quick replies"><span data-icon="quick"></span></button>
+
+                        <span class="nowo-chat-composer__toolbar" role="toolbar" aria-label="Formatting" data-part="format-toolbar" hidden>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="bold" aria-label="Bold (Ctrl+B)" title="Bold (Ctrl+B)"><span data-icon="bold" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="italic" aria-label="Italic (Ctrl+I)" title="Italic (Ctrl+I)"><span data-icon="italic" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="strike" aria-label="Strikethrough" title="Strikethrough"><span data-icon="strike" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="code" aria-label="Code" title="Code"><span data-icon="code" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="link" aria-label="Link (Ctrl+K)" title="Link (Ctrl+K)"><span data-icon="link" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="quote" aria-label="Quote" title="Quote"><span data-icon="quote" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="list" aria-label="List" title="List"><span data-icon="list" data-icon-size="16"></span></button>
+                                                                                            <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__tool" data-format="help" aria-label="Formatting help" title="Formatting help"><span data-icon="help" data-icon-size="16"></span></button>
+                                                    </span>
+                    </div>
+                    <div class="nowo-chat-composer__field">
+                                                <textarea id="nowo_chat_composer_body" name="nowo_chat_composer[body]" class="nowo-chat-composer__input" data-part="input" rows="1" placeholder="Write a message…" aria-label="Write a message…"></textarea>
+                        <button type="button" class="nowo-chat-icon-btn nowo-chat-composer__emoji" data-part="emoji-toggle" data-nowo-chat-emoji-toggle aria-label="Emoji" title="Emoji" aria-expanded="false"><span data-icon="smile"></span></button>
+                    </div>
+                                                                                                                                        <input type="hidden" id="nowo_chat_composer__token" name="nowo_chat_composer[_token]" data-controller="csrf-protection" value="<csrf>" />
+                                                                <button type="submit" class="nowo-chat-composer__send" data-part="send" aria-label="Send" title="Send"><span data-icon="send"></span></button>
+                    <p class="nowo-chat-composer__hint">Enter to send · Shift+Enter for a new line</p>
+                    <span class="nowo-chat-composer__counter" data-part="counter" hidden></span>
+                    <span class="nowo-chat-sr-only" aria-live="polite" data-part="counter-announce"></span>
+                </form>
+            </div>
+            <div class="nowo-chat-sr-only nowo-chat-window__live" aria-live="polite" aria-atomic="true" data-part="live"></div>
+        </section>
+    </template>
+
+        <template data-nowo-chat-template="message">
+        <article class="nowo-chat-msg">
+            <span data-part="avatar"></span>
+            <div class="nowo-chat-msg__content">
+                <p class="nowo-chat-msg__author" data-part="author" hidden></p>
+                <div class="nowo-chat-bubble" data-part="bubble"></div>
+                <div class="nowo-chat-previews" data-part="previews" hidden></div>
+                <div class="nowo-chat-reactions" data-part="reactions" role="group" aria-label="Reactions" hidden></div>
+                <span class="nowo-chat-msg__meta">
+                    <time data-part="time"></time>
+                    <span data-part="edited" hidden> · edited</span>
+                    <span class="nowo-chat-msg__receipt" data-part="receipt" hidden></span>
+                </span>
+            </div>
+            <div class="nowo-chat-msg__actions" data-part="actions">
+                    <button type="button" class="nowo-chat-icon-btn " data-part="react" aria-label="React" title="React"><span data-icon="smile"></span></button>
+
+                                    <button type="button" class="nowo-chat-icon-btn " data-part="pin" aria-label="Pin" title="Pin"><span data-icon="pin"></span></button>
+
+                    <button type="button" class="nowo-chat-icon-btn " data-part="edit" aria-label="Edit" title="Edit"><span data-icon="edit"></span></button>
+
+                    <button type="button" class="nowo-chat-icon-btn " data-part="delete" aria-label="Delete" title="Delete"><span data-icon="trash"></span></button>
+
+            </div>
+        </article>
+    </template>
+        <template data-nowo-chat-template="link-preview">
+        <a class="nowo-chat-preview" target="_blank" rel="noopener">
+            <span class="nowo-chat-preview__badge" data-part="badge" hidden></span>
+            <span class="nowo-chat-preview__title" data-part="title"></span>
+            <span class="nowo-chat-preview__subtitle" data-part="subtitle" hidden></span>
+        </a>
+    </template>
+        <template data-nowo-chat-template="edit-form">
+                <form name="nowo_chat_edit" method="post" class="nowo-chat-edit" novalidate="novalidate">
+            <textarea id="nowo_chat_edit_body" name="nowo_chat_edit[body]" class="nowo-chat-edit__input" data-part="input" rows="2" aria-label="Edit"></textarea>
+                                                                            <input type="hidden" id="nowo_chat_edit__token" name="nowo_chat_edit[_token]" data-controller="csrf-protection" value="<csrf>" />
+                                        <span class="nowo-chat-edit__actions">
+                <span class="nowo-chat-edit__hint">Esc to cancel · Enter to save</span>
+                <button type="button" class="nowo-chat-edit__cancel" data-part="cancel">Cancel</button>
+                <button type="submit" class="nowo-chat-edit__save" data-part="save">Save</button>
+            </span>
+        </form>
+    </template>
+        <template data-nowo-chat-template="delete-confirm">
+        <span class="nowo-chat-confirm" role="group" aria-label="Delete this message?">
+            <span class="nowo-chat-confirm__text">Delete this message?</span>
+                        <button type="button" class="nowo-chat-confirm__no" data-part="cancel">Cancel</button>
+            <button type="button" class="nowo-chat-confirm__yes" data-part="confirm">Delete</button>
+        </span>
+    </template>
+        <template data-nowo-chat-template="pending">
+        <article class="nowo-chat-msg nowo-chat-msg--mine nowo-chat-msg--pending">
+            <div class="nowo-chat-msg__content">
+                <div class="nowo-chat-bubble" data-part="bubble"></div>
+                <span class="nowo-chat-msg__meta" data-part="status"></span>
+            </div>
+        </article>
+    </template>
+    <template data-nowo-chat-template="buzz-line">
+        <p class="nowo-chat-buzz-line"><span data-icon="buzz" data-icon-size="14"></span> <span data-part="text"></span></p>
+    </template>
+    <template data-nowo-chat-template="day"><p class="nowo-chat-day" data-part="text"></p></template>
+    <template data-nowo-chat-template="unseen"><p class="nowo-chat-unseen">New messages</p></template>
+    <template data-nowo-chat-template="seen"><p class="nowo-chat-seen" data-part="text"></p></template>
+    <template data-nowo-chat-template="thread-state"><p class="nowo-chat-thread__loading" data-part="text"></p></template>
+    <template data-nowo-chat-template="thread-empty">
+        <div class="nowo-chat-thread__empty">
+            <span data-part="avatar"></span>
+            <p class="nowo-chat-thread__empty-title" data-part="title"></p>
+            <p data-part="hint"></p>
+        </div>
+    </template>
+
+        <template data-nowo-chat-template="edge">
+        <button type="button" class="nowo-chat-edge" data-part="edge" aria-label="Show messaging" title="Show messaging" hidden>
+            <span data-icon="chat" data-icon-size="20"></span>
+            <span class="nowo-chat-badge" data-part="edge-badge" hidden></span>
+        </button>
+    </template>
+
+        <template data-nowo-chat-template="sidebar-section">
+        <li class="nowo-chat-sidebar__section" data-part="section">
+            <div class="nowo-chat-sidebar__header">
+                <button type="button" class="nowo-chat-sidebar__toggle" data-part="toggle" aria-expanded="true">
+                    <span class="nowo-chat-sidebar__caret" data-icon="chevronDown" data-icon-size="14"></span>
+                    <span class="nowo-chat-sidebar__label" data-part="label"></span>
+                    <span class="nowo-chat-badge" data-part="badge" hidden></span>
+                </button>
+                <span class="nowo-chat-sidebar__heading" data-part="heading" hidden></span>
+                <div class="nowo-chat-sidebar__modes" role="group" aria-label="Show" data-part="modes" hidden>
+                    <button type="button" class="nowo-chat-chip nowo-chat-sidebar__mode" data-mode="recent" aria-pressed="true" tabindex="-1">Recent</button>
+                    <button type="button" class="nowo-chat-chip nowo-chat-sidebar__mode" data-mode="unread" aria-pressed="false" tabindex="-1">Unread</button>
+                </div>
+            </div>
+            <ul class="nowo-chat-sidebar__items" role="listbox" data-part="items"></ul>
+            <p class="nowo-chat-sidebar__empty" data-part="empty" hidden></p>
+            <div class="nowo-chat-sidebar__actions" data-part="actions" hidden></div>
+        </li>
+    </template>
+    <template data-nowo-chat-template="sidebar-item">
+                <li class="nowo-chat-sidebar__item" role="option" aria-selected="false" tabindex="-1">
+            <span class="nowo-chat-sidebar__icon" data-part="icon" aria-hidden="true"></span>
+            <span class="nowo-chat-sidebar__body">
+                <span class="nowo-chat-sidebar__top">
+                    <span class="nowo-chat-sidebar__text" data-part="label"></span>
+                    <span class="nowo-chat-sidebar__status" data-part="status" hidden></span>
+                </span>
+                <span class="nowo-chat-sidebar__preview" data-part="preview" hidden></span>
+            </span>
+            <span class="nowo-chat-sidebar__muted" data-part="muted" role="img" hidden><span data-icon="bellOff" data-icon-size="14"></span></span>
+            <span class="nowo-chat-sidebar__mentions" data-part="mentions" role="img" hidden></span>
+            <span class="nowo-chat-badge" data-part="badge" hidden></span>
+            <button type="button" class="nowo-chat-icon-btn nowo-chat-sidebar__close" data-part="close" tabindex="-1" aria-hidden="true" hidden><span data-icon="archive" data-icon-size="14"></span></button>
+        </li>
+    </template>
+    <template data-nowo-chat-template="sidebar-action">
+        <a class="nowo-chat-sidebar__action" tabindex="-1"><span class="nowo-chat-sidebar__icon" data-part="icon" aria-hidden="true"></span><span data-part="label"></span></a>
+    </template>
+
+                <template data-nowo-chat-icon="close"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"></path></svg></template>
+            <template data-nowo-chat-icon="send"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M4 12 20 4l-6 16-3-7z"></path></svg></template>
+    
+                                                                </div>
+    
+    </body>
+</html>
