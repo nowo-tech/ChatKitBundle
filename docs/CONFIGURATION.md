@@ -229,7 +229,7 @@ either end or control / format characters), loaded through `ChatUserReferenceDir
 (every answer re-checked byte for byte), and compared exactly everywhere; direct pairs keep both references in
 `direct_user_low` / `direct_user_high`. On MySQL / MariaDB every user reference column must have the binary NO PAD
 collation: the bundle checks it once per request and refuses to work until the `ALTER` of
-[UPGRADING](UPGRADING.md#unreleased) has run. Integer-id users are refused in this mode (and reference users in `id`
+[UPGRADING](UPGRADING.md#to-1280) has run. Integer-id users are refused in this mode (and reference users in `id`
 mode). The `relation` and `id` modes are unchanged.
 
 ## Private entity manager (1.27)
