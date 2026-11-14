@@ -212,11 +212,14 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function buzz(ChatUserInterface $author, ChatConversation $conversation): ChatMessage
     {
-        $message = ChatMessage::buzz($conversation, $author, $this->clock->now());
+        // 1.28 (audit PV-L7): the author's participant row first, as in send(), so a look-alike refusal leaves no buzz
+        // pending in the unit of work for a later flush (the next request of a worker) to store.
+        $participant = $this->participant($conversation, $author);
+        $message     = ChatMessage::buzz($conversation, $author, $this->clock->now());
         $this->entityManager->persist($message);
         $conversation->touch($message->getCreatedAt());
 
-        return $this->publish($message, $author);
+        return $this->publish($message, $author, $participant);
     }
 
     /**

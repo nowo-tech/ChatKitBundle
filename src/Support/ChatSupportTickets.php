@@ -8,6 +8,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -83,6 +84,9 @@ final readonly class ChatSupportTickets
      * @param ChatUserInterface $owner The user asking for support
      * @param array{url?: mixed, label?: mixed}|null $context Page the request comes from; null keeps the stored one
      *
+     * @throws ChatUserLookAlikeException 1.28, `string` user references only: the owner's participant row would go into
+     *                                    a user column that folds onto a look-alike's row (nothing is left pending)
+     *
      * @return ChatConversation The active ticket or the draft
      */
     public function open(ChatUserInterface $owner, ?array $context = null): ChatConversation
@@ -95,7 +99,14 @@ final readonly class ChatSupportTickets
             if (!$conversation instanceof ChatConversation) {
                 $conversation = ChatConversation::support($owner, $this->clock->now());
                 $this->entityManager->persist($conversation);
-                $this->chat->participant($conversation, $owner);
+                try {
+                    $this->chat->participant($conversation, $owner);
+                } catch (ChatUserLookAlikeException $refused) {
+                    // 1.28 (audit PV-L7): nothing of the refused ticket stays pending for a later flush.
+                    $this->entityManager->detach($conversation);
+
+                    throw $refused;
+                }
             }
         }
         if ($context !== null) {

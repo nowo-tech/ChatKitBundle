@@ -108,8 +108,9 @@ Target 1.28.0 (minor; behaviour change in `doctrine.user_reference: string` only
     The caller's pending changes are flushed first; then both steps run in one transaction (a savepoint inside the
     caller's own): on a folding column it is rolled back, the half-written conversation is detached and
     `ChatUserLookAlikeException` is thrown; on an exact column both rows are written as before (one flush later).
-  - `ChatService::send()` creates the author's participant row before anything else, so a look-alike author is refused
-    before the message is persisted or flushed (audit PV-D7).
+  - `ChatService::send()` and `ChatService::buzz()` create the author's participant row before anything else, so a
+    look-alike author is refused before the message is persisted or flushed and nothing stays pending for a later
+    flush (audits PV-D7, PV-L7); `ChatSupportTickets::open()` detaches the new ticket when its owner is refused.
   - `ChatMentions::sync()`, when a message mentions two such references, flushes the first mention row and reads the
     column before writing the second. On an exact column both people keep their own row (unread badge, mentions list)
     and are notified once. On a folding column the message keeps one row; the second person is notified once and

@@ -22,6 +22,7 @@ use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Service\ChatMentions;
+use Nowo\ChatKitBundle\Support\ChatSupportTickets;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefChatUser;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefDirectory;
@@ -226,6 +227,49 @@ final class StringReferenceLookAlikeWritesTest extends TestCase
 
         self::assertTrue($this->em->isOpen());
         self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message'));
+    }
+
+    /** PV-L7: a refused look-alike buzz leaves nothing pending, so no later flush (next worker request) stores it. */
+    public function testARefusedAuthorsBuzzIsNeverStored(): void
+    {
+        $chat    = $this->get(ChatServiceInterface::class);
+        $ana     = $this->make('ana');
+        $bob     = $this->make('bob');
+        $bigB    = $this->make('Bob');
+        $withBob = $chat->openDirect($ana, $bob);
+        $this->fold('nowo_chat_participant', 'user_id');
+        $this->em->clear();
+        $withBob = $this->em->getRepository(ChatConversation::class)->findOneBy(['uuid' => $withBob->getUuid()]) ?? self::fail('conversation');
+        $touched = $withBob->getLastMessageAt();
+
+        try {
+            $chat->buzz($bigB, $withBob);
+            self::fail('the look-alike author must be refused');
+        } catch (ChatUserLookAlikeException) {
+        }
+        self::assertSame([], $this->em->getUnitOfWork()->getScheduledEntityInsertions());
+        self::assertEquals($touched, $withBob->getLastMessageAt(), 'the conversation is not touched either');
+        $this->em->flush();
+
+        self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message'));
+    }
+
+    /** PV-L7 (support): a refused support ticket for a look-alike owner leaves nothing pending. */
+    public function testARefusedSupportTicketLeavesNothingPending(): void
+    {
+        $bigB = $this->make('Bob');
+        // This request already met a look-alike of Bob in the participant column.
+        $this->get(StringReferenceSchemaGuard::class)->sawLookAlike('nowo_chat_participant.user_id', 'Bob');
+
+        try {
+            $this->get(ChatSupportTickets::class)->open($bigB);
+            self::fail('refused');
+        } catch (ChatUserLookAlikeException) {
+        }
+        self::assertSame([], $this->em->getUnitOfWork()->getScheduledEntityInsertions());
+        $this->em->flush();
+
+        self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_conversation'));
     }
 
     /** PV-D1: on an exact column inside the host's transaction both rows are written through the savepoint. */
