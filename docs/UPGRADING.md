@@ -5,9 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
-  - [To 1.31.1](#to-1311)
 - [To 1.31.0](#to-1310)
-- [To 1.31.0](#to-1310-1)
 - [To 1.30.0](#to-1300)
 - [To 1.29.0](#to-1290)
 - [To 1.28.0](#to-1280)
@@ -78,11 +76,11 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
-### To 1.31.1
-
-Hosts whose `retention_days` resolves to 0 or a negative number (typically `%env(int:CHAT_RETENTION_DAYS)%` with an
-empty, non-numeric or out-of-range variable) will now see `nowo:chat:purge` log an error and exit with a failure
-instead of purging with a 30-day window. Fix the variable. Valid values (also 1 to 29, still raised to 30) and a
+Target 1.31.1. Hosts whose `retention_days` resolves to 0 or a negative number (for example `%env(int:CHAT_RETENTION_DAYS)%`
+with a value such as `'1e100'`, which the `int:` processor turns into 0, or `'-5'`) will now see `nowo:chat:purge` log an
+error ("Chat purge aborted") and exit with a failure instead of purging with a 30-day window. A non-numeric or empty
+variable (`'abc'`, `''`) was never coerced: the `int:` processor throws when the command is built, so the command already
+failed closed, without that log line. Fix the variable. Valid values (also 1 to 29, still raised to 30) and a
 `RetentionPolicyProviderInterface` answering a usable value are unaffected.
 
 ## To 1.31.0
@@ -93,9 +91,7 @@ From **1.30.0**:
 composer update nowo-tech/chat-kit-bundle
 ```
 
-## To 1.31.0
-
-From **1.30.0**. Nothing to change: without a provider `retention_days` applies exactly as before.
+Nothing to change: without a provider `retention_days` applies exactly as before.
 
 Optional: read the retention from your own storage. Implement `Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface`
 and alias it (see [USAGE](USAGE.md#retentionpolicyproviderinterface-optional)). `nowo:chat:purge` asks it on every run;
