@@ -44,7 +44,9 @@ final readonly class TablePrefixListener
         'participant'       => 'nowo_chat_participant',
         'quick_reply'       => 'nowo_chat_quick_reply',
         'reaction'          => 'nowo_chat_reaction',
-        'user_settings'     => 'nowo_chat_user_settings',
+        // 1.30: the ticket number counter.
+        'ticket_counter' => 'nowo_chat_ticket_counter',
+        'user_settings'  => 'nowo_chat_user_settings',
     ];
 
     /** Longest identifier PostgreSQL keeps (MySQL allows 64): every generated name must fit. */

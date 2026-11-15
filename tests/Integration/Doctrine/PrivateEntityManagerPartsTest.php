@@ -164,7 +164,8 @@ final class PrivateEntityManagerPartsTest extends DatabaseTestCase
             }
             self::assertTrue($connection->isTransactionActive(), 'the application transaction is still usable');
         } finally {
-            $connection->rollBack();
+            // The test plays the application's own level-1 transaction (SQLite: no deadlock, no lost savepoint).
+            $connection->rollBack(); // @phpstan-ignore frankenphp.worker.noRollbackAfterNestedBegin
         }
     }
 

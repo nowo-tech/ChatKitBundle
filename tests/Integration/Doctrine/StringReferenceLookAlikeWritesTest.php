@@ -200,7 +200,8 @@ final class StringReferenceLookAlikeWritesTest extends TestCase
             self::fail('refused');
         } catch (ChatUserLookAlikeException) {
         }
-        $this->em->flush();
+        // The test plays a host that flushes inside its own hand-written transaction (what PV-L6 protects).
+        $this->em->flush(); // @phpstan-ignore frankenphp.worker.noFlushInHandWrittenTransaction
         $connection->commit();
 
         self::assertSame(['host body'], $connection->fetchFirstColumn('SELECT body FROM nowo_chat_quick_reply'));

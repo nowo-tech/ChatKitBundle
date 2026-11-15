@@ -9,6 +9,9 @@ use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
+use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
+use Nowo\TransactionContract\TransactionRunnerInterface;
 
 /**
  * A user's quick replies (1.11).
@@ -25,6 +28,7 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
     public function __construct(
         ManagerRegistry $registry,
         private readonly ChatUserReferences $refs = new ChatUserReferences(),
+        private readonly ?TransactionRunnerInterface $transactions = null,
     ) {
         parent::__construct($registry, ChatQuickReply::class);
     }
@@ -44,6 +48,8 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
             ->setParameter('user', $this->refs->value($user))
             ->orderBy('q.title', 'ASC')
             ->addOrderBy('q.id', 'ASC')
+            // 1.30 (Beacon spec 239): bounded read; the API keeps a person at MAX_PER_USER snippets.
+            ->setMaxResults(ChatQuickReply::MAX_PER_USER)
             ->getQuery()
             ->getResult();
 
@@ -73,8 +79,12 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
      */
     public function save(ChatQuickReply $reply): void
     {
-        $this->getEntityManager()->persist($reply);
-        $this->getEntityManager()->flush();
+        $manager = $this->getEntityManager();
+        // 1.30: one unit of work through the transaction runner.
+        $stored = $reply->getId() !== null;
+        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function (bool $replay) use ($manager, $reply, $stored): void {
+            $manager->persist($replay ? ChatKitWrites::carry($manager, $reply, $stored) : $reply);
+        });
     }
 
     /**
@@ -84,7 +94,15 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
      */
     public function remove(ChatQuickReply $reply): void
     {
-        $this->getEntityManager()->remove($reply);
-        $this->getEntityManager()->flush();
+        $manager = $this->getEntityManager();
+        $id      = $reply->getId();
+        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function (bool $replay) use ($manager, $reply, $id): void {
+            // A replay looks the row up by id again: the attempt that removed it cleared the entity's id.
+            $reply = $replay ? $manager->find(ChatQuickReply::class, $id) : $reply;
+            if ($reply instanceof ChatQuickReply) {
+                // @igor-ignore - Unit of work of this call (the runner discards it on failure), not worker state.
+                $manager->remove($reply);
+            }
+        });
     }
 }

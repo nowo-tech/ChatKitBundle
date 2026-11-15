@@ -166,20 +166,35 @@ class ChatParticipantRepository extends ServiceEntityRepository
      */
     public function reopenArchived(ChatConversation $conversation, DateTimeImmutable $now): int
     {
-        $reopened = ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('p')
-            ->update()
-            ->set('p.archivedAt', ':none')
+        // 1.30 (Beacon spec 239): a plain read of the rows to reopen first, then an UPDATE by primary key. A busy channel
+        // gets a message every moment: the UPDATE … WHERE conversation = ? it replaces locked every participant row of
+        // the conversation (and the index gaps around them on MySQL) on every message, against every reader moving
+        // their cursor. Nearly always nothing is archived and nothing is written.
+        $ids = $this->createQueryBuilder('p')
+            ->select('p.id')
             ->where('p.conversation = :conversation AND p.archivedAt IS NOT NULL')
             ->andWhere('p.mutedUntil IS NULL OR p.mutedUntil <= :now')
-            ->setParameter('none', null)
             ->setParameter('conversation', $conversation)
             ->setParameter('now', $now)
             ->getQuery()
+            ->getSingleColumnResult();
+        if ($ids === []) {
+            return 0;
+        }
+        $reopened = ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('p')
+            ->update()
+            ->set('p.archivedAt', ':none')
+            ->where('p.id IN (:ids) AND p.archivedAt IS NOT NULL')
+            ->setParameter('none', null)
+            ->setParameter('ids', $ids)
+            ->getQuery()
             ->execute());
         $count = is_int($reopened) ? $reopened : 0;
-        if ($count > 0) {
-            // Managed rows read again (the UPDATE bypassed them).
-            foreach ($this->findBy(['conversation' => $conversation]) as $row) {
+        // Only the rows this manager holds are read again (the UPDATE bypassed them); 1.30: never the whole member list.
+        $unitOfWork = $this->getEntityManager()->getUnitOfWork();
+        foreach ($ids as $id) {
+            $row = $unitOfWork->tryGetById($id, ChatParticipant::class);
+            if ($row instanceof ChatParticipant) {
                 $this->getEntityManager()->refresh($row);
             }
         }

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Avatar\NullChatAvatarUrlResolver;
@@ -20,6 +21,7 @@ use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Contract\ChatSupportTopicProviderInterface;
 use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\TransactionRunnerAliasPass;
 use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
@@ -46,6 +48,7 @@ use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
 use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
@@ -85,7 +88,10 @@ return static function (ContainerConfigurator $container): void {
             '../../Doctrine/ChatUserLookAlikeException.php',
             '../../Avatar/AvatarUrlPolicy.php',
             '../../Doctrine/UnresolvedChatUser.php',
+            // 1.30: registered below under the bundle's own id; ChatKitWrites is a static helper.
+            '../../Transaction',
             // 1.27: registered by the extension only with doctrine.private_entity_manager: true.
+            '../../Doctrine/ChatKitRowLock.php',
             '../../Doctrine/{ChatKitEntityManager,ChatKitManagerRegistry,ChatKitSavepoint,PrivateEntityManagerConnection,PrivateEntityManagerDriver,PrivateEntityManagerMiddleware,PrivateManagerRepositoryFactory}.php',
         ]);
     // REQ-SF-004 rule 7: controllers are NOT autoconfigured. On Symfony >= 7.3 autoconfiguration tags every #[Route]
@@ -130,6 +136,11 @@ return static function (ContainerConfigurator $container): void {
             // per query by user, and a database switched between two requests is checked again. May be removed.
             service(StringReferenceSchemaGuard::class)->ignoreOnUninitialized(),
         ]));
+    // 1.30 (Beacon spec 239, recipe R1): the default runner under the bundle's own id. TransactionRunnerAliasPass
+    // aliases TransactionRunnerInterface to it only when the host defines none; the services are wired to the interface.
+    // The extension sets the manager name (the private manager's source name with doctrine.private_entity_manager).
+    $services->set(TransactionRunnerAliasPass::SERVICE_ID, ChatKitTransactionRunner::class)
+        ->args([service(EntityManagerInterface::class), service('doctrine'), null, 1]);
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).
     $services->alias(ChatServiceInterface::class, ChatService::class);

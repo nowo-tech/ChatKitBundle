@@ -35,6 +35,7 @@ final class NowoChatKitExtensionTableNamesTest extends TestCase
             'participant'       => 'nowo_chat_participant',
             'quick_reply'       => 'nowo_chat_quick_reply',
             'reaction'          => 'nowo_chat_reaction',
+            'ticket_counter'    => 'nowo_chat_ticket_counter',
             'user_settings'     => 'nowo_chat_user_settings',
         ], $container->getParameter('nowo_chat_kit.doctrine.tables'));
         self::assertSame('nowo_chat_message', $container->getParameter('nowo_chat_kit.doctrine.table.message'));

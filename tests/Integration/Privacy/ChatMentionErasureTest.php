@@ -21,6 +21,7 @@ use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Nowo\ChatKitBundle\Tests\Support\Transaction\CountingTransactionRunner;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Log\AbstractLogger;
 use ReflectionProperty;
@@ -286,12 +287,11 @@ final class ChatMentionErasureTest extends DatabaseTestCase
     public function testAFailureRollsTheErasureBack(): void
     {
         $em = $this->createMock(EntityManagerInterface::class);
-        $em->expects(self::once())->method('beginTransaction');
         $em->method('createQueryBuilder')->willThrowException(new RuntimeException('db gone'));
-        // The rollback fails too: the cause is never hidden.
-        $em->expects(self::once())->method('rollback')->willThrowException(new RuntimeException('no transaction'));
-        $em->expects(self::never())->method('commit');
-        $data = new ChatPersonalData($em, $this->get(ChatUserSettingsRepository::class), $this->get(ChatConversationRepository::class));
+        $em->expects(self::never())->method('flush');
+        // 1.30: the erasure is one unit of work of the transaction runner (which rolls it back and repairs the connection).
+        $runner = new CountingTransactionRunner();
+        $data   = new ChatPersonalData($em, $this->get(ChatUserSettingsRepository::class), $this->get(ChatConversationRepository::class), transactions: $runner);
 
         try {
             $data->eraseMentions($this->user('Ana'));
@@ -299,7 +299,8 @@ final class ChatMentionErasureTest extends DatabaseTestCase
         } catch (RuntimeException $exception) {
             self::assertSame('db gone', $exception->getMessage());
         }
-        self::assertSame([], $this->events);
+        self::assertSame(1, $runner->runs);
+        self::assertSame([], $this->events, 'no event and no broadcast after a failed erasure');
     }
 
     public function testAFailedEraseRollsEverythingBack(): void

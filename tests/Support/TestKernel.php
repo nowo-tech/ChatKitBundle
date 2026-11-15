@@ -14,6 +14,7 @@ use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatParticipantResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\TransactionRunnerAliasPass;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Nowo\ChatKitBundle\Tests\Support\Chat\CountingAvatarResolver;
@@ -32,10 +33,12 @@ use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCountingMiddleware;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\TestKindFilter;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Nowo\ChatKitBundle\Tests\Support\Transaction\ScriptedTransactionRunner;
 use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinChannelSource;
 use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinParticipantResolver;
 use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinRealtime;
 use Nowo\FormKitBundle\NowoFormKitBundle;
+use Nowo\TransactionContract\TransactionRunnerInterface;
 use Nowo\UiKitBundle\NowoUiKitBundle;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
@@ -90,6 +93,7 @@ final class TestKernel extends Kernel
         private readonly bool $grantReferences = false,
         private readonly bool $twinPortsKernel = false,
         private readonly bool $authorBadges = false,
+        private readonly bool $scriptedRunner = false,
     ) {
         // Own environment for the routing.controllers-only host: its container class must not collide with the
         // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir).
@@ -172,7 +176,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), self::privateEntityManager(), $this->authorBadges])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), self::privateEntityManager(), $this->authorBadges, $this->scriptedRunner])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -244,6 +248,12 @@ final class TestKernel extends Kernel
         if ($this->authorBadges) {
             $services->set(TestAuthorBadgeProvider::class);
             $services->alias(ChatAuthorBadgeProviderInterface::class, TestAuthorBadgeProvider::class);
+        }
+        // 1.30: a host that binds its own TransactionRunnerInterface (a DDD host, DoctrineDeadlockRetryBundle's adapter):
+        // ChatKit's default runner wrapped by a runner the tests script (a transient failure, a replay).
+        if ($this->scriptedRunner) {
+            $services->set(ScriptedTransactionRunner::class)->args([service(TransactionRunnerAliasPass::SERVICE_ID)]);
+            $services->alias(TransactionRunnerInterface::class, ScriptedTransactionRunner::class);
         }
         if ($this->sidebarProviders) {
             $services->set(TestSidebarProvider::class)->autoconfigure();

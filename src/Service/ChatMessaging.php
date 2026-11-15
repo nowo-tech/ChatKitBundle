@@ -20,6 +20,9 @@ use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
+use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
+use Nowo\TransactionContract\TransactionRunnerInterface;
 
 use function array_values;
 use function in_array;
@@ -33,6 +36,8 @@ use function in_array;
  */
 final readonly class ChatMessaging implements ChatMessagingInterface
 {
+    private TransactionRunnerInterface $transactions;
+
     /** Interface actions => voter attributes. */
     private const array ATTRIBUTES = [
         self::VIEW     => ChatVoter::VIEW,
@@ -60,7 +65,9 @@ final readonly class ChatMessaging implements ChatMessagingInterface
         private EntityManagerInterface $entityManager,
         private ChatVoter $voter,
         private ChatAccess $access,
+        ?TransactionRunnerInterface $transactions = null,
     ) {
+        $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
     }
 
     /**
@@ -194,8 +201,15 @@ final readonly class ChatMessaging implements ChatMessagingInterface
      */
     public function join(string $conversationUuid, ChatUserInterface $user): ChatParticipantView
     {
-        $participant = $this->chat->participant($this->conversation($user, $conversationUuid, ChatVoter::VIEW), $user);
-        $this->entityManager->flush();
+        $conversation = $this->conversation($user, $conversationUuid, ChatVoter::VIEW);
+        // 1.28: the look-alike refusal before any write; 1.30: one unit of work, and a row written by another request of
+        // the same person at the same moment is read again (idempotent).
+        $participant = $this->chat->participant($conversation, $user);
+        $participant = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function (bool $replay) use ($conversation, $user, $participant): ChatParticipant {
+            return $replay
+                ? $this->chat->participant(ChatKitWrites::attach($this->entityManager, $conversation), ChatKitWrites::attach($this->entityManager, $user))
+                : $participant;
+        }, true);
 
         return ChatParticipantView::of($participant);
     }
