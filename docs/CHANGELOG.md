@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.30.0] - 2026-11-15](#1300---2026-11-15)
 - [[1.29.0] - 2026-11-14](#1290---2026-11-14)
 - [[1.28.0] - 2026-11-14](#1280---2026-11-14)
 - [[1.27.1] - 2026-11-13](#1271---2026-11-13)
@@ -66,6 +67,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.30.0] - 2026-11-15
 
 Target 1.30.0 (minor). Load readiness for 1,000 concurrent users / 300 requests per second (Beacon spec 239): every chat
 write is one unit of work, a storage failure never answers 500, never touches the application's entity manager behind
@@ -1689,7 +1692,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   Spec Kit baseline (100% code inventory), Symfony 8.1 FrankenPHP demo with seeded accounts, Playwright e2e and
   screenshot.
 
-[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.29.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.30.0...HEAD
 [1.2.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/nowo-tech/ChatKitBundle/compare/v1.0.0...v1.1.0
