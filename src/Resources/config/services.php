@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Avatar\NullChatAvatarUrlResolver;
@@ -46,8 +47,10 @@ use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
 use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
+use Nowo\TransactionContract\TransactionRunnerInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -67,7 +70,10 @@ return static function (ContainerConfigurator $container): void {
         ->defaults()
             ->autowire()
             ->autoconfigure()
-            ->private();
+            ->private()
+            // 1.30 (Beacon spec 239, audits QD-M1 / QD-M3): every ChatKit write runs on ChatKit's own runner, never on
+            // a runner the application binds to TransactionRunnerInterface (that one drives the application's manager).
+            ->bind(TransactionRunnerInterface::class, service(ChatKitTransactionRunner::SERVICE_ID));
 
     $services->load('Nowo\\ChatKitBundle\\', '../../')
         ->exclude([
@@ -85,7 +91,10 @@ return static function (ContainerConfigurator $container): void {
             '../../Doctrine/ChatUserLookAlikeException.php',
             '../../Avatar/AvatarUrlPolicy.php',
             '../../Doctrine/UnresolvedChatUser.php',
+            // 1.30: registered below under the bundle's own id; ChatKitWrites is a static helper.
+            '../../Transaction',
             // 1.27: registered by the extension only with doctrine.private_entity_manager: true.
+            '../../Doctrine/ChatKitRowLock.php',
             '../../Doctrine/{ChatKitEntityManager,ChatKitManagerRegistry,ChatKitSavepoint,PrivateEntityManagerConnection,PrivateEntityManagerDriver,PrivateEntityManagerMiddleware,PrivateManagerRepositoryFactory}.php',
         ]);
     // REQ-SF-004 rule 7: controllers are NOT autoconfigured. On Symfony >= 7.3 autoconfiguration tags every #[Route]
@@ -129,7 +138,12 @@ return static function (ContainerConfigurator $container): void {
             // 1.27.1 (audit AOY-M2): the schema pass of the `string` mode guard. One check per request instead of one
             // per query by user, and a database switched between two requests is checked again. May be removed.
             service(StringReferenceSchemaGuard::class)->ignoreOnUninitialized(),
+            // 1.30: a shared manager closed by a failed chat write is replaced at the boundary (never mid-request).
+            service(ChatKitTransactionRunner::SERVICE_ID)->ignoreOnUninitialized(),
         ]));
+    // 1.30: ChatKit's runner (the extension sets the private manager's name and mode).
+    $services->set(ChatKitTransactionRunner::SERVICE_ID, ChatKitTransactionRunner::class)
+        ->args([service(EntityManagerInterface::class), service('doctrine'), null, false, 1, service('logger')->nullOnInvalid()]);
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).
     $services->alias(ChatServiceInterface::class, ChatService::class);

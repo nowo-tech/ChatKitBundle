@@ -8,6 +8,9 @@ use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Link\ChatLinks;
 use Nowo\ChatKitBundle\Repository\ChatMessageLinkRepository;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
+use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
+use Nowo\TransactionContract\TransactionRunnerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -42,6 +45,7 @@ final class ChatLinksBackfillCommand extends Command
         private readonly ChatLinks $links,
         private readonly ChatMessageLinkRepository $index,
         private readonly EntityManagerInterface $entityManager,
+        private readonly ?TransactionRunnerInterface $transactions = null,
     ) {
         parent::__construct();
     }
@@ -64,14 +68,25 @@ final class ChatLinksBackfillCommand extends Command
         $afterId  = max(0, (int) $input->getOption('after-id'));
         $messages = 0;
         $indexed  = 0;
+        $runner   = $this->transactions ?? new ChatKitTransactionRunner($this->entityManager);
         do {
             $ids = $this->index->candidateMessageIds($afterId, $batch);
-            foreach ($this->entityManager->getRepository(ChatMessage::class)->findBy(['id' => $ids], ['id' => 'ASC']) as $message) {
-                $indexed += $this->links->index($message);
-                ++$messages;
-                $afterId = (int) $message->getId();
-            }
-            $this->entityManager->flush();
+            // 1.30: one unit of work per batch, through ChatKit's runner.
+            [$batchMessages, $batchIndexed, $last] = ChatKitWrites::runRecovering($runner, $this->entityManager, function () use ($ids, $afterId): array {
+                $count   = 0;
+                $indexed = 0;
+                $last    = $afterId;
+                foreach ($this->entityManager->getRepository(ChatMessage::class)->findBy(['id' => $ids], ['id' => 'ASC']) as $message) {
+                    $indexed += $this->links->index($message);
+                    ++$count;
+                    $last = (int) $message->getId();
+                }
+
+                return [$count, $indexed, $last];
+            });
+            $messages += $batchMessages;
+            $indexed += $batchIndexed;
+            $afterId = $last;
             $this->entityManager->clear();
         } while (count($ids) === $batch);
         $io->success(sprintf('Indexed %d link(s) of %d message(s); last message id %d.', $indexed, $messages, $afterId));

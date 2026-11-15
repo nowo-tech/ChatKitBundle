@@ -227,6 +227,12 @@ final class SchemaNamesTest extends TestCase
                 'FK_F6AD5573A76ED395' => 'user_id -> test_user',
             ],
         ],
+        // 1.30: the ticket number counter (primary key only).
+        'nowo_chat_ticket_counter' => [
+            'indexes' => [],
+            'unique'  => [],
+            'fk'      => [],
+        ],
         'nowo_chat_user_settings' => [
             'indexes' => [],
             'unique'  => [
@@ -348,6 +354,12 @@ final class SchemaNamesTest extends TestCase
                 'FK_90F5D0C7537A1329' => 'message_id -> chat_message',
                 'FK_90F5D0C7A76ED395' => 'user_id -> test_user',
             ],
+        ],
+        // 1.30: the ticket number counter (primary key only).
+        'chat_ticket_counter' => [
+            'indexes' => [],
+            'unique'  => [],
+            'fk'      => [],
         ],
         'chat_user_settings' => [
             'indexes' => [],

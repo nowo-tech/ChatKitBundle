@@ -19,6 +19,9 @@ use Nowo\ChatKitBundle\Entity\ChatConversationLink;
  */
 class ChatConversationLinkRepository extends ServiceEntityRepository
 {
+    /** 1.30: the most pinned links one conversation lists (the largest `links.max_pinned`). */
+    public const int MAX_PINNED = 200;
+
     /**
      * Builds the repository for ChatConversationLink entities.
      *
@@ -46,6 +49,8 @@ class ChatConversationLinkRepository extends ServiceEntityRepository
         return $qb->where('l.conversation = :conversation')
             ->setParameter('conversation', $conversation)
             ->orderBy('l.id', 'ASC')
+            // 1.30 (Beacon spec 239): bounded read; `links.max_pinned` is at most MAX_PINNED under a row lock.
+            ->setMaxResults(self::MAX_PINNED)
             ->getQuery()
             ->getResult();
     }

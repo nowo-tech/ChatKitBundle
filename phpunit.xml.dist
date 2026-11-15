@@ -20,6 +20,10 @@
         <testsuite name="functional">
             <directory>tests/Functional</directory>
         </testsuite>
+        <!-- 1.30: two-session lock tests on a real server (CHAT_KIT_RACE_DATABASE_URL); skipped without it. -->
+        <testsuite name="database">
+            <directory>tests/Database</directory>
+        </testsuite>
     </testsuites>
 
     <source restrictNotices="true" restrictWarnings="true" ignoreIndirectDeprecations="true">

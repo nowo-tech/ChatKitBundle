@@ -6,7 +6,11 @@ namespace Nowo\ChatKitBundle\Repository;
 
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\LockMode;
 use Doctrine\Persistence\ManagerRegistry;
+use LogicException;
+use Nowo\ChatKitBundle\Doctrine\ChatKitRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
@@ -84,12 +88,18 @@ class ChatParticipantRepository extends ServiceEntityRepository
      *
      * @param ChatConversation $conversation The conversation
      * @param ChatUserInterface $user The user
+     * @param bool $lock 1.30: read with a shared row lock (inside a transaction)
      *
      * @return ChatParticipant|null The row, or null
      */
-    public function findOneFor(ChatConversation $conversation, ChatUserInterface $user): ?ChatParticipant
+    public function findOneFor(ChatConversation $conversation, ChatUserInterface $user, bool $lock = false): ?ChatParticipant
     {
-        $row = $this->findOneBy(['conversation' => $conversation] + $this->refs->criteria('user', $user));
+        $criteria = ['conversation' => $conversation] + $this->refs->criteria('user', $user);
+        // 1.30: a locking read (the latest committed row, whatever the transaction's snapshot) after a lost insert.
+        $row = $lock
+            ? $this->getEntityManager()->getUnitOfWork()->getEntityPersister(ChatParticipant::class)->load($criteria, null, null, [], LockMode::PESSIMISTIC_READ, 1)
+            : $this->findOneBy($criteria);
+        $row = $row instanceof ChatParticipant ? $row : null;
         if ($row instanceof ChatParticipant && !ChatUserReferences::same($row->getUser(), $user)) {
             // REQ-SEC-006 item 2: exactly this user's row (a folding collation may return a look-alike's). 1.28: the
             // read degrades to null and warns; assertInsertable() refuses the write that follows.
@@ -99,6 +109,43 @@ class ChatParticipantRepository extends ServiceEntityRepository
         }
 
         return $row;
+    }
+
+    /**
+     * 1.30 (Beacon spec 239, audit QD-M2): the user's participant row, written now when there is none, inside the caller's
+     * unit of work. The insert runs in a savepoint (ChatKitRows): when another request of the same person wrote the row
+     * at the same moment, only the savepoint is rolled back and that row is read, so the entity manager and every entity
+     * the request holds stay as they were.
+     *
+     * @param ChatConversation $conversation The conversation (stored)
+     * @param ChatUserInterface $user The user
+     * @param DateTimeImmutable $now Join time of a new row
+     *
+     * @throws ChatUserLookAlikeException When the column folds the user onto a look-alike's row (1.28)
+     * @throws UniqueConstraintViolationException When the row that took the key cannot be read (a caller's older snapshot)
+     *
+     * @return ChatParticipant The managed row
+     */
+    public function claim(ChatConversation $conversation, ChatUserInterface $user, DateTimeImmutable $now): ChatParticipant
+    {
+        $row = $this->findOneFor($conversation, $user);
+        if ($row instanceof ChatParticipant) {
+            return $row;
+        }
+        $this->assertInsertable($user);
+        // What the user reference listener checks for a row persisted through the unit of work.
+        $this->refs->assertExact();
+        $this->refs->assertKind($user);
+        $lost = ChatKitRows::insert($this->getEntityManager(), new ChatParticipant($conversation, $user, $now));
+        $row  = $this->findOneFor($conversation, $user, $lost instanceof UniqueConstraintViolationException);
+        if ($row instanceof ChatParticipant) {
+            return $row;
+        }
+        // A folding column took the key with a look-alike's row (the read above reported it).
+        $this->assertInsertable($user);
+
+        // The row is not visible to the caller's older snapshot (its own transaction, MySQL): a conflict (409).
+        throw $lost ?? new LogicException('The participant row was written but cannot be read.'); // @codeCoverageIgnore
     }
 
     /**
@@ -166,20 +213,35 @@ class ChatParticipantRepository extends ServiceEntityRepository
      */
     public function reopenArchived(ChatConversation $conversation, DateTimeImmutable $now): int
     {
-        $reopened = ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('p')
-            ->update()
-            ->set('p.archivedAt', ':none')
+        // 1.30 (Beacon spec 239): a plain read of the rows to reopen first, then an UPDATE by primary key. A busy channel
+        // gets a message every moment: the UPDATE … WHERE conversation = ? it replaces locked every participant row of
+        // the conversation (and the index gaps around them on MySQL) on every message, against every reader moving
+        // their cursor. Nearly always nothing is archived and nothing is written.
+        $ids = $this->createQueryBuilder('p')
+            ->select('p.id')
             ->where('p.conversation = :conversation AND p.archivedAt IS NOT NULL')
             ->andWhere('p.mutedUntil IS NULL OR p.mutedUntil <= :now')
-            ->setParameter('none', null)
             ->setParameter('conversation', $conversation)
             ->setParameter('now', $now)
             ->getQuery()
+            ->getSingleColumnResult();
+        if ($ids === []) {
+            return 0;
+        }
+        $reopened = ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('p')
+            ->update()
+            ->set('p.archivedAt', ':none')
+            ->where('p.id IN (:ids) AND p.archivedAt IS NOT NULL')
+            ->setParameter('none', null)
+            ->setParameter('ids', $ids)
+            ->getQuery()
             ->execute());
         $count = is_int($reopened) ? $reopened : 0;
-        if ($count > 0) {
-            // Managed rows read again (the UPDATE bypassed them).
-            foreach ($this->findBy(['conversation' => $conversation]) as $row) {
+        // Only the rows this manager holds are read again (the UPDATE bypassed them); 1.30: never the whole member list.
+        $unitOfWork = $this->getEntityManager()->getUnitOfWork();
+        foreach ($ids as $id) {
+            $row = $unitOfWork->tryGetById($id, ChatParticipant::class);
+            if ($row instanceof ChatParticipant) {
                 $this->getEntityManager()->refresh($row);
             }
         }
@@ -198,31 +260,6 @@ class ChatParticipantRepository extends ServiceEntityRepository
     public function assertInsertable(ChatUserInterface $user): void
     {
         $this->refs->assertNoLookAlike($this->userColumn(), $user);
-    }
-
-    /**
-     * 1.28 (audit PV-L2): whether a new participant row for `$user` could clash with the row of one of `$others` on a
-     * user column that folds (references equal but for case, accents, width or trailing spaces). Never outside
-     * `string` mode. ChatService::create() then writes that row only after a read proved the column exact.
-     *
-     * @param ChatUserInterface $user The user about to get a row
-     * @param list<ChatUserInterface> $others The users already getting one
-     *
-     * @return bool True when the two rows may be one row to a folding column
-     */
-    public function mayClash(ChatUserInterface $user, array $others): bool
-    {
-        $key = $this->refs->isStringMode() ? ChatUserReferences::key($user) : null;
-        if ($key === null) {
-            return false;
-        }
-        foreach ($others as $other) {
-            if (ChatUserReferences::mayFold($key, (string) ChatUserReferences::key($other))) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

@@ -32,6 +32,7 @@
 - [Formatting](#formatting)
 - [Web Push](#web-push)
 - [Messenger: retries and failures](#messenger-retries-and-failures)
+- [High load](#high-load)
 - [Timeouts](#timeouts)
 - [Privacy](#privacy)
 - [JSON API](#json-api)
@@ -1527,6 +1528,43 @@ inline.
 - **Idempotency:** a redelivered digest message is a no-op inside `digest.interval_minutes` (a "sent" marker in the
   cache pool); a redelivered push message sends the notification again with the same `tag`, which replaces the first one
   on the device.
+
+## High load
+
+1.30 (Beacon spec 239): ChatKit is built for 1,000 concurrent users / 300 requests per second on long-running workers
+(FrankenPHP worker mode with the kernel reset off, RoadRunner, Messenger consumers).
+
+- **One unit of work per write.** Every write runs in one transaction on ChatKit's own runner
+  (`nowo_chat_kit.transaction_runner`; the services type-hint nowo-tech/transaction-contract's
+  `TransactionRunnerInterface`). Side effects (Mercure, events, push, automatic replies) follow the commit. After a
+  failure no transaction is left open (the connection is closed only when the rollback fails, as after a MySQL deadlock
+  inside a nested flush), only the ChatKit rows the failed unit wrote are detached, and a transient failure surfaces as
+  `TransientStorageFailure`.
+- **Your entity manager is yours.** ChatKit never runs its writes on a runner you bind to `TransactionRunnerInterface`
+  (DoctrineDeadlockRetryBundle's adapter, your own): it drives your manager, would commit your pending work with a chat
+  write and reset your manager after a chat failure. With `doctrine.private_entity_manager: true` a chat write never
+  flushes, clears or closes your manager (REQ-ARCH-001 rule 6). Without it, ChatKit flushes your pending work on its
+  own before its unit, never resets or clears your manager, and replaces it only at a request boundary when a failed
+  chat flush closed it.
+- **No retries inside ChatKit.** Transient failures answer `503 Service Unavailable` with `Retry-After` (1 s) on
+  ChatKit's routes, a conflict `409 Conflict`, as `{ok: false, error: "unavailable" | "conflict"}` on the API. Your own
+  controllers that call the ChatKit services map failures themselves (or enable DoctrineDeadlockRetryBundle's
+  `http_mapping`).
+- **Races without failures.** A first opening that meets the row another request wrote at the same moment (a channel
+  membership, a read cursor, a reaction, a direct conversation) inserts in a savepoint and reads that row: nothing else is
+  undone and the caller's entities stay managed, so the next write of the same request works.
+- **One lock order.** Every unit of work that writes a conversation's rows locks the conversation row first (exclusive
+  for new lines, edits, pins, reactions, archives; shared for read cursors and mutes; `FOR NO KEY UPDATE` / `FOR SHARE`
+  on PostgreSQL). Messages of one busy conversation queue (each for a few milliseconds) instead of deadlocking, and read
+  cursors do not wait for each other. Markdown is rendered before the lock. Opening a ticket locks the draft and one
+  counter row, never the conversation table.
+- **Bounded reads.** Message pages, pins, mentions, the conversation list and the inbox are paged; the GDPR export
+  reads in pages of 500 and releases them; quick replies (50) and pinned links (200) are capped.
+- **Workers.** ChatKit resets its own per-request state at every boundary. For connections and managers left by other
+  code, enable DoctrineDeadlockRetryBundle's `worker_guard` (HTTP and Messenger), or DoctrineBundle's
+  `doctrine_ping_connection` / `doctrine_clear_entity_manager` Messenger middlewares.
+- **DDD hosts** use `TransactionRunnerInterface` in their own application services with the runner of their choice;
+  ChatKit's ports stay framework-free and ChatKit keeps its own runner.
 
 ## Timeouts
 

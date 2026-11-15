@@ -18,10 +18,12 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Repository\ChatConversationLinkRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageLinkRepository;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
+use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
+use Nowo\TransactionContract\TransactionRunnerInterface;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
-use Throwable;
 
 use function count;
 use function mb_strtolower;
@@ -37,6 +39,8 @@ use const DATE_ATOM;
  */
 final readonly class ChatLinks
 {
+    private TransactionRunnerInterface $transactions;
+
     /**
      * Builds the service.
      *
@@ -62,7 +66,9 @@ final readonly class ChatLinks
         private int $maxPinned = 20,
         private bool $enabled = true,
         private bool $channelMembers = true,
+        ?TransactionRunnerInterface $transactions = null,
     ) {
+        $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
     }
 
     /**
@@ -133,31 +139,34 @@ final readonly class ChatLinks
     {
         $url   = $this->urls->normalize($url);
         $title = $this->urls->title($title);
-        $link  = new ChatConversationLink($conversation, $by, $url, $this->urls->host($url), $title, $this->clock->now());
+        $host  = $this->urls->host($url);
+        $now   = $this->clock->now();
+        // The usual refusal before any write (1.30: nothing to roll back, the manager untouched).
+        if ($this->pinned->countFor($conversation) >= $this->maxPinned) {
+            throw new InvalidArgumentException('too_many_links');
+        }
         // Audit FZ-L2: the limit holds under concurrent adds — the conversation row is locked (SELECT … FOR UPDATE where
-        // the platform has it) and the count is checked again after the insert, inside one transaction.
-        $this->entityManager->beginTransaction();
-        try {
+        // the platform has it) and the count is checked again after the insert, inside one unit of work (1.30: run
+        // through the transaction runner; a refusal there rolls it back and discards the manager's pending changes).
+        $link = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($by, $conversation, $url, $host, $title, $now): ChatConversationLink {
+            // The row to lock must be managed: the same instance normally, loaded again after a failed earlier write of
+            // this request (the runner detached the chat rows).
+            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
             $this->entityManager->lock($conversation, LockMode::PESSIMISTIC_WRITE);
             if ($this->pinned->countFor($conversation) >= $this->maxPinned) {
                 throw new InvalidArgumentException('too_many_links');
             }
+            $link = new ChatConversationLink($conversation, $by, $url, $host, $title, $now);
             $this->entityManager->persist($link);
             $this->entityManager->flush();
             if ($this->pinned->countFor($conversation) > $this->maxPinned) {
                 throw new InvalidArgumentException('too_many_links');
             }
-            $this->entityManager->commit();
-        } catch (Throwable $exception) {
-            $this->entityManager->rollback();
-            if ($this->entityManager->contains($link)) {
-                $this->entityManager->detach($link);
-            }
 
-            throw $exception;
-        }
+            return $link;
+        });
         $this->events?->dispatch(new ChatLinkAddedEvent($link, $by));
-        $this->notifier->linksChanged($conversation);
+        $this->notifier->linksChanged($link->getConversation());
 
         return $link;
     }
@@ -181,8 +190,14 @@ final readonly class ChatLinks
         }
         $previousUrl   = $link->getUrl();
         $previousTitle = $link->getTitle();
-        $link->change($url, $this->urls->host($url), $title, $this->clock->now());
-        $this->entityManager->flush();
+        $host          = $this->urls->host($url);
+        $now           = $this->clock->now();
+        $link          = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($link, $url, $host, $title, $now): ChatConversationLink {
+            $link = ChatKitWrites::attach($this->entityManager, $link);
+            $link->change($url, $host, $title, $now);
+
+            return $link;
+        });
         $this->events?->dispatch(new ChatLinkUpdatedEvent($link, $by, $previousUrl, $previousTitle));
         $this->notifier->linksChanged($link->getConversation());
     }
@@ -196,8 +211,9 @@ final readonly class ChatLinks
     public function remove(ChatUserInterface $by, ChatConversationLink $link): void
     {
         $event = new ChatLinkRemovedEvent($link->getConversation(), $link->getUuid(), $link->getUrl(), $link->getTitle(), $by);
-        $this->entityManager->remove($link);
-        $this->entityManager->flush();
+        ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($link): void {
+            $this->entityManager->remove(ChatKitWrites::attach($this->entityManager, $link));
+        });
         $this->events?->dispatch($event);
         $this->notifier->linksChanged($event->conversation);
     }

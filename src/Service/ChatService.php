@@ -6,12 +6,12 @@ namespace Nowo\ChatKitBundle\Service;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
-use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatKitRows;
 use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -36,6 +36,10 @@ use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
+use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
+use Nowo\TransactionContract\TransactionRunnerInterface;
+use Nowo\TransactionContract\TransientStorageFailure;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
@@ -51,13 +55,18 @@ use function is_string;
  * support reopen on a new owner message) and notifies.
  *
  * 1.24: the default implementation of ChatServiceInterface (aliased to it); type-hint the interface in your code.
+ *
+ * 1.30 (Beacon spec 239, load readiness): every write is one unit of work run through TransactionRunnerInterface
+ * (ChatKit's one-attempt default, or the runner the host binds), and the realtime publish, events and automatic replies
+ * happen after it committed. A storage failure therefore leaves no half-written message, no transaction open and no
+ * closed entity manager; a transient one surfaces as TransientStorageFailure (503 + Retry-After on ChatKit's routes).
+ * A conversation's activity is bumped first in the unit of work, under a row lock and only forward, so two messages in
+ * the same conversation queue instead of deadlocking. A first opening (a direct conversation, a channel membership, a
+ * read cursor) that loses an insert race to another request re-reads the row the other one wrote.
  */
 final readonly class ChatService implements ChatServiceInterface
 {
-    private const string CHANNEL_INSERT_SAVEPOINT = 'nowo_chat_channel_insert';
-
-    /** 1.28 (audit PV-D1): the savepoint of a new conversation between look-alikes inside the caller's transaction. */
-    private const string LOOK_ALIKE_SAVEPOINT = 'nowo_chat_look_alike_create';
+    private TransactionRunnerInterface $transactions;
 
     /**
      * Builds the service from the entity manager, repositories, renderer, notifier and the offered reactions.
@@ -69,6 +78,7 @@ final readonly class ChatService implements ChatServiceInterface
      * @param ChatMessageMentionRepository|null $mentionRows Mention rows (removed with a deleted message, read with the thread)
      * @param ChatReferences|null $references Validates #reference tokens; null keeps them as written
      * @param ChatLinks|null $links 1.19: validates the link cards and keeps the link index; null keeps cards as written and indexes nothing
+     * @param TransactionRunnerInterface|null $transactions 1.30: runs every write unit of work; null uses ChatKit's default runner
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -87,7 +97,10 @@ final readonly class ChatService implements ChatServiceInterface
         private ?ChatMessageRepository $messageRepository = null,
         private ?ChatAutoReplier $autoReplies = null,
         private ?ChatLinks $links = null,
+        ?TransactionRunnerInterface $transactions = null,
     ) {
+        // 1.30: the container passes the runner bound to TransactionRunnerInterface; direct construction gets the default.
+        $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
     }
 
     /**
@@ -105,7 +118,12 @@ final readonly class ChatService implements ChatServiceInterface
             return $conversation;
         }
 
-        return $this->create(ChatConversation::direct($actor, $other, $this->clock->now()), [$actor, $other]);
+        try {
+            return $this->create(fn (ChatUserInterface ...$users): ChatConversation => ChatConversation::direct($users[0], $users[1], $this->clock->now()), [$actor, $other]);
+        } catch (UniqueConstraintViolationException $lost) {
+            // 1.30: another request opened the pair's conversation at the same moment: open that one.
+            return $this->conversations->findDirect($actor, $other) ?? throw $lost;
+        }
     }
 
     /**
@@ -125,10 +143,16 @@ final readonly class ChatService implements ChatServiceInterface
     {
         ChatChannelKey::assertValid($channel->key);
         $conversation = $this->conversations->findChannel($channel->key) ?? $this->createChannel($actor, $channel);
-        $this->participant($conversation, $actor);
-        $this->entityManager->flush();
+        // 1.28: the look-alike refusal before any write. 1.30: one unit of work; a membership another request of the
+        // same person wrote first is read instead (the insert runs in a savepoint: nothing else is undone, audit QD-M2).
+        $this->checkMember($conversation, $actor);
 
-        return $conversation;
+        return $this->write(function () use ($conversation, $actor): ChatConversation {
+            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+            $this->participants->claim($conversation, $actor, $this->clock->now());
+
+            return $conversation;
+        });
     }
 
     /**
@@ -144,10 +168,15 @@ final readonly class ChatService implements ChatServiceInterface
     public function openSupport(ChatUserInterface $owner, ?array $context = null): ChatConversation
     {
         $conversation = $this->conversations->findSupportFor($owner)
-            ?? $this->create(ChatConversation::support($owner, $this->clock->now()), [$owner]);
+            ?? $this->create(fn (ChatUserInterface ...$users): ChatConversation => ChatConversation::support($users[0], $this->clock->now()), [$owner]);
         if ($context !== null) {
-            $conversation->setSupportContext(is_string($context['url'] ?? null) ? $context['url'] : null, is_string($context['label'] ?? null) ? $context['label'] : null);
-            $this->entityManager->flush();
+            $conversation = $this->write(function () use ($conversation, $context): ChatConversation {
+                $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+                // @igor-ignore - Doctrine entity (one row), not a shared worker service.
+                $conversation->setSupportContext(is_string($context['url'] ?? null) ? $context['url'] : null, is_string($context['label'] ?? null) ? $context['label'] : null);
+
+                return $conversation;
+            });
         }
 
         return $conversation;
@@ -173,19 +202,29 @@ final readonly class ChatService implements ChatServiceInterface
         $body                       = $this->links?->normalizeCards($body) ?? $body;
         $body                       = $this->references?->validate($conversation, $author, $body) ?? $body;
         [$body, $mentioned, $group] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, [], null];
-        // 1.28 (audit PV-D7): the author's participant row first, so a look-alike refusal comes before any write (the
-        // mention sync may flush the message early).
-        $participant = $this->participant($conversation, $author);
-        $now         = $this->clock->now();
-        $message     = new ChatMessage($conversation, $author, $body, $this->markdown->render($body), $now);
-        $message->mentionAll($group);
-        $this->entityManager->persist($message);
-        // 1.19: the message's links go to the index of the Links panel (flushed with the message).
-        $this->links?->index($message);
-        $mentioned = $this->mentions?->sync($message, $mentioned) ?? [];
-        $conversation->touch($now);
-        $reopened = $this->supportTransition($conversation, $author);
-        $this->publish($message, $author, $participant);
+        // 1.28 (audit PV-D7): a look-alike refusal of the author's participant row comes before any write.
+        $this->checkMember($conversation, $author);
+        // 1.30 (audit QD-I2): rendered before the unit of work, not under the conversation's row lock.
+        $html = $this->markdown->render($body);
+        $now  = $this->clock->now();
+        // 1.30: one unit of work (message, mentions, links, activity, support status, read cursor, reopened lists).
+        [$message, $mentioned, $reopened] = $this->write(function () use ($author, $conversation, $body, $html, $mentioned, $group, $now): array {
+            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+            $this->bump($conversation, $now);
+            $participant = $this->participants->claim($conversation, $author, $now);
+            $message     = new ChatMessage($conversation, $author, $body, $html, $now);
+            $message->mentionAll($group);
+            $this->entityManager->persist($message);
+            // 1.19: the message's links go to the index of the Links panel (flushed with the message).
+            $this->links?->index($message);
+            $mentioned = $this->mentions?->sync($message, $mentioned) ?? [];
+            $reopened  = $this->supportTransition($conversation, $author);
+            $this->store($message, $participant);
+
+            return [$message, $mentioned, $reopened];
+        });
+        $conversation = $message->getConversation();
+        $this->announce($message);
         if ($reopened) {
             $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $author));
             if ($conversation->isTicket()) {
@@ -196,8 +235,13 @@ final readonly class ChatService implements ChatServiceInterface
         if ($mentioned !== []) {
             $this->events?->dispatch(new ChatMentionEvent($message, $mentioned, $conversation));
         }
-        // 1.11: automatic replies of the other person (direct) or of the people mentioned (channels).
-        $this->autoReplies?->afterSend($message, array_values($mentioned));
+        // 1.11: automatic replies of the other person (direct) or of the people mentioned (channels), after the commit.
+        try {
+            $this->autoReplies?->afterSend($message, array_values($mentioned));
+        } catch (TransientStorageFailure) {
+            // 1.30: the message is committed. Automatic replies are best effort: a transient failure of theirs must not
+            // report the sent message as failed (the client would send it again).
+        }
 
         return $message;
     }
@@ -212,14 +256,22 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function buzz(ChatUserInterface $author, ChatConversation $conversation): ChatMessage
     {
-        // 1.28 (audit PV-L7): the author's participant row first, as in send(), so a look-alike refusal leaves no buzz
-        // pending in the unit of work for a later flush (the next request of a worker) to store.
-        $participant = $this->participant($conversation, $author);
-        $message     = ChatMessage::buzz($conversation, $author, $this->clock->now());
-        $this->entityManager->persist($message);
-        $conversation->touch($message->getCreatedAt());
+        // 1.28 (audit PV-L7): a look-alike refusal comes before any write, so nothing stays pending.
+        $this->checkMember($conversation, $author);
+        $now     = $this->clock->now();
+        $message = $this->write(function () use ($author, $conversation, $now): ChatMessage {
+            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+            $this->bump($conversation, $now);
+            $participant = $this->participants->claim($conversation, $author, $now);
+            $message     = ChatMessage::buzz($conversation, $author, $now);
+            $this->entityManager->persist($message);
+            $this->store($message, $participant);
 
-        return $this->publish($message, $author, $participant);
+            return $message;
+        });
+        $this->announce($message);
+
+        return $message;
     }
 
     /**
@@ -241,11 +293,19 @@ final readonly class ChatService implements ChatServiceInterface
         [$body, $mentioned, $group] = $author instanceof ChatUserInterface && $this->mentions instanceof ChatMentions
             ? $this->mentions->resolve($message->getConversation(), $author, $body, $message->getMentionAll())
             : [$body, [], null];
-        $message->edit($body, $this->markdown->render($body), $this->clock->now());
-        $message->mentionAll($group);
-        $added = $this->mentions?->sync($message, $mentioned) ?? [];
-        $this->links?->index($message);
-        $this->entityManager->flush();
+        $html              = $this->markdown->render($body);
+        $now               = $this->clock->now();
+        [$message, $added] = $this->write(function () use ($message, $body, $html, $now, $mentioned, $group): array {
+            $message = ChatKitWrites::attach($this->entityManager, $message);
+            // The conversation's row first, as every unit of work that writes its rows (one lock order: audit QD-L2).
+            $this->conversations->lockActivity($message->getConversation());
+            $message->edit($body, $html, $now);
+            $message->mentionAll($group);
+            $added = $this->mentions?->sync($message, $mentioned) ?? [];
+            $this->links?->index($message);
+
+            return [$message, $added];
+        });
         $this->notifier->messageUpdated($message, $this->reactionsOf($message));
         if ($added !== []) {
             $this->events?->dispatch(new ChatMentionEvent($message, $added, $message->getConversation(), true));
@@ -261,17 +321,23 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function delete(ChatUserInterface $by, ChatMessage $message): void
     {
-        $message->delete($by, $this->clock->now());
         // A deleted message leaves the pinned bar.
         $wasPinned = $message->getPinnedAt() instanceof DateTimeImmutable;
-        $message->pin(null, null);
-        foreach ($this->reactionRepository->findBy(['message' => $message]) as $reaction) {
-            $this->entityManager->remove($reaction);
-        }
-        $this->mentionRows?->removeFor($message);
-        // 1.19: a deleted message leaves the Links panel.
-        $this->links?->forget($message);
-        $this->entityManager->flush();
+        $now       = $this->clock->now();
+        $message   = $this->write(function () use ($by, $message, $now): ChatMessage {
+            $message = ChatKitWrites::attach($this->entityManager, $message);
+            $this->conversations->lockActivity($message->getConversation());
+            $message->delete($by, $now);
+            $message->pin(null, null);
+            foreach ($this->reactionRepository->findBy(['message' => $message]) as $reaction) {
+                $this->entityManager->remove($reaction);
+            }
+            $this->mentionRows?->removeFor($message);
+            // 1.19: a deleted message leaves the Links panel.
+            $this->links?->forget($message);
+
+            return $message;
+        });
         $this->notifier->messageUpdated($message);
         if ($wasPinned) {
             $this->notifier->pinsChanged($message->getConversation());
@@ -295,15 +361,25 @@ final readonly class ChatService implements ChatServiceInterface
         if (!in_array($emoji, $this->reactions, true)) {
             throw new InvalidArgumentException('reaction');
         }
-        $existing = $this->reactionRepository->findOneFor($message, $user, $emoji);
-        if ($existing instanceof ChatReaction) {
-            $this->entityManager->remove($existing);
-        } else {
-            // 1.28: refused before the insert when the read found a look-alike's reaction (folding user column).
+        if (!$this->reactionRepository->findOneFor($message, $user, $emoji) instanceof ChatReaction) {
+            // 1.28: refused before any write when the read found a look-alike's reaction (folding user column).
             $this->reactionRepository->assertInsertable($user);
-            $this->entityManager->persist(new ChatReaction($message, $user, $emoji, $this->clock->now()));
         }
-        $this->entityManager->flush();
+        $now     = $this->clock->now();
+        $message = $this->write(function () use ($user, $message, $emoji, $now): ChatMessage {
+            $message = ChatKitWrites::attach($this->entityManager, $message);
+            $this->conversations->lockActivity($message->getConversation());
+            // Read again under the lock: a toggle of the same reaction from another tab is one step, not two.
+            $existing = $this->reactionRepository->findOneFor($message, $user, $emoji);
+            if ($existing instanceof ChatReaction) {
+                $this->entityManager->remove($existing);
+            } else {
+                // 1.30 (audit QD-M2): a reaction another request added at the same moment is kept (savepoint insert).
+                $this->reactionRepository->claim($message, $user, $emoji, $now);
+            }
+
+            return $message;
+        });
         $reactions = $this->reactionsOf($message);
         $this->notifier->messageUpdated($message, $reactions);
 
@@ -318,8 +394,15 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function resolveSupport(ChatUserInterface $agent, ChatConversation $conversation): void
     {
-        $conversation->resolve($agent, $this->clock->now());
-        $this->entityManager->flush();
+        // 1.30 (audit QD-M1): the refusal before the unit of work.
+        $this->assertSupport($conversation);
+        $now          = $this->clock->now();
+        $conversation = $this->write(function () use ($agent, $conversation, $now): ChatConversation {
+            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+            $conversation->resolve($agent, $now);
+
+            return $conversation;
+        });
         $this->notifier->supportStatusChanged($conversation);
         $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $agent));
     }
@@ -335,8 +418,13 @@ final readonly class ChatService implements ChatServiceInterface
         if (!$conversation->isResolved()) {
             return;
         }
-        $conversation->reopen();
-        $this->entityManager->flush();
+        $this->assertSupport($conversation);
+        $conversation = $this->write(function () use ($conversation): ChatConversation {
+            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+            $conversation->reopen();
+
+            return $conversation;
+        });
         $this->notifier->supportStatusChanged($conversation);
         $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $agent));
     }
@@ -353,10 +441,22 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function markRead(ChatUserInterface $user, ChatConversation $conversation, int $messageId): bool
     {
-        $moved = $this->participant($conversation, $user)->markReadUpTo($messageId);
-        $this->entityManager->flush();
+        $member = $this->checkMember($conversation, $user);
+        $now    = $this->clock->now();
+        // 1.30: the cursor and the mention rows it marks read in one unit of work. The conversation's row is locked
+        // first, shared (readers do not wait for each other) unless the cursor's row must be created, so it never meets a
+        // new message's unit of work in the other order (audit QD-L2).
+        $moved = $this->write(function () use ($user, $conversation, $messageId, $member, $now): bool {
+            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+            $this->conversations->lockActivity($conversation, $member);
+            $moved = $this->participants->claim($conversation, $user, $now)->markReadUpTo($messageId);
+            if ($moved) {
+                $this->mentionRows?->markReadUpTo($user, $conversation, $messageId, $now);
+            }
+
+            return $moved;
+        });
         if ($moved) {
-            $this->mentionRows?->markReadUpTo($user, $conversation, $messageId, $this->clock->now());
             $this->notifier->read($conversation, $user, $messageId);
         }
 
@@ -406,20 +506,29 @@ final readonly class ChatService implements ChatServiceInterface
         if ($pinned && $this->messageRepository instanceof ChatMessageRepository && count($this->messageRepository->findPinned($conversation, $this->maxPins)) >= $this->maxPins) {
             throw new InvalidArgumentException('too_many_pins');
         }
-        $now  = $this->clock->now();
-        $line = null;
-        $message->pin($user, $pinned ? $now : null);
-        if ($pinned) {
-            $line = ChatMessage::pinLine($conversation, $user, $message, $now);
-            $this->entityManager->persist($line);
-            $conversation->touch($now);
-        }
-        $this->entityManager->flush();
+        $now              = $this->clock->now();
+        [$message, $line] = $this->write(function () use ($user, $message, $pinned, $now): array {
+            $message      = ChatKitWrites::attach($this->entityManager, $message);
+            $conversation = $message->getConversation();
+            $line         = null;
+            if ($pinned) {
+                $this->bump($conversation, $now);
+            } else {
+                $this->conversations->lockActivity($conversation);
+            }
+            $message->pin($user, $pinned ? $now : null);
+            if ($pinned) {
+                $line = ChatMessage::pinLine($conversation, $user, $message, $now);
+                $this->entityManager->persist($line);
+            }
+
+            return [$message, $line];
+        });
         $this->notifier->messageUpdated($message);
         if ($line instanceof ChatMessage) {
             $this->notifier->botMessage($line);
         }
-        $this->notifier->pinsChanged($conversation);
+        $this->notifier->pinsChanged($message->getConversation());
     }
 
     /**
@@ -441,10 +550,14 @@ final readonly class ChatService implements ChatServiceInterface
     {
         $body = $this->normalize($body);
         $now  = $this->clock->now();
-        $line = ChatMessage::system($conversation, $body, $domain, $params, $now);
-        $this->entityManager->persist($line);
-        $conversation->touch($now);
-        $this->entityManager->flush();
+        $line = $this->write(function () use ($conversation, $body, $domain, $params, $now): ChatMessage {
+            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+            $this->bump($conversation, $now);
+            $line = ChatMessage::system($conversation, $body, $domain, $params, $now);
+            $this->entityManager->persist($line);
+
+            return $line;
+        });
         $this->notifier->botMessage($line);
 
         return $line;
@@ -463,14 +576,20 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function mute(ChatUserInterface $user, ChatConversation $conversation, ?DateTimeImmutable $until): ?ChatParticipant
     {
-        $participant = $until instanceof DateTimeImmutable ? $this->participant($conversation, $user) : $this->participants->findOneFor($conversation, $user);
-        if (!$participant instanceof ChatParticipant) {
+        $member = $until instanceof DateTimeImmutable ? $this->checkMember($conversation, $user) : $this->participants->findOneFor($conversation, $user) instanceof ChatParticipant;
+        if (!$member && !$until instanceof DateTimeImmutable) {
             return null;
         }
-        $participant->muteUntil($until);
-        $this->entityManager->flush();
+        $now = $this->clock->now();
 
-        return $participant;
+        return $this->write(function () use ($user, $conversation, $until, $member, $now): ChatParticipant {
+            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+            $this->conversations->lockActivity($conversation, $member);
+            $participant = $this->participants->claim($conversation, $user, $now);
+            $participant->muteUntil($until);
+
+            return $participant;
+        });
     }
 
     /**
@@ -482,11 +601,20 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function archive(ChatUserInterface $user, array $conversations, bool $archived): void
     {
-        $now = $this->clock->now();
         foreach ($conversations as $conversation) {
-            $this->participant($conversation, $user)->archive($archived ? $now : null);
+            // 1.28: every look-alike refusal before the first write.
+            $this->checkMember($conversation, $user);
         }
-        $this->entityManager->flush();
+        // One lock order for several conversations: by id.
+        usort($conversations, static fn (ChatConversation $a, ChatConversation $b): int => $a->getId() <=> $b->getId());
+        $now = $this->clock->now();
+        $this->write(function () use ($user, $conversations, $archived, $now): void {
+            foreach ($conversations as $conversation) {
+                $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+                $this->conversations->lockActivity($conversation);
+                $this->participants->claim($conversation, $user, $now)->archive($archived ? $now : null);
+            }
+        });
     }
 
     /**
@@ -534,51 +662,116 @@ final readonly class ChatService implements ChatServiceInterface
         return $body;
     }
 
-    private function publish(ChatMessage $message, ChatUserInterface $author, ?ChatParticipant $participant = null): ChatMessage
+    /**
+     * Inside the unit of work of a new message: stores it (its id), moves the author's read cursor onto it and brings
+     * the conversation back to the lists of those who closed it.
+     */
+    private function store(ChatMessage $message, ChatParticipant $participant): void
     {
-        $participant ??= $this->participant($message->getConversation(), $author);
+        // The id of the new message (the author's read cursor points at it).
         $this->entityManager->flush();
         // The author has read everything up to their own message.
         $participant->markReadUpTo((int) $message->getId());
-        $this->entityManager->flush();
         // 1.10: a new message brings the conversation back to the lists of those who closed it (not muted ones; a
         // resolved or closed ticket stays closed).
         $conversation = $message->getConversation();
         if (!$conversation->isSupport() || !in_array($conversation->getSupportStatus(), [SupportStatus::Resolved, SupportStatus::Closed], true)) {
-            $this->participants->reopenArchived($conversation, $this->clock->now());
+            $this->participants->reopenArchived($conversation, $message->getCreatedAt());
         }
-        $this->notifier->messageCreated($message);
-        $this->events?->dispatch(new ChatMessageSentEvent($message));
-
-        return $message;
     }
 
     /**
-     * The first opening of a channel: the event and the insert in one transaction, then the row, whoever wrote it.
+     * After the commit: the realtime publish and ChatMessageSentEvent of a new message.
+     */
+    private function announce(ChatMessage $message): void
+    {
+        $this->notifier->messageCreated($message);
+        $this->events?->dispatch(new ChatMessageSentEvent($message));
+    }
+
+    /**
+     * 1.30: the first statement of a unit of work that adds a line to the conversation. It locks the conversation row
+     * (exclusive) before any insert takes a shared foreign-key lock on it, so two messages of one conversation queue
+     * instead of deadlocking (MySQL / MariaDB), and moves the activity time forward only: a concurrent message that
+     * committed a later time is never set back.
+     */
+    private function bump(ChatConversation $conversation, DateTimeImmutable $now): void
+    {
+        $stored = $this->conversations->lockActivity($conversation);
+        if (!$stored instanceof DateTimeImmutable || $now > $stored) {
+            $conversation->touch($now);
+        }
+    }
+
+    /**
+     * Before any write (1.28): whether the user has a participant row; without one, a look-alike's row read in the same
+     * column refuses the insert that would clash with it (nothing is pending when it throws).
+     *
+     * @throws ChatUserLookAlikeException When the user's row would fold onto a look-alike's
+     *
+     * @return bool Whether the row exists
+     */
+    private function checkMember(ChatConversation $conversation, ChatUserInterface $user): bool
+    {
+        if ($this->participants->findOneFor($conversation, $user) instanceof ChatParticipant) {
+            return true;
+        }
+        $this->participants->assertInsertable($user);
+
+        return false;
+    }
+
+    /**
+     * 1.30 (audit QD-M1): the support-only refusal of resolve / reopen, before the unit of work.
+     */
+    private function assertSupport(ChatConversation $conversation): void
+    {
+        if (!$conversation->isSupport()) {
+            throw new LogicException('Only support conversations can be resolved or reopened.');
+        }
+    }
+
+    /**
+     * 1.30: runs one write unit of work through ChatKit's runner (flushed inside it).
+     *
+     * @template T
+     *
+     * @param callable(): T $work
+     *
+     * @return T
+     */
+    private function write(callable $work): mixed
+    {
+        return ChatKitWrites::runRecovering($this->transactions, $this->entityManager, $work);
+    }
+
+    /**
+     * The first opening of a channel: the event and the insert in one unit of work (ChatChannelOpeningEvent once per
+     * attempt), then the row, whoever wrote it.
      *
      * @throws ChatChannelDeniedException When a listener refused and the channel still does not exist
      * @throws UniqueConstraintViolationException When another opening won and its row cannot be read here (a caller's own transaction on a repeatable read)
      */
     private function createChannel(ChatUserInterface $actor, ChatChannel $channel): ChatConversation
     {
-        $opening = new ChatChannelOpeningEvent($channel, $actor);
-        $failure = null;
-        $lost    = null;
-        // A listener's `SELECT … FOR UPDATE` lasts until this commit. The connection's transaction, not the EntityManager's:
-        // that one flushes pending changes whatever happened, and closes the EntityManager on any exception. What a listener
-        // flushed stays even if it throws afterwards, so its exception leaves the closure as a value.
-        // @igor-ignore Runs and ends inside this call; the connection does not keep it.
-        $this->entityManager->getConnection()->transactional(function () use ($opening, $channel, &$failure, &$lost): void {
+        // A listener's `SELECT … FOR UPDATE` lasts until this commit. The connection's transaction, not the
+        // EntityManager's: that one flushes pending changes whatever happened (audit GZ-L2: a refusal never flushes
+        // what is pending). What a listener flushed stays even if it throws afterwards, so its exception leaves the unit
+        // of work as a value. 1.30: a connection-only runner instead of Connection::transactional(), whose rollback
+        // failed after a nested deadlock (savepoint gone, 1305) and hid the deadlock: the connection is repaired and a
+        // transient failure surfaces as TransientStorageFailure (503). The row goes in through DBAL, so the manager has
+        // nothing of this unit to flush or discard.
+        $runner = ChatKitTransactionRunner::forConnection($this->entityManager->getConnection());
+        // @igor-ignore - The runner calls the closure once, now, and keeps nothing (stateless, per call).
+        [$opening, $failure, $lost] = $runner->run(function () use ($actor, $channel): array {
+            $opening = new ChatChannelOpeningEvent($channel, $actor);
             try {
                 $this->events?->dispatch($opening);
             } catch (Throwable $thrown) {
-                $failure = $thrown;
+                return [$opening, $thrown, null];
+            }
 
-                return;
-            }
-            if (!$opening->isDenied()) {
-                $lost = $this->insertChannel($channel);
-            }
+            return [$opening, null, $opening->isDenied() ? null : $this->insertChannel($channel)];
         });
         if ($failure instanceof Throwable) {
             throw $failure;
@@ -597,135 +790,50 @@ final readonly class ChatService implements ChatServiceInterface
     }
 
     /**
-     * Writes the channel's row through DBAL: a flush that hits the unique key closes the EntityManager, and losing to
-     * another first opening of the same channel is not an error. The savepoint keeps the transaction usable after that
-     * loss (Postgres aborts it otherwise). It is explicit because a nested DBAL 3 transaction uses one only when the host
-     * enabled `use_savepoints`, and otherwise makes the outer commit fail.
+     * Writes the channel's row through DBAL in a savepoint (ChatKitRows): losing to another first opening of the same
+     * channel is not an error and leaves the transaction usable (Postgres aborts it otherwise).
      *
      * @return UniqueConstraintViolationException|null What stopped the insert; null when this call wrote the row
      */
     private function insertChannel(ChatChannel $channel): ?UniqueConstraintViolationException
     {
-        $conversation = ChatConversation::channel($channel->key, $this->clock->now());
-        $connection   = $this->entityManager->getConnection();
-        $metadata     = $this->entityManager->getClassMetadata(ChatConversation::class);
-        $idColumn     = $metadata->getSingleIdentifierColumnName();
-        // A sequence has to be asked before the insert: its column has no default. An identity column fills itself.
-        $id = $metadata->idGenerator->isPostInsertGenerator() ? [] : [$idColumn => $metadata->idGenerator->generateId($this->entityManager, $conversation)];
-        $connection->createSavepoint(self::CHANNEL_INSERT_SAVEPOINT);
-        try {
-            $connection->insert($metadata->getTableName(), $id + [
-                $metadata->getColumnName('uuid')          => $conversation->getUuid(),
-                $metadata->getColumnName('kind')          => $conversation->getKind()->value,
-                $metadata->getColumnName('channelKey')    => $channel->key,
-                $metadata->getColumnName('lastMessageAt') => $conversation->getLastMessageAt(),
-                $metadata->getColumnName('createdAt')     => $conversation->getCreatedAt(),
-            ], [
-                $idColumn                                 => Types::INTEGER,
-                $metadata->getColumnName('lastMessageAt') => Types::DATETIME_IMMUTABLE,
-                $metadata->getColumnName('createdAt')     => Types::DATETIME_IMMUTABLE,
-            ]);
-        } catch (UniqueConstraintViolationException $lost) {
-            $connection->rollbackSavepoint(self::CHANNEL_INSERT_SAVEPOINT);
-            $connection->releaseSavepoint(self::CHANNEL_INSERT_SAVEPOINT);
-
-            return $lost;
-        }
-        $connection->releaseSavepoint(self::CHANNEL_INSERT_SAVEPOINT);
-
-        return null;
+        return ChatKitRows::insert($this->entityManager, ChatConversation::channel($channel->key, $this->clock->now()));
     }
 
     /**
-     * Persist a new conversation with its participant rows. Two simultaneous first messages to the same pair
-     * hit the unique key and one request fails; the client retries the open call, which then finds it.
+     * A new conversation with its participant rows, in one unit of work.
      *
-     * 1.28 (audit PV-L2, `string` mode): a participant whose reference may fold onto an earlier one's (`Bob` next to
-     * `bob`) is written only after the others are stored and a read showed the user column keeps them apart. On a
-     * column that folds that read returns the look-alike's row and ChatUserLookAlikeException is thrown: the two
-     * inserts would otherwise clash inside one flush and close the entity manager. On exact columns both rows are
-     * written, one flush later. Audit PV-D1: both phases run in one transaction (a savepoint inside the caller's own),
-     * rolled back on the refusal, and the conversation and rows written by the first phase are detached, so nothing
-     * half-written stays and no cleanup statement can hide the refusal. Audit PV-L6: pending changes of the caller are
-     * flushed before that transaction starts, so a refusal never rolls them back.
+     * 1.30 (audit QD-M2): the conversation's row goes in through a savepoint (ChatKitRows). Two simultaneous first
+     * messages to the same pair hit its unique key: the loser's unit of work is rolled back with nothing else undone
+     * (no manager reset, the caller's entities stay managed) and the caller reads the winner's row.
      *
+     * 1.28 (audit PV-L2, `string` mode): the participant rows are claimed one by one; the read before each insert finds
+     * a look-alike's row on a column that folds (`Bob` next to `bob`), and ChatUserLookAlikeException is thrown. Audit
+     * PV-D1: the whole unit is rolled back on the refusal (a savepoint inside the caller's own transaction) and only
+     * ChatKit's rows are detached. Audit PV-L6: ChatKit's runner flushes the caller's pending changes on their own
+     * first, so a refusal never rolls them back.
+     *
+     * @param callable(ChatUserInterface ...): ChatConversation $make Builds the new conversation
      * @param list<ChatUserInterface> $participants
      *
      * @throws ChatUserLookAlikeException When the participant column folds two of the participants into one
+     * @throws UniqueConstraintViolationException When another request created the same conversation first
      */
-    private function create(ChatConversation $conversation, array $participants): ChatConversation
+    private function create(callable $make, array $participants): ChatConversation
     {
-        $first = [];
-        $later = [];
-        foreach ($participants as $user) {
-            if ($this->participants->mayClash($user, $first)) {
-                $later[] = $user;
-            } else {
-                $first[] = $user;
+        return $this->write(function () use ($make, $participants): ChatConversation {
+            $new  = $make(...$participants);
+            $lost = ChatKitRows::insert($this->entityManager, $new);
+            if ($lost instanceof UniqueConstraintViolationException) {
+                throw $lost;
             }
-        }
-        if ($later === []) {
-            $this->entityManager->persist($conversation);
-            foreach ($first as $user) {
-                $this->entityManager->persist(new ChatParticipant($conversation, $user, $this->clock->now()));
+            $conversation = $this->conversations->findOneByUuid($new->getUuid()) ?? throw new LogicException('The conversation row was written but cannot be read.');
+            $now          = $this->clock->now();
+            foreach ($participants as $user) {
+                $this->participants->claim($conversation, $user, $now);
             }
-            $this->entityManager->flush();
 
             return $conversation;
-        }
-
-        // Audit PV-L6: the caller's pending work is written first, outside what a refusal rolls back; otherwise the
-        // rollback would remove its rows while the entities stay managed with ids, and no later flush would write them.
-        $this->entityManager->flush();
-        $connection = $this->entityManager->getConnection();
-        $savepoint  = $connection->isTransactionActive() ? self::LOOK_ALIKE_SAVEPOINT : null;
-        if ($savepoint === null) {
-            $connection->beginTransaction();
-        } else {
-            $connection->createSavepoint($savepoint);
-        }
-        $rows = [];
-        try {
-            $this->entityManager->persist($conversation);
-            foreach ($first as $user) {
-                $this->entityManager->persist($rows[] = new ChatParticipant($conversation, $user, $this->clock->now()));
-            }
-            $this->entityManager->flush();
-            foreach ($later as $user) {
-                // A folding column answers the look-alike's row: findOneFor() reports it and assertInsertable() refuses.
-                $this->participants->findOneFor($conversation, $user);
-                $this->participants->assertInsertable($user);
-            }
-            foreach ($later as $user) {
-                $this->entityManager->persist(new ChatParticipant($conversation, $user, $this->clock->now()));
-            }
-            $this->entityManager->flush();
-        } catch (ChatUserLookAlikeException $refused) {
-            if ($savepoint === null) {
-                $connection->rollBack();
-            } else {
-                $connection->rollbackSavepoint($savepoint);
-                $connection->releaseSavepoint($savepoint);
-            }
-            foreach ([...$rows, $conversation] as $entity) {
-                $this->entityManager->detach($entity);
-            }
-
-            throw $refused;
-        } catch (Throwable $failure) {
-            // Anything else (a lost race on the pair, a closed connection): the transaction is the caller's to see fail.
-            if ($savepoint === null && $connection->isTransactionActive()) {
-                $connection->rollBack();
-            }
-
-            throw $failure;
-        }
-        if ($savepoint === null) {
-            $connection->commit();
-        } else {
-            $connection->releaseSavepoint($savepoint);
-        }
-
-        return $conversation;
+        });
     }
 }

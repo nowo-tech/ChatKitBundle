@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Privacy;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\AbstractQuery;
 use Doctrine\ORM\EntityManagerInterface;
@@ -34,6 +35,9 @@ use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Service\ChatMentions;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
+use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
+use Nowo\TransactionContract\TransactionRunnerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
@@ -60,6 +64,7 @@ use function preg_replace_callback;
 use function sprintf;
 use function str_replace;
 use function strtr;
+use function usort;
 
 use const DATE_ATOM;
 
@@ -89,6 +94,11 @@ final readonly class ChatPersonalData
      */
     private const string MENTION_LIKE_LABEL = '/^$|[\[\]()]|^[a-zA-Z0-9_-]|@[a-zA-Z0-9_]|@$/';
 
+    /** 1.30: rows loaded at a time by {@see self::export()} (the export stays complete, the entity map stays small). */
+    public const int EXPORT_BATCH = 500;
+
+    private TransactionRunnerInterface $transactions;
+
     /**
      * Builds the personal data hooks from the entity manager and the chat repositories.
      *
@@ -101,6 +111,7 @@ final readonly class ChatPersonalData
      * @param ChatMarkdownRenderer $markdown Re-renders the HTML of the rewritten messages
      * @param EventDispatcherInterface|null $events Receives {@see ChatMentionsErasedEvent} (1.18); null dispatches none
      * @param LoggerInterface|null $logger Logs a failed `message_updated` broadcast after the commit (1.18); null logs nothing
+     * @param TransactionRunnerInterface|null $transactions 1.30: runs the erasures; null uses ChatKit's default runner
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -114,7 +125,9 @@ final readonly class ChatPersonalData
         private ?LoggerInterface $logger = null,
         private ChatUserReferences $refs = new ChatUserReferences(),
         private ?ChatDirectoryInterface $directory = null,
+        ?TransactionRunnerInterface $transactions = null,
     ) {
+        $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
     }
 
     /**
@@ -126,32 +139,35 @@ final readonly class ChatPersonalData
      */
     public function export(ChatUserInterface $user): array
     {
-        /** @var list<ChatMessage> $messages */
-        $messages = $this->entityManager->createQueryBuilder()
-            ->select('m', 'c')->from(ChatMessage::class, 'm')->innerJoin('m.conversation', 'c')
-            ->where($this->refs->field('m', 'author') . ' = :user AND m.deletedAt IS NULL')
-            ->setParameter('user', $this->refs->value($user))
-            ->orderBy('m.id', 'ASC')
-            ->getQuery()->getResult();
-        // 1.28 (audit PV-L4, REQ-SEC-006 item 2): exactly this user's rows. A folding user column also answers a
-        // look-alike's rows to `= :user`, and an export must never hand one person another person's data.
-        $messages = array_values(array_filter($messages, static fn (ChatMessage $message): bool => ChatUserReferences::same($message->getAuthor(), $user)));
+        // 1.30 (Beacon spec 239): every list is read in pages of EXPORT_BATCH by id and the rows it loaded are released,
+        // so a long-time user's export never holds all their messages as entities at once. The export stays complete.
+        $messages = $this->exportPages(ChatMessage::class, 'author', $user, static fn (ChatMessage $message): array => [
+            'conversation_uuid' => $message->getConversation()->getUuid(),
+            'conversation_kind' => $message->getConversation()->getKind()->value,
+            'kind'              => $message->getKind(),
+            'text'              => $message->getBody(),
+            'sent_at'           => $message->getCreatedAt()->format(DATE_ATOM),
+            'edited_at'         => $message->getEditedAt()?->format(DATE_ATOM),
+        ], static fn (ChatMessage $message): bool => !$message->getDeletedAt() instanceof DateTimeImmutable && ChatUserReferences::same($message->getAuthor(), $user));
         $settings = $this->settings->forUser($user);
         $now      = $this->clock->now();
-        /** @var list<ChatMessage> $pins */
-        $pins = $this->entityManager->createQueryBuilder()
-            ->select('m', 'c')->from(ChatMessage::class, 'm')->innerJoin('m.conversation', 'c')
-            ->where($this->refs->field('m', 'pinnedBy') . ' = :user AND m.pinnedAt IS NOT NULL')
-            ->setParameter('user', $this->refs->value($user))
-            ->orderBy('m.pinnedAt', 'ASC')
-            ->getQuery()->getResult();
-        $pins = array_values(array_filter($pins, static fn (ChatMessage $message): bool => ChatUserReferences::same($message->getPinnedBy(), $user)));
-        /** @var list<ChatQuickReply> $quickReplies */
-        $quickReplies = $this->entityManager->getRepository(ChatQuickReply::class)->findBy($this->refs->criteria('user', $user), ['id' => 'ASC']);
-        $quickReplies = array_values(array_filter($quickReplies, static fn (ChatQuickReply $reply): bool => ChatUserReferences::same($reply->getUser(), $user)));
-        /** @var list<ChatConversationLink> $links */
-        $links = $this->entityManager->getRepository(ChatConversationLink::class)->findBy($this->refs->criteria('createdBy', $user), ['id' => 'ASC']);
-        $links = array_values(array_filter($links, static fn (ChatConversationLink $link): bool => ChatUserReferences::same($link->getCreatedBy(), $user)));
+        // 1.10: messages the user pinned (any author), oldest pin first.
+        $pins = $this->exportPages(ChatMessage::class, 'pinnedBy', $user, static fn (ChatMessage $message): array => [
+            'conversation_uuid' => $message->getConversation()->getUuid(),
+            'message_uuid'      => $message->getUuid(),
+            'pinned_at'         => $message->getPinnedAt()?->format(DATE_ATOM),
+        ], static fn (ChatMessage $message): bool => $message->getPinnedAt() instanceof DateTimeImmutable && ChatUserReferences::same($message->getPinnedBy(), $user));
+        // Stable sort: pins of the same moment keep their id order.
+        usort($pins, static fn (array $a, array $b): int => $a['pinned_at'] <=> $b['pinned_at']);
+        $quickReplies = $this->exportPages(ChatQuickReply::class, 'user', $user, static fn (ChatQuickReply $reply): array => ['title' => $reply->getTitle(), 'text' => $reply->getBody()], static fn (ChatQuickReply $reply): bool => ChatUserReferences::same($reply->getUser(), $user), false);
+        // 1.19: links the user pinned to a conversation.
+        $links = $this->exportPages(ChatConversationLink::class, 'createdBy', $user, static fn (ChatConversationLink $link): array => [
+            'conversation_uuid' => $link->getConversation()->getUuid(),
+            'url'               => $link->getUrl(),
+            'title'             => $link->getTitle(),
+            'created_at'        => $link->getCreatedAt()->format(DATE_ATOM),
+            'updated_at'        => $link->getUpdatedAt()?->format(DATE_ATOM),
+        ], static fn (ChatConversationLink $link): bool => ChatUserReferences::same($link->getCreatedBy(), $user));
 
         return [
             'settings' => [
@@ -176,33 +192,64 @@ final readonly class ChatPersonalData
                 // 1.11
                 'auto_reply' => $settings->autoReplyView(),
             ],
-            'quick_replies' => array_map(
-                static fn (ChatQuickReply $reply): array => ['title' => $reply->getTitle(), 'text' => $reply->getBody()],
-                $quickReplies,
-            ),
-            'messages' => array_map(static fn (ChatMessage $message): array => [
-                'conversation_uuid' => $message->getConversation()->getUuid(),
-                'conversation_kind' => $message->getConversation()->getKind()->value,
-                'kind'              => $message->getKind(),
-                'text'              => $message->getBody(),
-                'sent_at'           => $message->getCreatedAt()->format(DATE_ATOM),
-                'edited_at'         => $message->getEditedAt()?->format(DATE_ATOM),
-            ], $messages),
-            // 1.10: messages the user pinned (any author).
-            'pins' => array_map(static fn (ChatMessage $message): array => [
-                'conversation_uuid' => $message->getConversation()->getUuid(),
-                'message_uuid'      => $message->getUuid(),
-                'pinned_at'         => $message->getPinnedAt()?->format(DATE_ATOM),
-            ], $pins),
-            // 1.19: links the user pinned to a conversation.
-            'links' => array_map(static fn (ChatConversationLink $link): array => [
-                'conversation_uuid' => $link->getConversation()->getUuid(),
-                'url'               => $link->getUrl(),
-                'title'             => $link->getTitle(),
-                'created_at'        => $link->getCreatedAt()->format(DATE_ATOM),
-                'updated_at'        => $link->getUpdatedAt()?->format(DATE_ATOM),
-            ], $links),
+            'quick_replies' => $quickReplies,
+            'messages'      => $messages,
+            'pins'          => $pins,
+            'links'         => $links,
         ];
+    }
+
+    /**
+     * 1.30: one export list read in pages of {@see self::EXPORT_BATCH} by id (the user field of `$entity` selects the
+     * rows, `$keep` keeps exactly this user's, `$row` turns each into its export entry). The rows a page loaded are
+     * released from the entity manager after it; instances the caller already held stay managed.
+     *
+     * @template E of object
+     * @template R of array<string, string|null>
+     *
+     * @param class-string<E> $entity The bundle entity
+     * @param callable(E): R $row Export entry of one row
+     * @param callable(E): bool $keep Whether the row is exactly this user's
+     * @param bool $withConversation Whether each row's conversation is loaded with it
+     *
+     * @return list<R> The entries, by id
+     */
+    private function exportPages(string $entity, string $field, ChatUserInterface $user, callable $row, callable $keep, bool $withConversation = true): array
+    {
+        $entries    = [];
+        $after      = 0;
+        $unitOfWork = $this->entityManager->getUnitOfWork();
+        $metadata   = $this->entityManager->getClassMetadata($entity);
+        do {
+            $ids = array_values(array_map(intval(...), $this->entityManager->createQueryBuilder()->select('x.id')->from($entity, 'x')
+                ->where($this->refs->field('x', $field) . ' = :user AND x.id > :after')
+                ->setParameter('user', $this->refs->value($user))->setParameter('after', $after)
+                ->orderBy('x.id', 'ASC')->setMaxResults(self::EXPORT_BATCH)
+                ->getQuery()->getSingleColumnResult()));
+            if ($ids === []) {
+                break;
+            }
+            $held  = array_filter($ids, static fn (int $id): bool => $unitOfWork->tryGetById($id, $entity) !== false);
+            $query = $this->entityManager->createQueryBuilder()->select('x')->from($entity, 'x')
+                ->where('x.id IN (:ids)')->setParameter('ids', $ids)->orderBy('x.id', 'ASC');
+            if ($withConversation) {
+                // The conversation with its row (as before 1.30): one query, no lazy proxy per row.
+                $query->addSelect('c')->innerJoin('x.conversation', 'c');
+            }
+            /** @var list<E> $rows */
+            $rows = $query->getQuery()->getResult();
+            foreach ($rows as $loaded) {
+                if ($keep($loaded)) {
+                    $entries[] = $row($loaded);
+                }
+                if (!in_array((int) $metadata->getIdentifierValues($loaded)['id'], $held, true)) {
+                    $this->entityManager->detach($loaded);
+                }
+            }
+            $after = $ids[array_key_last($ids)];
+        } while (count($ids) === self::EXPORT_BATCH);
+
+        return $entries;
     }
 
     /**
@@ -226,8 +273,9 @@ final readonly class ChatPersonalData
     {
         $qb = $this->entityManager->createQueryBuilder(...);
 
-        $this->entityManager->beginTransaction();
-        try {
+        // 1.30 (Beacon spec 239): one unit of work through the transaction runner (a failure rolls the whole erasure back
+        // and leaves no transaction open).
+        [$erasure, $removedLinks] = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($qb, $user): array {
             $erasure = $this->scrubMentions($user, self::ERASED_MENTION);
             $this->keepModeratedState($user);
             foreach ([[ChatMessage::class, 'pinnedBy'], [ChatMessage::class, 'deletedBy'], [ChatConversation::class, 'assignee'], [ChatConversation::class, 'resolvedBy']] as [$entity, $field]) {
@@ -273,12 +321,9 @@ final readonly class ChatPersonalData
                 $qb()->delete(ChatParticipant::class, 'p')->where('p.conversation = :c')->setParameter('c', $support)->getQuery()->execute();
                 $qb()->delete(ChatConversation::class, 'c')->where('c.id = :id')->setParameter('id', $support->getId())->getQuery()->execute();
             }
-            $this->entityManager->commit();
-        } catch (Throwable $exception) {
-            $this->rollBack();
 
-            throw $exception;
-        }
+            return [$erasure, $removedLinks];
+        });
 
         // Audit FT-L2: the event first (host re-index, skipped report), then the best-effort broadcast.
         $this->dispatchErased($erasure);
@@ -462,15 +507,8 @@ final readonly class ChatPersonalData
     public function eraseMentions(ChatUserInterface $user, string $label = self::ERASED_MENTION): ChatMentionErasure
     {
         $this->assertLabel($label);
-        $this->entityManager->beginTransaction();
-        try {
-            $erasure = $this->scrubMentions($user, $label);
-            $this->entityManager->commit();
-        } catch (Throwable $exception) {
-            $this->rollBack();
-
-            throw $exception;
-        }
+        // 1.30: one unit of work through the transaction runner.
+        $erasure = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, fn (): ChatMentionErasure => $this->scrubMentions($user, $label));
         $this->dispatchErased($erasure);
         $this->publishRewritten($erasure->messageIds);
 
@@ -630,15 +668,6 @@ final readonly class ChatPersonalData
         } while ($changed && $after !== null);
 
         return $after;
-    }
-
-    /** Rolls the erasure back; a rollback that fails too never hides the cause. */
-    private function rollBack(): void
-    {
-        try {
-            $this->entityManager->rollback();
-        } catch (Throwable) {
-        }
     }
 
     /**

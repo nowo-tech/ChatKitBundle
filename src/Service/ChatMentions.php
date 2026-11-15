@@ -225,8 +225,9 @@ final readonly class ChatMentions
                 $clash = $this->foldsOnto($key, [...$stored, ...$pending]);
                 if ($clash !== null) {
                     if (in_array($clash, $pending, true)) {
-                        // The row it may fold onto is not stored yet: store it, then ask the column.
-                        $this->entityManager->flush();
+                        // The row it may fold onto is not stored yet: store it, then ask the column. 1.30: sync() runs inside
+                        // ChatService's unit of work (TransactionRunnerInterface), which recovers the manager on failure.
+                        $this->entityManager->flush(); // @phpstan-ignore frankenphp.worker.noFlushWithoutClosedManagerRecovery
                         $stored  = [...$stored, ...$pending];
                         $pending = [];
                     }

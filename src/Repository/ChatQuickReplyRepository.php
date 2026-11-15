@@ -9,6 +9,9 @@ use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
+use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
+use Nowo\TransactionContract\TransactionRunnerInterface;
 
 /**
  * A user's quick replies (1.11).
@@ -25,6 +28,7 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
     public function __construct(
         ManagerRegistry $registry,
         private readonly ChatUserReferences $refs = new ChatUserReferences(),
+        private readonly ?TransactionRunnerInterface $transactions = null,
     ) {
         parent::__construct($registry, ChatQuickReply::class);
     }
@@ -44,6 +48,8 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
             ->setParameter('user', $this->refs->value($user))
             ->orderBy('q.title', 'ASC')
             ->addOrderBy('q.id', 'ASC')
+            // 1.30 (Beacon spec 239): bounded read; the API keeps a person at MAX_PER_USER snippets.
+            ->setMaxResults(ChatQuickReply::MAX_PER_USER)
             ->getQuery()
             ->getResult();
 
@@ -73,8 +79,11 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
      */
     public function save(ChatQuickReply $reply): void
     {
-        $this->getEntityManager()->persist($reply);
-        $this->getEntityManager()->flush();
+        $manager = $this->getEntityManager();
+        // 1.30: one unit of work through ChatKit's runner.
+        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function () use ($manager, $reply): void {
+            $manager->persist($reply);
+        });
     }
 
     /**
@@ -84,7 +93,10 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
      */
     public function remove(ChatQuickReply $reply): void
     {
-        $this->getEntityManager()->remove($reply);
-        $this->getEntityManager()->flush();
+        $manager = $this->getEntityManager();
+        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function () use ($manager, $reply): void {
+            // @igor-ignore - Unit of work of this call (the runner discards it on failure), not worker state.
+            $manager->remove(ChatKitWrites::attach($manager, $reply));
+        });
     }
 }

@@ -19,4 +19,11 @@ parameters:
         - vendor/*
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
+    # 1.30 (Beacon spec 239): PhpStanFrankenPhp 1.4 worker load-readiness rules (ruleset-worker.neon is already
+    # included, so they are enabled through their parameters). Every write goes through TransactionRunnerInterface.
+    frankenphp:
+        flagRollbackAfterNestedBegin: true
+        flagFlushInHandWrittenTransaction: true
+        flagUnboundedRecursion: true
+        flagFlushWithoutClosedManagerRecovery: true
     ignoreErrors: []

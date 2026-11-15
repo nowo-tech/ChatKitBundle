@@ -252,7 +252,9 @@ final class ChatKitEntityManager extends EntityManagerDecorator implements Reset
     {
         $live = $this->live();
         $this->adoptForeignReferences($live);
-        $live->flush();
+        // The decorator's own flush: live() replaces a closed private manager on the next call, and every ChatKit write
+        // runs through the transaction runner, which resets this manager after a failure (1.30).
+        $live->flush(); // @phpstan-ignore frankenphp.worker.noFlushWithoutClosedManagerRecovery
         $this->wrote();
     }
 

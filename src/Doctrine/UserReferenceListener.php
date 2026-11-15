@@ -188,12 +188,12 @@ final class UserReferenceListener implements ResetInterface
 
     private function checkKinds(object $entity): void
     {
-        if (isset(self::RELATIONS[$entity::class])) {
+        if (isset(self::RELATIONS[$this->classOf($entity)])) {
             // 1.27 (audit OJ-M1): no chat row is written by user while the user columns fold (`string` mode).
             $this->refs->assertExact();
         }
-        foreach (array_keys(self::RELATIONS[$entity::class] ?? []) as $relation) {
-            $property = $this->property($entity::class, $relation);
+        foreach (array_keys(self::RELATIONS[$this->classOf($entity)] ?? []) as $relation) {
+            $property = $this->property($this->classOf($entity), $relation);
             $user     = $property->isInitialized($entity) ? $property->getValue($entity) : null;
             if ($user instanceof ChatUserInterface) {
                 $this->refs->assertKind($user);
@@ -210,14 +210,14 @@ final class UserReferenceListener implements ResetInterface
     public function postLoad(PostLoadEventArgs $event): void
     {
         $entity = $event->getObject();
-        if (!isset(self::RELATIONS[$entity::class]) || !$this->needsUsers($entity)) {
+        if (!isset(self::RELATIONS[$this->classOf($entity)]) || !$this->needsUsers($entity)) {
             return;
         }
         $pending = $this->pending($event->getObjectManager(), $entity);
         $refs    = [];
         foreach ($pending as $entity) {
-            foreach (array_keys(self::RELATIONS[$entity::class]) as $relation) {
-                $reference = $this->property($entity::class, $relation . 'Ref')->getValue($entity);
+            foreach (array_keys(self::RELATIONS[$this->classOf($entity)]) as $relation) {
+                $reference = $this->property($this->classOf($entity), $relation . 'Ref')->getValue($entity);
                 if (is_string($reference)) {
                     $refs[$reference] = $reference;
                 }
@@ -226,13 +226,13 @@ final class UserReferenceListener implements ResetInterface
         // 1.27: string references too (ChatUserReferenceInterface); ChatAccess re-checks every answer byte for byte.
         $users = $refs === [] ? [] : ($this->access)()->usersByIds(array_values(array_map(strval(...), $refs)));
         foreach ($pending as $entity) {
-            foreach (self::RELATIONS[$entity::class] as $relation => $nullable) {
-                $reference = $this->property($entity::class, $relation . 'Ref')->getValue($entity);
+            foreach (self::RELATIONS[$this->classOf($entity)] as $relation => $nullable) {
+                $reference = $this->property($this->classOf($entity), $relation . 'Ref')->getValue($entity);
                 $user      = is_string($reference) ? ($users[$reference] ?? null) : null;
                 if (!$user instanceof ChatUserInterface && is_string($reference) && !$nullable) {
                     $user = new UnresolvedChatUser($reference, $this->secret);
                 }
-                $this->property($entity::class, $relation)->setValue($entity, $user);
+                $this->property($this->classOf($entity), $relation)->setValue($entity, $user);
             }
             // @igor-ignore A WeakMap of the request's entities, cleared by reset().
             $this->resolved[$entity] = true;
@@ -271,14 +271,27 @@ final class UserReferenceListener implements ResetInterface
         if (isset($this->resolved[$entity])) {
             return false;
         }
-        foreach (array_keys(self::RELATIONS[$entity::class]) as $relation) {
-            $property = $this->property($entity::class, $relation);
-            if (!$property->isInitialized($entity) || ($property->getValue($entity) === null && $this->property($entity::class, $relation . 'Ref')->getValue($entity) !== null)) {
+        foreach (array_keys(self::RELATIONS[$this->classOf($entity)]) as $relation) {
+            $property = $this->property($this->classOf($entity), $relation);
+            if (!$property->isInitialized($entity) || ($property->getValue($entity) === null && $this->property($this->classOf($entity), $relation . 'Ref')->getValue($entity) !== null)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * 1.30 (audit QD-L4): the entity class of a loaded row, also when it is an initialized Doctrine proxy.
+     *
+     * @return class-string
+     */
+    private function classOf(object $entity): string
+    {
+        /** @var class-string $class */
+        $class = ChatKitManagerRegistry::realClass($entity::class);
+
+        return $class;
     }
 
     /**

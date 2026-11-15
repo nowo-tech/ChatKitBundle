@@ -30,7 +30,7 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function setUp(): void
     {
-        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges());
+        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges(), $this->hostTransactionRunner());
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
@@ -61,6 +61,14 @@ abstract class DatabaseTestCase extends TestCase
      * 1.27: whether the kernel wires the host ports through their framework-free twins only (tests/Support/TwinPorts).
      */
     protected function twinPorts(): bool
+    {
+        return false;
+    }
+
+    /**
+     * 1.30: whether the kernel binds TransactionRunnerInterface to HostEntityManagerRunner (a host runner ChatKit must ignore).
+     */
+    protected function hostTransactionRunner(): bool
     {
         return false;
     }

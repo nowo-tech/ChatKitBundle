@@ -10,6 +10,9 @@ use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
+use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
+use Nowo\TransactionContract\TransactionRunnerInterface;
 use Symfony\Contracts\Service\ResetInterface;
 
 /**
@@ -33,6 +36,7 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
     public function __construct(
         ManagerRegistry $registry,
         private readonly ChatUserReferences $refs = new ChatUserReferences(),
+        private readonly ?TransactionRunnerInterface $transactions = null,
     ) {
         parent::__construct($registry, ChatUserSettings::class);
     }
@@ -133,8 +137,10 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
             // unique user key inside the flush and close the entity manager.
             $this->refs->assertNoLookAlike($this->userColumn(), $settings->getUser());
         }
-        $manager->persist($settings);
-        $manager->flush();
+        // 1.30: one unit of work through the transaction runner (ChatKit's default one when the repository is built by hand).
+        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function () use ($manager, $settings): void {
+            $manager->persist($settings);
+        });
     }
 
     /**
