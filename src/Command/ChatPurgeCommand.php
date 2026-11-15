@@ -8,6 +8,7 @@ use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationLinkRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Support\ChatRetention;
+use Nowo\ChatKitBundle\Support\InvalidRetentionConfigurationException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Clock\Clock;
@@ -90,6 +91,11 @@ final class ChatPurgeCommand extends Command
                     break;
                 }
             }
+        } catch (InvalidRetentionConfigurationException $exception) {
+            // Fail closed (1.31.1): nothing is deleted when the configured retention is not a positive number.
+            $this->logger->error('Chat purge aborted: the configured retention_days is invalid (0 or negative).', ['configured_days' => $exception->days, 'minimum_days' => self::MIN_DAYS]);
+
+            return Command::FAILURE;
         } catch (Throwable $exception) {
             $this->logger->error('Chat purge failed.', ['deleted' => $deleted, 'exception' => $exception::class, 'message' => $exception->getMessage()]);
 

@@ -91,6 +91,7 @@ return static function (ContainerConfigurator $container): void {
             '../../Port',
             '../../Service/ChatNotFoundException.php',
             '../../Doctrine/ChatUserLookAlikeException.php',
+            '../../Support/InvalidRetentionConfigurationException.php',
             '../../Avatar/AvatarUrlPolicy.php',
             '../../Doctrine/UnresolvedChatUser.php',
             // 1.30: registered below under the bundle's own id; ChatKitWrites is a static helper.

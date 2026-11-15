@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Tests\Unit\Support;
 
 use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
 use Nowo\ChatKitBundle\Support\ChatRetention;
+use Nowo\ChatKitBundle\Support\InvalidRetentionConfigurationException;
 use Nowo\ChatKitBundle\Support\NullRetentionPolicyProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingLogger;
 use Nowo\ChatKitBundle\Tests\Support\Chat\ScriptedRetentionProvider;
@@ -14,6 +15,7 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 use const PHP_INT_MAX;
+use const PHP_INT_MIN;
 
 /**
  * @author Héctor Franco Aceituno <hectorfranco@nowo.tech>
@@ -54,6 +56,7 @@ final class ChatRetentionTest extends TestCase
         yield 'zero is ignored' => [0, 200, 200, 1];
         yield 'negative is ignored' => [-5, 200, 200, 1];
         yield 'unusable and configured below minimum' => [0, 5, 30, 2];
+        yield 'valid provider ignores an invalid configured value' => [90, 0, 90, 0];
         yield 'configured below minimum' => [null, 5, 30, 1];
         yield 'maximum is accepted' => [ChatRetention::MAX_DAYS, 365, ChatRetention::MAX_DAYS, 0];
         yield 'above maximum is lowered' => [ChatRetention::MAX_DAYS + 1, 365, ChatRetention::MAX_DAYS, 1];
@@ -106,5 +109,31 @@ final class ChatRetentionTest extends TestCase
 
         $this->expectException(RuntimeException::class);
         (new ChatRetention(365, $provider))->days();
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function invalidConfigured(): iterable
+    {
+        yield 'zero' => [0];
+        yield 'negative' => [-5];
+        yield 'int_min' => [PHP_INT_MIN];
+    }
+
+    /**
+     * @param int $configured Invalid configured days
+     */
+    #[DataProvider('invalidConfigured')]
+    public function testAnInvalidConfiguredValueIsRefused(int $configured): void
+    {
+        $this->expectException(InvalidRetentionConfigurationException::class);
+        (new ChatRetention($configured))->days();
+    }
+
+    public function testAnInvalidConfiguredValueIsRefusedWhenTheProviderGivesNothingUsable(): void
+    {
+        $this->expectException(InvalidRetentionConfigurationException::class);
+        (new ChatRetention(0, new ScriptedRetentionProvider([null])))->days();
     }
 }

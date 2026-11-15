@@ -69,6 +69,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.31.1 (patch, audit QP-L-3, owner decision 2026-11-16).
+
+### Fixed
+
+- `nowo:chat:purge` now fails closed when the configured `retention_days` is invalid (0, negative, or an `%env(int:…)%`
+  that coerced a value such as `'1e100'` to 0): it logs an error, returns `FAILURE` and deletes nothing.
+  Before, such values were raised to the 30-day minimum and purged with that window. A non-numeric or empty variable
+  (`'abc'`, `''`) was never coerced: the `int:` processor throws when the command is built, so it already failed closed,
+  without the log line. Unchanged: the provider path, the
+  1 to 29 days raised to 30 for valid small values, the 36500 day cap and the cutoff guard. The configuration tree
+  keeps its `min(30)` (it never sees env placeholders, hence the run-time check).
+
+### Documentation
+
+- USAGE: a retention provider must not put secrets in exception messages (they are logged).
+
 ## [1.31.0] - 2026-11-15
 
 Target 1.31.0 (minor, no BC break). Retention days from the application at run time (Symfony Beacon request: the value

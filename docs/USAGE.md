@@ -214,7 +214,9 @@ public function retentionDays(): ?int; // null: use the configured retention_day
 Retention days from your own storage, asked on **every** `nowo:chat:purge` run (nothing is cached by the bundle, so a
 changed setting applies at the next run, also in a FrankenPHP worker that never resets the kernel). Values below 30
 are raised to 30 and values above 36500 (100 years) are lowered to 36500, both with a warning in the log; 0 or less is
-ignored (warning, configured value applies); an exception stops the run before anything is deleted (and is logged).
+ignored (warning, configured value applies); an exception stops the run before anything is deleted (and is logged,
+message included: never put secrets in an exception message). A configured `retention_days` of 0 or less (for example
+an `%env(int:…)%` that coerced garbage to 0) makes the purge fail closed: error log, `FAILURE`, nothing deleted.
 The provider is global: it overrides `retention_days` for every profile. Validate the value you return (the example
 refuses anything that is not an integer of at least 1). Beacon-style example, reading an administration setting:
 

@@ -12,6 +12,7 @@ use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Support\ChatRetention;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingLogger;
 use Nowo\ChatKitBundle\Tests\Support\Chat\ScriptedRetentionProvider;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Symfony\Component\Clock\ClockInterface;
@@ -134,5 +135,57 @@ final class ChatPurgeCommandRetentionTest extends TestCase
         self::assertSame(1, $tester->execute([]));
         self::assertCount(1, $logger->lines);
         self::assertStringStartsWith('error Chat purge aborted', $logger->lines[0]);
+    }
+
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function invalidConfigured(): iterable
+    {
+        yield 'zero' => [0];
+        yield 'negative' => [-5];
+        // %env(int:X)% with X='1e100' (or 'abc' going through the lenient processor) gives 0 at run time.
+        yield 'coerced 1e100' => [0];
+    }
+
+    /**
+     * @param int $configured Invalid configured days
+     */
+    #[DataProvider('invalidConfigured')]
+    public function testAnInvalidConfiguredValueFailsClosed(int $configured): void
+    {
+        $repo = $this->createMock(ChatMessageRepository::class);
+        $repo->expects(self::never())->method('purgeOlderThan');
+        $logger = new RecordingLogger();
+
+        $tester = new CommandTester(new ChatPurgeCommand($repo, $configured, new MockClock('2026-11-15 12:00:00'), $logger));
+
+        self::assertSame(1, $tester->execute([]));
+        self::assertCount(1, $logger->lines);
+        self::assertStringStartsWith('error Chat purge aborted: the configured retention_days is invalid', $logger->lines[0]);
+    }
+
+    public function testAValidProviderStillPurgesWithAnInvalidConfiguredFallback(): void
+    {
+        $repo = $this->createMock(ChatMessageRepository::class);
+        $repo->expects(self::once())->method('purgeOlderThan')->willReturn(0);
+
+        $tester = new CommandTester(new ChatPurgeCommand($repo, 0, new MockClock('2026-11-15 12:00:00'), retention: new ScriptedRetentionProvider([90])));
+
+        self::assertSame(0, $tester->execute([]));
+    }
+
+    public function testASmallValidConfiguredValueIsStillRaisedToThirty(): void
+    {
+        $cutoffs = [];
+        $repo    = $this->createStub(ChatMessageRepository::class);
+        $repo->method('purgeOlderThan')->willReturnCallback(static function (DateTimeImmutable $cutoff) use (&$cutoffs): int {
+            $cutoffs[] = $cutoff->format('Y-m-d');
+
+            return 0;
+        });
+
+        self::assertSame(0, (new CommandTester(new ChatPurgeCommand($repo, 5, new MockClock('2026-11-15 12:00:00'))))->execute([]));
+        self::assertSame(['2026-10-16'], $cutoffs);
     }
 }
