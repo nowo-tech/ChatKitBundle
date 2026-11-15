@@ -205,6 +205,42 @@ public function send(ChatUserInterface $user, array $items): void; // list<ChatD
 
 See [Email digest](#email-digest).
 
+### `RetentionPolicyProviderInterface` (optional)
+
+```php
+public function retentionDays(): ?int; // null: use the configured retention_days
+```
+
+Retention days from your own storage, asked on **every** `nowo:chat:purge` run (nothing is cached by the bundle, so a
+changed setting applies at the next run, also in a FrankenPHP worker that never resets the kernel). Values below 30
+are raised to 30 (warning in the log); 0 or less is ignored (warning, configured value applies); an exception stops
+the run before anything is deleted. Beacon-style example, reading an administration setting:
+
+```php
+final class InstanceSettingsRetention implements RetentionPolicyProviderInterface
+{
+    public function __construct(private readonly InstanceSettings $settings)
+    {
+    }
+
+    public function retentionDays(): ?int
+    {
+        // Read on every call, never memoized in a property: the admin may change it between two purge runs.
+        $days = $this->settings->get('chat.retention_days');
+
+        return is_numeric($days) ? (int) $days : null;
+    }
+}
+```
+
+```yaml
+# config/services.yaml
+services:
+    Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface: '@App\Chat\InstanceSettingsRetention'
+```
+
+`retention_days` stays as the fallback (and may keep `%env(int:CHAT_RETENTION_DAYS)%` during the move).
+
 ## Standard Symfony host
 
 The zero-config path (REQ-ARCH-001): your Doctrine user entity implements `ChatUserInterface` and is mapped through

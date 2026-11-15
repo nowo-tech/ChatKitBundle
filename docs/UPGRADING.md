@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.31.0](#to-1310)
 - [To 1.30.0](#to-1300)
 - [To 1.29.0](#to-1290)
 - [To 1.28.0](#to-1280)
@@ -74,6 +75,15 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.31.0
+
+From **1.30.0**. Nothing to change: without a provider `retention_days` applies exactly as before.
+
+Optional: read the retention from your own storage. Implement `Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface`
+and alias it (see [USAGE](USAGE.md#retentionpolicyproviderinterface-optional)). `nowo:chat:purge` asks it on every run;
+null falls back to `retention_days`; the minimum of 30 days stays. The provider is not cached by the bundle: do not
+memoize the answer in the service either, or a worker keeps the old value.
 
 ## To 1.30.0
 

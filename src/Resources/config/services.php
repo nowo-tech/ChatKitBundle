@@ -21,6 +21,7 @@ use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Contract\ChatSupportTopicProviderInterface;
 use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
+use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
 use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
@@ -47,6 +48,7 @@ use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
 use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
+use Nowo\ChatKitBundle\Support\NullRetentionPolicyProvider;
 use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
@@ -93,6 +95,8 @@ return static function (ContainerConfigurator $container): void {
             '../../Doctrine/UnresolvedChatUser.php',
             // 1.30: registered below under the bundle's own id; ChatKitWrites is a static helper.
             '../../Transaction',
+            // 1.31: built per purge run by the command (a value object over the configured days), never autowired.
+            '../../Support/ChatRetention.php',
             // 1.27: registered by the extension only with doctrine.private_entity_manager: true.
             '../../Doctrine/ChatKitRowLock.php',
             '../../Doctrine/{ChatKitEntityManager,ChatKitManagerRegistry,ChatKitSavepoint,PrivateEntityManagerConnection,PrivateEntityManagerDriver,PrivateEntityManagerMiddleware,PrivateManagerRepositoryFactory}.php',
@@ -154,6 +158,8 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);
     $services->alias(ChatLinkPreviewProviderInterface::class, NullLinkPreviewProvider::class);
     $services->alias(ChatDigestSenderInterface::class, NullChatDigestSender::class);
+    // 1.31: retention days read at run time; the application aliases the interface to its own provider.
+    $services->alias(RetentionPolicyProviderInterface::class, NullRetentionPolicyProvider::class);
     $services->alias(ChatSupportTopicProviderInterface::class, ConfiguredSupportTopicProvider::class);
     // 1.16: profile pictures; the application aliases the interface to its own resolver.
     $services->alias(ChatAvatarUrlResolverInterface::class, NullChatAvatarUrlResolver::class);
@@ -231,5 +237,6 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$iconRenderer', service(IconRendererInterface::class)->nullOnInvalid())
         ->arg('$iconSet', param('nowo_chat_kit.icon_set'));
     $services->get(ChatPurgeCommand::class)
-        ->arg('$retentionDays', param('nowo_chat_kit.retention_days'));
+        ->arg('$retentionDays', param('nowo_chat_kit.retention_days'))
+        ->arg('$retention', service(RetentionPolicyProviderInterface::class));
 };

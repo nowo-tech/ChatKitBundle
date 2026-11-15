@@ -111,6 +111,7 @@ php bin/console doctrine:migrations:migrate
 | `ChatPushSenderInterface` | no | no push | Web Push delivery |
 | `ChatLinkPreviewProviderInterface` | no | no cards | Previews of links to your application, checked per viewer |
 | `ChatDigestSenderInterface` | no | no email | Email of the conversations still unread |
+| `RetentionPolicyProviderInterface` | no | configured `retention_days` | Retention days read at run time on every purge |
 
 Alias them in `config/services.yaml`:
 
@@ -174,7 +175,9 @@ Schedule the purge daily (Scheduler, cron…):
 php bin/console nowo:chat:purge --no-interaction
 ```
 
-It deletes messages older than `retention_days` (minimum 30) in bounded batches.
+It deletes messages older than `retention_days` (minimum 30) in bounded batches. With a
+`RetentionPolicyProviderInterface` (1.31) the window is read from your application on every run; `retention_days` is the
+fallback.
 
 ## FrankenPHP
 

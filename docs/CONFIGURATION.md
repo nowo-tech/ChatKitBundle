@@ -7,6 +7,7 @@
   - [Two profiles](#two-profiles)
   - [How the profile is selected](#how-the-profile-is-selected)
 - [Reference](#reference)
+- [Retention from the application (1.31)](#retention-from-the-application-131)
 - [Rate limits](#rate-limits)
 - [Private entity manager (1.27)](#private-entity-manager-127)
 - [Container parameters](#container-parameters)
@@ -84,7 +85,7 @@ nowo_chat_kit:
 | `default_profile` | string | `default` | Profile in use. |
 | `profiles.<name>.enabled` | bool | `true` | Render the dock. |
 | `profiles.<name>.user_class` | string | — (required with Doctrine, unless `doctrine.user_reference: id`) | Your user entity (implements `ChatUserInterface`). |
-| `profiles.<name>.retention_days` | int ≥ 30 | `365` | Messages older than this are purged by `nowo:chat:purge`. `%env()%` allowed. |
+| `profiles.<name>.retention_days` | int ≥ 30 | `365` | Messages older than this are purged by `nowo:chat:purge`. `%env()%` allowed. Fixed when the container is built; since 1.31 a `RetentionPolicyProviderInterface` service overrides it at run time (see below). |
 | `profiles.<name>.realtime` | bool | `true` | Use the realtime transport when one is available. |
 | `profiles.<name>.push` | bool | `false` | Queue Web Push for new messages (needs a `ChatPushSenderInterface`). |
 | `profiles.<name>.push_url` | string | `/?chat={uuid}` | URL a notification opens; `{uuid}` is the conversation. The dock opens `?chat=<uuid>` itself. |
@@ -132,6 +133,20 @@ nowo_chat_kit:
 | `profiles.<name>.links.channel_managers` | `members` \| `admins` | `members` | 1.19: who manages the pinned links of a channel: every member, or only whom `ChatLinkPolicyInterface::canManageLinksInChannel()` allows (else `ChatPinPolicyInterface::canPinInChannel()`, else nobody). Both people of a direct conversation always do; in tickets, the agents. |
 | `profiles.<name>.links.providers` | map | teams, meet, zoom, jitsi, webex | 1.19: known providers, `key => {label, hosts, icon, fallback_icon}`: `hosts` are lowercase hostnames (a subdomain matches too; only the hostname is looked at), `icon` the UX Icons name of the dock icon `provider_<key>` (null: the built-in `fallback_icon`, default `video`). Keys: `a-z`, `0-9`, `_` (not `other`). A map you set replaces the default one (`Configuration::DEFAULT_LINK_PROVIDERS`). |
 | `profiles.<name>.limits.*` | int | see below | Rate limits. |
+
+## Retention from the application (1.31)
+
+`retention_days` is read when the container is built. To change it without a deploy (for example an administration
+setting kept in the database), alias `Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface` to your service:
+
+```yaml
+services:
+    Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface: '@App\Chat\InstanceSettingsRetention'
+```
+
+The service returns the days (for example from `InstanceSettings`, see [USAGE](USAGE.md#retentionpolicyproviderinterface-optional))
+or null. `nowo:chat:purge` asks it on every run, never caches the answer, and falls back to `retention_days` on null.
+The minimum of 30 stays: a smaller value is raised to 30 with a warning in the log.
 
 ## Rate limits
 
