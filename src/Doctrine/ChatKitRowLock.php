@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Doctrine;
 
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception as DbalException;
 use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
-use Doctrine\DBAL\Platforms\Exception\NotSupported;
 use Doctrine\DBAL\Platforms\MariaDBPlatform;
 use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\DBAL\Query\QueryBuilder;
@@ -48,7 +48,8 @@ final class ChatKitRowLock
         $locked = (clone $query)->forUpdate();
         try {
             $locked->getSQL();
-        } catch (NotSupported) {
+        } catch (DbalException) {
+            // Not supported by the platform (DBAL 4: NotSupported; DBAL 3: a plain DBAL exception).
             return $query->fetchOne();
         }
 

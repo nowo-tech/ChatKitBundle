@@ -30,15 +30,17 @@ use function spl_object_id;
  * open: nowo-tech/transaction-doctrine rolls back to the entry level and closes the connection only when that rollback
  * fails (a MySQL deadlock inside a nested flush).
  *
- * The manager's pending work is flushed first, on its own, so a failed chat unit never rolls it back (PV-L6). The chat
- * unit runs in a connection-level transaction. After a failure only the ChatKit rows it added, wrote or changed are
- * detached (and the rows that point at them); every other entity stays managed, the application's ones included.
+ * The manager's pending work is flushed first, on its own, so a failed chat unit never rolls it back (PV-L6).
  *
- * - **Shared manager** (the default): a failed flush closes the manager (the ORM does). It stays closed for the rest of
- *   the request, so the application's next flush fails loudly as in 1.29, and {@see self::reset()} replaces it at the
- *   next request, message or command boundary (a FrankenPHP worker never serves a later request with it).
- * - **Private entity manager** (`doctrine.private_entity_manager: true`): the application's manager is never touched;
- *   ChatKit replaces its own closed manager on its next use.
+ * - **Private entity manager** (`doctrine.private_entity_manager: true`): nowo-tech/transaction-doctrine 1.1's ORM runner
+ *   on ChatKit's own manager. After a storage failure that manager is closed and replaced; after a refusal it is left
+ *   alone, or only what the run touched is forgotten. The application's manager is never involved.
+ * - **Shared manager** (the default): the chat unit runs in a connection-level transaction, because transaction-doctrine's
+ *   ORM runner would close and reset (or clear) the application's manager after a storage failure (audit QD-M1). After a
+ *   failure only the ChatKit rows the unit added, wrote or changed are detached (and the rows that point at them); every
+ *   other entity stays managed. A failed flush closes the manager (the ORM does): it stays closed for the rest of the
+ *   request, so the application's next flush fails loudly as in 1.29, and {@see self::reset()} replaces it at the next
+ *   request, message or command boundary (a FrankenPHP worker never serves a later request with it).
  *
  * Stateless.
  */
@@ -87,6 +89,14 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
         $manager = $this->entityManager;
         // Pending work first, on its own: a failed chat unit never rolls it back (PV-L6, QD-M1).
         $manager->flush();
+        if ($this->privateManager) {
+            // ChatKit's own manager: transaction-doctrine 1.1's runner (a storage failure closes and replaces it, a
+            // refusal leaves it alone or forgets only what the run touched). The application's manager is not involved.
+            return DoctrineTransactionRunner::forEntityManager($manager, $this->registry, $this->managerName, $this->retryAfterSeconds)->run($operation);
+        }
+        // The application's manager (shared): transaction-doctrine's ORM runner would close and reset it (or clear it)
+        // after a storage failure, detaching the application's entities behind its back (audit QD-M1). The unit runs in
+        // a connection-level transaction instead, and only the ChatKit rows it touched are forgotten.
         $before = $this->chatRows($manager);
         try {
             return DoctrineTransactionRunner::forConnection($manager->getConnection(), $this->retryAfterSeconds)->run(static function () use ($operation, $manager): mixed {
@@ -96,7 +106,7 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
                 return $result;
             });
         } catch (Throwable $failure) {
-            // A manager the ORM closed in a failed flush stays closed (the private one replaces itself on its next use).
+            // A manager the ORM closed in a failed flush stays closed: loud for the application, as in 1.29.
             if ($manager->isOpen()) {
                 $this->forgetChatRows($manager, $before);
             }

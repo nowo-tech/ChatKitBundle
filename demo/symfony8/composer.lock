@@ -946,14 +946,14 @@
             "dist": {
                 "type": "path",
                 "url": "/var/chat-kit-bundle",
-                "reference": "8da3b398750dcdda973b5b96f585fef1146a1c0d"
+                "reference": "7dde35aec5ac3dc5f4906022ede4cdb4d95824c9"
             },
             "require": {
                 "doctrine/doctrine-bundle": "^2.13 || ^3.0",
                 "doctrine/orm": "^3.3",
                 "nowo-tech/form-kit-bundle": "^2.17",
                 "nowo-tech/transaction-contract": "^1.0",
-                "nowo-tech/transaction-doctrine": "^1.0",
+                "nowo-tech/transaction-doctrine": "^1.1",
                 "nowo-tech/ui-kit-bundle": "^2.33.1",
                 "php": ">=8.3 <8.6",
                 "psr/cache": "^3.0",
@@ -1300,20 +1300,20 @@
         },
         {
             "name": "nowo-tech/transaction-doctrine",
-            "version": "v1.0.0",
+            "version": "v1.1.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/transaction-doctrine.git",
-                "reference": "33e450ea6c826f78c41291e5c013e95b65f54113"
+                "reference": "c9e26d12a120427c2c643af20140989bafacdf1a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/33e450ea6c826f78c41291e5c013e95b65f54113",
-                "reference": "33e450ea6c826f78c41291e5c013e95b65f54113",
+                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/c9e26d12a120427c2c643af20140989bafacdf1a",
+                "reference": "c9e26d12a120427c2c643af20140989bafacdf1a",
                 "shasum": ""
             },
             "require": {
-                "doctrine/dbal": "^4.0",
+                "doctrine/dbal": "^3.8.2 || ^4.0",
                 "nowo-tech/transaction-contract": "^1.0",
                 "php": ">=8.2 <8.6"
             },
@@ -1373,8 +1373,8 @@
                 "issues": "https://github.com/nowo-tech/transaction-doctrine/issues",
                 "source": "https://github.com/nowo-tech/transaction-doctrine"
             },
-            "time": "2026-11-15T02:44:49+00:00",
-            "published-time": "2026-11-15T02:46:07+00:00"
+            "time": "2026-11-15T08:15:49+00:00",
+            "published-time": "2026-11-15T08:18:10+00:00"
         },
         {
             "name": "nowo-tech/ui-kit-bundle",

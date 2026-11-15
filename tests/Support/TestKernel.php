@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Support;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
+use Doctrine\DBAL\Driver\Connection;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
@@ -39,6 +40,7 @@ use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinRealtime;
 use Nowo\FormKitBundle\NowoFormKitBundle;
 use Nowo\TransactionContract\TransactionRunnerInterface;
 use Nowo\UiKitBundle\NowoUiKitBundle;
+use ReflectionMethod;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -165,6 +167,12 @@ final class TestKernel extends Kernel
         return $this->twinPortsKernel || self::twinPorts();
     }
 
+    /** 1.30: whether doctrine/dbal 3 is installed (its Connection::rollBack() returns a bool). */
+    public static function dbal3(): bool
+    {
+        return (string) (new ReflectionMethod(Connection::class, 'rollBack'))->getReturnType() !== 'void';
+    }
+
     /** The database of ChatChannelRaceTest (`CHAT_KIT_RACE_DATABASE_URL`); null = in-memory SQLite. */
     public static function databaseUrl(): ?string
     {
@@ -208,7 +216,8 @@ final class TestKernel extends Kernel
         // Only `send` and `x` exist: the other dock icons fall back to the built-in SVG.
         $container->extension('ux_icons', ['icon_dir' => __DIR__ . '/icons', 'iconify' => ['enabled' => false]]);
         $container->extension('doctrine', [
-            'dbal' => self::databaseUrl() === null ? ['driver' => 'pdo_sqlite', 'memory' => true] : ['url' => self::databaseUrl()],
+            // 1.30: DBAL 3 nests transactions with savepoints only when asked (DBAL 4 always does); ChatKit needs them.
+            'dbal' => (self::databaseUrl() === null ? ['driver' => 'pdo_sqlite', 'memory' => true] : ['url' => self::databaseUrl()]) + (self::dbal3() ? ['use_savepoints' => true] : []),
             'orm'  => [
                 // 1.27: an application filter the private entity manager mirrors (disabled by default).
                 'filters'  => ['test_kind' => ['class' => TestKindFilter::class, 'enabled' => false]],

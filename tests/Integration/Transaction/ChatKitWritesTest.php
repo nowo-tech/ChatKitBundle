@@ -105,6 +105,9 @@ final class ChatKitWritesTest extends DatabaseTestCase
 
     public function testAFailedUnitDetachesTheChatRowsItChangedAndWhatPointsAtThem(): void
     {
+        if ($this->em instanceof ChatKitEntityManager) {
+            self::markTestSkipped('The shared manager only (the private one follows transaction-doctrine 1.1: cleared after a refusal with pending changes).');
+        }
         $ana     = $this->user('Ana');
         $agent   = $this->user('Agent');
         $chat    = $this->get(ChatService::class);

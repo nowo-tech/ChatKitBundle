@@ -15,6 +15,7 @@ use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Doctrine\DBAL\Query\QueryBuilder;
 use Doctrine\DBAL\Result;
 use Nowo\ChatKitBundle\Doctrine\ChatKitRowLock;
+use Nowo\ChatKitBundle\Tests\Support\TestKernel;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -44,6 +45,9 @@ final class ChatKitRowLockTest extends TestCase
     #[DataProvider('platforms')]
     public function testTheReadLocksTheRowWhereThePlatformCan(string $platform, bool $shared, string $sql): void
     {
+        if (TestKernel::dbal3()) {
+            self::markTestSkipped('Written against the DBAL 4 platform and result classes (the database job covers DBAL 3).');
+        }
         $connection = $this->createStub(Connection::class);
         $connection->method('getDatabasePlatform')->willReturn(new $platform());
         // The statement comes back as the value read.

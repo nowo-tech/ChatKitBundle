@@ -78,8 +78,10 @@ closed entity manager.
   `TransactionRunnerInterface`) runs every ChatKit write: conversations, messages, reactions, read cursors, pins,
   mutes, archives, support tickets, links, settings, quick replies, erasures, the links backfill. One attempt in one
   transaction (nowo-tech/transaction-doctrine repairs the connection after a failure); pending work flushed on its own
-  first; after a failure only the ChatKit rows the unit added or changed are detached; a manager closed by a failed
-  chat flush is replaced at the next request / message / command boundary. ChatKit never uses a runner the application
+  first. With the private manager, transaction-doctrine 1.1's ORM runner drives it. With the shared (application's)
+  manager the unit runs at connection level and only the ChatKit rows it added or changed are detached after a failure
+  (transaction-doctrine's ORM runner would reset or clear the application's manager after a storage failure); a manager
+  closed by a failed chat flush is replaced at the next request / message / command boundary. ChatKit never uses a runner the application
   binds to the interface (audits QD-M1, QD-M3).
 - Realtime publishes, events and automatic replies happen after the commit.
 - ChatKit's routes answer a transient storage failure (`TransientStorageFailure`, or a deadlock / lock wait /
@@ -116,8 +118,9 @@ closed entity manager.
   pending.
 - `ChatPersonalData::export()` reads every list in pages of `EXPORT_BATCH` (500) and releases what it loaded; the export
   stays complete. The quick replies (at most 50 per person) and pinned links (at most 200) lists are capped.
-- Requires `doctrine/dbal` ^4 (through `nowo-tech/transaction-doctrine` 1.0); the DBAL 3 legs of the CI database job are
-  gone for now.
+- Requires `nowo-tech/transaction-contract` ^1.0 and `nowo-tech/transaction-doctrine` ^1.1 (doctrine/dbal `^3.8.2 || ^4`
+  unchanged). With DBAL 3, `doctrine.dbal.use_savepoints: true` is required. CI keeps its DBAL 3 legs (race job) and
+  adds them to the Load readiness job.
 
 ### Fixed
 

@@ -76,9 +76,11 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 Target 1.30.0 (Beacon spec 239, load readiness).
 
-- **New requires:** `nowo-tech/transaction-contract` ^1.0 and `nowo-tech/transaction-doctrine` ^1.0. The latter requires
-  `doctrine/dbal` ^4 for now: a host still on DBAL 3 stays on ChatKit 1.29 until it upgrades DBAL (or until
-  transaction-doctrine allows DBAL 3 again).
+- **New requires:** `nowo-tech/transaction-contract` ^1.0 and `nowo-tech/transaction-doctrine` ^1.1 (doctrine/dbal
+  `^3.8.2 || ^4`, as before).
+- **DBAL 3 only:** turn savepoints on (`doctrine.dbal.use_savepoints: true`; DBAL 4 always uses them). ChatKit's units
+  of work nest inside your transactions and its race handling rolls back to savepoints; without them a refused or lost
+  insert inside your transaction marks it rollback-only.
 - **Schema:** one new table, `nowo_chat_ticket_counter` (with your `doctrine.table_name_prefix` / `table_prefix`).
   Generate a migration (`doctrine:migrations:diff`) or update the schema. Seeding it in the migration is optional:
 
