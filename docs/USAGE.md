@@ -32,6 +32,7 @@
 - [Formatting](#formatting)
 - [Web Push](#web-push)
 - [Messenger: retries and failures](#messenger-retries-and-failures)
+- [High load](#high-load)
 - [Timeouts](#timeouts)
 - [Privacy](#privacy)
 - [JSON API](#json-api)
@@ -1527,6 +1528,41 @@ inline.
 - **Idempotency:** a redelivered digest message is a no-op inside `digest.interval_minutes` (a "sent" marker in the
   cache pool); a redelivered push message sends the notification again with the same `tag`, which replaces the first one
   on the device.
+
+## High load
+
+1.30 (Beacon spec 239): ChatKit is built for 1,000 concurrent users / 300 requests per second on long-running workers
+(FrankenPHP worker mode with the kernel reset off, RoadRunner, Messenger consumers).
+
+- **One unit of work per write.** Every write runs through `Nowo\TransactionContract\TransactionRunnerInterface`:
+  one transaction, the chat manager flushed inside it, side effects (Mercure, events, push, automatic replies) after
+  the commit. The default runner (`nowo_chat_kit.transaction_runner`, nowo-tech/transaction-doctrine) makes one
+  attempt; after a failure it leaves no transaction open (it closes the connection only when the rollback fails, as
+  after a MySQL deadlock inside a nested flush) and resets the manager, so the worker's next request starts clean.
+- **Retries.** Bind the interface to a retrying runner to replay transient failures. With DoctrineDeadlockRetryBundle
+  3 installed its adapter does it (pass priority 10 beats ChatKit's default); or alias it yourself:
+
+  ```yaml
+  # config/services.yaml
+  services:
+      Nowo\TransactionContract\TransactionRunnerInterface: '@App\Persistence\MyTransactionRunner'
+  ```
+
+  ChatKit's writes are replayable: a replay re-reads what it changes and gets exactly one effect.
+- **503 and 409.** On ChatKit's routes a transient failure answers `503 Service Unavailable` with `Retry-After` (the
+  runner's hint, 1 s by default) and a conflict `409 Conflict`, as `{ok: false, error: "unavailable" | "conflict"}` on
+  the API. Your own controllers that call the ChatKit services map failures themselves (or enable
+  DoctrineDeadlockRetryBundle's `http_mapping`).
+- **Hot rows.** A new message locks its conversation row first and moves the activity time forward only, so messages
+  of one busy conversation queue (each for a few milliseconds) instead of deadlocking. Opening a ticket locks the draft
+  and one counter row, never the conversation table. Reopening closed conversations touches only the archived rows.
+- **Bounded reads.** Message pages, pins, mentions, the conversation list and the inbox are paged; the GDPR export
+  reads in pages of 500 and releases them; quick replies (50) and pinned links (200) are capped.
+- **Workers.** ChatKit resets its own per-request state at every boundary. For connections and managers left by other
+  code, enable DoctrineDeadlockRetryBundle's `worker_guard` (HTTP and Messenger), or DoctrineBundle's
+  `doctrine_ping_connection` / `doctrine_clear_entity_manager` Messenger middlewares.
+- **DDD hosts** inject `TransactionRunnerInterface` in their own application services too (nowo-tech/transaction-contract
+  has no Doctrine or Symfony type); ChatKit's ports stay framework-free.
 
 ## Timeouts
 

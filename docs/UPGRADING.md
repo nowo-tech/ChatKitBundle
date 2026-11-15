@@ -74,6 +74,32 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Target 1.30.0 (Beacon spec 239, load readiness).
+
+- **New requires:** `nowo-tech/transaction-contract` ^1.0 and `nowo-tech/transaction-doctrine` ^1.0. The latter requires
+  `doctrine/dbal` ^4: a host still on DBAL 3 stays on ChatKit 1.29 until it upgrades DBAL.
+- **Schema:** one new table, `nowo_chat_ticket_counter` (with your `doctrine.table_name_prefix` / `table_prefix`).
+  Generate a migration (`doctrine:migrations:diff`) or update the schema. The first ticket opened after the upgrade
+  starts the counter after the highest existing number; nothing else to migrate.
+- **Transaction runner:** ChatKit registers `nowo_chat_kit.transaction_runner` and aliases
+  `Nowo\TransactionContract\TransactionRunnerInterface` to it only when your application defines no alias. If you
+  alias the interface yourself (or install DoctrineDeadlockRetryBundle 3, whose adapter does), ChatKit's writes run
+  through your runner, retries included. A runner backed by another entity manager is fine: ChatKit flushes its own
+  manager inside the unit of work.
+- **Ticket numbers:** still sequential and gap-free (a failed opening hands no number out); new guarantee: a number is
+  never given again, even after the ticket was purged or erased. Numbers written outside ChatKit are skipped (the
+  counter catches up).
+- **Failures:** a deadlock, lock wait timeout or serialization failure on a ChatKit route answers 503 with
+  `Retry-After` (was 500), a lost unique key race that cannot be resolved by reading the winner's row answers 409. The
+  dock shows its usual error for a failed request (the person sends again); custom clients of the JSON API should retry
+  a 503 after `Retry-After`.
+- **After a failed ChatKit write** the entity manager the chat rows go through is closed and reset (the application's
+  manager with `doctrine.private_entity_manager` off): entities loaded before that write are detached. Domain refusals
+  that come before any write (look-alike users, limits, validation) do not reset it. Turn the private entity manager on
+  to keep the application's manager out of chat failures.
+- **Workers:** for Messenger consumers and custom loops, see USAGE "High load"; DoctrineDeadlockRetryBundle's
+  `worker_guard` is the recommended companion.
+
 ## To 1.29.0
 
 From **1.28.0**:

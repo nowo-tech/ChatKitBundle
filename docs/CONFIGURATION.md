@@ -162,7 +162,7 @@ The bundle maps its tables as `nowo_chat_<name>`. Two options change that, appli
 | `nowo_chat_` | `app_` | `app_nowo_chat_message` | `app_idx_nowo_chat_message_created` | `app_uniq_nowo_chat_message_uuid` |
 | `chat_` | `app_` | `app_chat_message` | `app_idx_chat_message_created` | `app_uniq_chat_message_uuid` |
 
-The tables are `conversation`, `message`, `message_mention`, `participant`, `quick_reply`, `reaction` and
+The tables are `conversation`, `message`, `message_mention`, `participant`, `quick_reply`, `reaction`, `ticket_counter` (1.30) and
 `user_settings`. Doctrine derives the `IDX_*` / `FK_*` names of the foreign keys from the table name, so they change
 with it. Changing either option on an existing database needs a migration; [UPGRADING](UPGRADING.md#to-1220) has the
 rename statements.
@@ -193,6 +193,7 @@ Container parameters with the resolved physical names, for host SQL (GDPR eraser
 | `nowo_chat_kit.doctrine.table.participant` | `nowo_chat_participant` | `chat_participant` |
 | `nowo_chat_kit.doctrine.table.quick_reply` | `nowo_chat_quick_reply` | `chat_quick_reply` |
 | `nowo_chat_kit.doctrine.table.reaction` | `nowo_chat_reaction` | `chat_reaction` |
+| `nowo_chat_kit.doctrine.table.ticket_counter` (1.30) | `nowo_chat_ticket_counter` | `chat_ticket_counter` |
 | `nowo_chat_kit.doctrine.table.user_settings` | `nowo_chat_user_settings` | `chat_user_settings` |
 | `nowo_chat_kit.doctrine.tables` | map of the keys above to the names | |
 
