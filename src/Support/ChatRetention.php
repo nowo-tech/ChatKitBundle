@@ -35,6 +35,9 @@ final readonly class ChatRetention
 
     /**
      * Retention in days for this run. Exceptions of the provider propagate (the run must stop, not fall back).
+     * A configured value below 1 (while the provider gave nothing usable) throws: the run must not purge.
+     *
+     * @throws InvalidRetentionConfigurationException When the configured `retention_days` is 0 or negative
      *
      * @return int Days, between MIN_DAYS and MAX_DAYS
      */
@@ -50,6 +53,11 @@ final readonly class ChatRetention
                 $days   = $asked;
                 $source = 'provider';
             }
+        }
+        if ($source === 'configuration' && $days < 1) {
+            // 1.31.1: a configured value that is not a positive number is an operator error (an `%env(int:…)%` that coerced
+            // to 0, a negative number): refuse instead of purging with the most aggressive window.
+            throw new InvalidRetentionConfigurationException($days);
         }
         if ($days < self::MIN_DAYS) {
             $this->logger->warning('Chat retention below the minimum was raised.', ['requested_days' => $days, 'minimum_days' => self::MIN_DAYS, 'source' => $source]);

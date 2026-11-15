@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [To 1.31.1](#to-1311)
 - [To 1.31.0](#to-1310)
 - [To 1.31.0](#to-1310-1)
 - [To 1.30.0](#to-1300)
@@ -76,6 +77,13 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+### To 1.31.1
+
+Hosts whose `retention_days` resolves to 0 or a negative number (typically `%env(int:CHAT_RETENTION_DAYS)%` with an
+empty, non-numeric or out-of-range variable) will now see `nowo:chat:purge` log an error and exit with a failure
+instead of purging with a 30-day window. Fix the variable. Valid values (also 1 to 29, still raised to 30) and a
+`RetentionPolicyProviderInterface` answering a usable value are unaffected.
 
 ## To 1.31.0
 
