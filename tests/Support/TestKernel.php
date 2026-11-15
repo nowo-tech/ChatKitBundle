@@ -14,7 +14,6 @@ use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatParticipantResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
-use Nowo\ChatKitBundle\DependencyInjection\Compiler\TransactionRunnerAliasPass;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Nowo\ChatKitBundle\Tests\Support\Chat\CountingAvatarResolver;
@@ -33,7 +32,7 @@ use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCountingMiddleware;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\TestKindFilter;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
-use Nowo\ChatKitBundle\Tests\Support\Transaction\ScriptedTransactionRunner;
+use Nowo\ChatKitBundle\Tests\Support\Transaction\HostEntityManagerRunner;
 use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinChannelSource;
 use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinParticipantResolver;
 use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinRealtime;
@@ -249,11 +248,11 @@ final class TestKernel extends Kernel
             $services->set(TestAuthorBadgeProvider::class);
             $services->alias(ChatAuthorBadgeProviderInterface::class, TestAuthorBadgeProvider::class);
         }
-        // 1.30: a host that binds its own TransactionRunnerInterface (a DDD host, DoctrineDeadlockRetryBundle's adapter):
-        // ChatKit's default runner wrapped by a runner the tests script (a transient failure, a replay).
+        // 1.30 (audit QD-M3): a host that binds TransactionRunnerInterface to a runner on its own manager (as
+        // DoctrineDeadlockRetryBundle's adapter): ChatKit must never use it.
         if ($this->scriptedRunner) {
-            $services->set(ScriptedTransactionRunner::class)->args([service(TransactionRunnerAliasPass::SERVICE_ID)]);
-            $services->alias(TransactionRunnerInterface::class, ScriptedTransactionRunner::class);
+            $services->set(HostEntityManagerRunner::class)->args([service('doctrine.orm.entity_manager')]);
+            $services->alias(TransactionRunnerInterface::class, HostEntityManagerRunner::class);
         }
         if ($this->sidebarProviders) {
             $services->set(TestSidebarProvider::class)->autoconfigure();

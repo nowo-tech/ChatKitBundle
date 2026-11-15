@@ -146,6 +146,40 @@ final class TicketNumberLocksTest extends LoadDatabaseTestCase
         $this->assertHealthy();
     }
 
+    /**
+     * Audit QD-L3, ported with the assertion inverted: two real first openings after the upgrade (no counter row yet,
+     * tickets already numbered). The peer runs ChatKitTicketNumbers' 1.30 statements for its own draft and commits a
+     * moment later; this opening waits for the peer's counter row, then moves it on. No deadlock (1.30's first read of
+     * the maximum takes no lock), numbers unique and gap-free.
+     */
+    public function testTwoRealFirstOpeningsAfterTheUpgradeDoNotDeadlock(): void
+    {
+        $tickets = $this->get(ChatSupportTickets::class);
+        $bea     = $tickets->open($this->user('bea'));
+        $cai     = $tickets->open($this->user('cai'));
+        $this->connection()->executeStatement("INSERT INTO nowo_chat_conversation (uuid, kind, ticket_number, last_message_at, created_at) VALUES ('00000000-0000-7000-8000-0000000000f1', 'support', 1, '2026-11-15 10:00:00', '2026-11-15 10:00:00'), ('00000000-0000-7000-8000-0000000000f2', 'support', 2, '2026-11-15 10:00:00', '2026-11-15 10:00:00')");
+        $this->em->clear();
+
+        $peer = $this->otherSession();
+        self::assertSame('OK', $peer->execute('BEGIN'));
+        self::assertSame('OK', $peer->execute('SELECT ticket_number FROM nowo_chat_conversation WHERE id = ' . $cai->getId() . ' FOR UPDATE'));
+        self::assertSame('OK', $peer->execute("SELECT 1 FROM nowo_chat_ticket_counter WHERE counter_key = 'nowo_chat_conversation'"));
+        self::assertSame('OK', $peer->execute('SELECT COALESCE(MAX(ticket_number), 0) FROM nowo_chat_conversation'));
+        self::assertSame('OK', $peer->execute("INSERT INTO nowo_chat_ticket_counter (counter_key, last_number) VALUES ('nowo_chat_conversation', 3)"));
+        $peer->send($this->sleepStatement(0.7));
+        $peer->send('UPDATE nowo_chat_conversation SET ticket_number = 3 WHERE id = ' . $cai->getId() . ' AND ticket_number IS NULL');
+        $peer->send('COMMIT');
+
+        $tickets->chooseTopic($this->userNamed('bea'), $this->draft($bea), 'billing');
+
+        self::assertSame('OK', $peer->await(), 'the sleep');
+        self::assertSame('OK', $peer->await(), 'the peer\'s number');
+        self::assertSame('OK', $peer->await(), 'the peer committed');
+        $this->assertHealthy();
+        self::assertSame(4, $this->draft($bea)->getTicketNumber());
+        self::assertSame([1, 2, 3, 4], array_map(intval(...), $this->connection()->fetchFirstColumn('SELECT ticket_number FROM nowo_chat_conversation WHERE ticket_number IS NOT NULL ORDER BY ticket_number')));
+    }
+
     private function firstTicket(): void
     {
         $tickets = $this->get(ChatSupportTickets::class);

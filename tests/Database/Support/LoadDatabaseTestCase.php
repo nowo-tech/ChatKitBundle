@@ -11,6 +11,7 @@ use Doctrine\ORM\Tools\SchemaTool;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
+use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Throwable;
@@ -142,10 +143,15 @@ abstract class LoadDatabaseTestCase extends TestCase
     }
 
     /**
-     * After a failure: no transaction left open on the test's connection, the entity manager open, nothing pending.
+     * What the worker's next request finds after a failure, once the request boundary ran (ChatKit's boundary listener:
+     * a manager a failed chat flush closed is replaced there, never mid-request): no transaction left open on the test's
+     * connection, the entity manager open, nothing pending.
      */
     protected function assertHealthy(): void
     {
+        $boundary = $this->kernel->getContainer()->get(ChatRequestBoundaryListener::class);
+        assert($boundary instanceof ChatRequestBoundaryListener);
+        $boundary->clear();
         self::assertSame(0, $this->connection()->getTransactionNestingLevel(), 'no transaction left open');
         $registry = $this->kernel->getContainer()->get('doctrine');
         assert($registry instanceof ManagerRegistry);

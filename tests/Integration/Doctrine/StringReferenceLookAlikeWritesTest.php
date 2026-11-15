@@ -5,30 +5,30 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Integration\Doctrine;
 
 use DateTimeImmutable;
+use Doctrine\DBAL\Exception\DriverException;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Event\OnFlushEventArgs;
-use Doctrine\ORM\Events;
 use Doctrine\ORM\Tools\SchemaTool;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
-use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
-use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
+use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Service\ChatMentions;
 use Nowo\ChatKitBundle\Support\ChatSupportTickets;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefChatUser;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefDirectory;
+use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 use function array_column;
@@ -36,6 +36,7 @@ use function assert;
 use function preg_quote;
 use function preg_replace;
 use function sprintf;
+use function str_contains;
 
 /**
  * 1.28, audit PV (`doctrine.user_reference: string`, a user column that folds behind a passed schema check): the
@@ -288,26 +289,78 @@ final class StringReferenceLookAlikeWritesTest extends TestCase
     /** PV-D1: any other failure of the second step rolls the conversation back and surfaces unchanged. */
     public function testAnotherFailureOfTheSecondStepRollsBackAndSurfaces(): void
     {
-        $this->em->getEventManager()->addEventListener(Events::onFlush, new class {
-            public function onFlush(OnFlushEventArgs $args): void
-            {
-                foreach ($args->getObjectManager()->getUnitOfWork()->getScheduledEntityInsertions() as $entity) {
-                    if ($entity instanceof ChatParticipant && ChatUserReferences::key($entity->getUser()) === 'Bob') {
-                        throw new RuntimeException('second step failed');
-                    }
-                }
-            }
-        });
+        // 1.30: participant rows go in through DBAL (a savepoint per row); the second one fails in the database.
+        $this->em->getConnection()->executeStatement("CREATE TRIGGER second_step BEFORE INSERT ON nowo_chat_participant WHEN NEW.user_id = 'Bob' BEGIN SELECT RAISE(ABORT, 'second step failed'); END");
         try {
             $this->get(ChatServiceInterface::class)->openDirect($this->make('bob'), $this->make('Bob'));
             self::fail('the failure must surface');
-        } catch (RuntimeException $failure) {
-            self::assertSame('second step failed', $failure->getMessage());
+        } catch (DriverException $failure) {
+            self::assertStringContainsString('second step failed', $failure->getMessage());
         }
         $connection = $this->em->getConnection();
         self::assertFalse($connection->isTransactionActive());
         self::assertSame(0, (int) $connection->fetchOne('SELECT COUNT(*) FROM nowo_chat_conversation'), 'no orphan conversation');
         self::assertSame(0, (int) $connection->fetchOne('SELECT COUNT(*) FROM nowo_chat_participant'));
+    }
+
+    /**
+     * 1.30, audit QD-L1 (ported from the audit's PoC, inverted): a refusal the host treats as recoverable never detaches
+     * the host's entities; a change it makes afterwards is written. The application's manager only: the private one is
+     * replaced after a rollback that undid its rows, and holds no host entity anyway.
+     */
+    #[Group('application-manager')]
+    public function testARecoverableLookAlikeRefusalLeavesTheHostsEntitiesManaged(): void
+    {
+        $bob  = $this->make('bob');
+        $bigB = $this->make('Bob');
+        $this->em->persist($hostRow = new ChatQuickReply($bob, 'host title', 'v1'));
+        $this->em->flush();
+        $this->fold('nowo_chat_participant', 'user_id');
+
+        try {
+            $this->get(ChatServiceInterface::class)->openDirect($bob, $bigB);
+            self::fail('refused');
+        } catch (ChatUserLookAlikeException) {
+        }
+        $hostRow->change('host title', 'v2');
+        $this->em->flush();
+
+        self::assertTrue($this->em->isOpen());
+        self::assertSame('v2', $this->em->getConnection()->fetchOne('SELECT body FROM nowo_chat_quick_reply'));
+    }
+
+    /**
+     * 1.30: a membership insert that meets a look-alike's row written just before it (a folding column) is refused as a
+     * look-alike after the savepoint rolled it back; nothing of the refused unit stays.
+     */
+    #[Group('application-manager')]
+    public function testAMembershipInsertMeetingALookAlikesNewRowIsRefused(): void
+    {
+        // bob is known to the directory; his row is the one another request writes.
+        $this->make('bob');
+        $bigB    = $this->make('Bob');
+        $channel = $this->get(ChatServiceInterface::class)->openChannel($this->make('ana'), new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+        $this->fold('nowo_chat_participant', 'user_id');
+        $em      = $this->em;
+        $counter = $this->services()->get(QueryCounter::class);
+        self::assertInstanceOf(QueryCounter::class, $counter);
+        $counter->before = static function (string $sql) use ($em, $channel): bool {
+            if (!str_contains($sql, 'SAVEPOINT nowo_chat_kit_row_') || str_contains($sql, 'RELEASE') || str_contains($sql, 'ROLLBACK')) {
+                return false;
+            }
+            $em->getConnection()->insert('nowo_chat_participant', ['conversation_id' => $channel->getId(), 'user_id' => 'bob', 'joined_at' => '2026-11-15 10:00:00']);
+
+            return true;
+        };
+
+        try {
+            $this->get(ChatServiceInterface::class)->openChannel($bigB, new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+            self::fail('refused');
+        } catch (ChatUserLookAlikeException) {
+        }
+        self::assertSame(0, $this->em->getConnection()->getTransactionNestingLevel());
+        self::assertSame(['ana'], $this->em->getConnection()->fetchFirstColumn('SELECT user_id FROM nowo_chat_participant ORDER BY user_id'), 'the unit was rolled back');
+        self::assertTrue($this->em->isOpen());
     }
 
     /** PV-L2: on exact columns two references that differ only by case are two people, as before. */

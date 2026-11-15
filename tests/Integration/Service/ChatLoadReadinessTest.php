@@ -13,6 +13,7 @@ use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
 use Nowo\ChatKitBundle\Repository\ChatConversationLinkRepository;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
+use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatQuickReplyRepository;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
@@ -20,6 +21,7 @@ use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\TransactionContract\TransactionRunnerInterface;
+use ReflectionProperty;
 
 use function sprintf;
 use function str_pad;
@@ -33,9 +35,11 @@ use const STR_PAD_LEFT;
  */
 final class ChatLoadReadinessTest extends DatabaseTestCase
 {
-    public function testTheDefaultRunnerIsWiredToTheInterface(): void
+    public function testChatKitDefinesNoRunnerForTheApplication(): void
     {
-        self::assertInstanceOf(ChatKitTransactionRunner::class, $this->get(TransactionRunnerInterface::class));
+        // 1.30 (audit QD-M3): ChatKit's runner is its own; the application's TransactionRunnerInterface is the application's.
+        self::assertFalse($this->kernel->getContainer()->has(TransactionRunnerInterface::class));
+        self::assertInstanceOf(ChatKitTransactionRunner::class, (new ReflectionProperty(ChatService::class, 'transactions'))->getValue($this->get(ChatService::class)));
     }
 
     public function testTheActivityMovesForwardOnly(): void
@@ -74,7 +78,7 @@ final class ChatLoadReadinessTest extends DatabaseTestCase
 
         self::assertSame(1, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_participant WHERE archived_at IS NOT NULL'), 'only the muted member stays closed');
         self::assertCount(1, $this->em->getUnitOfWork()->getIdentityMap()[ChatParticipant::class] ?? [], 'only the author\'s row was loaded');
-        $mine = $this->em->getRepository(ChatParticipant::class)->findOneBy(['conversation' => $channel, 'user' => $ana]) ?? self::fail('row');
+        $mine = $this->get(ChatParticipantRepository::class)->findOneFor($channel, $ana) ?? self::fail('row');
         self::assertNull($mine->getArchivedAt(), 'the managed row was read again');
     }
 

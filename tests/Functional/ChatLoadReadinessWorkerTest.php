@@ -6,18 +6,19 @@ namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use Doctrine\DBAL\Driver\PDO\Exception as PdoDriverException;
 use Doctrine\DBAL\Exception\DeadlockException;
+use Doctrine\DBAL\Exception\LockWaitTimeoutException;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Event\OnFlushEventArgs;
+use Doctrine\ORM\Event\PostPersistEventArgs;
 use Doctrine\ORM\Events;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
-use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
-use Nowo\ChatKitBundle\Tests\Support\Transaction\ScriptedTransactionRunner;
 use PDOException;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\HttpFoundation\Request;
@@ -29,6 +30,7 @@ use Throwable;
 use function assert;
 use function json_decode;
 use function json_encode;
+use function str_contains;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -41,11 +43,6 @@ use const JSON_THROW_ON_ERROR;
 final class ChatLoadReadinessWorkerTest extends DatabaseTestCase
 {
     private KernelBrowser $client;
-
-    protected function scriptedTransactionRunner(): bool
-    {
-        return true;
-    }
 
     protected function chatKitConfig(): array
     {
@@ -61,18 +58,48 @@ final class ChatLoadReadinessWorkerTest extends DatabaseTestCase
         $this->client = $client;
     }
 
-    public function testATransientFailureAnswers503WithRetryAfterAndTheNextRequestWorks(): void
+    public function testALockWaitBeforeTheFlushAnswers503AndTheNextRequestWorks(): void
     {
-        [$session, $uuid]                                    = $this->directConversation();
-        $this->get(ScriptedTransactionRunner::class)->script = ['unavailable'];
+        [$session, $uuid] = $this->directConversation();
+        // Raised before the flush opens its own transaction: the manager stays open.
+        $this->failOnce(ChatMessage::class, new LockWaitTimeoutException(PdoDriverException::new(new PDOException('Lock wait timeout exceeded')), null));
 
         $failed = $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', $session, ['body' => 'one']);
-        self::assertSame(503, $failed->getStatusCode());
-        self::assertSame('7', $failed->headers->get('Retry-After'));
+        self::assertSame(503, $failed->getStatusCode(), (string) $failed->getContent());
+        self::assertSame('1', $failed->headers->get('Retry-After'));
         self::assertSame(['ok' => false, 'error' => 'unavailable'], $this->json($failed));
+        $this->assertHealthy();
 
         $sent = $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', $session, ['body' => 'two']);
         self::assertSame(201, $sent->getStatusCode());
+        $this->assertHealthy();
+    }
+
+    public function testADeadlockInsideTheFlushLeavesTheNextRequestHealthy(): void
+    {
+        [$session, $uuid] = $this->directConversation();
+        // Raised inside the flush's transaction (a real 1213): the ORM closes the manager; the boundary replaces it.
+        $this->em->getEventManager()->addEventListener([Events::postPersist], new class {
+            private bool $done = false;
+
+            public function postPersist(PostPersistEventArgs $args): void
+            {
+                if (!$this->done && $args->getObject() instanceof ChatMessage) {
+                    $this->done = true;
+
+                    throw new DeadlockException(PdoDriverException::new(new PDOException('Deadlock found when trying to get lock')), null);
+                }
+            }
+        });
+
+        $failed = $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', $session, ['body' => 'lost']);
+        self::assertSame(503, $failed->getStatusCode(), (string) $failed->getContent());
+        $this->assertHealthy();
+        self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message'), 'nothing half-written');
+
+        $sent = $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', $session, ['body' => 'kept']);
+        self::assertSame(201, $sent->getStatusCode(), (string) $sent->getContent());
+        self::assertSame(['kept'], $this->em->getConnection()->fetchFirstColumn('SELECT body FROM nowo_chat_message'));
         $this->assertHealthy();
     }
 
@@ -108,15 +135,29 @@ final class ChatLoadReadinessWorkerTest extends DatabaseTestCase
         $this->assertHealthy();
     }
 
-    public function testAMembershipAnotherRequestWroteFirstOpensTheChannel(): void
+    public function testOpeningAChannelThenSendingInOneRequestWorksAfterALostMembershipRace(): void
     {
         [$session] = $this->directConversation();
-        // The participant insert loses the race once: the unit of work runs again and reads the row (idempotent).
-        $this->failOnce(ChatParticipant::class, new UniqueConstraintViolationException(PdoDriverException::new(new PDOException('UNIQUE constraint failed')), null));
+        $counter   = $this->get(QueryCounter::class);
+        $em        = $this->em;
+        $channel   = $this->json($this->raw(Request::METHOD_POST, '/chat/api/channel', $this->signIn($this->user('Bea')), ['channelKey' => TestChannelProvider::KEY]))['conversation']['uuid'] ?? null;
+        self::assertIsString($channel);
+        $session = $this->signIn($em->getRepository(TestUser::class)->findOneBy(['name' => 'Ana']) ?? self::fail('Ana'));
+        // Another tab of the same person writes the membership row just before this request's insert.
+        $counter->before = static function (string $sql) use ($em): bool {
+            if (!str_contains($sql, 'SAVEPOINT nowo_chat_kit_row_') || str_contains($sql, 'RELEASE') || str_contains($sql, 'ROLLBACK')) {
+                return false;
+            }
+            $em->getConnection()->executeStatement("INSERT INTO nowo_chat_participant (conversation_id, user_id, joined_at) SELECT c.id, u.id, '2026-11-15 10:00:00' FROM nowo_chat_conversation c, test_user u WHERE c.kind = 'channel' AND u.name = 'Ana'");
+
+            return true;
+        };
 
         $opened = $this->raw(Request::METHOD_POST, '/chat/api/channel', $session, ['channelKey' => TestChannelProvider::KEY]);
         self::assertSame(200, $opened->getStatusCode(), (string) $opened->getContent());
-        self::assertSame(1, (int) $this->em->getConnection()->fetchOne("SELECT COUNT(*) FROM nowo_chat_participant p JOIN nowo_chat_conversation c ON c.id = p.conversation_id WHERE c.kind = 'channel'"));
+        self::assertNull($counter->before, 'the race was played');
+        $sent = $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $channel . '/messages', $session, ['body' => 'shared a link']);
+        self::assertSame(201, $sent->getStatusCode(), (string) $sent->getContent());
         $this->assertHealthy();
     }
 

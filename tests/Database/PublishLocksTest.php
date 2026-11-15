@@ -6,15 +6,19 @@ namespace Nowo\ChatKitBundle\Tests\Database;
 
 use Doctrine\ORM\Events;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
+use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Database\Support\LoadDatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Database\Support\SecondConnection;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
+use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\TransactionContract\TransientStorageFailure;
 use PHPUnit\Framework\TestCase;
 
 use function microtime;
 use function preg_match;
+use function str_contains;
 use function str_starts_with;
 
 /**
@@ -130,6 +134,70 @@ final class PublishLocksTest extends LoadDatabaseTestCase
 
         self::assertSame('00000000-0000-7000-8000-0000000000bb', $conversation->getUuid(), 'the conversation the other request wrote');
         self::assertSame(1, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_conversation'));
+        $this->assertHealthy();
+    }
+
+    /**
+     * Audit QD-L2, ported with the assertion inverted: a mentioned member who closed the conversation moves their read
+     * cursor (markRead(), through the service) while a new message that mentions them is in flight (the peer plays
+     * publish(): the conversation row, the message and its mention row, then the reopened participant row). 1.30's
+     * markRead() takes the conversation row first (shared), so it waits for the message's unit of work instead of locking
+     * the participant row and meeting the uncommitted mention in the other order (a deadlock on MySQL before).
+     */
+    public function testAMentionedMembersReadCursorQueuesBehindANewMessage(): void
+    {
+        [$ana, $luis, $dm] = $this->conversation();
+        $chat              = $this->get(ChatService::class);
+        $seed              = $chat->send($ana, $dm, 'seed');
+        $chat->archive($luis, [$dm], true);
+        $this->em->clear();
+        $luis = $this->fresh($luis);
+        $dm   = $this->em->find(ChatConversation::class, $dm->getId()) ?? self::fail('dm');
+
+        $peer = $this->otherSession();
+        self::assertSame('OK', $peer->execute('BEGIN'));
+        self::assertSame('OK', $peer->execute('SELECT last_message_at FROM nowo_chat_conversation WHERE id = ' . $dm->getId() . ' FOR UPDATE'));
+        self::assertSame('OK', $peer->execute("INSERT INTO nowo_chat_message (uuid, conversation_id, author_id, kind, body, body_html, created_at) VALUES ('00000000-0000-7000-8000-0000000000dd', " . $dm->getId() . ', ' . $ana->getId() . ", 'text', 'hi', '<p>hi</p>', '2026-11-15 10:00:00')"));
+        self::assertSame('OK', $peer->execute('INSERT INTO nowo_chat_message_mention (message_id, user_id, created_at) SELECT id, ' . $luis->getId() . ", '2026-11-15 10:00:00' FROM nowo_chat_message WHERE uuid = '00000000-0000-7000-8000-0000000000dd'"));
+        $this->ballast();
+        $peer->send($this->sleepStatement(0.7));
+        $peer->send('UPDATE nowo_chat_participant SET archived_at = NULL WHERE conversation_id = ' . $dm->getId() . ' AND user_id = ' . $luis->getId());
+        $peer->send('COMMIT');
+
+        $moved = $chat->markRead($luis, $dm, (int) $seed->getId());
+
+        self::assertTrue($moved);
+        self::assertSame('OK', $peer->await(), 'the sleep');
+        self::assertSame('OK', $peer->await(), 'the reopened row');
+        self::assertSame('OK', $peer->await(), 'the peer committed');
+        $this->assertHealthy();
+    }
+
+    /**
+     * Audit QD-M2 on a real server: the membership row of the caller is written by another request just before this
+     * one's insert. Only the insert's savepoint is rolled back, the row is read, and the next write of the same request
+     * works with the same user.
+     */
+    public function testAWriteAfterALostMembershipRaceWorks(): void
+    {
+        $ana             = $this->user('ana');
+        $channel         = $this->get(ChatService::class)->openChannel($this->user('luis'), new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+        $peer            = $this->otherSession();
+        $counter         = $this->get(QueryCounter::class);
+        $counter->before = static function (string $sql) use ($peer, $channel, $ana): bool {
+            if (!str_contains($sql, 'INSERT INTO nowo_chat_participant')) {
+                return false;
+            }
+            TestCase::assertSame('OK', $peer->execute('INSERT INTO nowo_chat_participant (conversation_id, user_id, joined_at) VALUES (' . $channel->getId() . ', ' . $ana->getId() . ", '2026-11-15 10:00:00')"));
+
+            return true;
+        };
+
+        $conversation = $this->get(ChatService::class)->openChannel($ana, new ChatChannel(TestChannelProvider::KEY, 'Acme'));
+
+        self::assertNull($counter->before, 'the race was played');
+        self::assertTrue($this->em->contains($ana), 'the caller\'s user stays managed');
+        self::assertNotNull($this->get(ChatService::class)->send($ana, $conversation, 'shared a link')->getId());
         $this->assertHealthy();
     }
 
