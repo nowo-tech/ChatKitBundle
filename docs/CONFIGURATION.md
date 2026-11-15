@@ -146,7 +146,9 @@ services:
 
 The service returns the days (for example from `InstanceSettings`, see [USAGE](USAGE.md#retentionpolicyproviderinterface-optional))
 or null. `nowo:chat:purge` asks it on every run, never caches the answer, and falls back to `retention_days` on null.
-The minimum of 30 stays: a smaller value is raised to 30 with a warning in the log.
+The minimum of 30 stays: a smaller value is raised to 30 with a warning in the log. A value of 0 or less is ignored
+(warning; `retention_days` applies). Since 1.31 the maximum is 36500 days: a larger value, from the provider or from
+`retention_days`, is lowered to 36500 with a warning. The provider is global: it applies to every profile.
 
 ## Rate limits
 

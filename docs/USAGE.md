@@ -213,8 +213,10 @@ public function retentionDays(): ?int; // null: use the configured retention_day
 
 Retention days from your own storage, asked on **every** `nowo:chat:purge` run (nothing is cached by the bundle, so a
 changed setting applies at the next run, also in a FrankenPHP worker that never resets the kernel). Values below 30
-are raised to 30 (warning in the log); 0 or less is ignored (warning, configured value applies); an exception stops
-the run before anything is deleted. Beacon-style example, reading an administration setting:
+are raised to 30 and values above 36500 (100 years) are lowered to 36500, both with a warning in the log; 0 or less is
+ignored (warning, configured value applies); an exception stops the run before anything is deleted (and is logged).
+The provider is global: it overrides `retention_days` for every profile. Validate the value you return (the example
+refuses anything that is not an integer of at least 1). Beacon-style example, reading an administration setting:
 
 ```php
 final class InstanceSettingsRetention implements RetentionPolicyProviderInterface
@@ -226,9 +228,9 @@ final class InstanceSettingsRetention implements RetentionPolicyProviderInterfac
     public function retentionDays(): ?int
     {
         // Read on every call, never memoized in a property: the admin may change it between two purge runs.
-        $days = $this->settings->get('chat.retention_days');
+        $days = filter_var($this->settings->get('chat.retention_days'), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 
-        return is_numeric($days) ? (int) $days : null;
+        return $days === false ? null : $days;
     }
 }
 ```

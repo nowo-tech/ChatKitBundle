@@ -62,13 +62,20 @@ final class ChatPurgeCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $days    = (new ChatRetention($this->retentionDays, $this->retention, $this->logger))->days();
-        $cutoff  = $this->clock->now()->modify(sprintf('-%d days', $days));
         $deleted = 0;
         $links   = 0;
         $max     = max(1, (int) $input->getOption('max-batches'));
-        $this->logger->info('Chat purge started.', ['retention_days' => $days, 'cutoff' => $cutoff->format(DATE_ATOM), 'max_batches' => $max]);
         try {
+            $days   = (new ChatRetention($this->retentionDays, $this->retention, $this->logger))->days();
+            $now    = $this->clock->now();
+            $cutoff = $now->modify(sprintf('-%d days', $days));
+            // Defence in depth: whatever the arithmetic gave, never delete anything newer than the minimum window.
+            if ($cutoff > $now->modify(sprintf('-%d days', self::MIN_DAYS))) {
+                $this->logger->error('Chat purge aborted: the cutoff is inside the minimum retention window.', ['retention_days' => $days, 'cutoff' => $cutoff->format(DATE_ATOM)]);
+
+                return Command::FAILURE;
+            }
+            $this->logger->info('Chat purge started.', ['retention_days' => $days, 'cutoff' => $cutoff->format(DATE_ATOM), 'max_batches' => $max]);
             for ($batch = 0; $batch < $max; ++$batch) {
                 $count = $this->messages->purgeOlderThan($cutoff, self::BATCH);
                 $deleted += $count;

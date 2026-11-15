@@ -13,6 +13,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
+use const PHP_INT_MAX;
+
 /**
  * @author Héctor Franco Aceituno <hectorfranco@nowo.tech>
  * @copyright 2026 Nowo.tech
@@ -53,12 +55,25 @@ final class ChatRetentionTest extends TestCase
         yield 'negative is ignored' => [-5, 200, 200, 1];
         yield 'unusable and configured below minimum' => [0, 5, 30, 2];
         yield 'configured below minimum' => [null, 5, 30, 1];
+        yield 'maximum is accepted' => [ChatRetention::MAX_DAYS, 365, ChatRetention::MAX_DAYS, 0];
+        yield 'above maximum is lowered' => [ChatRetention::MAX_DAYS + 1, 365, ChatRetention::MAX_DAYS, 1];
+        yield 'ten to the thirteen is lowered' => [10 ** 13, 365, ChatRetention::MAX_DAYS, 1];
+        yield 'PHP_INT_MAX is lowered' => [PHP_INT_MAX, 365, ChatRetention::MAX_DAYS, 1];
+        yield 'configured above maximum is lowered' => [null, PHP_INT_MAX, ChatRetention::MAX_DAYS, 1];
     }
 
     public function testNoProviderUsesTheConfiguredDays(): void
     {
         self::assertSame(120, (new ChatRetention(120))->days());
         self::assertSame(30, (new ChatRetention(1))->days());
+    }
+
+    public function testTheMaximumWarningCarriesValuesOnly(): void
+    {
+        $logger = new RecordingLogger();
+        (new ChatRetention(PHP_INT_MAX, null, $logger))->days();
+
+        self::assertSame(['warning Chat retention above the maximum was lowered. ' . PHP_INT_MAX . ' 36500 configuration'], $logger->lines);
     }
 
     public function testWarningsCarryValuesOnly(): void
