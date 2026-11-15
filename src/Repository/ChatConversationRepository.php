@@ -57,10 +57,12 @@ class ChatConversationRepository extends ServiceEntityRepository
      * conversation then queue instead of deadlocking on MySQL / MariaDB).
      *
      * @param ChatConversation $conversation A stored conversation (a new one has nothing to lock: null)
+     * @param bool $shared A shared lock (a read cursor, a mute: they only wait for, and hold off, the writers of the
+     *                     conversation's lines; audit QD-L2)
      *
      * @return DateTimeImmutable|null The stored `lastMessageAt`; null for a new or vanished row
      */
-    public function lockActivity(ChatConversation $conversation): ?DateTimeImmutable
+    public function lockActivity(ChatConversation $conversation, bool $shared = false): ?DateTimeImmutable
     {
         $id = $conversation->getId();
         if ($id === null) {
@@ -68,11 +70,11 @@ class ChatConversationRepository extends ServiceEntityRepository
         }
         $metadata   = $this->getClassMetadata();
         $connection = $this->getEntityManager()->getConnection();
-        $stored     = ChatKitRowLock::fetchOne($connection->createQueryBuilder()
+        $stored     = ChatKitRowLock::fetchOne($connection, $connection->createQueryBuilder()
             ->select($metadata->getColumnName('lastMessageAt'))
             ->from($metadata->getTableName())
             ->where($metadata->getSingleIdentifierColumnName() . ' = :id')
-            ->setParameter('id', $id, ParameterType::INTEGER));
+            ->setParameter('id', $id, ParameterType::INTEGER), $shared);
         $value = $stored === false ? null : Type::getType(Types::DATETIME_IMMUTABLE)->convertToPHPValue($stored, $connection->getDatabasePlatform());
 
         return $value instanceof DateTimeImmutable ? $value : null;

@@ -106,10 +106,7 @@ final readonly class ChatSupportTickets
         // 1.28 (audit PV-L7): a look-alike refusal comes before any write and leaves nothing pending.
         $conversation = $this->target($owner);
 
-        return ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function (bool $replay) use ($owner, $context, $conversation): ChatConversation {
-            if ($replay) {
-                $conversation = $this->target(ChatKitWrites::attach($this->entityManager, $owner));
-            }
+        return ChatKitWrites::runRecovering($this->transactions, $this->entityManager, static function () use ($context, $conversation): ChatConversation {
             if ($context !== null) {
                 // @igor-ignore - Doctrine entity (one row), not a shared worker service.
                 $conversation->setSupportContext(is_string($context['url'] ?? null) ? $context['url'] : null, is_string($context['label'] ?? null) ? $context['label'] : null);
@@ -194,7 +191,7 @@ final readonly class ChatSupportTickets
                 $this->entityManager->persist($posted[1]);
             }
             if ($assignee instanceof ChatUserInterface) {
-                $conversation->assign(ChatKitWrites::attach($this->entityManager, $assignee));
+                $conversation->assign($assignee);
             }
 
             return $posted;
@@ -224,12 +221,12 @@ final readonly class ChatSupportTickets
             throw new InvalidArgumentException('read_only');
         }
         $previous          = $ticket->getSupportStatus() ?? SupportStatus::Open;
-        [$ticket, $posted] = $this->change($ticket, function (ChatConversation $ticket, bool $replay) use ($owner, $draft): array {
-            $draft = $replay && $draft instanceof ChatConversation ? ChatKitWrites::attach($this->entityManager, $draft) : $draft;
+        [$ticket, $posted] = $this->change($ticket, function (ChatConversation $ticket) use ($owner, $draft): array {
+            $draft = $draft instanceof ChatConversation ? ChatKitWrites::attach($this->entityManager, $draft) : $draft;
             if ($draft instanceof ChatConversation && $draft->isSupportDraft()) {
                 $this->messages->moveAll($draft, $ticket);
             }
-            $ticket->changeSupportStatus(SupportStatus::Open, ChatKitWrites::attach($this->entityManager, $owner), $this->clock->now());
+            $ticket->changeSupportStatus(SupportStatus::Open, $owner, $this->clock->now());
 
             return [$this->bot($ticket, 'support.bot.continued', ['by' => $owner->getChatDisplayName()])];
         });
@@ -266,7 +263,7 @@ final readonly class ChatSupportTickets
             }
         }
         [$ticket, $posted] = $this->change($ticket, function (ChatConversation $ticket) use ($actor, $status): array {
-            $ticket->changeSupportStatus($status, ChatKitWrites::attach($this->entityManager, $actor), $this->clock->now());
+            $ticket->changeSupportStatus($status, $actor, $this->clock->now());
 
             return [$this->bot($ticket, 'support.bot.status_' . $status->value, ['by' => $actor->getChatDisplayName()])];
         });
@@ -296,7 +293,7 @@ final readonly class ChatSupportTickets
             return false;
         }
         [$ticket, $posted] = $this->change($ticket, function (ChatConversation $ticket) use ($agent, $assignee): array {
-            $ticket->assign($assignee instanceof ChatUserInterface ? ChatKitWrites::attach($this->entityManager, $assignee) : null);
+            $ticket->assign($assignee instanceof ChatUserInterface ? $assignee : null);
 
             return [$assignee instanceof ChatUserInterface
                 ? $this->bot($ticket, 'support.bot.assigned', ['name' => $assignee->getChatDisplayName()])
@@ -322,23 +319,23 @@ final readonly class ChatSupportTickets
     /**
      * 1.30: one unit of work on a ticket (or draft): its row locked first and its activity moved forward (bot lines
      * insert after the lock, so two changes of one ticket queue instead of deadlocking), then the change, flushed with
-     * its bot lines before the commit. A replay works on the ticket loaded again.
+     * its bot lines before the commit.
      *
-     * @param callable(ChatConversation, bool): list<ChatMessage> $change Applies the change, returns the bot lines posted
+     * @param callable(ChatConversation): list<ChatMessage> $change Applies the change, returns the bot lines posted
      *
      * @return array{0: ChatConversation, 1: list<ChatMessage>} The ticket the change was written on and its bot lines
      */
     private function change(ChatConversation $ticket, callable $change): array
     {
-        return ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function (bool $replay) use ($ticket, $change): array {
-            $ticket = $replay ? ChatKitWrites::attach($this->entityManager, $ticket) : $ticket;
+        return ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($ticket, $change): array {
+            $ticket = ChatKitWrites::attach($this->entityManager, $ticket);
             $now    = $this->clock->now();
             $stored = $this->conversations->lockActivity($ticket);
             if (!$stored instanceof DateTimeImmutable || $now > $stored) {
                 $ticket->touch($now);
             }
 
-            return [$ticket, $change($ticket, $replay)];
+            return [$ticket, $change($ticket)];
         });
     }
 

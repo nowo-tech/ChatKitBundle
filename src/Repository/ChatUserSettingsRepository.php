@@ -138,9 +138,8 @@ class ChatUserSettingsRepository extends ServiceEntityRepository implements Rese
             $this->refs->assertNoLookAlike($this->userColumn(), $settings->getUser());
         }
         // 1.30: one unit of work through the transaction runner (ChatKit's default one when the repository is built by hand).
-        $stored = $settings->getId() !== null;
-        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function (bool $replay) use ($manager, $settings, $stored): void {
-            $manager->persist($replay ? ChatKitWrites::carry($manager, $settings, $stored) : $settings);
+        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function () use ($manager, $settings): void {
+            $manager->persist($settings);
         });
     }
 

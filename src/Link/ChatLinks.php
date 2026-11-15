@@ -148,11 +148,10 @@ final readonly class ChatLinks
         // Audit FZ-L2: the limit holds under concurrent adds — the conversation row is locked (SELECT … FOR UPDATE where
         // the platform has it) and the count is checked again after the insert, inside one unit of work (1.30: run
         // through the transaction runner; a refusal there rolls it back and discards the manager's pending changes).
-        $link = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function (bool $replay) use ($by, $conversation, $url, $host, $title, $now): ChatConversationLink {
-            // The row to lock must be managed: the same instances normally, loaded again after a failed earlier write
-            // of this request (the runner discarded the manager's state).
+        $link = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($by, $conversation, $url, $host, $title, $now): ChatConversationLink {
+            // The row to lock must be managed: the same instance normally, loaded again after a failed earlier write of
+            // this request (the runner detached the chat rows).
             $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
-            $by           = ChatKitWrites::attach($this->entityManager, $by);
             $this->entityManager->lock($conversation, LockMode::PESSIMISTIC_WRITE);
             if ($this->pinned->countFor($conversation) >= $this->maxPinned) {
                 throw new InvalidArgumentException('too_many_links');
@@ -193,8 +192,8 @@ final readonly class ChatLinks
         $previousTitle = $link->getTitle();
         $host          = $this->urls->host($url);
         $now           = $this->clock->now();
-        $link          = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function (bool $replay) use ($link, $url, $host, $title, $now): ChatConversationLink {
-            $link = $replay ? ChatKitWrites::attach($this->entityManager, $link) : $link;
+        $link          = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($link, $url, $host, $title, $now): ChatConversationLink {
+            $link = ChatKitWrites::attach($this->entityManager, $link);
             $link->change($url, $host, $title, $now);
 
             return $link;
@@ -212,13 +211,8 @@ final readonly class ChatLinks
     public function remove(ChatUserInterface $by, ChatConversationLink $link): void
     {
         $event = new ChatLinkRemovedEvent($link->getConversation(), $link->getUuid(), $link->getUrl(), $link->getTitle(), $by);
-        $id    = $link->getId();
-        ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function (bool $replay) use ($link, $id): void {
-            // A replay looks the row up by id again: the attempt that removed it cleared the entity's id.
-            $link = $replay ? $this->entityManager->find(ChatConversationLink::class, $id) : $link;
-            if ($link instanceof ChatConversationLink) {
-                $this->entityManager->remove($link);
-            }
+        ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($link): void {
+            $this->entityManager->remove(ChatKitWrites::attach($this->entityManager, $link));
         });
         $this->events?->dispatch($event);
         $this->notifier->linksChanged($event->conversation);

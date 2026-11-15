@@ -21,7 +21,6 @@ use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Contract\ChatSupportTopicProviderInterface;
 use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
-use Nowo\ChatKitBundle\DependencyInjection\Compiler\TransactionRunnerAliasPass;
 use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
@@ -51,6 +50,7 @@ use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
 use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
+use Nowo\TransactionContract\TransactionRunnerInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -70,7 +70,10 @@ return static function (ContainerConfigurator $container): void {
         ->defaults()
             ->autowire()
             ->autoconfigure()
-            ->private();
+            ->private()
+            // 1.30 (Beacon spec 239, audits QD-M1 / QD-M3): every ChatKit write runs on ChatKit's own runner, never on
+            // a runner the application binds to TransactionRunnerInterface (that one drives the application's manager).
+            ->bind(TransactionRunnerInterface::class, service(ChatKitTransactionRunner::SERVICE_ID));
 
     $services->load('Nowo\\ChatKitBundle\\', '../../')
         ->exclude([
@@ -135,12 +138,12 @@ return static function (ContainerConfigurator $container): void {
             // 1.27.1 (audit AOY-M2): the schema pass of the `string` mode guard. One check per request instead of one
             // per query by user, and a database switched between two requests is checked again. May be removed.
             service(StringReferenceSchemaGuard::class)->ignoreOnUninitialized(),
+            // 1.30: a shared manager closed by a failed chat write is replaced at the boundary (never mid-request).
+            service(ChatKitTransactionRunner::SERVICE_ID)->ignoreOnUninitialized(),
         ]));
-    // 1.30 (Beacon spec 239, recipe R1): the default runner under the bundle's own id. TransactionRunnerAliasPass
-    // aliases TransactionRunnerInterface to it only when the host defines none; the services are wired to the interface.
-    // The extension sets the manager name (the private manager's source name with doctrine.private_entity_manager).
-    $services->set(TransactionRunnerAliasPass::SERVICE_ID, ChatKitTransactionRunner::class)
-        ->args([service(EntityManagerInterface::class), service('doctrine'), null, 1]);
+    // 1.30: ChatKit's runner (the extension sets the private manager's name and mode).
+    $services->set(ChatKitTransactionRunner::SERVICE_ID, ChatKitTransactionRunner::class)
+        ->args([service(EntityManagerInterface::class), service('doctrine'), null, false, 1, service('logger')->nullOnInvalid()]);
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).
     $services->alias(ChatServiceInterface::class, ChatService::class);

@@ -68,22 +68,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 Target 1.30.0 (minor). Load readiness for 1,000 concurrent users / 300 requests per second (Beacon spec 239): every chat
-write is one unit of work through `nowo-tech/transaction-contract`, a storage failure never answers 500 and never leaves
-a long-running worker (FrankenPHP worker mode, kernel reset off) with an open transaction or a closed entity manager.
+write is one unit of work, a storage failure never answers 500, never touches the application's entity manager behind
+its back and never leaves a long-running worker (FrankenPHP worker mode, kernel reset off) with an open transaction or a
+closed entity manager.
 
 ### Added
 
-- `Nowo\TransactionContract\TransactionRunnerInterface` runs every ChatKit write (conversations, messages, reactions,
-  read cursors, pins, mutes, archives, support tickets, links, settings, quick replies, erasures, the links backfill).
-  The default, `nowo_chat_kit.transaction_runner` (`Transaction\ChatKitTransactionRunner`), is
-  `nowo-tech/transaction-doctrine`'s one-attempt `DoctrineTransactionRunner` on the manager the chat rows go through
-  (the application's, or the private one with `doctrine.private_entity_manager: true`). `TransactionRunnerAliasPass`
-  aliases the interface to it **only when the host defines none**, so a host's alias or DoctrineDeadlockRetryBundle's
-  retrying adapter runs every ChatKit write instead (recipe R1). After a failure the runner rolls back to the entry
-  level (it closes the connection only when that rollback fails, as after a MySQL deadlock in a nested transaction)
-  and closes and resets the manager: nothing of the failed unit of work stays pending.
-- Writes are replayable: a runner that retries a unit of work (with the manager cleared) gets exactly one effect.
-  Realtime publishes, events and automatic replies happen after the commit.
+- `Transaction\ChatKitTransactionRunner` (`nowo_chat_kit.transaction_runner`, a nowo-tech/transaction-contract
+  `TransactionRunnerInterface`) runs every ChatKit write: conversations, messages, reactions, read cursors, pins,
+  mutes, archives, support tickets, links, settings, quick replies, erasures, the links backfill. One attempt in one
+  transaction (nowo-tech/transaction-doctrine repairs the connection after a failure); pending work flushed on its own
+  first; after a failure only the ChatKit rows the unit added or changed are detached; a manager closed by a failed
+  chat flush is replaced at the next request / message / command boundary. ChatKit never uses a runner the application
+  binds to the interface (audits QD-M1, QD-M3).
+- Realtime publishes, events and automatic replies happen after the commit.
 - ChatKit's routes answer a transient storage failure (`TransientStorageFailure`, or a deadlock / lock wait /
   serialization failure) with **503** and `Retry-After`, and a conflict (a unique key another request took first, a lost
   optimistic lock) with **409**: `{ok: false, error: "unavailable" | "conflict"}` on the API, Symfony's
@@ -91,8 +89,8 @@ a long-running worker (FrankenPHP worker mode, kernel reset off) with an open tr
   never sees SQL. Hosts that do not enable DoctrineDeadlockRetryBundle's `http_mapping` get it too.
 - `nowo_chat_ticket_counter` table (`ChatTicketCounter`, key `ticket_counter` of `doctrine.tables`): the last support
   ticket number handed out.
-- Real-database CI job "Load readiness" (MySQL 8.4, PostgreSQL 16): two-session lock wait and deadlock tests for ticket
-  numbers and new messages (`tests/Database`).
+- Real-database CI job "Load readiness" (MySQL 8.4, PostgreSQL 16, `tests/Database`): two-session lock wait, deadlock and
+  race tests for ticket numbers, new messages, read cursors and memberships, and two concurrent writer processes.
 - PhpStanFrankenPhp 1.4's worker load rules are enabled (`flagRollbackAfterNestedBegin`,
   `flagFlushInHandWrittenTransaction`, `flagUnboundedRecursion`, `flagFlushWithoutClosedManagerRecovery`).
 
@@ -101,21 +99,30 @@ a long-running worker (FrankenPHP worker mode, kernel reset off) with an open tr
 - **Ticket numbers** come from one counter row moved with a single-row `UPDATE`, in the ticket's own transaction (the
   draft's row is locked first, then the counter row). 1.29 read `MAX(ticket_number) + 1` of the conversation table,
   which locked the whole ticket index on MySQL / MariaDB and did not survive a deadlock. Numbers stay sequential and
-  gap-free, and are now never reused (1.29 gave the highest number again once that ticket was deleted).
-- **New messages** (and buzzes, pin lines, system lines, automatic replies, ticket bot lines) are one unit of work that
-  locks the conversation row first (`SELECT … FOR UPDATE`): two messages of one conversation queue instead of
-  deadlocking on the row's foreign-key share lock. The activity time moves forward only. Reopening closed
-  conversations reads the archived rows first and updates them by id, instead of locking every member's row (and
-  re-reading every member) on every message.
-- A first opening that loses an insert race to another request (the pair's direct conversation, a channel membership,
-  a read cursor, a reaction) reads the row the other request wrote instead of answering 500.
+  gap-free, and are now never reused. The first counter row reads the maximum without a lock (audit QD-L3).
+- **One lock order:** every unit of work that writes a conversation's rows locks the conversation row first (exclusive
+  for new lines, edits, pins, reactions and archives, shared for read cursors and mutes; `FOR NO KEY UPDATE` /
+  `FOR SHARE` on PostgreSQL). Two messages of one conversation queue instead of deadlocking on the row's foreign-key
+  share lock, and a new message no longer meets a mentioned member's read cursor in the other order (audit QD-L2). The
+  activity time moves forward only. Reopening closed conversations reads the archived rows first and updates them by
+  id. Markdown is rendered before the lock.
+- **Races resolved in a savepoint:** a channel membership, read cursor, reaction or direct conversation that another
+  request wrote at the same moment is read instead of answering 500; only the insert's savepoint is rolled back, so the
+  caller's entities stay managed and its next write works (audit QD-M2).
+- Refusals (support-only actions, look-alike users, limits) come before the unit of work, or roll back the chat rows
+  only (audits QD-M1, QD-L1).
 - The first opening of a channel runs on a connection-only runner (the listener's transaction no longer uses
   `Connection::transactional()`, whose rollback failed after a nested deadlock); a refusal still flushes nothing that was
   pending.
 - `ChatPersonalData::export()` reads every list in pages of `EXPORT_BATCH` (500) and releases what it loaded; the export
   stays complete. The quick replies (at most 50 per person) and pinned links (at most 200) lists are capped.
-- Requires `doctrine/dbal` ^4 (through `nowo-tech/transaction-doctrine`); the DBAL 3 legs of the CI database job are
-  gone.
+- Requires `doctrine/dbal` ^4 (through `nowo-tech/transaction-doctrine` 1.0); the DBAL 3 legs of the CI database job are
+  gone for now.
+
+### Fixed
+
+- `doctrine.user_reference: id`: the user reference listener resolves an initialized Doctrine proxy by its entity
+  class; the GDPR export (and any read) of rows next to such a proxy failed with a `TypeError` (audit QD-L4, 1.29 too).
 
 ## [1.29.0] - 2026-11-14
 

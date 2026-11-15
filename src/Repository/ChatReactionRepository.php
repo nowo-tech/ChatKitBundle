@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Repository;
 
+use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitRows;
 use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
@@ -53,6 +55,22 @@ class ChatReactionRepository extends ServiceEntityRepository
         }
 
         return $row;
+    }
+
+    /**
+     * 1.30 (audit QD-M2): adds the user's reaction inside the caller's unit of work, through a savepoint: when the same
+     * reaction was added by another request at the same moment, that one is kept and nothing else is undone.
+     *
+     * @param ChatMessage $message The message
+     * @param ChatUserInterface $user The reacting user
+     * @param string $emoji The emoji
+     * @param DateTimeImmutable $now Reaction time
+     */
+    public function claim(ChatMessage $message, ChatUserInterface $user, string $emoji, DateTimeImmutable $now): void
+    {
+        $this->refs->assertExact();
+        $this->refs->assertKind($user);
+        ChatKitRows::insert($this->getEntityManager(), new ChatReaction($message, $user, $emoji, $now));
     }
 
     /**

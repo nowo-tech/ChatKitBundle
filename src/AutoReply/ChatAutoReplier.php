@@ -109,7 +109,9 @@ final readonly class ChatAutoReplier
             if ($last instanceof DateTimeImmutable && $last > $since) {
                 continue;
             }
-            $reply = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, fn (bool $replay): ChatMessage => $this->reply($conversation, $candidate, $text, $now, $replay ? null : $participant, $replay), true);
+            // 1.30 (audit QD-I2): rendered before the unit of work, not under the conversation's row lock.
+            $html  = $this->markdown->render($text);
+            $reply = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, fn (): ChatMessage => $this->reply($conversation, $candidate, $text, $html, $now));
             $this->notifier->botMessage($reply);
             $sent[] = $reply;
         }
@@ -119,23 +121,14 @@ final readonly class ChatAutoReplier
 
     /**
      * One automatic reply, inside its unit of work: the conversation row locked first, the replier's participant row
-     * (created on first use), the reply and the replier's read cursor on it.
+     * (claimed: written now when there is none), the reply and the replier's read cursor on it.
      */
-    private function reply(ChatConversation $conversation, ChatUserInterface $candidate, string $text, DateTimeImmutable $now, ?ChatParticipant $participant, bool $replay): ChatMessage
+    private function reply(ChatConversation $conversation, ChatUserInterface $candidate, string $text, string $html, DateTimeImmutable $now): ChatMessage
     {
-        if ($replay) {
-            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
-            $candidate    = ChatKitWrites::attach($this->entityManager, $candidate);
-        }
-        $stored = $this->conversations?->lockActivity($conversation);
-        if (!$participant instanceof ChatParticipant) {
-            $participant = $this->participants->findOneFor($conversation, $candidate);
-        }
-        if (!$participant instanceof ChatParticipant) {
-            $participant = new ChatParticipant($conversation, $candidate, $now);
-            $this->entityManager->persist($participant);
-        }
-        $reply = ChatMessage::autoReply($conversation, $candidate, $text, $this->markdown->render($text), $now);
+        $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+        $stored       = $this->conversations?->lockActivity($conversation);
+        $participant  = $this->participants->claim($conversation, $candidate, $now);
+        $reply        = ChatMessage::autoReply($conversation, $candidate, $text, $html, $now);
         $this->entityManager->persist($reply);
         $participant->markAutoReplied($now);
         if (!$stored instanceof DateTimeImmutable || $now > $stored) {

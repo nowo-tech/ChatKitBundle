@@ -77,28 +77,40 @@ This guide lists the changes integrators must apply when upgrading between versi
 Target 1.30.0 (Beacon spec 239, load readiness).
 
 - **New requires:** `nowo-tech/transaction-contract` ^1.0 and `nowo-tech/transaction-doctrine` ^1.0. The latter requires
-  `doctrine/dbal` ^4: a host still on DBAL 3 stays on ChatKit 1.29 until it upgrades DBAL.
+  `doctrine/dbal` ^4 for now: a host still on DBAL 3 stays on ChatKit 1.29 until it upgrades DBAL (or until
+  transaction-doctrine allows DBAL 3 again).
 - **Schema:** one new table, `nowo_chat_ticket_counter` (with your `doctrine.table_name_prefix` / `table_prefix`).
-  Generate a migration (`doctrine:migrations:diff`) or update the schema. The first ticket opened after the upgrade
-  starts the counter after the highest existing number; nothing else to migrate.
-- **Transaction runner:** ChatKit registers `nowo_chat_kit.transaction_runner` and aliases
-  `Nowo\TransactionContract\TransactionRunnerInterface` to it only when your application defines no alias. If you
-  alias the interface yourself (or install DoctrineDeadlockRetryBundle 3, whose adapter does), ChatKit's writes run
-  through your runner, retries included. A runner backed by another entity manager is fine: ChatKit flushes its own
-  manager inside the unit of work.
+  Generate a migration (`doctrine:migrations:diff`) or update the schema. Seeding it in the migration is optional:
+
+  ```sql
+  INSERT INTO nowo_chat_ticket_counter (counter_key, last_number)
+  SELECT 'nowo_chat_conversation', COALESCE(MAX(ticket_number), 0) FROM nowo_chat_conversation;
+  ```
+
+  (both table names with your prefixes). Without it, the first ticket opened after the upgrade starts the counter after
+  the highest existing number, without locking the conversation table.
+- **Transaction runner:** ChatKit runs its writes on its own runner (`nowo_chat_kit.transaction_runner`) and never on a
+  runner your application binds to `Nowo\TransactionContract\TransactionRunnerInterface` (DoctrineDeadlockRetryBundle's
+  adapter, your own): such a runner drives your application's entity manager, so it would flush and commit your pending
+  work with a chat write, and reset your manager after a chat failure. ChatKit defines no `TransactionRunnerInterface`
+  service for your application. Transient failures are not retried by ChatKit: they answer 503 + `Retry-After`.
 - **Ticket numbers:** still sequential and gap-free (a failed opening hands no number out); new guarantee: a number is
   never given again, even after the ticket was purged or erased. Numbers written outside ChatKit are skipped (the
   counter catches up).
 - **Failures:** a deadlock, lock wait timeout or serialization failure on a ChatKit route answers 503 with
-  `Retry-After` (was 500), a lost unique key race that cannot be resolved by reading the winner's row answers 409. The
+  `Retry-After` (was 500); a lost unique key race that cannot be resolved by reading the winner's row answers 409. The
   dock shows its usual error for a failed request (the person sends again); custom clients of the JSON API should retry
   a 503 after `Retry-After`.
-- **After a failed ChatKit write** the entity manager the chat rows go through is closed and reset (the application's
-  manager with `doctrine.private_entity_manager` off): entities loaded before that write are detached. Domain refusals
-  that come before any write (look-alike users, limits, validation) do not reset it. Turn the private entity manager on
-  to keep the application's manager out of chat failures.
+- **Your entity manager after a failed ChatKit write** (`doctrine.private_entity_manager` off, ChatKit shares it): it is
+  never reset or cleared by ChatKit, and your entities stay managed. Your pending changes are flushed on their own before
+  the chat unit of work, so a chat failure never rolls them back. Refusals (look-alike users, limits, validation) come
+  before any write, or roll the chat rows back. Only the ChatKit rows the failed unit added or changed are detached;
+  ChatKit loads them again on its next call. A deadlock or lock wait inside the chat flush closes the manager (the ORM
+  does, as in 1.29): your next flush in that request fails loudly, and ChatKit replaces the closed manager at the next
+  request, message or command boundary, so a long-running worker never serves a later request with it. With the private
+  entity manager on, your manager is never involved at all.
 - **Workers:** for Messenger consumers and custom loops, see USAGE "High load"; DoctrineDeadlockRetryBundle's
-  `worker_guard` is the recommended companion.
+  `worker_guard` is the recommended companion for your own writes.
 
 ## To 1.29.0
 

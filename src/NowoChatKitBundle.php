@@ -8,7 +8,6 @@ use Nowo\ChatKitBundle\DependencyInjection\Compiler\ChatKitPortsPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerReferencesPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\RealtimeTransportPass;
-use Nowo\ChatKitBundle\DependencyInjection\Compiler\TransactionRunnerAliasPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
@@ -49,8 +48,6 @@ final class NowoChatKitBundle extends Bundle
         $container->addCompilerPass(new PrivateEntityManagerPass(), PassConfig::TYPE_BEFORE_OPTIMIZATION, 10);
         $container->addCompilerPass(new PrivateEntityManagerReferencesPass(), PassConfig::TYPE_BEFORE_REMOVING);
         $container->addCompilerPass(new TwigPathsPass());
-        // 1.30 (Beacon spec 239, recipe R1): TransactionRunnerInterface -> ChatKit's default runner, only when absent.
-        $container->addCompilerPass(new TransactionRunnerAliasPass());
     }
 
     /**

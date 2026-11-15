@@ -71,7 +71,7 @@ final class ChatLinksBackfillCommand extends Command
         $runner   = $this->transactions ?? new ChatKitTransactionRunner($this->entityManager);
         do {
             $ids = $this->index->candidateMessageIds($afterId, $batch);
-            // 1.30: one unit of work per batch, through the transaction runner (a replay loads the batch again).
+            // 1.30: one unit of work per batch, through ChatKit's runner.
             [$batchMessages, $batchIndexed, $last] = ChatKitWrites::runRecovering($runner, $this->entityManager, function () use ($ids, $afterId): array {
                 $count   = 0;
                 $indexed = 0;

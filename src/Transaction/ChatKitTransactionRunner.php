@@ -7,45 +7,62 @@ namespace Nowo\ChatKitBundle\Transaction;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
-use Nowo\ChatKitBundle\DependencyInjection\Compiler\TransactionRunnerAliasPass;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagerRegistry;
 use Nowo\TransactionContract\TransactionRunnerInterface;
-use Nowo\TransactionContract\TransientStorageFailure;
 use Nowo\TransactionDoctrine\DoctrineTransactionRunner;
+use Psr\Log\LoggerInterface;
+use Symfony\Contracts\Service\ResetInterface;
+use Throwable;
+
+use function array_filter;
+use function is_object;
+use function spl_object_id;
 
 /**
- * 1.30 (Beacon spec 239, load readiness): ChatKit's default {@see TransactionRunnerInterface}, registered as
- * `nowo_chat_kit.transaction_runner`. The bundle's services are wired to the interface, which
- * {@see TransactionRunnerAliasPass} aliases to this service only when
- * the host defines none: a host that aliases the interface (for example to DoctrineDeadlockRetryBundle's retrying
- * adapter) replaces it for every ChatKit write.
+ * 1.30 (Beacon spec 239, audits QD-M1 / QD-M3): the runner of every ChatKit write, registered as
+ * `nowo_chat_kit.transaction_runner` and injected into the ChatKit services for their `TransactionRunnerInterface`
+ * argument. ChatKit never runs its writes through a runner the application binds to the interface: such a runner drives
+ * the application's entity manager (it would flush and commit the application's work with a chat write, and reset
+ * that manager after a chat failure).
  *
- * It is nowo-tech/transaction-doctrine's one-attempt {@see DoctrineTransactionRunner} on the manager the chat rows are
- * written through (the application's manager, or ChatKit's private one with `doctrine.private_entity_manager: true`):
- * one transaction, the manager flushed before the commit, no retry. After a failure the levels it opened are rolled
- * back (the connection is closed only when that rollback fails, as after a MySQL deadlock in a nested transaction), the
- * manager is closed and reset through the registry so nothing of the failed unit of work stays pending, and a transient
- * failure (deadlock, lock wait timeout, serialization failure) is rethrown as
- * {@see TransientStorageFailure}, which ChatKit's routes answer with 503 and `Retry-After`.
+ * One attempt, one transaction; a transient failure (deadlock, lock wait timeout, serialization failure) surfaces as
+ * TransientStorageFailure (503 + Retry-After on ChatKit's routes). After any failure no transaction of its own stays
+ * open: nowo-tech/transaction-doctrine rolls back to the entry level and closes the connection only when that rollback
+ * fails (a MySQL deadlock inside a nested flush).
  *
- * Stateless: safe as a shared service in a long-running worker (FrankenPHP worker mode with kernel reset off).
+ * The manager's pending work is flushed first, on its own, so a failed chat unit never rolls it back (PV-L6). The chat
+ * unit runs in a connection-level transaction. After a failure only the ChatKit rows it added, wrote or changed are
+ * detached (and the rows that point at them); every other entity stays managed, the application's ones included.
+ *
+ * - **Shared manager** (the default): a failed flush closes the manager (the ORM does). It stays closed for the rest of
+ *   the request, so the application's next flush fails loudly as in 1.29, and {@see self::reset()} replaces it at the
+ *   next request, message or command boundary (a FrankenPHP worker never serves a later request with it).
+ * - **Private entity manager** (`doctrine.private_entity_manager: true`): the application's manager is never touched;
+ *   ChatKit replaces its own closed manager on its next use.
+ *
+ * Stateless.
  */
-final readonly class ChatKitTransactionRunner implements TransactionRunnerInterface
+final readonly class ChatKitTransactionRunner implements TransactionRunnerInterface, ResetInterface
 {
-    private DoctrineTransactionRunner $runner;
+    /** The service id the ChatKit services are wired to. */
+    public const string SERVICE_ID = 'nowo_chat_kit.transaction_runner';
 
     /**
      * @param EntityManagerInterface $entityManager The manager the chat rows are written through
-     * @param ManagerRegistry|null $registry Resets that manager after a failure; null only clears it
+     * @param ManagerRegistry|null $registry Resets that manager (after a failure with the private manager; a closed shared manager at a boundary)
      * @param string|null $managerName The registry name of that manager; null for the default one
+     * @param bool $privateManager Whether it is ChatKit's private manager
      * @param int|null $retryAfterSeconds Retry-After hint of the TransientStorageFailure; null for none
+     * @param LoggerInterface|null $logger Warns when a closed manager is replaced at a boundary
      */
     public function __construct(
-        EntityManagerInterface $entityManager,
-        ?ManagerRegistry $registry = null,
-        ?string $managerName = null,
-        ?int $retryAfterSeconds = 1,
+        private EntityManagerInterface $entityManager,
+        private ?ManagerRegistry $registry = null,
+        private ?string $managerName = null,
+        private bool $privateManager = false,
+        private ?int $retryAfterSeconds = 1,
+        private ?LoggerInterface $logger = null,
     ) {
-        $this->runner = DoctrineTransactionRunner::forEntityManager($entityManager, $registry, $managerName, $retryAfterSeconds);
     }
 
     /**
@@ -67,6 +84,118 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
      */
     public function run(callable $operation): mixed
     {
-        return $this->runner->run($operation);
+        $manager = $this->entityManager;
+        // Pending work first, on its own: a failed chat unit never rolls it back (PV-L6, QD-M1).
+        $manager->flush();
+        $before = $this->chatRows($manager);
+        try {
+            return DoctrineTransactionRunner::forConnection($manager->getConnection(), $this->retryAfterSeconds)->run(static function () use ($operation, $manager): mixed {
+                $result = $operation();
+                $manager->flush();
+
+                return $result;
+            });
+        } catch (Throwable $failure) {
+            // A manager the ORM closed in a failed flush stays closed (the private one replaces itself on its next use).
+            if ($manager->isOpen()) {
+                $this->forgetChatRows($manager, $before);
+            }
+
+            throw $failure;
+        }
+    }
+
+    /**
+     * At a request, message or command boundary: a shared manager that a failed chat flush closed is replaced, so the
+     * next request of a long-running worker starts with an open one. Nothing happens to an open manager, or with the
+     * private manager (ChatKit replaces its own).
+     */
+    public function reset(): void
+    {
+        if ($this->privateManager || !$this->registry instanceof ManagerRegistry || $this->entityManager->isOpen()) {
+            return;
+        }
+        $this->registry->resetManager($this->managerName);
+        $this->logger?->warning('ChatKit: the entity manager closed by a failed chat write was replaced at the request boundary.', ['bundle' => 'nowo_chat_kit']);
+    }
+
+    /**
+     * The ChatKit rows the manager holds, with the data it knows them by (before a unit of work).
+     *
+     * @return array<int, array<string, mixed>> object id => original data
+     */
+    private function chatRows(EntityManagerInterface $manager): array
+    {
+        $unitOfWork = $manager->getUnitOfWork();
+        $rows       = [];
+        foreach ($unitOfWork->getIdentityMap() as $class => $entities) {
+            if (ChatKitManagerRegistry::isBundleEntity($class)) {
+                foreach ($entities as $entity) {
+                    $rows[spl_object_id($entity)] = $unitOfWork->getOriginalEntityData($entity);
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * After a failed unit: detaches the ChatKit rows it added, wrote or changed (their database state was rolled back);
+     * a ChatKit row the caller held and the unit did not change stays managed, and so does every entity of the
+     * application. A later ChatKit call loads its rows again.
+     *
+     * @param array<int, array<string, mixed>> $before {@see self::chatRows()} before the unit
+     */
+    private function forgetChatRows(EntityManagerInterface $manager, array $before): void
+    {
+        $unitOfWork = $manager->getUnitOfWork();
+        $rows       = $unitOfWork->getScheduledEntityInsertions();
+        foreach ($unitOfWork->getIdentityMap() as $class => $entities) {
+            if (ChatKitManagerRegistry::isBundleEntity($class)) {
+                foreach ($entities as $entity) {
+                    $rows[] = $entity;
+                }
+            }
+        }
+        $stale = [];
+        $kept  = [];
+        foreach (array_filter($rows, static fn (object $entity): bool => ChatKitManagerRegistry::isBundleEntity($entity::class) && $manager->contains($entity)) as $entity) {
+            $id = spl_object_id($entity);
+            if (!isset($before[$id]) || $before[$id] !== $unitOfWork->getOriginalEntityData($entity) || $this->changed($manager, $entity)) {
+                $stale[$id] = $entity;
+            } else {
+                $kept[$id] = $entity;
+            }
+        }
+        // A kept row that points at a stale one goes too (it would drag it back as a new entity on the next flush).
+        do {
+            $more = false;
+            foreach ($kept as $id => $entity) {
+                foreach ($manager->getClassMetadata($entity::class)->associationMappings as $field => $mapping) {
+                    $target = $mapping->isToOne() ? $manager->getClassMetadata($entity::class)->getFieldValue($entity, $field) : null;
+                    if (is_object($target) && isset($stale[spl_object_id($target)])) {
+                        $stale[$id] = $entity;
+                        unset($kept[$id]);
+                        $more = true;
+
+                        break;
+                    }
+                }
+            }
+        } while ($more);
+        foreach ($stale as $entity) {
+            $manager->detach($entity);
+        }
+    }
+
+    /**
+     * Whether the row has changes the manager would write (the ORM's own comparison with the data it knows it by).
+     */
+    private function changed(EntityManagerInterface $manager, object $entity): bool
+    {
+        $unitOfWork = $manager->getUnitOfWork();
+        $unitOfWork->computeChangeSet($manager->getClassMetadata($entity::class), $entity);
+
+        return $unitOfWork->getEntityChangeSet($entity) !== [];
     }
 }

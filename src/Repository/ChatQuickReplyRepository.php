@@ -80,10 +80,9 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
     public function save(ChatQuickReply $reply): void
     {
         $manager = $this->getEntityManager();
-        // 1.30: one unit of work through the transaction runner.
-        $stored = $reply->getId() !== null;
-        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function (bool $replay) use ($manager, $reply, $stored): void {
-            $manager->persist($replay ? ChatKitWrites::carry($manager, $reply, $stored) : $reply);
+        // 1.30: one unit of work through ChatKit's runner.
+        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function () use ($manager, $reply): void {
+            $manager->persist($reply);
         });
     }
 
@@ -95,14 +94,9 @@ class ChatQuickReplyRepository extends ServiceEntityRepository
     public function remove(ChatQuickReply $reply): void
     {
         $manager = $this->getEntityManager();
-        $id      = $reply->getId();
-        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function (bool $replay) use ($manager, $reply, $id): void {
-            // A replay looks the row up by id again: the attempt that removed it cleared the entity's id.
-            $reply = $replay ? $manager->find(ChatQuickReply::class, $id) : $reply;
-            if ($reply instanceof ChatQuickReply) {
-                // @igor-ignore - Unit of work of this call (the runner discards it on failure), not worker state.
-                $manager->remove($reply);
-            }
+        ChatKitWrites::runRecovering($this->transactions ?? new ChatKitTransactionRunner($manager), $manager, static function () use ($manager, $reply): void {
+            // @igor-ignore - Unit of work of this call (the runner discards it on failure), not worker state.
+            $manager->remove(ChatKitWrites::attach($manager, $reply));
         });
     }
 }

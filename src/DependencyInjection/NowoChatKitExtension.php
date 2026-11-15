@@ -9,7 +9,6 @@ use Nowo\ChatKitBundle\Contract\ChatReferenceProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatSidebarSectionProviderInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerReferencesPass;
-use Nowo\ChatKitBundle\DependencyInjection\Compiler\TransactionRunnerAliasPass;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
@@ -20,6 +19,7 @@ use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Model\ChatUserReferenceInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
@@ -238,10 +238,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     {
         $container->setParameter(PrivateEntityManagerReferencesPass::PARAMETER, $private === true);
         $container->setParameter(PrivateEntityManagerReferencesPass::SOURCE_PARAMETER, $emName);
-        // 1.30: the default runner resets the manager the chat rows go through: the private one is the registry's
-        // source name (ChatKitManagerRegistry), the application's one the default name of the registry.
-        if ($private === true && $container->hasDefinition(TransactionRunnerAliasPass::SERVICE_ID)) {
-            $container->getDefinition(TransactionRunnerAliasPass::SERVICE_ID)->replaceArgument(2, $emName);
+        // 1.30: with the private manager ChatKit's runner drives it alone (the registry's source name resolves to it).
+        if ($private === true && $container->hasDefinition(ChatKitTransactionRunner::SERVICE_ID)) {
+            $container->getDefinition(ChatKitTransactionRunner::SERVICE_ID)->replaceArgument(2, $emName)->replaceArgument(3, true);
         }
         if ($private === false) {
             trigger_deprecation('nowo-tech/chat-kit-bundle', '1.27', '"nowo_chat_kit ... doctrine.private_entity_manager: false" is deprecated: chat writes then flush the application\'s entity manager, including its pending changes; the private entity manager becomes the only mode in 2.0. Set it to true (see UPGRADING.md).');

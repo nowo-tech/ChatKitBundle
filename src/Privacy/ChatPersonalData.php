@@ -274,7 +274,7 @@ final readonly class ChatPersonalData
         $qb = $this->entityManager->createQueryBuilder(...);
 
         // 1.30 (Beacon spec 239): one unit of work through the transaction runner (a failure rolls the whole erasure back
-        // and leaves no transaction open; a replay runs the whole erasure again, every row read inside it).
+        // and leaves no transaction open).
         [$erasure, $removedLinks] = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($qb, $user): array {
             $erasure = $this->scrubMentions($user, self::ERASED_MENTION);
             $this->keepModeratedState($user);

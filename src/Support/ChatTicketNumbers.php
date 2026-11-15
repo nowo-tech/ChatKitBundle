@@ -29,7 +29,9 @@ use Nowo\TransactionContract\TransactionRunnerInterface;
  * - **never reused**: a purged or erased ticket's number is not given again (1.29 gave the highest one again once
  *   it was deleted);
  * - the counter starts after the numbers already in the table (the first ticket after the upgrade reads the
- *   maximum once), and catches up when a number is found taken (rows numbered outside ChatKit, a restored backup).
+ *   maximum once, without a lock), and catches up when a number is found taken (rows numbered outside ChatKit, a
+ *   restored backup). A migration may also seed it: `INSERT INTO nowo_chat_ticket_counter (counter_key, last_number)
+ *   SELECT 'nowo_chat_conversation', COALESCE(MAX(ticket_number), 0) FROM nowo_chat_conversation`.
  */
 final readonly class ChatTicketNumbers
 {
@@ -78,7 +80,7 @@ final readonly class ChatTicketNumbers
         $conversations = $this->entityManager->getClassMetadata(ChatConversation::class)->getTableName();
         // The draft's row first (locked: always draft, then counter), so a second opening of the same draft waits for
         // the first, then finds its number and takes none.
-        $current = ChatKitRowLock::fetchOne($connection->createQueryBuilder()->select('ticket_number')->from($conversations)
+        $current = ChatKitRowLock::fetchOne($connection, $connection->createQueryBuilder()->select('ticket_number')->from($conversations)
             ->where('id = :id')->setParameter('id', $id, ParameterType::INTEGER));
         if ($current !== false && $current !== null) {
             return (int) $current;
@@ -91,9 +93,11 @@ final readonly class ChatTicketNumbers
             } catch (UniqueConstraintViolationException) {
                 $connection->rollbackSavepoint(self::SAVEPOINT);
                 $connection->releaseSavepoint(self::SAVEPOINT);
-                // The number is taken (numbered outside ChatKit, a restored backup): the counter catches up.
+                // The number is taken (numbered outside ChatKit, a restored backup): the counter catches up. 1.30 (audit
+                // QD-L3): a plain read of the maximum (no lock on the ticket index), then a single-row update forward.
                 [$table, $key, $last] = $this->counter();
-                $connection->executeStatement('UPDATE ' . $table . ' SET ' . $last . ' = (SELECT COALESCE(MAX(ticket_number), 0) FROM ' . $conversations . ') WHERE ' . $key . ' = ?', [$conversations]);
+                $highest              = (int) $connection->fetchOne('SELECT COALESCE(MAX(ticket_number), 0) FROM ' . $conversations);
+                $connection->executeStatement('UPDATE ' . $table . ' SET ' . $last . ' = ? WHERE ' . $key . ' = ? AND ' . $last . ' < ?', [$highest, $conversations, $highest], [ParameterType::INTEGER, ParameterType::STRING, ParameterType::INTEGER]);
 
                 continue;
             }
@@ -118,13 +122,16 @@ final readonly class ChatTicketNumbers
         // A plain read first: an UPDATE of a missing row would take a gap lock on MySQL, and two first tickets would
         // then deadlock on their inserts.
         if ($connection->fetchOne('SELECT 1 FROM ' . $table . ' WHERE ' . $key . ' = ?', [$conversations]) === false) {
+            // The first ticket of this table: start after the numbers already there. 1.30 (audit QD-L3): the maximum is a
+            // plain read (an INSERT … SELECT MAX() locked the ticket index on MySQL, and two first tickets deadlocked) and
+            // the row a plain insert in a savepoint; a number it misses is caught up above.
+            $first = (int) $connection->fetchOne('SELECT COALESCE(MAX(ticket_number), 0) FROM ' . $conversations) + 1;
             $connection->createSavepoint(self::SAVEPOINT);
             try {
-                // The first ticket of this table: start after the numbers already there (the only read of the maximum).
-                $connection->executeStatement('INSERT INTO ' . $table . ' (' . $key . ', ' . $last . ') SELECT ?, COALESCE(MAX(ticket_number), 0) + 1 FROM ' . $conversations, [$conversations]);
+                $connection->insert($table, [$key => $conversations, $last => $first], [ParameterType::STRING, ParameterType::INTEGER]);
                 $connection->releaseSavepoint(self::SAVEPOINT);
 
-                return (int) $connection->fetchOne('SELECT ' . $last . ' FROM ' . $table . ' WHERE ' . $key . ' = ?', [$conversations]);
+                return $first;
                 // @codeCoverageIgnoreStart
                 // Two sessions are needed: tests/Database/TicketNumberLocksTest (MySQL, PostgreSQL) covers this branch.
             } catch (UniqueConstraintViolationException) {

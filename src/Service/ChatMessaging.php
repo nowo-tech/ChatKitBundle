@@ -18,13 +18,17 @@ use Nowo\ChatKitBundle\Model\ChatParticipantView;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
 use Nowo\TransactionContract\TransactionRunnerInterface;
+use Symfony\Component\Clock\Clock;
+use Symfony\Component\Clock\ClockInterface;
 
 use function array_values;
+use function assert;
 use function in_array;
 
 /**
@@ -57,6 +61,9 @@ final readonly class ChatMessaging implements ChatMessagingInterface
      *                                              entity manager with `doctrine.private_entity_manager: true`)
      * @param ChatVoter $voter The API's authorization rules
      * @param ChatAccess $access Reachability, channels, direct peers and pins
+     * @param TransactionRunnerInterface|null $transactions 1.30: ChatKit's runner (join()); null builds the default
+     * @param ChatParticipantRepository|null $participantRows 1.30: participant rows of join(); null asks the manager
+     * @param ClockInterface $clock 1.30: join time of a new participant row
      */
     public function __construct(
         private ChatServiceInterface $chat,
@@ -66,6 +73,8 @@ final readonly class ChatMessaging implements ChatMessagingInterface
         private ChatVoter $voter,
         private ChatAccess $access,
         ?TransactionRunnerInterface $transactions = null,
+        private ?ChatParticipantRepository $participantRows = null,
+        private ClockInterface $clock = new Clock(),
     ) {
         $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
     }
@@ -202,14 +211,14 @@ final readonly class ChatMessaging implements ChatMessagingInterface
     public function join(string $conversationUuid, ChatUserInterface $user): ChatParticipantView
     {
         $conversation = $this->conversation($user, $conversationUuid, ChatVoter::VIEW);
-        // 1.28: the look-alike refusal before any write; 1.30: one unit of work, and a row written by another request of
-        // the same person at the same moment is read again (idempotent).
-        $participant = $this->chat->participant($conversation, $user);
-        $participant = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function (bool $replay) use ($conversation, $user, $participant): ChatParticipant {
-            return $replay
-                ? $this->chat->participant(ChatKitWrites::attach($this->entityManager, $conversation), ChatKitWrites::attach($this->entityManager, $user))
-                : $participant;
-        }, true);
+        // 1.28: the look-alike refusal before any write. 1.30: one unit of work; a row another request of the same person
+        // wrote at the same moment is read (savepoint insert, audit QD-M2).
+        $rows = $this->participantRows ?? $this->entityManager->getRepository(ChatParticipant::class);
+        assert($rows instanceof ChatParticipantRepository);
+        if (!$rows->findOneFor($conversation, $user) instanceof ChatParticipant) {
+            $rows->assertInsertable($user);
+        }
+        $participant = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, fn (): ChatParticipant => $rows->claim(ChatKitWrites::attach($this->entityManager, $conversation), $user, $this->clock->now()));
 
         return ChatParticipantView::of($participant);
     }
