@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Command;
 
+use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationLinkRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Support\ChatRetention;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\Clock\Clock;
@@ -29,17 +31,18 @@ use const DATE_ATOM;
 #[AsCommand(name: 'nowo:chat:purge', description: 'Delete chat messages older than the retention window')]
 final class ChatPurgeCommand extends Command
 {
-    public const int MIN_DAYS = 30;
+    public const int MIN_DAYS = ChatRetention::MIN_DAYS;
     private const int BATCH   = 1000;
 
     /**
      * Builds the command from the message repository and the configured retention.
      *
      * @param ChatMessageRepository $messages Deletes the old messages in batches
-     * @param int $retentionDays Retention window in days (never less than MIN_DAYS)
+     * @param int $retentionDays Configured retention window in days (never less than MIN_DAYS; the host's provider wins when it answers)
      * @param ClockInterface $clock Clock the cutoff is computed from
      * @param LoggerInterface $logger Start / end / failure of a purge run (counts only, never message content)
      * @param ChatConversationLinkRepository|null $links 1.19: pinned links not changed within the window go too (audit FZ-L3)
+     * @param RetentionPolicyProviderInterface|null $retention 1.31: the host's retention, asked again on every run (null: `$retentionDays` only)
      */
     public function __construct(
         private readonly ChatMessageRepository $messages,
@@ -47,6 +50,7 @@ final class ChatPurgeCommand extends Command
         private readonly ClockInterface $clock = new Clock(),
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly ?ChatConversationLinkRepository $links = null,
+        private readonly ?RetentionPolicyProviderInterface $retention = null,
     ) {
         parent::__construct();
     }
@@ -58,13 +62,20 @@ final class ChatPurgeCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $days    = max(self::MIN_DAYS, $this->retentionDays);
-        $cutoff  = $this->clock->now()->modify(sprintf('-%d days', $days));
         $deleted = 0;
         $links   = 0;
         $max     = max(1, (int) $input->getOption('max-batches'));
-        $this->logger->info('Chat purge started.', ['retention_days' => $days, 'cutoff' => $cutoff->format(DATE_ATOM), 'max_batches' => $max]);
         try {
+            $days   = (new ChatRetention($this->retentionDays, $this->retention, $this->logger))->days();
+            $now    = $this->clock->now();
+            $cutoff = $now->modify(sprintf('-%d days', $days));
+            // Defence in depth: whatever the arithmetic gave, never delete anything newer than the minimum window.
+            if ($cutoff > $now->modify(sprintf('-%d days', self::MIN_DAYS))) {
+                $this->logger->error('Chat purge aborted: the cutoff is inside the minimum retention window.', ['retention_days' => $days, 'cutoff' => $cutoff->format(DATE_ATOM)]);
+
+                return Command::FAILURE;
+            }
+            $this->logger->info('Chat purge started.', ['retention_days' => $days, 'cutoff' => $cutoff->format(DATE_ATOM), 'max_batches' => $max]);
             for ($batch = 0; $batch < $max; ++$batch) {
                 $count = $this->messages->purgeOlderThan($cutoff, self::BATCH);
                 $deleted += $count;

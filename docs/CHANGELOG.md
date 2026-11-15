@@ -68,6 +68,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.31.0 (minor, no BC break). Retention days from the application at run time (Symfony Beacon request: the value
+moves from `.env` into an administration setting).
+
+### Fixed
+
+- The configured `retention_days` is now lowered to 36500 (100 years) at run time, with a warning. In 1.30 and earlier a
+  huge value (an environment variable such as `99999999999999999999`) overflowed the date arithmetic and
+  `nowo:chat:purge` could delete every message. The command also aborts, deleting nothing and logging an error, when
+  the cutoff would fall inside the last 30 days. A provider failure is logged ("Chat purge failed") before it is rethrown.
+
+### Added
+
+- `RetentionPolicyProviderInterface` (`retentionDays(): ?int`), optional: the application aliases it to a service that
+  reads the retention from its own source. `nowo:chat:purge` asks it on every run and keeps nothing between runs
+  (worker safe, kernel reset off). Null, or no provider (default `NullRetentionPolicyProvider`), means the configured
+  `retention_days`. The purge command is the only place retention is used (no Messenger message, no GDPR path reads it).
+- A value above 36500 is lowered to 36500 (`ChatRetention::MAX_DAYS`) with a warning.
+- A value below 30 is raised to 30 and a warning is logged (values only, no secrets); a value of 0 or less is ignored
+  and the configured value applies, also with a warning. A provider that throws stops the run and nothing is deleted.
+- `Nowo\ChatKitBundle\Support\ChatRetention` (the resolution rule); `ChatPurgeCommand` takes the provider as an
+  optional last constructor argument.
+
 ## [1.30.0] - 2026-11-15
 
 Target 1.30.0 (minor). Load readiness for 1,000 concurrent users / 300 requests per second (Beacon spec 239): every chat
