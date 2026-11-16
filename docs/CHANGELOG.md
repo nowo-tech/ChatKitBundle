@@ -70,6 +70,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- docs: Spec Kit baseline refreshed (REQ-SPECKIT-001 / REQ-SPECKIT-003 sweep 2026-11-16): `specs/001-baseline/code-inventory.md` maps all 223 production units (126 added: auto-replies, avatars, badges, links, mentions, references, sidebar, support, ports, user reference modes, private entity manager, browser modules) and `spec.md` gains the matching `FR-*` groups; no code change
+
 ## [1.31.1] - 2026-11-15
 
 Target 1.31.1 (patch, audit QP-L-3, owner decision 2026-11-16).

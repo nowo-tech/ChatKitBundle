@@ -1,8 +1,8 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-10-20  
-**Production units**: **97/97**  
+**Last audited**: 2026-11-16  
+**Production units**: **223/223**  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -28,7 +28,17 @@
 | Twig, markup & theme | 10 |
 | Browser (TypeScript) | 14 |
 | Translations | 7 |
-| **Total** | **97** |
+| Automatic replies, avatars & author badges | 11 |
+| Links (pinned links and links panel) | 14 |
+| Mentions, references & quick replies | 13 |
+| Channels, sidebar & preferences | 14 |
+| Support tickets | 12 |
+| Application ports (framework-free twins, messaging by id) | 20 |
+| User reference modes (relation, id, string) | 10 |
+| Private entity manager, savepoints & write concurrency | 14 |
+| Retention policy | 4 |
+| Browser (TypeScript) — feature modules | 14 |
+| **Total** | **223** |
 
 ## Bundle, configuration & DI
 
@@ -181,3 +191,179 @@
 | `src/Resources/translations/NowoChatKitBundle.it.yaml` | US-01 | FR-I18N-001 |
 | `src/Resources/translations/NowoChatKitBundle.nl.yaml` | US-01 | FR-I18N-001 |
 | `src/Resources/translations/NowoChatKitBundle.pt.yaml` | US-01 | FR-I18N-001 |
+
+## Automatic replies, avatars & author badges
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/AutoReply/ChatAutoReplier.php` | US-02, US-03 | FR-AUTOREPLY-001 |
+| `src/Avatar/AvatarUrlPolicy.php` | US-02, US-08 | FR-AVATAR-001 |
+| `src/Avatar/ChatAvatars.php` | US-02, US-08 | FR-AVATAR-001 |
+| `src/Avatar/NullChatAvatarUrlResolver.php` | US-08 | FR-AVATAR-001 |
+| `src/Contract/ChatAvatarUrlResolverInterface.php` | US-08 | FR-AVATAR-001 |
+| `src/Badge/ChatAuthorBadges.php` | US-02, US-08 | FR-BADGE-001 |
+| `src/Badge/NoChatAuthorBadges.php` | US-08 | FR-BADGE-001 |
+| `src/Contract/ChatAuthorBadgeProviderInterface.php` | US-08 | FR-BADGE-001 |
+| `src/Enum/ChatAuthorBadgeVariant.php` | US-08 | FR-BADGE-001 |
+| `src/Model/ChatAuthorBadge.php` | US-08 | FR-BADGE-001 |
+| `src/Model/ChatAuthorRef.php` | US-08 | FR-BADGE-001 |
+
+## Links (pinned links and links panel)
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/Link/ChatLinkUrls.php` | US-10 | FR-LINK-001 |
+| `src/Link/ChatLinks.php` | US-10 | FR-LINK-001 |
+| `src/Model/ChatLinkProvider.php` | US-10 | FR-LINK-001 |
+| `src/Model/ChatLinkView.php` | US-10 | FR-LINK-001, FR-EVT-002 |
+| `src/Entity/ChatConversationLink.php` | US-10 | FR-LINK-002 |
+| `src/Entity/ChatMessageLink.php` | US-10 | FR-LINK-002 |
+| `src/Repository/ChatConversationLinkRepository.php` | US-10 | FR-LINK-002 |
+| `src/Repository/ChatMessageLinkRepository.php` | US-10 | FR-LINK-002 |
+| `src/Controller/ChatLinksController.php` | US-10 | FR-LINK-003 |
+| `src/Contract/ChatLinkPolicyInterface.php` | US-10 | FR-LINK-003 |
+| `src/Command/ChatLinksBackfillCommand.php` | US-10 | FR-LINK-004 |
+| `src/Event/ChatLinkAddedEvent.php` | US-10 | FR-EVT-002 |
+| `src/Event/ChatLinkUpdatedEvent.php` | US-10 | FR-EVT-002 |
+| `src/Event/ChatLinkRemovedEvent.php` | US-10 | FR-EVT-002 |
+
+## Mentions, references & quick replies
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/Service/ChatMentions.php` | US-02, US-03 | FR-MENTION-001 |
+| `src/Entity/ChatMessageMention.php` | US-02, US-03 | FR-MENTION-001 |
+| `src/Repository/ChatMessageMentionRepository.php` | US-02, US-03 | FR-MENTION-001 |
+| `src/Event/ChatMentionEvent.php` | US-02, US-03 | FR-MENTION-001, FR-EVT-002 |
+| `src/Event/ChatMentionsErasedEvent.php` | US-09 | FR-MENTION-001, FR-EVT-002 |
+| `src/Privacy/ChatMentionErasure.php` | US-09 | FR-MENTION-001 |
+| `src/Contract/ChatChannelMentionPolicyInterface.php` | US-03 | FR-MENTION-001, FR-CHANNEL-001 |
+| `src/Service/ChatReferences.php` | US-10 | FR-REF-001 |
+| `src/Contract/ChatReferenceProviderInterface.php` | US-10 | FR-REF-001 |
+| `src/Model/ChatReference.php` | US-10 | FR-REF-001 |
+| `src/Model/ChatReferenceScope.php` | US-10 | FR-REF-001 |
+| `src/Entity/ChatQuickReply.php` | US-02 | FR-QUICKREPLY-001 |
+| `src/Repository/ChatQuickReplyRepository.php` | US-02 | FR-QUICKREPLY-001 |
+
+## Channels, sidebar & preferences
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/Contract/ChatChannelWritePolicyInterface.php` | US-03 | FR-CHANNEL-001 |
+| `src/Contract/ChatPinPolicyInterface.php` | US-03 | FR-CHANNEL-001 |
+| `src/Event/ChatChannelOpeningEvent.php` | US-03 | FR-CHANNEL-001, FR-EVT-002 |
+| `src/Service/ChatChannelDeniedException.php` | US-03 | FR-CHANNEL-001 |
+| `src/Model/ChatChannelKey.php` | US-03 | FR-CHANNEL-002 |
+| `src/Doctrine/ChannelKeyCollationListener.php` | US-03 | FR-CHANNEL-002 |
+| `src/Sidebar/ChatSidebar.php` | US-08 | FR-SIDEBAR-001 |
+| `src/Controller/ChatSidebarController.php` | US-08 | FR-SIDEBAR-001 |
+| `src/Contract/ChatSidebarSectionProviderInterface.php` | US-08 | FR-SIDEBAR-001 |
+| `src/Model/ChatSidebarAction.php` | US-08 | FR-SIDEBAR-001 |
+| `src/Model/ChatSidebarItem.php` | US-08 | FR-SIDEBAR-001 |
+| `src/Model/ChatSidebarSection.php` | US-08 | FR-SIDEBAR-001 |
+| `src/Form/ChatPreferencesType.php` | US-08 | FR-PREFS-001 |
+| `src/Form/ChatDockStatusType.php` | US-08 | FR-PREFS-001, FR-TWIG-004 |
+
+## Support tickets
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/Support/ChatSupportTickets.php` | US-04 | FR-SUPPORT-002 |
+| `src/Support/ChatSupportPolicy.php` | US-04 | FR-SUPPORT-002 |
+| `src/Support/ChatSupportTopics.php` | US-04 | FR-SUPPORT-002 |
+| `src/Support/ConfiguredSupportTopicProvider.php` | US-04 | FR-SUPPORT-002 |
+| `src/Contract/ChatSupportTopicProviderInterface.php` | US-04 | FR-SUPPORT-002 |
+| `src/Model/ChatSupportTopic.php` | US-04 | FR-SUPPORT-002 |
+| `src/Support/ChatTicketNumbers.php` | US-04 | FR-SUPPORT-003 |
+| `src/Entity/ChatTicketCounter.php` | US-04 | FR-SUPPORT-003 |
+| `src/Event/SupportTicketCreatedEvent.php` | US-04 | FR-EVT-002 |
+| `src/Event/SupportTicketAssignedEvent.php` | US-04 | FR-EVT-002 |
+| `src/Event/SupportTicketReopenedEvent.php` | US-04 | FR-EVT-002 |
+| `src/Event/SupportTicketStatusChangedEvent.php` | US-04 | FR-EVT-002 |
+
+## Application ports (framework-free twins, messaging by id)
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/Contract/ChatServiceInterface.php` | US-02 | FR-PORT-001 |
+| `src/Contract/CurrentChatUserResolverInterface.php` | US-01 | FR-PORT-001 |
+| `src/Security/SecurityChatUserResolver.php` | US-01 | FR-PORT-001 |
+| `src/Contract/ChatChannelSourceInterface.php` | US-03 | FR-PORT-002 |
+| `src/Contract/ChatParticipantResolverInterface.php` | US-01 | FR-PORT-002 |
+| `src/Contract/ChatRealtimeTransportInterface.php` | US-05 | FR-PORT-002 |
+| `src/Port/Ports.php` | US-01 | FR-PORT-002 |
+| `src/Port/ChatChannelSourceGate.php` | US-03 | FR-PORT-002 |
+| `src/Port/ChatParticipantResolverGate.php` | US-01 | FR-PORT-002 |
+| `src/Port/ChatRealtimeTransportGate.php` | US-05 | FR-PORT-002 |
+| `src/Port/ChatRequestContexts.php` | US-01 | FR-PORT-002 |
+| `src/Model/ChatRequestContext.php` | US-01 | FR-PORT-002 |
+| `src/Model/ChatSecurityUser.php` | US-01 | FR-PORT-002 |
+| `src/DependencyInjection/Compiler/ChatKitPortsPass.php` | US-01 | FR-PORT-002 |
+| `src/Contract/ChatMessagingInterface.php` | US-02 | FR-PORT-003 |
+| `src/Service/ChatMessaging.php` | US-02 | FR-PORT-003 |
+| `src/Service/ChatNotFoundException.php` | US-02 | FR-PORT-003 |
+| `src/Model/ChatConversationView.php` | US-02 | FR-PORT-003, FR-EVT-002 |
+| `src/Model/ChatMessageView.php` | US-02 | FR-PORT-003, FR-EVT-002 |
+| `src/Model/ChatParticipantView.php` | US-02 | FR-PORT-003 |
+
+## User reference modes (relation, id, string)
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/Doctrine/ChatUserReferences.php` | US-01 | FR-USERREF-001 |
+| `src/Doctrine/UserReferenceListener.php` | US-01 | FR-USERREF-001 |
+| `src/Doctrine/UnresolvedChatUser.php` | US-01 | FR-USERREF-001 |
+| `src/Model/ChatUserReferenceInterface.php` | US-01 | FR-USERREF-001 |
+| `src/Contract/ChatUserReferenceDirectoryInterface.php` | US-01 | FR-USERREF-001 |
+| `src/Model/ChatUserReference.php` | US-01 | FR-USERREF-002 |
+| `src/Doctrine/StringReferenceSchemaGuard.php` | US-01 | FR-USERREF-002 |
+| `src/Doctrine/ChatUserLookAlikeException.php` | US-01 | FR-USERREF-002 |
+| `src/Model/ErasedChatUser.php` | US-09 | FR-USERREF-003 |
+| `src/Model/ErasedChatUserReference.php` | US-09 | FR-USERREF-003 |
+
+## Private entity manager, savepoints & write concurrency
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/DependencyInjection/Compiler/PrivateEntityManagerPass.php` | US-01 | FR-PEM-001 |
+| `src/DependencyInjection/Compiler/PrivateEntityManagerReferencesPass.php` | US-01 | FR-PEM-001 |
+| `src/Doctrine/ChatKitEntityManager.php` | US-01 | FR-PEM-001 |
+| `src/Doctrine/ChatKitManagerRegistry.php` | US-01 | FR-PEM-001 |
+| `src/Doctrine/PrivateManagerRepositoryFactory.php` | US-01 | FR-PEM-001 |
+| `src/Doctrine/PrivateEntityManagerMiddleware.php` | US-01 | FR-PEM-002 |
+| `src/Doctrine/PrivateEntityManagerDriver.php` | US-01 | FR-PEM-002 |
+| `src/Doctrine/PrivateEntityManagerConnection.php` | US-01 | FR-PEM-002 |
+| `src/Doctrine/ChatKitSavepoint.php` | US-01 | FR-PEM-003 |
+| `src/Doctrine/ChatKitRows.php` | US-02, US-03 | FR-CONC-001 |
+| `src/Doctrine/ChatKitRowLock.php` | US-04 | FR-CONC-001 |
+| `src/Transaction/ChatKitTransactionRunner.php` | US-02 | FR-CONC-002 |
+| `src/Transaction/ChatKitWrites.php` | US-02 | FR-CONC-002 |
+| `src/Worker/ChatRequestBoundaryListener.php` | US-01 | FR-WORKER-001 |
+
+## Retention policy
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/Contract/RetentionPolicyProviderInterface.php` | US-09 | FR-RET-002 |
+| `src/Support/NullRetentionPolicyProvider.php` | US-09 | FR-RET-002 |
+| `src/Support/ChatRetention.php` | US-09 | FR-RET-002 |
+| `src/Support/InvalidRetentionConfigurationException.php` | US-09 | FR-RET-002 |
+
+## Browser (TypeScript) — feature modules
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/Resources/assets/src/avatar.ts` | US-08 | FR-AVATAR-001, FR-TS-009 |
+| `src/Resources/assets/src/badges.ts` | US-08 | FR-BADGE-001, FR-TS-009 |
+| `src/Resources/assets/src/composer-tools.ts` | US-02 | FR-QUICKREPLY-001, FR-TS-009 |
+| `src/Resources/assets/src/links.ts` | US-10 | FR-LINK-005 |
+| `src/Resources/assets/src/mention.ts` | US-02, US-03 | FR-MENTION-001, FR-TS-009 |
+| `src/Resources/assets/src/reference.ts` | US-10 | FR-REF-001, FR-TS-009 |
+| `src/Resources/assets/src/sidebar.ts` | US-08 | FR-SIDEBAR-001, FR-TS-009 |
+| `src/Resources/assets/src/status.ts` | US-08 | FR-PREFS-001, FR-TS-009 |
+| `src/Resources/assets/src/support.ts` | US-04 | FR-SUPPORT-002, FR-TS-009 |
+| `src/Resources/assets/src/prefs.ts` | US-08 | FR-PREFS-001, FR-TS-009 |
+| `src/Resources/assets/src/public.ts` | US-08 | FR-PREFS-001, FR-TS-009 |
+| `src/Resources/assets/src/motion.ts` | US-08 | FR-TS-010 |
+| `src/Resources/assets/src/overlay.ts` | US-08 | FR-TS-010 |
+| `src/Resources/views/_author_badges.html.twig` | US-08 | FR-BADGE-001, FR-TWIG-002 |

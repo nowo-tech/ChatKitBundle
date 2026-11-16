@@ -153,6 +153,63 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 - **FR-TS-008** — Page read state (1.3): `page.ts` `markPageRead()` (called by `autoStart`) POSTs `/api/conversations/{uuid}/read` with the `X-CSRF-TOKEN` header once the full-page tab is visible.
 - **FR-BUILD-001** — Vite builds the IIFE `Resources/public/js/nowo-chat.js` from the sources (build output, not a unit).
 
+### Automatic replies, avatars, badges, mentions and references (1.10–1.29)
+
+- **FR-AUTOREPLY-001** — `ChatAutoReplier`: after a message, the other person of a direct conversation (and, in channels, the @mentioned people who chose so) answer with their automatic reply when it applies (away / busy / do not disturb or an out-of-office range), at most once per conversation per interval; never in support tickets.
+- **FR-AVATAR-001** — Profile pictures: `ChatAvatarUrlResolverInterface` (default `NullChatAvatarUrlResolver`: initials); `ChatAvatars` primes the people of one response with a single `urlsFor()` call; `AvatarUrlPolicy` emits only `https://host[:port]` URLs without user info or same-origin paths and drops every other scheme; `avatar.ts` checks again and removes a picture that fails to load.
+- **FR-BADGE-001** — Author badges: `ChatAuthorBadgeProviderInterface` (default `NoChatAuthorBadges`, never called) gives plain-text `ChatAuthorBadge` pills with an allow-listed `ChatAuthorBadgeVariant`, asked once per response by `ChatAuthorBadges` (`authorBadges` in the API and realtime events); `badges.ts` and `_author_badges.html.twig` print them escaped.
+- **FR-MENTION-001** — `ChatMentions` keeps an `@[Name](publicId)` token only for a conversation member (never the author), rewrites the name to the current display name, stores one `ChatMessageMention` row per member and dispatches `ChatMentionEvent` (on edit only the added people); `@channel` / `@here` need `ChatChannelMentionPolicyInterface` and are rate limited; `ChatMentionErasure` / `ChatMentionsErasedEvent` report mentions rewritten when a user is erased; `mention.ts` is the composer picker.
+- **FR-REF-001** — References to application items (`#[Title](type:id)`): `ChatReferences` goes through tagged `ChatReferenceProviderInterface` services, searches only what every person of the `ChatReferenceScope` may open and keeps a token on send or edit only for such an item; `reference.ts` is the `/task` and `#` picker.
+- **FR-QUICKREPLY-001** — Per-user saved snippets (`ChatQuickReply`, `ChatQuickReplyRepository`) inserted from the composer toolbar (`composer-tools.ts`: formatting buttons, shortcuts, help).
+
+### Links (1.19)
+
+- **FR-LINK-001** — `ChatLinkUrls` validates and normalises URLs, detects the configured `links.providers` (`ChatLinkProvider`) by hostname and extracts the links of a message; nothing is fetched. `ChatLinks` adds, changes and removes pinned links, enforces per-conversation limits, keeps the message link index in step and broadcasts `links`.
+- **FR-LINK-002** — Persistence: `ChatConversationLink` (pinned link, kept when its author is erased) and `ChatMessageLink` (index behind the Links panel) with their repositories.
+- **FR-LINK-003** — `ChatLinksController`: JSON API for pinned links and the paged Links panel (search, provider filter), members only (unknown or foreign gives 404); who manages pinned links follows `links.channel_managers` through `ChatLinkPolicyInterface`, then `ChatPinPolicyInterface`, else nobody.
+- **FR-LINK-004** — `nowo:chat:links:backfill` indexes links of messages written before 1.19 in batches, safe to repeat, `--after-id` resumes.
+- **FR-LINK-005** — `links.ts`: chips bar, add / edit dialog, link card attachment and Links panel, built with DOM nodes (text through `textContent`).
+
+### Channels, sidebar and preferences
+
+- **FR-CHANNEL-001** — Optional channel policies of the application's channel provider: `ChatChannelWritePolicyInterface` (asked on every send, edit, reaction, typing ping, pin and link change), `ChatPinPolicyInterface` (who pins in channels; deny by default) and `ChatChannelOpeningEvent` (a listener refuses creating a channel's conversation; API 403 `channel_denied` through `ChatChannelDeniedException`).
+- **FR-CHANNEL-002** — A channel key is compared byte for byte (`ChatChannelKey`: 1–120 bytes of valid UTF-8, no edge whitespace or control / format characters); on MySQL / MariaDB `ChannelKeyCollationListener` gives `channel_key` an exact collation.
+- **FR-SIDEBAR-001** — `ChatSidebar` and `ChatSidebarController` (`GET …/api/sidebar`) merge sections of tagged `ChatSidebarSectionProviderInterface` services (`ChatSidebarSection`, `ChatSidebarItem`, `ChatSidebarAction`), leave out rows the viewer may not read and reserved keys; `sidebar.ts` renders the grouped, collapsible list in the page and, with `web_ui.dock.sidebar_sections`, the dock.
+- **FR-PREFS-001** — `ChatPreferencesType` (sounds, volume … bound to `ChatUserSettings`) for a host settings screen, `ChatDockStatusType` for the dock's custom status; `prefs.ts` saves one preference at a time through the API, `status.ts` is the status menu and activity clock, `public.ts` is the supported entry of a host bundler (preferences and sounds only).
+
+### Support tickets (1.x)
+
+- **FR-SUPPORT-002** — `ChatSupportTickets` opens support (continue the active ticket or an intake draft), chooses a topic (number, default assignee, automatic replies), continues earlier tickets, changes status and assignment, posting a bot line and dispatching `SupportTicketCreated`, `Assigned`, `Reopened` and `StatusChanged` events; `ChatSupportPolicy` decides the readable number, the "continue or new?" question and read-only tickets; topics come from `ChatSupportTopicProviderInterface` (default `ConfiguredSupportTopicProvider` over `support.topics`) through `ChatSupportTopics`; `support.ts` is the in-window assistant.
+- **FR-SUPPORT-003** — Ticket numbers are sequential per conversation table from one `ChatTicketCounter` row moved with a single-row `UPDATE`, in the ticket's transaction (`ChatTicketNumbers`).
+
+### Application ports (1.24–1.27, REQ-ARCH-001)
+
+- **FR-PORT-001** — `ChatServiceInterface` (default `ChatService`, decoratable) and `CurrentChatUserResolverInterface` (default `SecurityChatUserResolver`: the security user is the participant when it implements `ChatUserInterface`).
+- **FR-PORT-002** — Framework-free twins `ChatChannelSourceInterface`, `ChatParticipantResolverInterface` and `ChatRealtimeTransportInterface` take `ChatRequestContext` / `ChatSecurityUser` instead of HttpFoundation or Security types; `Ports` and the `*Gate` classes pick the interface a host service implements (the deprecated one wins when both), `ChatRequestContexts` copies request and user without headers, cookies, session or body, and `ChatKitPortsPass` wires them and refuses a service implementing neither.
+- **FR-PORT-003** — `ChatMessagingInterface` / `ChatMessaging`: the chat's application service by public uuid (compared byte for byte), answering read-only views (`ChatConversationView`, `ChatMessageView`, `ChatParticipantView`, `ChatLinkView`) and authorizing with the API's rules; an unknown or forbidden uuid gives the same `ChatNotFoundException`.
+
+### User reference modes and private entity manager (1.24–1.30)
+
+- **FR-USERREF-001** — `doctrine.user_reference`: `relation` (default, foreign keys to `user_class`), `id` (string column per former relation through `UserReferenceListener`, users loaded by `ChatUserReferenceDirectoryInterface`, a missing user stands in as `UnresolvedChatUser`) or `string` (`ChatUserReferenceInterface`); `ChatUserReferences` states the mode and asserts the user kind.
+- **FR-USERREF-002** — A user reference is 1–64 characters of valid UTF-8 without edge whitespace or control characters (`ChatUserReference`, never trimmed); in string mode `StringReferenceSchemaGuard` fails closed when user columns still fold on MySQL / MariaDB and `ChatUserLookAlikeException` refuses an insert that would clash with a look-alike's row.
+- **FR-USERREF-003** — `ErasedChatUser` and `ErasedChatUserReference` describe a gone account for `ChatPersonalData::erase()` / `eraseFormerAccount()` (rows by reference, mention tokens, bot-line parameters).
+- **FR-PEM-001** — With `doctrine.private_entity_manager: true` ChatKit uses its own `ChatKitEntityManager` behind `ChatKitManagerRegistry`; `PrivateEntityManagerPass` and `PrivateEntityManagerReferencesPass` attach it to the source connection only and make every bundle service use it; each manager has its own `PrivateManagerRepositoryFactory`.
+- **FR-PEM-002** — A DBAL middleware (`PrivateEntityManagerMiddleware`, `Driver`, `Connection`) reports rollbacks, savepoint releases and failed commits so a stale identity map is replaced before the next write.
+- **FR-PEM-003** — `ChatKitSavepoint` runs a bundle write inside a savepoint when a transaction is open, so a failing statement never aborts the application's transaction.
+- **FR-CONC-001** — `ChatKitRows::insert` writes rows whose unique key another request may take (participant, reaction, direct conversation) through DBAL in a savepoint, rolling back only the savepoint on a violation; `ChatKitRowLock::fetchOne` reads one row with a lock (`FOR UPDATE`, `FOR NO KEY UPDATE` on PostgreSQL, shared optional).
+- **FR-CONC-002** — `ChatKitTransactionRunner` runs every ChatKit write in one transaction (never a runner the application binds) and `ChatKitWrites` flushes the chat manager inside it; realtime, events, push and mail stay with the caller after it returns.
+- **FR-WORKER-001** — `ChatRequestBoundaryListener` resets the bundle's per-request memos (`ResetInterface` services) at every request and worker-message boundary it sees, so a kept-alive kernel without a services resetter never serves one request's memo to the next.
+
+### Retention policy and events
+
+- **FR-RET-002** — `RetentionPolicyProviderInterface` (default `NullRetentionPolicyProvider`) lets the application give the retention days at run time; `ChatRetention` uses it when usable, else `retention_days`, clamped to its minimum and maximum, asked again at every purge run; `InvalidRetentionConfigurationException` makes the purge refuse a non-positive configured value.
+- **FR-EVT-002** — Additional events carry read-only views and scalars (no entity, no user object): link added / updated / removed, mention, mentions erased, channel opening, support ticket created / assigned / reopened / status changed.
+
+### Browser modules
+
+- **FR-TS-009** — Feature modules `avatar.ts`, `badges.ts`, `composer-tools.ts`, `mention.ts`, `reference.ts`, `sidebar.ts`, `status.ts`, `support.ts`, `prefs.ts`, `public.ts` extend the dock and thread; everything is built with DOM nodes and `textContent`, never HTML from user text.
+- **FR-TS-010** — `motion.ts` closes dialogs with an effect (a fade plus a timer fallback) and `overlay.ts` makes the dock step aside through `nowo:overlay-open` / `nowo:overlay-close` and `data-nowo-overlay`.
+
 ## Key entities
 
 | Entity | Source | Description |
@@ -182,7 +239,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 ## Success criteria
 
-- **SC-01** — `code-inventory.md` maps **97/97** production units (see its audit command).
+- **SC-01** — `code-inventory.md` maps **223/223** production units (see its audit command).
 - **SC-02** — PHPUnit: 100% line coverage of `src/`.
 - **SC-03** — Vitest: 100% line coverage of `Resources/assets/src`.
 - **SC-04** — PHPStan level 8 (with the FrankenPHP rulesets), Rector and PHP-CS-Fixer report nothing; Igor passes.
