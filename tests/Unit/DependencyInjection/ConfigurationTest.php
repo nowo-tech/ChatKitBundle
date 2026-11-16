@@ -28,6 +28,7 @@ final class ConfigurationTest extends TestCase
             'enabled'                   => true,
             'user_class'                => null,
             'retention_days'            => 365,
+            'runtime'                   => [],
             'realtime'                  => true,
             'push'                      => false,
             'push_url'                  => '/?chat={uuid}',

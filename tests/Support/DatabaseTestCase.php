@@ -30,7 +30,7 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function setUp(): void
     {
-        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges(), $this->hostTransactionRunner());
+        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges(), $this->hostTransactionRunner(), $this->runtimeSettings());
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
@@ -69,6 +69,14 @@ abstract class DatabaseTestCase extends TestCase
      * 1.30: whether the kernel binds TransactionRunnerInterface to HostEntityManagerRunner (a host runner ChatKit must ignore).
      */
     protected function hostTransactionRunner(): bool
+    {
+        return false;
+    }
+
+    /**
+     * 1.32: whether the kernel registers nowo-tech/runtime-setting-contract's bridge over its in-memory store.
+     */
+    protected function runtimeSettings(): bool
     {
         return false;
     }

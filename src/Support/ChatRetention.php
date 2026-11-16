@@ -15,6 +15,9 @@ use Psr\Log\NullLogger;
  */
 final readonly class ChatRetention
 {
+    /** 1.32: the documented default of `retention_days`, in days (also the runtime setting's default with `source: db`). */
+    public const int DEFAULT_DAYS = 365;
+
     /** Smallest retention the bundle accepts, in days. */
     public const int MIN_DAYS = 30;
 

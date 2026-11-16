@@ -111,6 +111,13 @@ change another thread made (e.g. a user hiding their presence or opting out of d
 manager is cleared (audit MC-C-L1). Stock Symfony, including FrankenPHP worker mode with
 `FRANKENPHP_RESET_KERNEL=false`, runs the resetter and needs nothing extra.
 
+## 1.32.0 additions: retention from the runtime-setting contract (2026-11-16)
+
+| Unit | Status | Notes |
+| --- | --- | --- |
+| `RuntimeSettingRetentionPolicyProvider` (`runtime.retention_days`) | ✅ | `final readonly`, no state: asks the contract's `RuntimeSettingResolver` on every call. The resolver's memo holds one value per unit of work and is cleared by the contract's `RuntimeSettingBoundaryListener` (main `kernel.request`, `kernel.terminate`, `console.command` / `console.terminate`, Messenger worker events) and `kernel.reset`. `ChatRuntimeRetentionTest` runs 50 `set` + `nowo:chat:purge` rounds alternating two values in one kept-alive kernel: every purge sees the latest value. |
+| `RetentionUnavailableException` | ✅ | Plain exception (setting id and reason, no stored value). |
+
 ## Rules for future code
 
 - Keep presence, typing and counters in storage (database / cache pool / Mercure), never in service properties.

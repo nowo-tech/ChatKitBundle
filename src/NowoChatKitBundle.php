@@ -8,6 +8,7 @@ use Nowo\ChatKitBundle\DependencyInjection\Compiler\ChatKitPortsPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerReferencesPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\RealtimeTransportPass;
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\RuntimeRetentionPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
@@ -48,6 +49,8 @@ final class NowoChatKitBundle extends Bundle
         $container->addCompilerPass(new PrivateEntityManagerPass(), PassConfig::TYPE_BEFORE_OPTIMIZATION, 10);
         $container->addCompilerPass(new PrivateEntityManagerReferencesPass(), PassConfig::TYPE_BEFORE_REMOVING);
         $container->addCompilerPass(new TwigPathsPass());
+        // 1.32: `runtime.retention_days` puts the runtime-setting adapter behind the retention port (resolver required).
+        $container->addCompilerPass(new RuntimeRetentionPass());
     }
 
     /**

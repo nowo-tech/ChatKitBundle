@@ -19,12 +19,22 @@ use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Model\ChatUserReferenceInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\RuntimeSetting\RuntimeSettingRetentionPolicyProvider;
+use Nowo\ChatKitBundle\Support\ChatRetention;
 use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
+use Nowo\RuntimeSettingContract\Bridge\Symfony\DependencyInjection\RuntimeSettingsConfiguration;
+use Nowo\RuntimeSettingContract\Contract\Exception\InvalidRuntimeSettingId;
+use Nowo\RuntimeSettingContract\Contract\RuntimeSettingDefinition;
+use Nowo\RuntimeSettingContract\Contract\RuntimeSettingId;
+use Nowo\RuntimeSettingContract\Contract\RuntimeSettingResolver;
+use Nowo\RuntimeSettingContract\Contract\RuntimeSettingType;
+use Nowo\RuntimeSettingContract\Contract\Validator\IntRange;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Argument\IteratorArgument;
+use Symfony\Component\DependencyInjection\Argument\ServiceClosureArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Extension\Extension;
@@ -33,6 +43,7 @@ use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
 
 use function array_key_exists;
+use function class_exists;
 use function is_a;
 use function is_array;
 use function is_string;
@@ -57,6 +68,15 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      * Public path created by `assets:install` for this bundle (REQ-ASSETS-004).
      */
     public const ASSET_BASE_PATH = '/bundles/nowochatkit';
+
+    /** 1.32: parameter holding the `runtime.retention_days` setting id of the default profile (null: not configured). */
+    public const RUNTIME_RETENTION_PARAMETER = 'nowo_chat_kit.runtime.retention_days';
+
+    /** 1.32: the retention RuntimeSettingDefinition (tagged for the contract's registry). */
+    public const RUNTIME_RETENTION_DEFINITION = 'nowo_chat_kit.runtime_setting.retention_days';
+
+    /** 1.32: the bounded validator of the retention runtime setting (30..36500 days, refuse, never clamp). */
+    public const RUNTIME_RETENTION_VALIDATOR = 'nowo_chat_kit.runtime_setting.retention_days.validator';
 
     /**
      * Registers the Doctrine mapping, maps ChatUserInterface to the configured user class and registers the
@@ -203,6 +223,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         if ($userReference !== ChatUserReferences::STRING) {
             $container->removeDefinition(StringReferenceSchemaGuard::class);
         }
+        $this->registerRuntimeRetention($container, $profile['runtime']['retention_days'] ?? null, $profile['retention_days']);
         $this->registerTableNames($container, $configs, $config['default_profile'], $profile['doctrine']);
         $this->registerPrivateEntityManager($container, $profile['doctrine']['private_entity_manager'], $profile['doctrine']['entity_manager']);
         foreach ($profile['links'] as $key => $value) {
@@ -225,6 +246,54 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.web_ui.page.open_recent', $profile['web_ui']['page']['open_recent']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.dock.sidebar_sections', $profile['web_ui']['dock']['sidebar_sections']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.dock.dialog_runtime', $profile['web_ui']['dock']['dialog_runtime']);
+    }
+
+    /**
+     * 1.32: `runtime.retention_days` registers the retention as a runtime setting of nowo-tech/runtime-setting-contract
+     * (an optional dependency): a {@see RuntimeSettingDefinition} with a bounded validator, tagged for the contract's
+     * registry (so `nowo:runtime-setting:*` can change it), and {@see RuntimeSettingRetentionPolicyProvider} behind the
+     * retention port ({@see Compiler\RuntimeRetentionPass} aliases it once the host's services are known). Without the
+     * node nothing is registered and nothing changes.
+     *
+     * @param array{source: string, key: string, on_error: string}|null $runtime The processed `runtime.retention_days`
+     * @param mixed $configured The configured `retention_days` (an int or an `%env()%` placeholder): the env fallback
+     *
+     * @throws InvalidConfigurationException When the contract is not installed or the key is not a valid setting id
+     */
+    private function registerRuntimeRetention(ContainerBuilder $container, ?array $runtime, mixed $configured): void
+    {
+        $container->setParameter(self::RUNTIME_RETENTION_PARAMETER, $runtime['key'] ?? null);
+        if ($runtime === null) {
+            return;
+        }
+        if (!class_exists(RuntimeSettingDefinition::class) || !class_exists(RuntimeSettingsConfiguration::class)) {
+            throw new InvalidConfigurationException('nowo_chat_kit: runtime.retention_days needs nowo-tech/runtime-setting-contract ^1.0 (composer require nowo-tech/runtime-setting-contract), or remove the node to keep the configured retention_days.');
+        }
+
+        try {
+            RuntimeSettingId::fromString($runtime['key']);
+        } catch (InvalidRuntimeSettingId) {
+            throw new InvalidConfigurationException(sprintf('nowo_chat_kit: runtime.retention_days.key "%s" is not a valid runtime setting id: use "namespace.key" (lowercase) or an environment variable name.', $runtime['key']));
+        }
+
+        $container->register(self::RUNTIME_RETENTION_VALIDATOR, IntRange::class)
+            ->setArguments([ChatRetention::MIN_DAYS, ChatRetention::MAX_DAYS, false]);
+        RuntimeSettingsConfiguration::registerDefinition(
+            $container,
+            self::RUNTIME_RETENTION_DEFINITION,
+            $runtime,
+            RuntimeSettingType::Int,
+            $configured,
+            validatorServiceId: self::RUNTIME_RETENTION_VALIDATOR,
+            default: ChatRetention::DEFAULT_DAYS,
+        );
+        // The definition is built on first use, inside retentionDays(): a configuration error fails the purge cleanly.
+        $container->register(RuntimeSettingRetentionPolicyProvider::class, RuntimeSettingRetentionPolicyProvider::class)
+            ->setArguments([
+                new Reference(RuntimeSettingResolver::class),
+                new ServiceClosureArgument(new Reference(self::RUNTIME_RETENTION_DEFINITION)),
+                $runtime['key'],
+            ]);
     }
 
     /**

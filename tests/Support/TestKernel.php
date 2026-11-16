@@ -38,6 +38,8 @@ use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinChannelSource;
 use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinParticipantResolver;
 use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinRealtime;
 use Nowo\FormKitBundle\NowoFormKitBundle;
+use Nowo\RuntimeSettingContract\Bridge\Symfony\NowoRuntimeSettingBundle;
+use Nowo\RuntimeSettingContract\InMemory\InMemoryRuntimeSettingStore;
 use Nowo\TransactionContract\TransactionRunnerInterface;
 use Nowo\UiKitBundle\NowoUiKitBundle;
 use ReflectionMethod;
@@ -61,6 +63,7 @@ use function array_key_exists;
 use function dirname;
 use function is_array;
 use function is_string;
+use function str_repeat;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
 
 /**
@@ -95,6 +98,7 @@ final class TestKernel extends Kernel
         private readonly bool $twinPortsKernel = false,
         private readonly bool $authorBadges = false,
         private readonly bool $scriptedRunner = false,
+        private readonly bool $runtimeSettings = false,
     ) {
         // Own environment for the routing.controllers-only host: its container class must not collide with the
         // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir).
@@ -113,6 +117,10 @@ final class TestKernel extends Kernel
         yield new NowoUiKitBundle();
         yield new NowoFormKitBundle();
         yield new NowoChatKitBundle();
+        // 1.32: nowo-tech/runtime-setting-contract's Symfony bridge, only for the runtime retention tests.
+        if ($this->runtimeSettings) {
+            yield new NowoRuntimeSettingBundle();
+        }
     }
 
     public function getProjectDir(): string
@@ -183,7 +191,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), self::privateEntityManager(), $this->authorBadges, $this->scriptedRunner])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), self::privateEntityManager(), $this->authorBadges, $this->scriptedRunner, $this->runtimeSettings])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -289,6 +297,18 @@ final class TestKernel extends Kernel
             $services->alias(ChatChannelProviderInterface::class, TwinChannelSource::class);
             $services->alias(ChatRealtimeInterface::class, TwinRealtime::class);
             $services->alias(ChatParticipantResolverInterface::class, TwinParticipantResolver::class);
+        }
+        // 1.32: the contract's in-memory reference store as the host's source and writer (commands enabled).
+        if ($this->runtimeSettings) {
+            $container->extension('nowo_runtime_setting', [
+                'source'      => InMemoryRuntimeSettingStore::class,
+                'writer'      => InMemoryRuntimeSettingStore::class,
+                'version_ttl' => 0,
+                // The test kernel.secret is shorter than the 16 bytes the fingerprinter needs (not a credential).
+                'fingerprint_key' => str_repeat('REDACTED-TEST-', 2),
+                'command'         => ['enabled' => true],
+            ]);
+            $services->set(InMemoryRuntimeSettingStore::class);
         }
         $services->set(self::TRANSLATOR_COLLECTOR, DataCollectorTranslator::class)->decorate('translator')->args([service('.inner')]);
     }

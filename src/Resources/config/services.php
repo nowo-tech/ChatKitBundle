@@ -92,6 +92,9 @@ return static function (ContainerConfigurator $container): void {
             '../../Service/ChatNotFoundException.php',
             '../../Doctrine/ChatUserLookAlikeException.php',
             '../../Support/InvalidRetentionConfigurationException.php',
+            // 1.32: registered by the extension only with `runtime.retention_days` (needs the optional contract).
+            '../../Support/RetentionUnavailableException.php',
+            '../../RuntimeSetting',
             '../../Avatar/AvatarUrlPolicy.php',
             '../../Doctrine/UnresolvedChatUser.php',
             // 1.30: registered below under the bundle's own id; ChatKitWrites is a static helper.

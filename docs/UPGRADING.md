@@ -77,6 +77,34 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Target 1.32.0, from **1.31.x**. Nothing to change: without `runtime.retention_days` the bundle behaves exactly as in
+1.31.1.
+
+Optional: read the purge retention from a runtime setting (`.env` or database, changed live):
+
+```bash
+composer require nowo-tech/runtime-setting-contract:^1.0
+```
+
+```yaml
+# config/bundles.php: Nowo\RuntimeSettingContract\Bridge\Symfony\NowoRuntimeSettingBundle::class => ['all' => true]
+# Source and writer: InstanceSettingsBundle >= 1.20 (runtime_setting.enabled: true binds them), RuntimeEnvBundle >= 1.6,
+# or your own (nowo_runtime_setting: { source: <service id>, writer: <service id> }).
+nowo_chat_kit:
+    profiles:
+        default:
+            retention_days: '%env(int:CHAT_RETENTION_DAYS)%'   # stays the env fallback
+            runtime:
+                retention_days: chat.retention_days           # = { source: db_then_env, key: chat.retention_days }
+```
+
+- If you aliased `RetentionPolicyProviderInterface` to your own provider (1.31), remove the alias: the build refuses both
+  (two sources for one value).
+- Values are bounded to 30..36500 days for every source: `nowo:runtime-setting:set` refuses anything else, and a value
+  outside the bounds found in the source (a hand-edited row) makes the purge fail without deleting anything. Unlike the
+  1.31 provider, a value below 30 is refused, not raised to 30.
+- `on_error: fallback` is not accepted for this setting: the purge deletes data, so it fails closed.
+
 ## To 1.31.1
 
 From **1.31.0**:

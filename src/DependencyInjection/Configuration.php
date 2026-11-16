@@ -151,6 +151,18 @@ final class Configuration implements ConfigurationInterface
         'webex' => ['label' => 'Webex', 'hosts' => ['webex.com'], 'icon' => 'tabler:video', 'fallback_icon' => 'video'],
     ];
 
+    /** 1.32: `runtime.<setting>.source` values (nowo-tech/runtime-setting-contract `RuntimeSettingSource`). */
+    public const array RUNTIME_SOURCES = ['env', 'db', 'db_then_env'];
+
+    /** 1.32: default id of the retention runtime setting. */
+    public const string RUNTIME_RETENTION_KEY = 'chat.retention_days';
+
+    /**
+     * 1.32: a runtime setting id, as RuntimeSettingId accepts it (checked again by the contract): `namespace.key`
+     * (namespace not `env`) or an environment variable name. Lengths are checked separately.
+     */
+    public const string RUNTIME_KEY_PATTERN = '/^(?:(?!env\.)[a-z][a-z0-9_]{0,63}\.[a-z0-9_]{1,128}(?:\.[a-z0-9_]+)*|[A-Z][A-Z0-9_]{0,127})$/D';
+
     /** Support ticket topics offered by default (labels and replies in the bundle catalogue). */
     public const array DEFAULT_SUPPORT_TOPICS = [
         ['key' => 'incident', 'icon' => 'tabler:bug', 'emoji' => '🐞'],
@@ -199,6 +211,40 @@ final class Configuration implements ConfigurationInterface
                                 ->info('Messages older than this are purged by nowo:chat:purge (minimum 30).')
                                 ->defaultValue(365)
                                 ->min(30)
+                            ->end()
+                            ->arrayNode('runtime')
+                                ->info('1.32: settings read at run time through nowo-tech/runtime-setting-contract (optional dependency). Omitted: nothing changes.')
+                                ->addDefaultsIfNotSet()
+                                ->children()
+                                    ->arrayNode('retention_days')
+                                        ->info('Read retention_days from a runtime setting on every purge. A string is the setting id (source db_then_env). Needs the contract and its resolver (NowoRuntimeSettingBundle).')
+                                        ->beforeNormalization()
+                                            ->ifString()
+                                            ->then(static fn (string $key): array => ['key' => $key, 'source' => 'db_then_env'])
+                                        ->end()
+                                        ->children()
+                                            ->enumNode('source')
+                                                ->info('env: the configured retention_days only; db: the runtime setting only (unset: 365); db_then_env: the runtime setting, else retention_days.')
+                                                ->values(self::RUNTIME_SOURCES)
+                                                ->defaultValue('db_then_env')
+                                            ->end()
+                                            ->scalarNode('key')
+                                                ->info('Setting id: "namespace.key" (lowercase) or an environment variable name.')
+                                                ->defaultValue(self::RUNTIME_RETENTION_KEY)
+                                                ->cannotBeEmpty()
+                                                ->validate()
+                                                    ->ifTrue(static fn (mixed $key): bool => !is_string($key) || preg_match(self::RUNTIME_KEY_PATTERN, $key) !== 1)
+                                                    ->thenInvalid('Invalid runtime setting key %s: use "namespace.key" (lowercase) or an environment variable name.')
+                                                ->end()
+                                            ->end()
+                                            ->enumNode('on_error')
+                                                ->info('Only fail_closed: the purge deletes data, so an invalid or unreadable value stops it (never a fallback).')
+                                                ->values(['fail_closed'])
+                                                ->defaultValue('fail_closed')
+                                            ->end()
+                                        ->end()
+                                    ->end()
+                                ->end()
                             ->end()
                             ->booleanNode('realtime')
                                 ->info('Push messages, typing, presence and receipts live (needs a ChatRealtimeInterface; Mercure by default).')
