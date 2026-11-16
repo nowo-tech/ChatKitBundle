@@ -1,41 +1,35 @@
 {% extends 'base.html.twig' %}
 
 {% block body %}
-<div class="container py-4">
-    <h1 class="h3 mb-2">{{ 'demo.heading'|trans }}</h1>
-    <p class="lead">{{ 'demo.lead'|trans }}</p>
-    <p class="text-muted">{{ 'demo.body'|trans({ '%profile%': default_profile }) }}</p>
+<div class="nowo-ui-page-header"><h1 class="nowo-ui-page-header__title">{{ 'demo.heading'|trans }}</h1></div>
+<p>{{ 'demo.lead'|trans }}</p>
+<p class="nowo-ui-muted">{{ 'demo.body'|trans({ '%profile%': default_profile }) }}</p>
 
-    <div class="row g-4">
-        <div class="col-lg-7">
-            <div class="card shadow-sm" data-screenshot-target>
-                <div class="card-body">
-                    <h2 class="h5">{{ 'demo.features.title'|trans }}</h2>
-                    <ul class="mb-0">
-                        {% for key in ['dms', 'channels', 'support', 'realtime', 'presence', 'buzz', 'page', 'theming'] %}
-                            <li>{{ ('demo.features.' ~ key)|trans }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            </div>
+<div class="nowo-ui-cards">
+    <section class="nowo-ui-card" data-screenshot-target>
+        <div class="nowo-ui-card__header"><h2 class="nowo-ui-card__title">{{ 'demo.features.title'|trans }}</h2></div>
+        <div class="nowo-ui-card__body">
+            <ul>
+                {% for key in ['dms', 'channels', 'support', 'realtime', 'presence', 'buzz', 'page', 'theming'] %}
+                    <li>{{ ('demo.features.' ~ key)|trans }}</li>
+                {% endfor %}
+            </ul>
         </div>
-        <div class="col-lg-5">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h2 class="h6">{{ 'demo.try.title'|trans }}</h2>
-                    {% if app.user %}
-                        <p class="small">{{ 'demo.try.signed_in'|trans }}</p>
-                        <div class="d-flex flex-wrap gap-2">
-                            <a class="btn btn-sm btn-outline-primary" href="{{ path('nowo_chat_page') }}">{{ 'demo.try.page'|trans }}</a>
-                            <a class="btn btn-sm btn-outline-secondary" href="#" data-nowo-chat-open="support">{{ 'demo.try.support'|trans }}</a>
-                        </div>
-                    {% else %}
-                        <p class="small mb-2">{{ 'demo.try.guest'|trans }}</p>
-                        <a class="btn btn-sm btn-primary" href="{{ path('demo_login', { _locale: app.request.locale }) }}">{{ 'demo.login.nav'|trans }}</a>
-                    {% endif %}
+    </section>
+    <section class="nowo-ui-card">
+        <div class="nowo-ui-card__header"><h2 class="nowo-ui-card__title">{{ 'demo.try.title'|trans }}</h2></div>
+        <div class="nowo-ui-card__body">
+            {% if app.user %}
+                <p>{{ 'demo.try.signed_in'|trans }}</p>
+                <div class="nowo-ui-card__toolbar">
+                    <a class="nowo-ui-btn nowo-ui-btn--outline" href="{{ path('nowo_chat_page') }}">{{ 'demo.try.page'|trans }}</a>
+                    <a class="nowo-ui-btn nowo-ui-btn--outline" href="#" data-nowo-chat-open="support">{{ 'demo.try.support'|trans }}</a>
                 </div>
-            </div>
+            {% else %}
+                <p>{{ 'demo.try.guest'|trans }}</p>
+                <a class="nowo-ui-btn nowo-ui-btn--primary" href="{{ path('demo_login', { _locale: app.request.locale }) }}">{{ 'demo.login.nav'|trans }}</a>
+            {% endif %}
         </div>
-    </div>
+    </section>
 </div>
 {% endblock %}

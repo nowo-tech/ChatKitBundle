@@ -38,7 +38,7 @@ final class DemoRoomType extends AbstractType
         $this->addWithDefaults($builder, 'submit', SubmitType::class, [
             'label' => 'demo.rooms.submit',
             'attr' => [
-                'class' => 'btn btn-primary',
+                'class' => 'nowo-ui-btn nowo-ui-btn--primary',
             ],
         ]);
     }

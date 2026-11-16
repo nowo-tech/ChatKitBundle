@@ -16,6 +16,9 @@ async function signIn(page: Page, username: string): Promise<void> {
 
 test.describe('chat dock on a phone (1.23)', () => {
   test.beforeEach(async ({ page }) => {
+    // The dev stack's FrankenPHP hot reload morphs the page when the run writes its screenshots under the demo
+    // directory, which re-renders the open sheet under the test: these specs do not subscribe to it.
+    await page.route('**/.well-known/mercure**', (route) => route.abort());
     await signIn(page, 'alice');
     await expect(page.locator('.nowo-chat.is-mobile')).toHaveCount(1);
   });

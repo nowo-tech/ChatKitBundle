@@ -1,8 +1,10 @@
 {% extends 'base.html.twig' %}
 
 {% block body %}
-<div class="container py-4" style="max-width: 32rem">
-    <h1 class="h4 mb-3">{{ 'demo.rooms.create'|trans }}</h1>
-    {{ include('demo/_room_form.html.twig') }}
-</div>
+<div class="nowo-ui-page-header"><h1 class="nowo-ui-page-header__title">{{ 'demo.rooms.create'|trans }}</h1></div>
+<section class="nowo-ui-card">
+    <div class="nowo-ui-card__body">
+        {{ include('demo/_room_form.html.twig') }}
+    </div>
+</section>
 {% endblock %}

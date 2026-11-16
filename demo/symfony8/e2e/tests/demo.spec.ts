@@ -172,7 +172,7 @@ test.describe('chat kit demo', () => {
     await expect(app.locator('.nowo-chat-pagemode__empty')).toBeVisible();
     // REQ-UI-003: the page renders in the UiKit host layout (nowo_ui_kit.layouts.admin) with the UiKit page header.
     await expect(page.locator('main[data-nowo-ui-bundle="NowoChatKitBundle"] [data-nowo-ui-region="header"] h1')).toHaveText('Messages');
-    await expect(page.locator('nav.demo-navbar')).toBeVisible();
+    await expect(page.locator('[data-testid="demo-masthead"]')).toBeVisible();
   });
 });
 

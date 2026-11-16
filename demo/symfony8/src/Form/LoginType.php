@@ -51,7 +51,7 @@ final class LoginType extends AbstractType
         $this->addWithDefaults($builder, 'submit', SubmitType::class, [
                 'label' => 'demo.login.submit',
                 'attr' => [
-                    'class' => 'btn btn-primary',
+                    'class' => 'nowo-ui-btn nowo-ui-btn--primary',
                 ],
             ]);
     }

@@ -34,7 +34,7 @@ The stack uses:
 
 | Demo | UI | Default port |
 | --- | --- | --- |
-| `demo/symfony8/` | Bootstrap 5 | **8147** |
+| `demo/symfony8/` | UiKit (default theme) | **8147** |
 
 ```bash
 make -C demo up-symfony8

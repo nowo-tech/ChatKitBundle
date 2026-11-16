@@ -71,6 +71,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Demo
+
+- The demo is built on UiKit and FormKit (REQ-DEMO-014 / REQ-DEMO-015): the Bootstrap CDN CSS/JS, the hand-written navbar and the host token overrides are gone, the demo shell is UiKit's admin layout with its default theme, the demo requires `nowo-tech/ui-kit-bundle` ^2.52 and the forms are themed by UiKit's form theme (no `bootstrap_5_layout`). No bundle runtime change.
+
 ## [1.32.0] - 2026-11-16
 
 Target 1.32.0 (minor, no BC break). Retention from the runtime-setting contract (Symfony Beacon request).
