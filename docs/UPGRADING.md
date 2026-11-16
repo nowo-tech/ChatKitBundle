@@ -100,6 +100,13 @@ nowo_chat_kit:
 
 - If you aliased `RetentionPolicyProviderInterface` to your own provider (1.31), remove the alias: the build refuses both
   (two sources for one value).
+- If your application already registers its own runtime-setting definition for the chat retention (for example id
+  `ops.chat_retention_days`), remove that definition and set ChatKit's `key` to the same id:
+  `runtime: { retention_days: { key: ops.chat_retention_days, source: db_then_env } }`. Keeping both fails with a
+  duplicate-definition error at runtime; keeping yours with ChatKit's default key makes ChatKit read
+  `chat.retention_days` and ignore your stored value.
+- Prefer `source: db_then_env` (the short form's default): unset means the configured `retention_days`. With
+  `source: db` an unset value makes the purge fail and delete nothing (there is no bundle default).
 - Values are bounded to 30..36500 days for every source: `nowo:runtime-setting:set` refuses anything else, and a value
   outside the bounds found in the source (a hand-edited row) makes the purge fail without deleting anything. Unlike the
   1.31 provider, a value below 30 is refused, not raised to 30.

@@ -48,9 +48,15 @@ final class RuntimeSettingRetentionPolicyProviderTest extends TestCase
         self::assertSame(120, $this->provider(RuntimeSettingSource::DbThenEnv, 120)->retentionDays());
     }
 
-    public function testDbUsesTheBundleDefaultWhileNothingIsStored(): void
+    public function testDbFailsWhileNothingIsStored(): void
     {
-        self::assertSame(ChatRetention::DEFAULT_DAYS, $this->provider(RuntimeSettingSource::Db, 120)->retentionDays());
+        // Audit RN-M1: never a bundle default shorter than the host's retention_days.
+        try {
+            $this->provider(RuntimeSettingSource::Db, 400)->retentionDays();
+            self::fail('a missing db value must not fall back');
+        } catch (RetentionUnavailableException $exception) {
+            self::assertInstanceOf(RuntimeSettingUnavailable::class, $exception->getPrevious());
+        }
     }
 
     public function testEnvNeverReadsTheSource(): void
@@ -131,11 +137,14 @@ final class RuntimeSettingRetentionPolicyProviderTest extends TestCase
         self::assertSame(60, $this->provider(RuntimeSettingSource::DbThenEnv, 0)->retentionDays());
     }
 
-    public function testNoValueAndNoDefaultIsNull(): void
+    public function testNoValueFromANonRequiredDefinitionFailsTooNeverNull(): void
     {
+        // Audit RN-L1: a definition a DDD host built without `required` resolves to null: still a failure.
         $definition = new RuntimeSettingDefinition(self::ID, RuntimeSettingType::Int, RuntimeSettingSource::Db, validator: new IntRange(30, 36500));
 
-        self::assertNull((new RuntimeSettingRetentionPolicyProvider($this->resolver, $definition))->retentionDays());
+        $this->expectException(RetentionUnavailableException::class);
+        $this->expectExceptionMessage('the setting has no value');
+        (new RuntimeSettingRetentionPolicyProvider($this->resolver, $definition))->retentionDays();
     }
 
     public function testADefinitionThatCannotBeBuiltFailsTheRunWithTheConfiguredId(): void
@@ -203,7 +212,7 @@ final class RuntimeSettingRetentionPolicyProviderTest extends TestCase
             $source,
             validator: new IntRange(ChatRetention::MIN_DAYS, ChatRetention::MAX_DAYS),
             configured: $configured,
-            default: ChatRetention::DEFAULT_DAYS,
+            required: true,
         );
 
         return new RuntimeSettingRetentionPolicyProvider($this->resolver, $definition);

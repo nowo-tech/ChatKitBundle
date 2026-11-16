@@ -176,7 +176,7 @@ A string is the short form: `runtime: { retention_days: chat.retention_days }` m
 | `source` | Retention used by `nowo:chat:purge` |
 | --- | --- |
 | `env` | The configured `retention_days` (through the resolver; the commands refuse to write it). |
-| `db` | The stored value; unset: 365 (the bundle default). The configured value is ignored. |
+| `db` | The stored value; unset: the purge **fails** and deletes nothing (no bundle default: a default shorter than your `retention_days` would delete messages you keep). The configured value is ignored. |
 | `db_then_env` | The stored value; unset: the configured `retention_days`. |
 
 - **Bounds.** The setting is an `int` bounded to 30..36500 days for every source (`IntRange`, no clamping):
@@ -192,6 +192,15 @@ A string is the short form: `runtime: { retention_days: chat.retention_days }` m
   `RuntimeSettingResolver` service exists, or when `RetentionPolicyProviderInterface` is also aliased to an application
   provider (keep one source). Only the default profile's node is used, like `retention_days`.
 - Without the node nothing is registered and nothing changes.
+
+**Recommended: `db_then_env`**, so that an unset value (or `nowo:runtime-setting:unset`) means "the configured
+`retention_days`", as before. Use `db` only when the value must come from the source.
+
+**Moving from your own definition.** If your application already registers a runtime-setting definition for the chat
+retention (for example `ops.chat_retention_days`), remove it and set ChatKit's `key` to that id
+(`runtime: { retention_days: { key: ops.chat_retention_days, source: db_then_env } }`). Otherwise the contract's registry
+fails on a duplicate id, or, with the default key, ChatKit reads `chat.retention_days` and your stored value is ignored.
+Remove your `RetentionPolicyProviderInterface` alias as well (the build refuses both).
 
 ## Rate limits
 

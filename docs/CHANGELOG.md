@@ -81,16 +81,17 @@ Target 1.32.0 (minor, no BC break). Retention from the runtime-setting contract 
   the setting id (`source: db_then_env`); the full form takes `source` (`env` | `db` | `db_then_env`), `key`
   (`namespace.key` or an environment variable name, default `chat.retention_days`) and `on_error` (`fail_closed` only).
   The setting is registered as an `int` `RuntimeSettingDefinition` bounded to 30..36500 days (`IntRange`, refuse, no
-  clamp) with the configured `retention_days` as its env fallback and 365 as its default.
+  clamp) with the configured `retention_days` as its env fallback, `required` and no default: with `source: db` and
+  nothing stored the purge fails instead of applying a bundle default (audit RN-M1).
 - `Nowo\ChatKitBundle\RuntimeSetting\RuntimeSettingRetentionPolicyProvider`: the adapter behind
   `RetentionPolicyProviderInterface` (the contract's types stay in it, REQ-ARCH-001 rule 3; DDD hosts can build it over
   their own resolver). `Nowo\ChatKitBundle\Support\RetentionUnavailableException`: an invalid stored or configured value,
-  a required setting without value or a source failure makes the purge fail (error log, `FAILURE`, nothing deleted),
+  a setting without value (never `null`, audit RN-L1) or a source failure makes the purge fail (error log, `FAILURE`, nothing deleted),
   never a fallback to the configured value, a default or "keep forever" (the 1.31.1 rule).
 - The container build fails when `runtime.retention_days` is set but the contract is not installed, when no
   `RuntimeSettingResolver` service exists, or when the application also aliased `RetentionPolicyProviderInterface` to its
   own provider (two sources for one value). Without the node nothing is registered and nothing changes.
-- `ChatRetention::DEFAULT_DAYS` (365). `nowo-tech/runtime-setting-contract` in `suggest` and `require-dev`, `conflict`
+- `nowo-tech/runtime-setting-contract` in `suggest` and `require-dev`, `conflict`
   `<1.0 || >=2.0`.
 
 ### Changed

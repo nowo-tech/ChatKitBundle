@@ -22,8 +22,8 @@ use function is_int;
  * command and message boundary): a value changed with `nowo:runtime-setting:set` reaches a long-running worker within
  * the contract's `version_ttl`, with no restart (FrankenPHP worker mode, kernel reset off). This class holds no state.
  *
- * Fail closed: an invalid stored or configured value (outside 30..36500 days, not an integer), a required setting
- * without value or a source failure throws {@see RetentionUnavailableException}; the purge then deletes nothing.
+ * Fail closed: an invalid stored or configured value (outside 30..36500 days, not an integer), a setting without value
+ * (`source: db` with nothing stored) or a source failure throws {@see RetentionUnavailableException}; the purge then deletes nothing.
  */
 final readonly class RuntimeSettingRetentionPolicyProvider implements RetentionPolicyProviderInterface
 {
@@ -45,9 +45,9 @@ final readonly class RuntimeSettingRetentionPolicyProvider implements RetentionP
      *
      * @throws RetentionUnavailableException When the value is invalid or cannot be read
      *
-     * @return int|null Days (30..36500), or null when the setting has no value and no default
+     * @return int Days (30..36500); never null: the runtime path never falls back to the configured value by itself
      */
-    public function retentionDays(): ?int
+    public function retentionDays(): int
     {
         $setting = $this->setting;
         try {
@@ -58,7 +58,8 @@ final readonly class RuntimeSettingRetentionPolicyProvider implements RetentionP
             throw new RetentionUnavailableException($setting, $exception->getMessage(), $exception);
         }
         if ($days === null) {
-            return null;
+            // Audit RN-L1: no value at all is a failure of this path, never "use the configured retention_days".
+            throw new RetentionUnavailableException($setting, 'the setting has no value');
         }
         if (!is_int($days)) {
             // Only a misregistered definition (another type) can get here: refuse it, never guess.

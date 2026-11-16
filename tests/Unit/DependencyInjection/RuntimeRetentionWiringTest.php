@@ -58,7 +58,8 @@ final class RuntimeRetentionWiringTest extends TestCase
         self::assertSame(RuntimeSettingSource::DbThenEnv, $definition->getArgument('$source'));
         self::assertSame(RuntimeSettingErrorPolicy::FailClosed, $definition->getArgument('$onError'));
         self::assertSame(120, $definition->getArgument('$configured'));
-        self::assertSame(365, $definition->getArgument('$default'));
+        self::assertNull($definition->getArgument('$default'), 'audit RN-M1: no bundle default');
+        self::assertTrue($definition->getArgument('$required'));
         self::assertSame(NowoChatKitExtension::RUNTIME_RETENTION_VALIDATOR, (string) $definition->getArgument('$validator'));
 
         $validator = $container->getDefinition(NowoChatKitExtension::RUNTIME_RETENTION_VALIDATOR);

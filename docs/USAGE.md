@@ -264,10 +264,12 @@ Symfony's bridge builds the adapter over its own resolver:
 
 ```php
 $definition = new RuntimeSettingDefinition('chat.retention_days', RuntimeSettingType::Int, RuntimeSettingSource::DbThenEnv,
-    validator: new IntRange(ChatRetention::MIN_DAYS, ChatRetention::MAX_DAYS), configured: $configuredDays, default: ChatRetention::DEFAULT_DAYS);
+    validator: new IntRange(ChatRetention::MIN_DAYS, ChatRetention::MAX_DAYS), configured: $configuredDays, required: true);
 $retention  = new RuntimeSettingRetentionPolicyProvider(new RuntimeSettingResolver($mySource, versionTtl: 0), $definition);
-// clear the resolver's per-request memo ($resolver->clearRuntimeCache()) at every unit-of-work boundary
 ```
+
+A DDD host that owns its resolver must call `$resolver->clearRuntimeCache()` at every unit-of-work boundary (request,
+message, command, loop iteration): otherwise a long-running process keeps serving the first value it read.
 
 ## Standard Symfony host
 

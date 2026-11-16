@@ -224,7 +224,7 @@ final class Configuration implements ConfigurationInterface
                                         ->end()
                                         ->children()
                                             ->enumNode('source')
-                                                ->info('env: the configured retention_days only; db: the runtime setting only (unset: 365); db_then_env: the runtime setting, else retention_days.')
+                                                ->info('env: the configured retention_days only; db: the runtime setting only (unset: the purge fails); db_then_env: the runtime setting, else retention_days.')
                                                 ->values(self::RUNTIME_SOURCES)
                                                 ->defaultValue('db_then_env')
                                             ->end()

@@ -285,7 +285,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
             RuntimeSettingType::Int,
             $configured,
             validatorServiceId: self::RUNTIME_RETENTION_VALIDATOR,
-            default: ChatRetention::DEFAULT_DAYS,
+            // Audit RN-M1: no default. With `source: db` and nothing stored the purge fails instead of applying a
+            // bundle default shorter than the host's retention_days (which would delete messages it meant to keep).
+            required: true,
         );
         // The definition is built on first use, inside retentionDays(): a configuration error fails the purge cleanly.
         $container->register(RuntimeSettingRetentionPolicyProvider::class, RuntimeSettingRetentionPolicyProvider::class)
