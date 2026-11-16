@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.32.0](#to-1320)
 - [To 1.31.1](#to-1311)
 - [To 1.31.0](#to-1310)
 - [To 1.30.0](#to-1300)
@@ -76,6 +77,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.32.0
+
+From **1.31.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 Target 1.32.0, from **1.31.x**. Nothing to change: without `runtime.retention_days` the bundle behaves exactly as in
 1.31.1.
