@@ -54,7 +54,8 @@ The IDs match the user scenarios of the baseline spec ([`specs/001-baseline/spec
 - JSON API for the dock and a server-rendered full-page chat (Symfony Form, works without JavaScript).
 - Realtime through Mercure private topics (polling fallback), presence, typing, read receipts, buzz, reactions, edit / delete window.
 - Web Push and an unread-messages email digest through Messenger; link previews through the host's provider.
-- GDPR export / erasure helpers and the `nowo:chat:purge` retention command.
+- GDPR export / erasure helpers and the `nowo:chat:purge` retention command (retention days may come from a run-time `RetentionPolicyProviderInterface`).
+- Automatic replies, profile pictures, author badges, @mentions, `#` references, quick replies, pinned links and a Links panel, a grouped sidebar with host sections, support ticket topics and numbering, framework-free application ports, `doctrine.user_reference` modes and an opt-in private entity manager (see the `FR-*` groups of `specs/001-baseline/spec.md`).
 - Overridable Twig `<template>` markup, `--nowo-chat-*` tokens (colours, shapes, shadows, sizes), bottom-bar avoidance (`data-nowo-chat-avoid`, Symfony toolbar), the dock tucked into a right-edge tab (1.2), Symfony UX Icons; 7 locales.
 - Documented integration (root `README.md` and `docs/`).
 - Configuration in [`CONFIGURATION.md`](CONFIGURATION.md) and runtime behavior in [`USAGE.md`](USAGE.md).
