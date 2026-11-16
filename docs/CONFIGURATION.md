@@ -8,6 +8,7 @@
   - [How the profile is selected](#how-the-profile-is-selected)
 - [Reference](#reference)
 - [Retention from the application (1.31)](#retention-from-the-application-131)
+- [Retention from a runtime setting (1.32)](#retention-from-a-runtime-setting-132)
 - [Rate limits](#rate-limits)
 - [Private entity manager (1.27)](#private-entity-manager-127)
 - [Container parameters](#container-parameters)
@@ -86,6 +87,7 @@ nowo_chat_kit:
 | `profiles.<name>.enabled` | bool | `true` | Render the dock. |
 | `profiles.<name>.user_class` | string | — (required with Doctrine, unless `doctrine.user_reference: id`) | Your user entity (implements `ChatUserInterface`). |
 | `profiles.<name>.retention_days` | int ≥ 30 | `365` | Messages older than this are purged by `nowo:chat:purge`. `%env()%` allowed. Fixed when the container is built; since 1.31 a `RetentionPolicyProviderInterface` service overrides it at run time (see below). |
+| `profiles.<name>.runtime.retention_days` | string or map | not set | 1.32: read `retention_days` from a runtime setting on every purge (needs `nowo-tech/runtime-setting-contract`). See [Retention from a runtime setting](#retention-from-a-runtime-setting-132). |
 | `profiles.<name>.realtime` | bool | `true` | Use the realtime transport when one is available. |
 | `profiles.<name>.push` | bool | `false` | Queue Web Push for new messages (needs a `ChatPushSenderInterface`). |
 | `profiles.<name>.push_url` | string | `/?chat={uuid}` | URL a notification opens; `{uuid}` is the conversation. The dock opens `?chat=<uuid>` itself. |
@@ -149,6 +151,56 @@ or null. `nowo:chat:purge` asks it on every run, never caches the answer, and fa
 The minimum of 30 stays: a smaller value is raised to 30 with a warning in the log. A value of 0 or less is ignored
 (warning; `retention_days` applies). Since 1.31 the maximum is 36500 days: a larger value, from the provider or from
 `retention_days`, is lowered to 36500 with a warning. The provider is global: it applies to every profile.
+
+## Retention from a runtime setting (1.32)
+
+With [`nowo-tech/runtime-setting-contract`](https://github.com/nowo-tech/runtime-setting-contract) ^1.0 (an optional
+dependency) the retention can live in `.env` or in the database and change without a deploy or a restart. The contract's
+resolver must exist: register `NowoRuntimeSettingBundle` and bind its source and writer (InstanceSettingsBundle ≥ 1.20,
+RuntimeEnvBundle ≥ 1.6 or your own), or, in a DDD host, register a `RuntimeSettingResolver` service yourself.
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            retention_days: '%env(int:CHAT_RETENTION_DAYS)%'   # the configured (env) value
+            runtime:
+                retention_days:
+                    source: db_then_env      # env | db | db_then_env (default)
+                    key: chat.retention_days # namespace.key or an environment variable name (default chat.retention_days)
+                    on_error: fail_closed    # the only accepted value
+```
+
+A string is the short form: `runtime: { retention_days: chat.retention_days }` means `source: db_then_env` with that key.
+
+| `source` | Retention used by `nowo:chat:purge` |
+| --- | --- |
+| `env` | The configured `retention_days` (through the resolver; the commands refuse to write it). |
+| `db` | The stored value; unset: the purge **fails** and deletes nothing (no bundle default: a default shorter than your `retention_days` would delete messages you keep). The configured value is ignored. |
+| `db_then_env` | The stored value; unset: the configured `retention_days`. |
+
+- **Bounds.** The setting is an `int` bounded to 30..36500 days for every source (`IntRange`, no clamping):
+  `nowo:runtime-setting:set chat.retention_days 5` is refused and nothing is written.
+- **Fail closed.** An invalid value read from the source (a hand-edited row, a value outside the bounds, not an integer),
+  an invalid configured fallback (`%env(int:…)%` coerced to 0) or a source that cannot be read makes the purge fail:
+  error log, the reason on the console, exit code 1, nothing deleted. There is no fallback to the configured value, to
+  a default or to "keep forever"; `on_error: fallback` is refused when the container is built.
+- **Live.** The value is read on every purge run; the resolver keeps it for one request, command or message only, so a
+  value set with `nowo:runtime-setting:set` reaches a long-running worker (FrankenPHP, kernel reset off) within the
+  contract's `version_ttl`, without a restart.
+- **Build errors.** The container build fails when the node is set and the contract is not installed, when no
+  `RuntimeSettingResolver` service exists, or when `RetentionPolicyProviderInterface` is also aliased to an application
+  provider (keep one source). Only the default profile's node is used, like `retention_days`.
+- Without the node nothing is registered and nothing changes.
+
+**Recommended: `db_then_env`**, so that an unset value (or `nowo:runtime-setting:unset`) means "the configured
+`retention_days`", as before. Use `db` only when the value must come from the source.
+
+**Moving from your own definition.** If your application already registers a runtime-setting definition for the chat
+retention (for example `ops.chat_retention_days`), remove it and set ChatKit's `key` to that id
+(`runtime: { retention_days: { key: ops.chat_retention_days, source: db_then_env } }`). Otherwise the contract's registry
+fails on a duplicate id, or, with the default key, ChatKit reads `chat.retention_days` and your stored value is ignored.
+Remove your `RetentionPolicyProviderInterface` alias as well (the build refuses both).
 
 ## Rate limits
 
@@ -287,6 +339,7 @@ pending there, and a failed chat write closed your manager. With `private_entity
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
 key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `web_ui.assets`, `web_ui.page.full_height`, `web_ui.page.open_recent` and `web_ui.dock.sidebar_sections` (1.25), `web_ui.dock.dialog_runtime` (1.26), `doctrine.table_prefix`, `doctrine.table_name_prefix`, `doctrine.tables`, `doctrine.table.<key>`,
 `reactions`, `icon_set`, `icons`, `presence_ttl`, `auto_away_minutes`, `status_presets`, `max_pins`, `auto_reply_interval_hours`, `limits`, `digest`, `support`, `dock`, and `support.<key>` for each support key).
+Since 1.32, `nowo_chat_kit.runtime.retention_days` holds the `runtime.retention_days` setting id (null when not set).
 
 ## Timeouts
 

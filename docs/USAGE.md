@@ -245,6 +245,32 @@ services:
 
 `retention_days` stays as the fallback (and may keep `%env(int:CHAT_RETENTION_DAYS)%` during the move).
 
+#### From a runtime setting (1.32)
+
+Instead of writing a provider, let `nowo-tech/runtime-setting-contract` answer the port: set
+`runtime.retention_days` (see [CONFIGURATION](CONFIGURATION.md#retention-from-a-runtime-setting-132)) and the bundle
+registers the setting (`chat.retention_days`, 30..36500 days) and puts
+`Nowo\ChatKitBundle\RuntimeSetting\RuntimeSettingRetentionPolicyProvider` behind `RetentionPolicyProviderInterface`.
+Change it live:
+
+```bash
+bin/console nowo:runtime-setting:set chat.retention_days 90    # refused outside 30..36500
+bin/console nowo:runtime-setting:unset chat.retention_days     # back to retention_days (db_then_env)
+bin/console nowo:chat:purge                                    # uses 90 on its next run, no restart
+```
+
+An invalid stored value or an unreadable source makes the purge fail (exit code 1, nothing deleted). A DDD host without
+Symfony's bridge builds the adapter over its own resolver:
+
+```php
+$definition = new RuntimeSettingDefinition('chat.retention_days', RuntimeSettingType::Int, RuntimeSettingSource::DbThenEnv,
+    validator: new IntRange(ChatRetention::MIN_DAYS, ChatRetention::MAX_DAYS), configured: $configuredDays, required: true);
+$retention  = new RuntimeSettingRetentionPolicyProvider(new RuntimeSettingResolver($mySource, versionTtl: 0), $definition);
+```
+
+A DDD host that owns its resolver must call `$resolver->clearRuntimeCache()` at every unit-of-work boundary (request,
+message, command, loop iteration): otherwise a long-running process keeps serving the first value it read.
+
 ## Standard Symfony host
 
 The zero-config path (REQ-ARCH-001): your Doctrine user entity implements `ChatUserInterface` and is mapped through

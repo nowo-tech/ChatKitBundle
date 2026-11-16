@@ -70,6 +70,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+Target 1.32.0 (minor, no BC break). Retention from the runtime-setting contract (Symfony Beacon request).
+
+### Added
+
+- `profiles.<name>.runtime.retention_days` (optional, needs `nowo-tech/runtime-setting-contract` ^1.0 and its resolver,
+  for example `NowoRuntimeSettingBundle`): the purge retention comes from a runtime setting, read on every
+  `nowo:chat:purge` run and changeable live with `nowo:runtime-setting:set` (database through InstanceSettings,
+  RuntimeEnvBundle or the host's own source; no restart, FrankenPHP worker mode with kernel reset off). A string is
+  the setting id (`source: db_then_env`); the full form takes `source` (`env` | `db` | `db_then_env`), `key`
+  (`namespace.key` or an environment variable name, default `chat.retention_days`) and `on_error` (`fail_closed` only).
+  The setting is registered as an `int` `RuntimeSettingDefinition` bounded to 30..36500 days (`IntRange`, refuse, no
+  clamp) with the configured `retention_days` as its env fallback, `required` and no default: with `source: db` and
+  nothing stored the purge fails instead of applying a bundle default (audit RN-M1).
+- `Nowo\ChatKitBundle\RuntimeSetting\RuntimeSettingRetentionPolicyProvider`: the adapter behind
+  `RetentionPolicyProviderInterface` (the contract's types stay in it, REQ-ARCH-001 rule 3; DDD hosts can build it over
+  their own resolver). `Nowo\ChatKitBundle\Support\RetentionUnavailableException`: an invalid stored or configured value,
+  a setting without value (never `null`, audit RN-L1) or a source failure makes the purge fail (error log, `FAILURE`, nothing deleted),
+  never a fallback to the configured value, a default or "keep forever" (the 1.31.1 rule).
+- The container build fails when `runtime.retention_days` is set but the contract is not installed, when no
+  `RuntimeSettingResolver` service exists, or when the application also aliased `RetentionPolicyProviderInterface` to its
+  own provider (two sources for one value). Without the node nothing is registered and nothing changes.
+- `nowo-tech/runtime-setting-contract` in `suggest` and `require-dev`, `conflict`
+  `<1.0 || >=2.0`.
+
 ### Changed
 
 - docs: Spec Kit baseline refreshed (REQ-SPECKIT-001 / REQ-SPECKIT-003 sweep 2026-11-16): `specs/001-baseline/code-inventory.md` maps all 223 production units (126 added: auto-replies, avatars, badges, links, mentions, references, sidebar, support, ports, user reference modes, private entity manager, browser modules) and `spec.md` gains the matching `FR-*` groups; no code change

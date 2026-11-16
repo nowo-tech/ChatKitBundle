@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ba5b8d6315315be88baa06a6f2a48559",
+    "content-hash": "2a0f168533fbe55dad4602a7625d38fa",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -7198,6 +7198,118 @@
             ],
             "time": "2026-11-15T02:26:27+00:00",
             "published-time": "2026-11-15T02:27:38+00:00"
+        },
+        {
+            "name": "nowo-tech/runtime-setting-contract",
+            "version": "v1.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/nowo-tech/runtime-setting-contract.git",
+                "reference": "fd2afd7fa86962ffe496073b64322b1cff2e2dfc"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/nowo-tech/runtime-setting-contract/zipball/fd2afd7fa86962ffe496073b64322b1cff2e2dfc",
+                "reference": "fd2afd7fa86962ffe496073b64322b1cff2e2dfc",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.2 <8.6",
+                "psr/clock": "^1.0",
+                "psr/event-dispatcher": "^1.0",
+                "psr/log": "^2.0 || ^3.0"
+            },
+            "conflict": {
+                "symfony/config": "<7.4",
+                "symfony/console": "<7.4",
+                "symfony/dependency-injection": "<7.4",
+                "symfony/http-kernel": "<7.4",
+                "symfony/messenger": "<7.4"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.64",
+                "igor-php/igor-php": "^0.10.0",
+                "nowo-tech/phpstan-frankenphp": "^1.0",
+                "phpstan/extension-installer": "^1.4",
+                "phpstan/phpstan": "^2.0",
+                "phpstan/phpstan-phpunit": "^2.0",
+                "phpunit/phpunit": "^11.0",
+                "psr/cache": "^2.0 || ^3.0",
+                "rector/rector": "^2.0",
+                "symfony/cache": "^7.4 || ^8.0",
+                "symfony/config": "^7.4 || ^8.0",
+                "symfony/console": "^7.4 || ^8.0",
+                "symfony/dependency-injection": "^7.4 || ^8.0",
+                "symfony/event-dispatcher": "^7.4 || ^8.0",
+                "symfony/framework-bundle": "^7.4 || ^8.0",
+                "symfony/http-kernel": "^7.4 || ^8.0",
+                "symfony/messenger": "^7.4 || ^8.0",
+                "symfony/process": "^7.4 || ^8.0"
+            },
+            "suggest": {
+                "nowo-tech/instance-settings-bundle": "Database source and writer in admin settings sections",
+                "nowo-tech/runtime-env-bundle": "Database source and writer: one encrypted table keyed by environment variable name",
+                "psr/cache": "For Psr6RuntimeValueCache (shared cache of non-secret values)",
+                "symfony/console": "For the nowo:runtime-setting:* commands; ^7.4 || ^8.0",
+                "symfony/http-kernel": "For the Symfony bridge (NowoRuntimeSettingBundle, boundary listener); ^7.4 || ^8.0",
+                "symfony/messenger": "The boundary listener also clears the memo between Messenger messages"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-main": "1.0.x-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Nowo\\RuntimeSettingContract\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Héctor Franco Aceituno",
+                    "email": "hectorfranco@nowo.tech",
+                    "homepage": "https://github.com/HecFranco",
+                    "role": "Developer"
+                },
+                {
+                    "name": "Nowo.tech",
+                    "homepage": "https://nowo.tech"
+                }
+            ],
+            "description": "Runtime setting port: a bundle setting that lives in .env can come from the database instead, change live through a console command and rotate without downtime. Framework-free contract, versioned cache, FrankenPHP worker safe, optional Symfony bridge.",
+            "homepage": "https://github.com/nowo-tech/runtime-setting-contract",
+            "keywords": [
+                "configuration",
+                "contracts",
+                "ddd",
+                "env",
+                "frankenphp",
+                "hexagonal",
+                "port",
+                "rotation",
+                "runtime-settings",
+                "secrets",
+                "symfony"
+            ],
+            "support": {
+                "changelog": "https://github.com/nowo-tech/runtime-setting-contract/blob/main/docs/CHANGELOG.md",
+                "docs": "https://github.com/nowo-tech/runtime-setting-contract/tree/main/docs",
+                "issues": "https://github.com/nowo-tech/runtime-setting-contract/issues",
+                "source": "https://github.com/nowo-tech/runtime-setting-contract"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/HecFranco",
+                    "type": "github"
+                }
+            ],
+            "time": "2026-11-15T19:31:57+00:00",
+            "published-time": "2026-11-15T19:46:46+00:00"
         },
         {
             "name": "phar-io/manifest",
