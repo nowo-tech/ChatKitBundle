@@ -25,7 +25,7 @@ use function str_starts_with;
  * 1.30 (Beacon spec 239), two sessions on MySQL 8.4 / PostgreSQL 16: a new message is one unit of work that locks its
  * conversation row first. Two messages of one conversation queue instead of deadlocking (up to 1.29 both took the
  * foreign-key share lock with the message insert and then both asked for the row's exclusive lock); a lock wait or a
- * deadlock answers TransientStorageFailure (503) and leaves the worker's connection healthy — level 0 even after a
+ * deadlock answers TransientStorageFailure (409 + Retry-After) and leaves the worker's connection healthy — level 0 even after a
  * deadlock inside the ORM's nested flush, where the savepoint is gone (MySQL 1305).
  */
 final class PublishLocksTest extends LoadDatabaseTestCase

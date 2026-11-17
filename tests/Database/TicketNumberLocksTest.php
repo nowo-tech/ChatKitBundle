@@ -19,7 +19,7 @@ use function str_starts_with;
  * 1.30 (Beacon spec 239), two sessions on MySQL 8.4 / PostgreSQL 16: opening a ticket locks the draft's row and the
  * counter row only — never the conversation table — so it does not wait for other conversation writes; two openings
  * queue on the counter and get consecutive numbers; a lock wait or a deadlock on the counter answers
- * TransientStorageFailure (503) and leaves the worker's connection healthy, with no number lost.
+ * TransientStorageFailure (409 + Retry-After) and leaves the worker's connection healthy, with no number lost.
  */
 final class TicketNumberLocksTest extends LoadDatabaseTestCase
 {

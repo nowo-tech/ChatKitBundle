@@ -59,7 +59,7 @@ use function is_string;
  * 1.30 (Beacon spec 239, load readiness): every write is one unit of work run through TransactionRunnerInterface
  * (ChatKit's one-attempt default, or the runner the host binds), and the realtime publish, events and automatic replies
  * happen after it committed. A storage failure therefore leaves no half-written message, no transaction open and no
- * closed entity manager; a transient one surfaces as TransientStorageFailure (503 + Retry-After on ChatKit's routes).
+ * closed entity manager; a transient one surfaces as TransientStorageFailure (409 + Retry-After on ChatKit's routes).
  * A conversation's activity is bumped first in the unit of work, under a row lock and only forward, so two messages in
  * the same conversation queue instead of deadlocking. A first opening (a direct conversation, a channel membership, a
  * read cursor) that loses an insert race to another request re-reads the row the other one wrote.
@@ -759,7 +759,7 @@ final readonly class ChatService implements ChatServiceInterface
         // what is pending). What a listener flushed stays even if it throws afterwards, so its exception leaves the unit
         // of work as a value. 1.30: a connection-only runner instead of Connection::transactional(), whose rollback
         // failed after a nested deadlock (savepoint gone, 1305) and hid the deadlock: the connection is repaired and a
-        // transient failure surfaces as TransientStorageFailure (503). The row goes in through DBAL, so the manager has
+        // transient failure surfaces as TransientStorageFailure (409 + Retry-After). The row goes in through DBAL, so the manager has
         // nothing of this unit to flush or discard.
         $runner = ChatKitTransactionRunner::forConnection($this->entityManager->getConnection());
         // @igor-ignore - The runner calls the closure once, now, and keeps nothing (stateless, per call).

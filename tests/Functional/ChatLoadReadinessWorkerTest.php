@@ -36,7 +36,7 @@ use const JSON_THROW_ON_ERROR;
 
 /**
  * 1.30 (Beacon spec 239): one kernel, every request through the container's `http_kernel` with no services resetter
- * (FrankenPHP worker mode, kernel reset off). A storage failure in one request answers 503 (transient, Retry-After) or 409
+ * (FrankenPHP worker mode, kernel reset off). A storage failure in one request answers 409 (transient, Retry-After) or 409
  * (conflict), never 500, and leaves the next request of the same worker healthy: no transaction left open (nesting
  * level 0), an open entity manager, nothing of the failed unit of work pending.
  */
@@ -58,14 +58,14 @@ final class ChatLoadReadinessWorkerTest extends DatabaseTestCase
         $this->client = $client;
     }
 
-    public function testALockWaitBeforeTheFlushAnswers503AndTheNextRequestWorks(): void
+    public function testALockWaitBeforeTheFlushAnswers409AndTheNextRequestWorks(): void
     {
         [$session, $uuid] = $this->directConversation();
         // Raised before the flush opens its own transaction: the manager stays open.
         $this->failOnce(ChatMessage::class, new LockWaitTimeoutException(PdoDriverException::new(new PDOException('Lock wait timeout exceeded')), null));
 
         $failed = $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', $session, ['body' => 'one']);
-        self::assertSame(503, $failed->getStatusCode(), (string) $failed->getContent());
+        self::assertSame(409, $failed->getStatusCode(), (string) $failed->getContent());
         self::assertSame('1', $failed->headers->get('Retry-After'));
         self::assertSame(['ok' => false, 'error' => 'unavailable'], $this->json($failed));
         $this->assertHealthy();
@@ -93,7 +93,7 @@ final class ChatLoadReadinessWorkerTest extends DatabaseTestCase
         });
 
         $failed = $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', $session, ['body' => 'lost']);
-        self::assertSame(503, $failed->getStatusCode(), (string) $failed->getContent());
+        self::assertSame(409, $failed->getStatusCode(), (string) $failed->getContent());
         $this->assertHealthy();
         self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message'), 'nothing half-written');
 
@@ -109,7 +109,7 @@ final class ChatLoadReadinessWorkerTest extends DatabaseTestCase
         $this->failOnce(ChatMessage::class, new DeadlockException(PdoDriverException::new(new PDOException('Deadlock found when trying to get lock')), null));
 
         $failed = $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', $session, ['body' => 'lost']);
-        self::assertSame(503, $failed->getStatusCode(), (string) $failed->getContent());
+        self::assertSame(409, $failed->getStatusCode(), (string) $failed->getContent());
         self::assertSame('1', $failed->headers->get('Retry-After'));
         $this->assertHealthy();
         self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message'), 'nothing half-written');

@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.34.0](#to-1340)
 - [To 1.33.0](#to-1330)
 - [To 1.32.0](#to-1320)
 - [To 1.31.1](#to-1311)
@@ -78,6 +79,40 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.34.0
+
+From **1.33.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle nowo-tech/transaction-doctrine
+```
+
+**409 (was 503).** A transient storage failure on a ChatKit route (deadlock, lock wait timeout, `TransientStorageFailure`)
+now answers **409 Conflict + `Retry-After`**, the status of the shared `ConflictResponsePolicy` of
+nowo-tech/transaction-doctrine 1.3 (required `^1.3`). The API body (`{"ok": false, "error": "unavailable"}`) and the
+unique-key 409 (`"conflict"`) are unchanged. `conflict_response.status: 503` keeps the old status:
+
+```yaml
+# config/packages/nowo_transaction_doctrine.yaml
+nowo_transaction_doctrine:
+    conflict_response:
+        status: 503   # 409 (default) or 503
+        retry_after: 1
+```
+
+- **Hosts that never register `Nowo\TransactionDoctrine\Symfony\NowoTransactionDoctrineBundle` move to 409 too** (the
+  listener falls back to `new ConflictResponsePolicy()`: 409, 1 s). The only way back to 503 is to register that bundle
+  in `config/bundles.php` and set `conflict_response.status: 503`.
+- Clients that retry on 503 + `Retry-After` must also retry on 409 + `Retry-After`; tell `error: "unavailable"` (retry the
+  same request) from `error: "conflict"` (another request won).
+- A write that already committed part of its work (`ConcurrencyConflict` with `committed: true`) is answered with the same
+  status but **without** `Retry-After` and with `message` asking to reload: never retry it blindly.
+- Chat pages now throw `HttpException(409|503)` with the storage error as previous, instead of
+  `ServiceUnavailableHttpException`; match on the status, not the class, in a custom error page.
+- New `ChatConflictResponseFormatter` (tag `nowo_transaction_doctrine.conflict_response_formatter`): if you list ChatKit
+  routes in `nowo_transaction_doctrine.controller_routes`, the responder's answer for `nowo_chat_api_*` routes uses
+  ChatKit's JSON shape.
 
 ## To 1.33.0
 

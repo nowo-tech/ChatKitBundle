@@ -11,6 +11,9 @@ use Doctrine\ORM\OptimisticLockException;
 use LogicException;
 use Nowo\ChatKitBundle\Http\ChatApiExceptionListener;
 use Nowo\TransactionContract\TransientStorageFailure;
+use Nowo\TransactionDoctrine\Symfony\Conflict\ConflictResponsePolicy;
+use Nowo\TransactionDoctrine\TransientFailureKind;
+use Nowo\TransactionDoctrine\WriteUnit\ConcurrencyConflict;
 use PDOException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -19,13 +22,15 @@ use stdClass;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\HttpKernel\Exception\ServiceUnavailableHttpException;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Throwable;
 
+use function json_decode;
+
 /**
- * 1.30 (Beacon spec 239): storage failures on ChatKit's routes are 503 (transient, with Retry-After) or 409 (conflict),
+ * 1.30 (Beacon spec 239): storage failures on ChatKit's routes are 409 + Retry-After (transient; 503 with the policy opt-in) or 409 (conflict),
  * never 500; the host's routes and HTTP exceptions are left alone; the client never sees the storage error.
  */
 final class ChatApiExceptionListenerStorageTest extends TestCase
@@ -37,10 +42,10 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
     {
         $deadlock = new DeadlockException(PdoDriverException::new(new PDOException('Deadlock found; SELECT secret FROM t')), null);
         $unique   = new UniqueConstraintViolationException(PdoDriverException::new(new PDOException('Duplicate entry secret')), null);
-        yield 'runner failure with its hint' => [new TransientStorageFailure(4, TransientStorageFailure::DEFAULT_MESSAGE, $deadlock), 503, '4'];
-        yield 'runner failure without a hint' => [new TransientStorageFailure(), 503, '1'];
-        yield 'runner failure wrapped by the host' => [new RuntimeException('wrapped', 0, new TransientStorageFailure(2)), 503, '2'];
-        yield 'deadlock the runner did not see' => [$deadlock, 503, '1'];
+        yield 'runner failure with its hint' => [new TransientStorageFailure(4, TransientStorageFailure::DEFAULT_MESSAGE, $deadlock), 409, '4'];
+        yield 'runner failure without a hint' => [new TransientStorageFailure(), 409, '1'];
+        yield 'runner failure wrapped by the host' => [new RuntimeException('wrapped', 0, new TransientStorageFailure(2)), 409, '2'];
+        yield 'deadlock the runner did not see' => [$deadlock, 409, '1'];
         yield 'unique key taken by another request' => [$unique, 409, null];
         yield 'unique key wrapped' => [new LogicException('wrapped', 0, $unique), 409, null];
         yield 'optimistic lock lost' => [OptimisticLockException::lockFailed(new stdClass()), 409, null];
@@ -55,7 +60,7 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
         $response = $event->getResponse();
         self::assertNotNull($response);
         self::assertSame($status, $response->getStatusCode());
-        self::assertSame($status === 503 ? '{"ok":false,"error":"unavailable"}' : '{"ok":false,"error":"conflict"}', $response->getContent(), 'no SQL, no driver text');
+        self::assertSame($retryAfter !== null ? '{"ok":false,"error":"unavailable"}' : '{"ok":false,"error":"conflict"}', $response->getContent(), 'no SQL, no driver text');
         self::assertSame($retryAfter, $response->headers->get('Retry-After'));
         self::assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
     }
@@ -66,8 +71,9 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
         $event   = $this->event('nowo_chat_page_send', $failure);
         (new ChatApiExceptionListener())->onStorageFailure($event);
         $replaced = $event->getThrowable();
-        self::assertInstanceOf(ServiceUnavailableHttpException::class, $replaced);
-        self::assertSame(['Retry-After' => 3], $replaced->getHeaders());
+        self::assertInstanceOf(HttpException::class, $replaced);
+        self::assertSame(409, $replaced->getStatusCode());
+        self::assertSame(['Retry-After' => '3'], $replaced->getHeaders());
         self::assertSame($failure, $replaced->getPrevious());
         self::assertNull($event->getResponse());
 
@@ -76,6 +82,63 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
         (new ChatApiExceptionListener())->onStorageFailure($event);
         self::assertInstanceOf(ConflictHttpException::class, $event->getThrowable());
         self::assertSame($unique, $event->getThrowable()->getPrevious());
+    }
+
+    public function testThe503OptInOfThePolicyKeepsTheOldStatusForJsonAndHtml(): void
+    {
+        $policy = new ConflictResponsePolicy(ConflictResponsePolicy::STATUS_SERVICE_UNAVAILABLE, 4);
+
+        $event = $this->event('nowo_chat_api_send', new TransientStorageFailure());
+        (new ChatApiExceptionListener($policy))->onStorageFailure($event);
+        self::assertSame(503, $event->getResponse()?->getStatusCode());
+        self::assertSame('4', $event->getResponse()->headers->get('Retry-After'));
+        self::assertSame('{"ok":false,"error":"unavailable"}', $event->getResponse()->getContent());
+
+        $event = $this->event('nowo_chat_page_send', new TransientStorageFailure(9));
+        (new ChatApiExceptionListener($policy))->onStorageFailure($event);
+        $page = $event->getThrowable();
+        self::assertInstanceOf(HttpException::class, $page);
+        self::assertSame(503, $page->getStatusCode());
+        self::assertSame('9', $page->getHeaders()['Retry-After'] ?? null);
+
+        $unique = new UniqueConstraintViolationException(PdoDriverException::new(new PDOException('Duplicate')), null);
+        $event  = $this->event('nowo_chat_api_send', $unique);
+        (new ChatApiExceptionListener($policy))->onStorageFailure($event);
+        self::assertSame(409, $event->getResponse()?->getStatusCode());
+    }
+
+    public function testThePolicysRetryAfterIsTheFallbackHint(): void
+    {
+        $event = $this->event('nowo_chat_api_send', new TransientStorageFailure());
+        (new ChatApiExceptionListener(new ConflictResponsePolicy(409, 6)))->onStorageFailure($event);
+        self::assertSame('6', $event->getResponse()?->headers->get('Retry-After'));
+    }
+
+    public function testACommittedConflictHasNoRetryAfterOnJsonAndHtml(): void
+    {
+        $deadlock = new DeadlockException(PdoDriverException::new(new PDOException('Deadlock')), null);
+        $conflict = new ConcurrencyConflict(3, TransientFailureKind::Deadlock, 5, $deadlock, true);
+
+        $event = $this->event('nowo_chat_api_send', new RuntimeException('wrapped', 0, $conflict));
+        (new ChatApiExceptionListener())->onStorageFailure($event);
+        $response = $event->getResponse();
+        self::assertSame(409, $response?->getStatusCode());
+        self::assertFalse($response->headers->has('Retry-After'));
+        self::assertSame(['ok' => false, 'error' => 'unavailable', 'message' => ChatApiExceptionListener::PARTIAL_MESSAGE], json_decode((string) $response->getContent(), true));
+
+        $event = $this->event('nowo_chat_page_send', $conflict);
+        (new ChatApiExceptionListener())->onStorageFailure($event);
+        $page = $event->getThrowable();
+        self::assertInstanceOf(HttpException::class, $page);
+        self::assertSame(409, $page->getStatusCode());
+        self::assertSame([], $page->getHeaders());
+        self::assertSame($conflict, $page->getPrevious());
+
+        // Not committed: the retry is invited.
+        $open  = new ConcurrencyConflict(3, TransientFailureKind::Deadlock, 5, $deadlock, false);
+        $event = $this->event('nowo_chat_api_send', $open);
+        (new ChatApiExceptionListener())->onStorageFailure($event);
+        self::assertSame('5', $event->getResponse()?->headers->get('Retry-After'));
     }
 
     /**

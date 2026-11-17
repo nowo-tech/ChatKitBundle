@@ -26,7 +26,7 @@ use function spl_object_id;
  * that manager after a chat failure).
  *
  * One attempt, one transaction; a transient failure (deadlock, lock wait timeout, serialization failure) surfaces as
- * TransientStorageFailure (503 + Retry-After on ChatKit's routes). After any failure no transaction of its own stays
+ * TransientStorageFailure (409 + Retry-After on ChatKit's routes). After any failure no transaction of its own stays
  * open: nowo-tech/transaction-doctrine rolls back to the entry level and closes the connection only when that rollback
  * fails (a MySQL deadlock inside a nested flush).
  *
