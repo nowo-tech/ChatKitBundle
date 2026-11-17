@@ -1,8 +1,8 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-11-16  
-**Production units**: **223/223**  
+**Last audited**: 2026-11-17  
+**Production units**: **226/226**  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -36,9 +36,9 @@
 | Application ports (framework-free twins, messaging by id) | 20 |
 | User reference modes (relation, id, string) | 10 |
 | Private entity manager, savepoints & write concurrency | 14 |
-| Retention policy | 4 |
+| Retention policy | 7 |
 | Browser (TypeScript) — feature modules | 14 |
-| **Total** | **223** |
+| **Total** | **226** |
 
 ## Bundle, configuration & DI
 
@@ -348,6 +348,9 @@
 | `src/Support/NullRetentionPolicyProvider.php` | US-09 | FR-RET-002 |
 | `src/Support/ChatRetention.php` | US-09 | FR-RET-002 |
 | `src/Support/InvalidRetentionConfigurationException.php` | US-09 | FR-RET-002 |
+| `src/Support/RetentionUnavailableException.php` | US-09 | FR-RET-002 |
+| `src/RuntimeSetting/RuntimeSettingRetentionPolicyProvider.php` | US-09 | FR-RET-002 |
+| `src/DependencyInjection/Compiler/RuntimeRetentionPass.php` | US-09 | FR-RET-002 |
 
 ## Browser (TypeScript) — feature modules
 
