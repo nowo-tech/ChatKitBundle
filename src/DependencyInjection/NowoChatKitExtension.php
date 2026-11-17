@@ -246,6 +246,8 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.web_ui.page.open_recent', $profile['web_ui']['page']['open_recent']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.dock.sidebar_sections', $profile['web_ui']['dock']['sidebar_sections']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.dock.dialog_runtime', $profile['web_ui']['dock']['dialog_runtime']);
+        // 1.33: the message context menu (null = UiKit's theme flag).
+        $container->setParameter(Configuration::ALIAS . '.web_ui.message_context_menu', $profile['web_ui']['message_context_menu']);
     }
 
     /**

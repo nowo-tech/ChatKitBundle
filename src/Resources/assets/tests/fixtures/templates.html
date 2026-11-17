@@ -282,7 +282,7 @@
     </template>
 
         <template data-nowo-chat-template="message">
-        <article class="nowo-chat-msg">
+        <article class="nowo-chat-msg" tabindex="0" data-nowo-ui-context-menu-scope>
             <span data-part="avatar"></span>
             <div class="nowo-chat-msg__content">
                 <p class="nowo-chat-msg__author" data-part="author" hidden></p>
@@ -304,7 +304,45 @@
 
                     <button type="button" class="nowo-chat-icon-btn " data-part="delete" aria-label="Delete" title="Delete"><span data-icon="trash"></span></button>
 
-            </div>
+                                                        <span class="nowo-chat-msg__menu" data-part="menu" hidden>
+                        <div class="nowo-ui-kebab" data-nowo-ui-kebab>
+    <details class="nowo-ui-kebab__details">
+        <summary class="nowo-ui-kebab__summary" aria-label="More actions">
+            <span class="nowo-ui-kebab__dots" aria-hidden="true">⋮</span>
+        </summary>
+        <div class="nowo-ui-kebab__menu" role="menu">
+                                                        <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-reply" hidden="hidden"                                     >Reply</a>
+                                            <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-edit" hidden="hidden"                                     >Edit</a>
+                                            <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-copy-link" hidden="hidden"                                     >Copy link</a>
+                                            <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-pin" hidden="hidden"                                     >Pin</a>
+                                            <a
+                    class="nowo-ui-kebab__item nowo-ui-kebab__item--danger"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-delete" hidden="hidden"                                     >Delete</a>
+            
+        </div>
+    </details>
+</div>
+
+                    </span>
+                            </div>
         </article>
     </template>
         <template data-nowo-chat-template="link-preview">

@@ -245,6 +245,8 @@ export interface ChatConfig {
   reactions: string[];
   /** 1.24: host page to browse or create channels (`web_ui.channels_url`); absent: no link. */
   channelsUrl?: string;
+  /** 1.33 (`web_ui.message_context_menu: true`): address of UiKit's js/nowo-ui-context-menu.js, loaded by the dock. */
+  contextMenuRuntime?: string;
   endpoints: {
     conversations: string;
     contacts: string;
@@ -291,6 +293,8 @@ export interface ChatConfig {
     pins?: string;
     /** 1.10: pin (`POST`) / unpin (`DELETE`) a message (`__uuid__`, `__message__`). */
     pin?: string;
+    /** 1.33: `POST` → `{url}`, the address of a message (`__uuid__`, `__message__`; "Copy link" of its menu). */
+    messageLink?: string;
     /** 1.11: save the automatic reply. */
     autoReply?: string;
     /** 1.24: mute (`POST {minutes?}`) / unmute (`DELETE`) a conversation (`__uuid__`). */

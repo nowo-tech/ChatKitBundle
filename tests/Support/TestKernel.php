@@ -99,6 +99,7 @@ final class TestKernel extends Kernel
         private readonly bool $authorBadges = false,
         private readonly bool $scriptedRunner = false,
         private readonly bool $runtimeSettings = false,
+        private readonly bool $uiKitContextMenus = false,
     ) {
         // Own environment for the routing.controllers-only host: its container class must not collide with the
         // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir).
@@ -191,7 +192,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), self::privateEntityManager(), $this->authorBadges, $this->scriptedRunner, $this->runtimeSettings])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), self::privateEntityManager(), $this->authorBadges, $this->scriptedRunner, $this->runtimeSettings, $this->uiKitContextMenus])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -243,6 +244,10 @@ final class TestKernel extends Kernel
         $idGeneration = getenv('CHAT_KIT_RACE_ID_GENERATION');
         if (is_string($idGeneration) && $idGeneration !== '') {
             $container->extension('doctrine', ['orm' => ['identity_generation_preferences' => ['Doctrine\\DBAL\\Platforms\\PostgreSQLPlatform' => $idGeneration]]]);
+        }
+        // 1.33: UiKit's theme flag for every kebab's context menu, only for the tests that ask for it.
+        if ($this->uiKitContextMenus) {
+            $container->extension('nowo_ui_kit', ['theme' => ['context_menus' => true]]);
         }
         $container->extension('nowo_chat_kit', array_replace_recursive(
             ['profiles' => ['default' => ['user_class' => TestUser::class, 'doctrine' => (self::userReference() === null ? [] : ['user_reference' => self::userReference()]) + (self::privateEntityManager() ? ['private_entity_manager' => true] : [])]]],

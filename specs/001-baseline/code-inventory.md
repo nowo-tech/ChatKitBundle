@@ -2,7 +2,7 @@
 
 **Package**: `nowo-tech/chat-kit-bundle`  
 **Last audited**: 2026-11-17  
-**Production units**: **226/226**  
+**Production units**: **227/227**  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -11,6 +11,7 @@
 - `src/Resources/public/js/nowo-chat.js` is the Vite **build output** of `index.ts` / `iife.ts` (`FR-BUILD-001`), not a separate unit.
 - Covers the 1.2 "hide the dock to the side" feature (`FR-TS-007`, `FR-TWIG-003`, `FR-THEME-003`): no new file, existing units extended.
 - Covers 1.3: dock Form types (`FR-TWIG-004`), page mark-read script `page.ts` (`FR-TS-008`), page layout global and asset blocks (`FR-TWIG-002`).
+- Covers 1.33 (message menu and context menu, `FR-MENU-001`): one new unit `message-menu.ts`; `ChatApiController`, `ChatMarkdownRenderer`, `ChatPresenter`, `ChatDockExtension`, `Configuration`, `_templates.html.twig`, `thread.ts`, `dock.ts`, `api.ts`, `types.ts`, `nowo-chat.css` and the translations extended.
 - `src/Resources/assets/README.md` is documentation; `demo/` and `.symfony/` (Flex recipe, see `docs/INSTALLATION.md`) are out of inventory scope.
 
 ## Coverage summary
@@ -37,8 +38,8 @@
 | User reference modes (relation, id, string) | 10 |
 | Private entity manager, savepoints & write concurrency | 14 |
 | Retention policy | 7 |
-| Browser (TypeScript) — feature modules | 14 |
-| **Total** | **226** |
+| Browser (TypeScript) — feature modules | 15 |
+| **Total** | **227** |
 
 ## Bundle, configuration & DI
 
@@ -103,7 +104,7 @@
 | `src/Event/ChatMessageDeletedEvent.php` | US-02, US-04 | FR-EVT-001 |
 | `src/Event/ChatMessageSentEvent.php` | US-02 | FR-EVT-001 |
 | `src/Event/ChatSupportStatusChangedEvent.php` | US-04 | FR-EVT-001 |
-| `src/Service/ChatMarkdownRenderer.php` | US-02 | FR-MSG-002 |
+| `src/Service/ChatMarkdownRenderer.php` | US-02 | FR-MSG-002, FR-MENU-001 |
 | `src/Service/ChatPresenter.php` | US-02, US-07 | FR-MSG-003 |
 | `src/Service/ChatService.php` | US-02, US-03, US-04 | FR-MSG-001 |
 | `src/Service/ChatSupportInbox.php` | US-04 | FR-SUPPORT-001 |
@@ -112,7 +113,7 @@
 
 | Source path | Spec section | Requirement ID(s) |
 | --- | --- | --- |
-| `src/Controller/ChatApiController.php` | US-02 … US-05, US-10 | FR-API-001 |
+| `src/Controller/ChatApiController.php` | US-02 … US-05, US-10 | FR-API-001, FR-MENU-001 |
 | `src/Controller/ChatPageController.php` | US-07 | FR-PAGE-001 |
 | `src/Form/ChatPageMessageType.php` | US-07 | FR-PAGE-001 |
 | `src/Http/ChatApiException.php` | US-02 | FR-API-002 |
@@ -177,7 +178,7 @@
 | `src/Resources/assets/src/sounds.ts` | US-05 | FR-TS-005 |
 | `src/Resources/assets/src/state.ts` | US-05, US-08 | FR-TS-005, FR-TS-007 |
 | `src/Resources/assets/src/templates.ts` | US-08 | FR-TS-005 |
-| `src/Resources/assets/src/thread.ts` | US-02, US-04, US-05 | FR-TS-003 |
+| `src/Resources/assets/src/thread.ts` | US-02, US-04, US-05 | FR-TS-003, FR-MENU-001 |
 | `src/Resources/assets/src/types.ts` | US-02, US-08 | FR-TS-005, FR-TS-007 |
 
 ## Translations
@@ -369,4 +370,5 @@
 | `src/Resources/assets/src/public.ts` | US-08 | FR-PREFS-001, FR-TS-009 |
 | `src/Resources/assets/src/motion.ts` | US-08 | FR-TS-010 |
 | `src/Resources/assets/src/overlay.ts` | US-08 | FR-TS-010 |
+| `src/Resources/assets/src/message-menu.ts` | US-02, US-07 | FR-MENU-001, FR-TS-009 |
 | `src/Resources/views/_author_badges.html.twig` | US-08 | FR-BADGE-001, FR-TWIG-002 |

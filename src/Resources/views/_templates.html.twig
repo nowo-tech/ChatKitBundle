@@ -310,9 +310,11 @@
 {% endblock %}
 
 {% block nowo_chat_template_messages %}
-    {# A message: bubble, reactions, meta, and the hover actions (react, edit, delete). #}
+    {# A message: bubble, reactions, meta, and the hover actions (react, pin, edit, delete, 1.33: the "More actions" kebab).
+     # 1.33: the message is focusable (Tab reaches its actions) and the scope of its kebab's context menu
+     # (web_ui.message_context_menu: false marks it "off", so the browser's menu stays whatever the theme says). #}
     <template data-nowo-chat-template="message">
-        <article class="nowo-chat-msg">
+        <article class="nowo-chat-msg" tabindex="0" data-nowo-ui-context-menu-scope{% if (nowo_chat_message_context_menu ?? null) is same as(false) %} data-nowo-ui-context-menu="off"{% endif %}>
             <span data-part="avatar"></span>
             <div class="nowo-chat-msg__content">
                 <p class="nowo-chat-msg__author" data-part="author" hidden></p>
@@ -331,6 +333,26 @@
                 {{ ui.icon_button('pin', 'chat.pin'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'pin') }}
                 {{ ui.icon_button('edit', 'chat.edit'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'edit') }}
                 {{ ui.icon_button('trash', 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'delete') }}
+                {% block nowo_chat_message_menu %}
+                    {# 1.33: the UiKit kebab of the message: Reply, Edit, Copy link, Pin / Unpin, Delete. Every item starts hidden;
+                     # the script shows the ones the viewer may use (the server checks each action again). It is the source of
+                     # the message's context menu (right-click, Shift+F10, ContextMenu key, long press) when
+                     # web_ui.message_context_menu is true, or null and UiKit's theme.context_menus is on. Keep data-part. #}
+                    <span class="nowo-chat-msg__menu" data-part="menu" hidden>
+                        {{ include('@NowoUiKitBundle/partials/_kebab.html.twig', {
+                            label: 'chat.message_actions'|trans({}, 'NowoChatKitBundle', nowo_chat_locale),
+                            popover: false,
+                            context_menu: (nowo_chat_message_context_menu ?? null),
+                            items: [
+                                {label: 'chat.reply'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), attr: {'data-part': 'menu-reply', hidden: 'hidden'}},
+                                {label: 'chat.edit'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), attr: {'data-part': 'menu-edit', hidden: 'hidden'}},
+                                {label: 'chat.copy_link'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), attr: {'data-part': 'menu-copy-link', hidden: 'hidden'}},
+                                {label: 'chat.pin'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), attr: {'data-part': 'menu-pin', hidden: 'hidden'}},
+                                {label: 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), danger: true, attr: {'data-part': 'menu-delete', hidden: 'hidden'}},
+                            ],
+                        }, with_context: false) }}
+                    </span>
+                {% endblock %}
             </div>
         </article>
     </template>{% if nowo_chat_author_badges|default(false) %}{% block nowo_chat_template_author_badge %}

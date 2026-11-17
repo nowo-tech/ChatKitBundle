@@ -229,12 +229,13 @@ final readonly class ChatPresenter
             'authorAvatarUrl' => $bot ? null : $this->avatarUrl($author),
             'mine'            => $viewer instanceof ChatUserInterface && $message->isAuthoredBy($viewer),
             'kind'            => $message->getKind(),
-            'html'            => match (true) {
+            // 1.33: never UiKit's context-menu / card attributes in a message (UiKit 2.54 SECURITY).
+            'html' => ChatMarkdownRenderer::stripAttributes(match (true) {
                 $bot => $this->botHtml($message),
                 // 1.24: a system line is always text (its key translated, its parameters escaped with it).
                 $system => '<p>' . $this->escape($this->botText($message)) . '</p>',
                 default => $filled['html'],
-            },
+            }),
             'createdAt' => $message->getCreatedAt()->format(DATE_ATOM),
             'edited'    => $message->isEdited(),
             'deleted'   => $message->isDeleted(),

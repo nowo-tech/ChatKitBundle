@@ -856,6 +856,33 @@ describe('ChatDock', () => {
     expect(window.location.search).toBe('?chat=not-a-uuid');
   });
 
+  it('1.33: a copied message link (?chat=…&message=…) opens the conversation on that message', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const conv = '11111111-1111-1111-1111-111111111111';
+    const target = message({ uuid: '22222222-2222-2222-2222-222222222222' });
+    api.messages.mockResolvedValue({ messages: [target], hasMore: false, readUpTo: null, readers: [] });
+    window.history.replaceState(null, '', `/dashboard?chat=${conv}&message=${target.uuid}`);
+    const first = mount([summary(conv)]);
+    await first.dock.start();
+    await vi.waitFor(() => expect(first.q(`[data-id="${target.id}"]`)?.classList.contains('is-highlighted')).toBe(true));
+    expect(window.location.search).toBe('');
+    first.dock.destroy();
+    document.body.replaceChildren();
+
+    // The window is open already (restored tab): the jump goes to it at once.
+    window.history.replaceState(null, '', `/dashboard?chat=${conv}&message=${target.uuid}`);
+    const second = mount([summary(conv)]);
+    await second.dock.start();
+    await vi.waitFor(() => expect(second.q(`[data-id="${target.id}"]`)?.classList.contains('is-highlighted')).toBe(true));
+  });
+
+  it('1.33: loads UiKit\'s context-menu runtime when web_ui.message_context_menu is true', async () => {
+    const { dock } = mount([], { contextMenuRuntime: '/bundles/nowouikit/js/nowo-ui-context-menu.js' });
+    await dock.start();
+    expect(document.head.querySelector('script[data-nowo-chat-context-menu-runtime]')?.getAttribute('src')).toBe('/bundles/nowouikit/js/nowo-ui-context-menu.js');
+    document.head.querySelector('script[data-nowo-chat-context-menu-runtime]')?.remove();
+  });
+
   it('stays above the Symfony toolbar at its real height (collapsed, one row, two rows, gone)', async () => {
     const { dock, root } = mount([]);
     await dock.start();

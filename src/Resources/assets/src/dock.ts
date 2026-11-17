@@ -14,6 +14,7 @@ import { playOnce } from './sounds';
 import { ActivityTracker, currentStatus, customStatus, StatusMenu, statusLabel } from './status';
 import { clearChatStorage, DockStore, DraftStore, type SyncEvent, ThreadCache } from './state';
 import { ChatSidebarView } from './sidebar';
+import { loadContextMenuRuntime, takeMessageFromUrl } from './message-menu';
 import { part, Templates, text } from './templates';
 import { isMuted, plain, ThreadView, type ThreadHost } from './thread';
 import type { ChatConfig, ChatMessage, ChatPrefs, Contact, ConversationSummary, LinkPreview, PeerStatus, RealtimeEvent, SoundName, SupportContext } from './types';
@@ -94,6 +95,8 @@ export class ChatDock implements ThreadHost {
   private toastTimer: number | undefined;
   private readonly windows = new Map<string, ThreadView>();
   private filter: Filter = 'all';
+  /** 1.33: `?message=` of a copied message link, until the window of its conversation exists. */
+  private pendingJump: { conversation: string; message: string } | null = null;
   private query = '';
   private mode: 'list' | 'picker' = 'list';
   private contactsQuery: string | null = null;
@@ -401,11 +404,21 @@ export class ChatDock implements ThreadHost {
         return new Promise<void>(() => undefined);
       });
     }
+    // 1.33 (`web_ui.message_context_menu: true`): UiKit's context-menu runtime, unless the page has it.
+    if (this.config.contextMenuRuntime !== undefined) {
+      loadContextMenuRuntime(this.config.contextMenuRuntime);
+    }
+    // 1.33: a copied message link (`/chat/{uuid}?message=…`, or `?chat=…&message=…`) shows that message.
+    const jump = takeMessageFromUrl();
+    const linked = this.page?.active ?? new URL(window.location.href).searchParams.get('chat');
     this.applyState();
     await this.refreshList();
     if (this.filter === 'archived') {
       // Page mode, `/chat/?archived=1`: the "Closed" filter is on from the start.
       await this.loadArchived();
+    }
+    if (jump !== null && linked !== null && linked !== '') {
+      this.requestJump(linked, jump);
     }
     this.openFromUrl();
     this.openRecent();
@@ -1220,6 +1233,21 @@ export class ChatDock implements ThreadHost {
     this.showToast(reason);
   }
 
+  /**
+   * 1.33: shows a message of a conversation once its window exists (at once when it does).
+   *
+   * @param conversation Conversation uuid.
+   * @param message Message uuid.
+   */
+  private requestJump(conversation: string, message: string): void {
+    const view = this.windows.get(conversation);
+    if (view !== undefined) {
+      view.jumpWhenLoaded(message);
+      return;
+    }
+    this.pendingJump = { conversation, message };
+  }
+
   /** Push notification click: `?chat=<uuid>` opens that conversation, then the parameter is dropped. */
   private openFromUrl(): void {
     const url = new URL(window.location.href);
@@ -1673,6 +1701,10 @@ export class ChatDock implements ThreadHost {
         }
         this.windows.set(tab.uuid, view);
         view.hydrate(this.cache.read(tab.uuid));
+        if (this.pendingJump?.conversation === tab.uuid) {
+          view.jumpWhenLoaded(this.pendingJump.message);
+          this.pendingJump = null;
+        }
         void view.load();
       }
       view.setMinimised(tab.minimised);

@@ -66,6 +66,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
     /** 1.26: UiKit's remote-dialog runtime, in UiKit's asset package (`web_ui.dock.dialog_runtime`). */
     public const string DIALOG_RUNTIME = 'js/nowo-ui-dialog.js';
 
+    /** 1.33: UiKit's context-menu runtime, in UiKit's asset package (`web_ui.message_context_menu: true`). */
+    public const string CONTEXT_MENU_RUNTIME = 'js/nowo-ui-context-menu.js';
+
     /** 1.26: name of UiKit's asset package. */
     public const string UI_KIT_PACKAGE = 'nowo_ui_kit';
 
@@ -94,6 +97,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param bool $dialogRuntime 1.26: the dock loads UiKit's dialog runtime for the sidebar actions (`web_ui.dock.dialog_runtime`)
      * @param Packages|null $packages 1.26: asset packages (the URL of UiKit's js/nowo-ui-dialog.js); null without symfony/asset
      * @param ChatAuthorBadges|null $authorBadges 1.29: whether the application gives author badges; null: it does not
+     * @param bool|null $messageContextMenu 1.33: the message context menu (`web_ui.message_context_menu`): null follows UiKit's theme flag, true / false force it
      */
     public function __construct(
         private readonly Security $security,
@@ -128,6 +132,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly bool $dialogRuntime = false,
         private readonly ?Packages $packages = null,
         private readonly ?ChatAuthorBadges $authorBadges = null,
+        private readonly ?bool $messageContextMenu = null,
     ) {
     }
 
@@ -149,7 +154,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * Twig globals: `nowo_chat_kit_page_layout` (deprecated), the layout the 1.x chat page (`page_legacy.html.twig`)
      * extends; the 1.5 page extends the UiKit layout (`web_ui.layout_template`). 1.29: `nowo_chat_author_badges`, true
      * when the application aliased ChatAuthorBadgeProviderInterface (the dock's `author-badge` template is rendered only
-     * then, so the dock markup of a host without badges is unchanged).
+     * then, so the dock markup of a host without badges is unchanged). 1.33: `nowo_chat_message_context_menu`, the
+     * `context_menu` option of each message's kebab (null: UiKit's `theme.context_menus` decides).
      *
      * @return array<string, mixed> The globals
      */
@@ -159,6 +165,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'nowo_chat_kit_page_layout' => $this->pageLayout ?? Configuration::LEGACY_PAGE_LAYOUT,
             // 1.29: whether the application gives author badges (the dock template of a badge is rendered only then).
             'nowo_chat_author_badges' => $this->authorBadges?->enabled() ?? false,
+            // 1.33: the message context menu (null: UiKit's theme flag; true / false: forced by web_ui.message_context_menu).
+            'nowo_chat_message_context_menu' => $this->messageContextMenu,
         ];
     }
 
@@ -243,6 +251,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'autoReply'      => $this->urls->generate('nowo_chat_api_auto_reply'),
                 'quickReplies'   => $this->urls->generate('nowo_chat_api_quick_replies'),
                 'pin'            => $this->pattern('nowo_chat_api_pin', ['messageUuid' => self::PLACEHOLDER], '__message__'),
+                // 1.33: the address of a message (the "Copy link" item of its menu).
+                'messageLink' => $this->pattern('nowo_chat_api_message_link', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 // 1.24: mute / unmute a conversation for the user.
                 'mute' => $this->pattern('nowo_chat_api_mute'),
                 // 1.26: the session's current CSRF token (asked for once when the page's token is refused).
@@ -270,7 +280,28 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'links' => $this->linksConfig(),
             'i18n'  => $this->strings($locale),
         ] + ($this->channelsUrl === null || preg_match(Configuration::CHANNELS_URL_PATTERN, $this->channelsUrl) !== 1 ? [] : ['channelsUrl' => $this->channelsUrl])
-            + $this->sidebarConfig();
+            + $this->sidebarConfig()
+            + $this->contextMenuConfig();
+    }
+
+    /**
+     * 1.33 (`web_ui.message_context_menu: true`): the address of UiKit's context-menu runtime, which the dock loads
+     * unless the page already has it. With null the host's UiKit `scripts` partial loads it when `theme.context_menus`
+     * is on; with false nothing is loaded. Configuration only: computed on each call, nothing kept between requests.
+     *
+     * @return array{contextMenuRuntime?: string}
+     */
+    private function contextMenuConfig(): array
+    {
+        if ($this->messageContextMenu !== true || !$this->packages instanceof Packages) {
+            return [];
+        }
+        try {
+            return ['contextMenuRuntime' => $this->packages->getUrl(self::CONTEXT_MENU_RUNTIME, self::UI_KIT_PACKAGE)];
+        } catch (InvalidArgumentException) {
+            // UiKit's asset package is not registered: the host loads the runtime (the kebab still works).
+            return [];
+        }
     }
 
     /**

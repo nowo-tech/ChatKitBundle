@@ -53,6 +53,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 use function array_slice;
@@ -258,6 +259,28 @@ final class ChatApiController extends AbstractController
         }
 
         return $this->json($this->pinsOf($message->getConversation(), $user));
+    }
+
+    /**
+     * 1.33: the path of a message (the "Copy link" item of its menu): the full-page chat of the conversation with
+     * `?message=<uuid>`, which scrolls to it. `POST` with the CSRF header from the page's own origin (403
+     * `cross_origin` otherwise); 404 when the conversation or the message is not visible to the caller, or deleted.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{path}` (root-relative: the browser adds its own origin, the `Host` header is never used)
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/link', name: 'message_link', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST'])]
+    public function messageLink(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $this->writer($request);
+        $this->sameOrigin($request);
+        $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
+        $this->deny(!$message instanceof ChatMessage || $message->isDeleted(), 'not_found', Response::HTTP_NOT_FOUND);
+
+        return $this->json(['path' => $this->generateUrl('nowo_chat_page_conversation', ['uuid' => $uuid, 'message' => $messageUuid], UrlGeneratorInterface::ABSOLUTE_PATH)]);
     }
 
     /**
@@ -1377,6 +1400,23 @@ final class ChatApiController extends AbstractController
     private function checkCsrf(Request $request): void
     {
         $this->deny(!$this->isCsrfTokenValid(self::CSRF_ID, (string) $request->headers->get('X-CSRF-TOKEN', '')), 'invalid_csrf', Response::HTTP_FORBIDDEN);
+    }
+
+    /**
+     * 1.33: a request sent by another site is refused (403 `cross_origin`). The browser's `Sec-Fetch-Site` decides when
+     * it is sent (`same-origin` only); `Origin` is compared with this host only without it (audit SQ-L2: behind a proxy
+     * that terminates TLS without `trusted_proxies`, the scheme seen here differs from the browser's). A client sending
+     * neither header (no browser) still needs the CSRF header.
+     */
+    private function sameOrigin(Request $request): void
+    {
+        $site   = $request->headers->get('Sec-Fetch-Site');
+        $origin = $request->headers->get('Origin');
+        $this->deny(
+            $site !== null ? $site !== 'same-origin' : $origin !== null && $origin !== $request->getSchemeAndHttpHost(),
+            'cross_origin',
+            Response::HTTP_FORBIDDEN,
+        );
     }
 
     /** Unknown, foreign or forbidden → 404 (never 403, so UUIDs cannot be probed). */

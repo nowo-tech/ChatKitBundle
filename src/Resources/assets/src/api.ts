@@ -194,6 +194,23 @@ export class ChatApi {
   }
 
   /**
+   * 1.33: the address of a message (the full-page chat scrolled to it), for its "Copy link" menu item. The server
+   * answers a root-relative path (it never builds a URL from the `Host` header); the page's own origin is prefixed here.
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid Message uuid.
+   * @returns The absolute URL on the page's origin.
+   * @throws ChatApiError When the answer is not a root-relative path.
+   */
+  async messageLink(uuid: string, messageUuid: string): Promise<string> {
+    const { path } = await this.request<{ path: string }>('POST', this.messageUrl('messageLink', uuid, messageUuid), {});
+    if (typeof path !== 'string' || !/^\/(?![/\\])/.test(path)) {
+      throw new ChatApiError(500, 'invalid_response');
+    }
+    return `${window.location.origin}${path}`;
+  }
+
+  /**
    * Pinned links of a conversation, oldest first, whether the viewer may manage them and the limit (1.19).
    *
    * @param uuid Conversation uuid.
@@ -594,7 +611,7 @@ export class ChatApi {
    * @param messageUuid Message uuid.
    * @returns The URL.
    */
-  private messageUrl(kind: 'message' | 'reactions' | 'pin', uuid: string, messageUuid: string): string {
+  private messageUrl(kind: 'message' | 'reactions' | 'pin' | 'messageLink', uuid: string, messageUuid: string): string {
     return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid)).replace('__message__', encodeURIComponent(messageUuid));
   }
 

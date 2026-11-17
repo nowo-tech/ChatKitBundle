@@ -209,6 +209,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 - **FR-TS-009** — Feature modules `avatar.ts`, `badges.ts`, `composer-tools.ts`, `mention.ts`, `reference.ts`, `sidebar.ts`, `status.ts`, `support.ts`, `prefs.ts`, `public.ts` extend the dock and thread; everything is built with DOM nodes and `textContent`, never HTML from user text.
 - **FR-TS-010** — `motion.ts` closes dialogs with an effect (a fade plus a timer fallback) and `overlay.ts` makes the dock step aside through `nowo:overlay-open` / `nowo:overlay-close` and `data-nowo-overlay`.
+- **FR-MENU-001** — Message menu and context menu (1.33): each message of the dock carries a UiKit kebab ("More actions", template block `nowo_chat_message_menu`) with Reply, Edit, Copy link, Pin / Unpin and Delete; `message-menu.ts` shows only the items the viewer may use (Reply / Edit need write access, Edit / Delete only the author within the 15-minute window, Pin the bundle's pin rights, Copy link any shown message) and the server checks each action again on its endpoint (send, edit, delete, pin, and `POST …/messages/{messageUuid}/link` with the CSRF header, same origin and the VIEW voter). The message is focusable and the scope of the kebab's UiKit 2.54 context menu (right-click, Shift+F10, ContextMenu key, long press), on with `web_ui.message_context_menu: true` or with null and UiKit's `theme.context_menus`, off with false. `ChatMarkdownRenderer::stripAttributes()` (server) and `stripReservedAttributes()` (browser) keep `data-nowo-ui-context-menu*` and `data-nowo-ui-card` out of message bodies. A `?message=<uuid>` link scrolls the conversation to that message.
 
 ## Key entities
 
@@ -239,7 +240,7 @@ A LinkedIn-style floating chat for Symfony applications. Installing the bundle g
 
 ## Success criteria
 
-- **SC-01** — `code-inventory.md` maps **223/223** production units (see its audit command).
+- **SC-01** — `code-inventory.md` maps **227/227** production units (see its audit command).
 - **SC-02** — PHPUnit: 100% line coverage of `src/`.
 - **SC-03** — Vitest: 100% line coverage of `Resources/assets/src`.
 - **SC-04** — PHPStan level 8 (with the FrankenPHP rulesets), Rector and PHP-CS-Fixer report nothing; Igor passes.

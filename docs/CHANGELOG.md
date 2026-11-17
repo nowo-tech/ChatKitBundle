@@ -71,6 +71,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Message menu and context menu** (owner request relayed by Symfony Beacon, UiKit 2.54): every message of the dock has a UiKit **More actions** kebab (block `nowo_chat_message_menu` of `_templates.html.twig`) with **Reply**, **Edit**, **Copy link**, **Pin / Unpin** and **Delete**. Only the items the viewer may use are shown: Reply and Edit need write access to the conversation, Edit and Delete only for the author within the 15-minute window, Pin for who may pin (both people of a direct conversation, agents in tickets, `ChatPinPolicyInterface` in channels), Copy link for any shown message. Every action is checked again on its endpoint. Reply starts the composer with a quote (`> Name: excerpt`). The message is focusable (Tab reaches its actions and kebab) and the scope of the kebab's UiKit context menu: right-click, Shift+F10, the ContextMenu key or a long press opens the same items.
+- `web_ui.message_context_menu` (`null` default = follow UiKit's `theme.context_menus`; `true` = always on, the dock loads UiKit's `js/nowo-ui-context-menu.js` itself unless the page has it; `false` = always off). Dock configuration `contextMenuRuntime` (only with `true`).
+- `POST /api/conversations/{uuid}/messages/{messageUuid}/link` → `{path}`: the root-relative address of a message (`/chat/{uuid}?message=<uuid>`) for whoever may see it (the dock prefixes the page's origin; the `Host` header is never used); CSRF header, same origin (`403 cross_origin` for a `Sec-Fetch-Site` other than `same-origin`, or, without that header, an `Origin` that is not this host), `404` for a deleted or invisible message. Dock endpoint `messageLink`. Opening such a link (page mode, or `?chat=…&message=…`) scrolls to the message and highlights it.
+- Translations `chat.message_actions`, `chat.reply`, `chat.copy_link`, `chat.link_copied` in the 7 locales.
+
+### Security
+
+- Message bodies never carry UiKit's context-menu or card attributes (UiKit 2.54 SECURITY): `ChatMarkdownRenderer::stripAttributes()` (an HTML-tokenizer reading of every tag: `/`, a closing quote or whitespace separate attributes, backticks stay in unquoted values; then, failing closed, every occurrence of the two names left anywhere — comments, declarations, raw-text elements, text — is renamed `data-removed-…`) removes `data-nowo-ui-context-menu*` and `data-nowo-ui-card` from the render and from every message the presenter returns (stored HTML of older versions or written by the application, reference cards, bot lines), and the dock strips them again in the browser, so a message can never open another element's kebab items on right-click.
+
+### Changed
+
+- Requires `nowo-tech/ui-kit-bundle` ^2.54 (was ^2.33.1).
+- The dock's `<template>` golden files (`templates.html`, `fixtures/author-badges/*`) are regenerated for the new kebab, the focusable message and the `messageLink` endpoint.
+
 ### Documentation
 
 - `specs/001-baseline/code-inventory.md` maps the three 1.32 retention units (`RuntimeSettingRetentionPolicyProvider`, `RetentionUnavailableException`, `RuntimeRetentionPass`): 226/226 (REQ-SPECKIT-003).

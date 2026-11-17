@@ -30,7 +30,7 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function setUp(): void
     {
-        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges(), $this->hostTransactionRunner(), $this->runtimeSettings());
+        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges(), $this->hostTransactionRunner(), $this->runtimeSettings(), $this->uiKitContextMenus());
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
@@ -69,6 +69,14 @@ abstract class DatabaseTestCase extends TestCase
      * 1.30: whether the kernel binds TransactionRunnerInterface to HostEntityManagerRunner (a host runner ChatKit must ignore).
      */
     protected function hostTransactionRunner(): bool
+    {
+        return false;
+    }
+
+    /**
+     * 1.33: whether the kernel turns on UiKit's `theme.context_menus` (the message kebab follows it by default).
+     */
+    protected function uiKitContextMenus(): bool
     {
         return false;
     }

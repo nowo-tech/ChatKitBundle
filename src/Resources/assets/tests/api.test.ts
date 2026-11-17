@@ -156,6 +156,19 @@ describe('chat api client', () => {
     await expect(new ChatApi(config).typing('c')).rejects.toMatchObject({ code: 'invalid_csrf' });
   });
 
+  it('asks for the address of a message with a POST and the CSRF header (1.33)', async () => {
+    const fetchMock = respond({ path: '/chat/c?message=m' });
+    vi.stubGlobal('fetch', fetchMock);
+    const api = new ChatApi({ ...config, endpoints: { ...config.endpoints, messageLink: '/conv/__uuid__/messages/__message__/link' } });
+    expect(await api.messageLink('c', 'm/1')).toBe(`${window.location.origin}/chat/c?message=m`);
+    expect(fetchMock).toHaveBeenLastCalledWith('/conv/c/messages/m%2F1/link', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'X-CSRF-TOKEN': 'tok' }) }));
+    // Audit SQ-I1: only a root-relative path is accepted (never another host).
+    for (const path of ['//evil.example/x', 'https://evil.example/x', '/\\evil.example', 42, undefined]) {
+      vi.stubGlobal('fetch', respond({ path }));
+      await expect(api.messageLink('c', 'm')).rejects.toMatchObject({ code: 'invalid_response' });
+    }
+  });
+
   it('calls the pinned links and links panel endpoints (1.19)', async () => {
     const fetchMock = respond({ links: [], canManage: true, max: 10 });
     vi.stubGlobal('fetch', fetchMock);
