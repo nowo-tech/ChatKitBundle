@@ -29,6 +29,8 @@ use const JSON_UNESCAPED_UNICODE;
  * message API and the realtime payloads are byte for byte what 1.28.0 produced. The golden files under
  * `fixtures/author-badges/` were captured on 1.28.0 (0c56fc6) before the feature existed; only random values (uuids,
  * times, CSRF tokens) are masked. The dock's `<template>` markup has its own golden file (DockTemplatesFixtureTest).
+ * 1.33: regenerated once for the message menu (the kebab in the dock markup, the focusable message and the dock's
+ * `messageLink` endpoint), which every host gets whatever its badges.
  */
 class ChatAuthorBadgesDefaultOutputTest extends DatabaseTestCase
 {

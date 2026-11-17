@@ -156,6 +156,14 @@ describe('chat api client', () => {
     await expect(new ChatApi(config).typing('c')).rejects.toMatchObject({ code: 'invalid_csrf' });
   });
 
+  it('asks for the address of a message with a POST and the CSRF header (1.33)', async () => {
+    const fetchMock = respond({ url: 'http://localhost/chat/c?message=m' });
+    vi.stubGlobal('fetch', fetchMock);
+    const api = new ChatApi({ ...config, endpoints: { ...config.endpoints, messageLink: '/conv/__uuid__/messages/__message__/link' } });
+    expect(await api.messageLink('c', 'm/1')).toBe('http://localhost/chat/c?message=m');
+    expect(fetchMock).toHaveBeenLastCalledWith('/conv/c/messages/m%2F1/link', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'X-CSRF-TOKEN': 'tok' }) }));
+  });
+
   it('calls the pinned links and links panel endpoints (1.19)', async () => {
     const fetchMock = respond({ links: [], canManage: true, max: 10 });
     vi.stubGlobal('fetch', fetchMock);

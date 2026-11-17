@@ -11,7 +11,8 @@ import { emojiPicker, insertAtCaret } from './emoji';
 import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from './format';
 import { decodeMentions, markOwnMentions, MentionAutocomplete, mentionsViewer } from './mention';
 import { decodeReferences, ReferenceAutocomplete } from './reference';
-import { ConversationLinks, decodeLinkTokens, linksSettings, linkToken } from './links';
+import { ConversationLinks, copyText, decodeLinkTokens, linksSettings, linkToken } from './links';
+import { quoteOf, stripReservedAttributes, visibleItems, type MessageMenuItem } from './message-menu';
 import { SupportPanel } from './support';
 import { customStatus, statusLabel } from './status';
 import { part, text, type Templates } from './templates';
@@ -134,6 +135,8 @@ export class ThreadView {
   /** 1.19: pinned links (bar under the header), the "Attach link" composer button and the links panel. */
   private readonly links: ConversationLinks | null;
   private loaded = false;
+  /** 1.33: a message to show once the first page is in (`?message=<uuid>`, a copied message link). */
+  private pendingJump: string | null = null;
   /** 1.26.1: the first load (or a reload) is on its way; a resync waits for it instead of sending another. */
   private loading = false;
   /** 1.26.1: the catch-up on its way (one request chain per window) and whether another one was asked for meanwhile. */
@@ -808,6 +811,33 @@ export class ThreadView {
     }
   }
 
+  /**
+   * 1.33: shows a message (by uuid) once the thread has its first page — at once when it has.
+   *
+   * @param uuid The message uuid (`?message=` of a copied link).
+   */
+  jumpWhenLoaded(uuid: string): void {
+    this.pendingJump = uuid;
+    if (this.loaded) {
+      void this.runPendingJump();
+    }
+  }
+
+  /** 1.33: the pending `?message=` jump: the loaded message, else the server's copy (it checks the viewer sees it). */
+  private async runPendingJump(): Promise<void> {
+    const uuid = this.pendingJump;
+    this.pendingJump = null;
+    if (uuid === null) {
+      return;
+    }
+    const known = this.messages.find((message) => message.uuid === uuid);
+    try {
+      await this.jumpTo(known ?? (await this.host.api.message(this.summary.uuid, uuid)));
+    } catch {
+      this.flashNotice(t(this.host.config.i18n, 'pinned_gone'));
+    }
+  }
+
   /** Loads the newest page from the server (or catches up after a cache paint); failures show the error state. */
   async load(): Promise<void> {
     this.loading = true;
@@ -815,6 +845,7 @@ export class ThreadView {
       if (this.messages.length > 0) {
         await this.refreshCached();
         this.loaded = true;
+        void this.runPendingJump();
         return;
       }
       const page = await this.host.api.messages(this.summary.uuid);
@@ -829,6 +860,7 @@ export class ThreadView {
       this.scrollToBottom(false);
       this.host.messagesChanged(this.summary.uuid, this.messages, this.hasMore, []);
       this.maybeMarkRead();
+      void this.runPendingJump();
     } catch {
       this.logState('error');
     } finally {
@@ -1833,6 +1865,8 @@ export class ThreadView {
       // Server-sanitised Markdown render (ChatMarkdownRenderer): escape-first, closed tag set.
       // eslint-disable-next-line no-restricted-syntax -- sanitised on the server, see ChatMarkdownRenderer
       bubble.innerHTML = message.html;
+      // 1.33: never UiKit's context-menu / card attributes inside a message (the server strips them too).
+      stripReservedAttributes(bubble);
       markOwnMentions(bubble, this.host.config.userUuid);
       // Icons of the #reference cards (data-icon slots of the server render).
       this.host.templates.fillIcons(bubble);
@@ -1956,10 +1990,11 @@ export class ThreadView {
     edit.hidden = !(usable && message.mine && inWindow && this.summary.canSend);
     // Only the author, within the edit window (others' messages are never deletable).
     remove.hidden = !(usable && message.mine && inWindow);
-    actions.hidden = react.hidden && edit.hidden && remove.hidden && (pin === null || pin.hidden);
+    const menu = this.wireMenu(article, message, { usable, mine: message.mine, inWindow });
+    actions.hidden = react.hidden && edit.hidden && remove.hidden && (pin === null || pin.hidden) && (menu === null || menu.hidden);
     // Touch screens have no hover: tapping a message shows its actions (one message at a time).
     article.addEventListener('click', (event) => {
-      if ((event.target as Element).closest('a, button, form') !== null) {
+      if ((event.target as Element).closest('a, button, form, summary, details') !== null) {
         return;
       }
       const active = !article.classList.contains('is-active');
@@ -1969,6 +2004,101 @@ export class ThreadView {
     react.addEventListener('click', () => this.openReactions(message, react));
     edit.addEventListener('click', () => this.startEdit(message, article));
     remove.addEventListener('click', () => this.confirmDelete(message, article));
+  }
+
+  /**
+   * 1.33: the "More actions" kebab of a message (template block `nowo_chat_message_menu`): shows the items the viewer may
+   * use and binds them. The same items open as the message's context menu when UiKit's runtime runs (it forwards each
+   * click to the kebab item). The server checks every action again: send (Reply), edit, link, pin and delete endpoints.
+   *
+   * @param article Rendered line of the message.
+   * @param message The message.
+   * @param state Whether it is usable (shown, text), the viewer's own and within the edit window.
+   * @returns The menu holder, or null when the template has none (a host override of the message template).
+   */
+  private wireMenu(article: HTMLElement, message: ChatMessage, state: { usable: boolean; mine: boolean; inWindow: boolean }): HTMLElement | null {
+    const menu = article.querySelector<HTMLElement>('[data-part="menu"]');
+    if (menu === null) {
+      return null;
+    }
+    const config = this.host.config;
+    const shown = visibleItems({
+      ...state,
+      canSend: this.summary.canSend,
+      canPin: this.canPin,
+      pinned: message.pinned === true,
+      canLink: (config.endpoints.messageLink ?? '') !== '',
+    });
+    const details = menu.querySelector('details');
+    const actions: Record<MessageMenuItem, () => void> = {
+      reply: () => this.replyTo(message, article),
+      edit: () => this.startEdit(message, article),
+      'copy-link': () => void this.copyLink(message),
+      pin: () => void this.setPinned(message, message.pinned !== true),
+      delete: () => this.confirmDelete(message, article),
+    };
+    let any = false;
+    for (const [name, run] of Object.entries(actions) as [MessageMenuItem, () => void][]) {
+      const item = menu.querySelector<HTMLElement>(`[data-part="menu-${name}"]`);
+      if (item === null) {
+        continue;
+      }
+      item.hidden = !shown[name];
+      any ||= shown[name];
+      if (name === 'pin') {
+        item.textContent = t(config.i18n, message.pinned === true ? 'unpin' : 'pin');
+      }
+      item.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (details !== null) {
+          details.open = false;
+        }
+        run();
+      });
+    }
+    menu.hidden = !any;
+    // Escape closes the open kebab and gives focus back to its toggle.
+    details?.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && details.open) {
+        event.stopPropagation();
+        details.open = false;
+        details.querySelector<HTMLElement>('summary')?.focus();
+      }
+    });
+    return menu;
+  }
+
+  /**
+   * 1.33: Reply — starts the composer with a quote of the message (`> Name: excerpt`) and focuses it; sending goes
+   * through the usual send endpoint (the server checks the viewer may write).
+   *
+   * @param message The message replied to.
+   * @param article Its rendered line (the plain text of the bubble).
+   */
+  private replyTo(message: ChatMessage, article: HTMLElement): void {
+    const quote = quoteOf(message.authorName, part(article, 'bubble').textContent ?? '');
+    if (quote === '' || this.input.disabled) {
+      return;
+    }
+    this.input.value = `${quote}${this.input.value.replace(/^\n+/, '')}`;
+    this.input.dispatchEvent(new Event('input', { bubbles: true }));
+    this.input.focus({ preventScroll: true });
+    this.input.setSelectionRange(this.input.value.length, this.input.value.length);
+  }
+
+  /**
+   * 1.33: Copy link — asks the server for the message's address (it checks the viewer may see it) and copies it.
+   *
+   * @param message The message.
+   */
+  private async copyLink(message: ChatMessage): Promise<void> {
+    const i18n = this.host.config.i18n;
+    try {
+      const url = await this.host.api.messageLink(this.summary.uuid, message.uuid);
+      this.flashNotice(t(i18n, (await copyText(url)) ? 'link_copied' : 'error'));
+    } catch {
+      this.flashNotice(t(i18n, 'error'));
+    }
   }
 
   /**

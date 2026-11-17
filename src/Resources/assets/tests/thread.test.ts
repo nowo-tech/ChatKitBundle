@@ -942,6 +942,134 @@ describe('ThreadView', () => {
       expect(direct.action(theirs.id + 100, 'react').hidden).toBe(true);
     });
 
+    describe('1.33: the "More actions" kebab and its context menu', () => {
+      const names = ['reply', 'edit', 'copy-link', 'pin', 'delete'] as const;
+      const withMenu = { i18n: { ...i18n, pin: 'Pin', unpin: 'Unpin', link_copied: 'Link copied' }, endpoints: { page: '/chat/__uuid__', messageLink: '/chat/api/conversations/__uuid__/messages/__message__/link' } } as unknown as Partial<ChatConfig>;
+      const item = (article: HTMLElement, name: string) => article.querySelector<HTMLAnchorElement>(`[data-part="menu-${name}"]`) as HTMLAnchorElement;
+      const shown = (article: HTMLElement) => names.filter((name) => !item(article, name).hidden);
+
+      it('shows each item by the bundle rules: author, 15-minute window, pin rights, read-only, deleted', async () => {
+        const mine = msg({ mine: true, authorUuid: 'me', uuid: 'mine' });
+        const old = msg({ mine: true, authorUuid: 'me', createdAt: '2026-10-15T09:00:00Z', uuid: 'old' });
+        const theirs = msg({ uuid: 'theirs', pinned: true });
+        const gone = msg({ deleted: true });
+        const { article } = await loaded([old, mine, theirs, gone], { canPin: true }, withMenu);
+        expect(shown(article(mine.id))).toEqual(['reply', 'edit', 'copy-link', 'pin', 'delete']);
+        expect(shown(article(old.id))).toEqual(['reply', 'copy-link', 'pin']);
+        expect(shown(article(theirs.id))).toEqual(['reply', 'copy-link', 'pin']);
+        expect(item(article(theirs.id), 'pin').textContent).toBe('Unpin');
+        expect(item(article(mine.id), 'pin').textContent).toBe('Pin');
+        expect(article(gone.id).querySelector<HTMLElement>('[data-part="menu"]')?.hidden).toBe(true);
+        // The message is focusable and the scope of its kebab's context menu.
+        expect(article(mine.id).getAttribute('tabindex')).toBe('0');
+        expect(article(mine.id).hasAttribute('data-nowo-ui-context-menu-scope')).toBe(true);
+      });
+
+      it('hides what the viewer may not do: no pin rights, read-only, no link endpoint', async () => {
+        const mine = msg({ mine: true, authorUuid: 'me', uuid: 'mine' });
+        const ro = await loaded([mine], { canPin: false, canSend: false }, withMenu);
+        expect(shown(ro.article(mine.id))).toEqual(['copy-link', 'delete']);
+        document.body.replaceChildren();
+        const other = msg({ uuid: 'x' });
+        const noLink = await loaded([other], { canPin: false }, { i18n });
+        expect(shown(noLink.article(other.id))).toEqual(['reply']);
+      });
+
+      it('runs each item: reply quotes, edit and delete open in place, pin toggles, copy link asks the server', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        vi.stubGlobal('navigator', { clipboard: { writeText } });
+        const mine = msg({ mine: true, authorUuid: 'me', uuid: 'mine', html: '<p>mine</p>' });
+        const theirs = msg({ uuid: 'theirs', html: '<p>hola   <strong>Ana</strong></p>' });
+        const messageLink = vi.fn().mockResolvedValueOnce('http://localhost/chat/c1?message=theirs').mockRejectedValueOnce(new ChatApiError(404, 'not_found'));
+        const pin = vi.fn().mockResolvedValue({ pins: [theirs], canPin: true });
+        const ctx = await loaded([mine, theirs], { canPin: true }, withMenu);
+        Object.assign(ctx.host.api, { messageLink, pin });
+        const details = ctx.article(theirs.id).querySelector('details') as HTMLDetailsElement;
+        details.open = true;
+
+        item(ctx.article(theirs.id), 'reply').click();
+        const input = ctx.q<HTMLTextAreaElement>('textarea');
+        expect(input.value).toBe('> Luis: hola Ana\n\nborrador');
+        expect(document.activeElement).toBe(input);
+        expect(details.open).toBe(false);
+
+        item(ctx.article(theirs.id), 'copy-link').click();
+        await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('http://localhost/chat/c1?message=theirs'));
+        expect(messageLink).toHaveBeenCalledWith('c1', 'theirs');
+        await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe('Link copied'));
+        item(ctx.article(theirs.id), 'copy-link').click();
+        await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe('Error'));
+
+        item(ctx.article(theirs.id), 'pin').click();
+        expect(pin).toHaveBeenCalledWith('c1', 'theirs', true);
+
+        item(ctx.article(mine.id), 'edit').click();
+        expect(ctx.article(mine.id).querySelector('form')).not.toBeNull();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        item(ctx.article(mine.id), 'delete').click();
+        expect(ctx.article(mine.id).querySelector('.nowo-chat-confirm')).not.toBeNull();
+      });
+
+      it('works with a host template that drops the menu or one of its items; an empty message is not quoted', async () => {
+        vi.setSystemTime(now);
+        const empty = msg({ uuid: 'empty', html: '<p> </p>' });
+        for (const drop of ['[data-part="menu"]', '[data-part="menu-copy-link"]']) {
+          const root = templatesRoot();
+          root.querySelector<HTMLTemplateElement>('template[data-nowo-chat-template="message"]')?.content.querySelector(drop)?.remove();
+          const ctx = setup({}, { messages: vi.fn().mockResolvedValue({ messages: [empty], hasMore: false, readUpTo: null, readers: [] }) }, withMenu);
+          (ctx.host as { templates: Templates }).templates = new Templates(root);
+          await ctx.view.load();
+          const article = ctx.q(`[data-id="${empty.id}"]`);
+          expect(article.querySelector('[data-part="menu-copy-link"]')).toBeNull();
+          const reply = article.querySelector<HTMLElement>('[data-part="menu-reply"]');
+          if (reply !== null) {
+            reply.click();
+            expect(ctx.q<HTMLTextAreaElement>('textarea').value).toBe('borrador');
+          }
+          document.body.replaceChildren();
+        }
+      });
+
+      it('Escape closes the open kebab and gives focus back to its toggle', async () => {
+        const theirs = msg({ uuid: 'theirs' });
+        const ctx = await loaded([theirs], {}, withMenu);
+        const details = ctx.article(theirs.id).querySelector('details') as HTMLDetailsElement;
+        details.open = true;
+        item(ctx.article(theirs.id), 'reply').focus();
+        item(ctx.article(theirs.id), 'reply').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        expect(details.open).toBe(false);
+        expect(document.activeElement).toBe(details.querySelector('summary'));
+        // A tap on the kebab toggle does not fold the message's actions (touch screens).
+        details.querySelector('summary')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(ctx.article(theirs.id).classList.contains('is-active')).toBe(false);
+      });
+
+      it('never keeps UiKit context-menu or card attributes in a message body', async () => {
+        const forged = msg({ html: '<p data-nowo-ui-context-menu="admin-menu" data-mention="x"><span data-nowo-ui-card data-nowo-ui-context-menu-source>hi</span></p>' });
+        const { article } = await loaded([forged], {}, withMenu);
+        const bubble = article(forged.id).querySelector('[data-part="bubble"]') as HTMLElement;
+        expect(bubble.innerHTML).toBe('<p data-mention="x"><span>hi</span></p>');
+      });
+
+      it('shows a linked message once the first page is in (?message=)', async () => {
+        Element.prototype.scrollIntoView = vi.fn();
+        vi.setSystemTime(now);
+        const target = msg({ uuid: 'target' });
+        const elsewhere = msg({ uuid: 'elsewhere' });
+        const ctx = setup({}, { messages: vi.fn().mockResolvedValue({ messages: [target], hasMore: false, readUpTo: null, readers: [] }) }, withMenu);
+        ctx.view.jumpWhenLoaded('target');
+        await ctx.view.load();
+        await vi.waitFor(() => expect(ctx.q(`[data-id="${target.id}"]`).classList.contains('is-highlighted')).toBe(true));
+        // Not loaded: the server's copy gives its id; a message the viewer cannot see says so.
+        const message = vi.fn().mockResolvedValueOnce(elsewhere).mockRejectedValueOnce(new ChatApiError(404, 'not_found'));
+        Object.assign(ctx.host.api, { message });
+        ctx.view.jumpWhenLoaded('elsewhere');
+        await vi.waitFor(() => expect(message).toHaveBeenCalledWith('c1', 'elsewhere'));
+        ctx.view.jumpWhenLoaded('missing');
+        await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe('pinned_gone'));
+      });
+    });
+
     it('reacts from the quick bar and toggles existing chips', async () => {
       const theirs = msg({ uuid: 'r1', reactions: { '🎉': ['p'] } });
       const { action, article, api, host, view } = await loaded([theirs]);

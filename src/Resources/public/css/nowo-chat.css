@@ -4527,3 +4527,83 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
 .nowo-chat-window.is-muted .nowo-chat-window__mute {
   opacity: 0.7;
 }
+
+/* 1.33: the "More actions" kebab of a message (UiKit kebab: Reply, Edit, Copy link, Pin, Delete). Its items are the
+   message's context menu when UiKit's context-menu runtime runs (right-click, Shift+F10, ContextMenu key, long press). */
+.nowo-chat-msg:focus-visible {
+  outline: 2px solid var(--nowo-chat-accent);
+  outline-offset: 2px;
+}
+.nowo-chat-msg__menu {
+  position: relative;
+  display: inline-flex;
+}
+.nowo-chat-msg__menu[hidden] {
+  display: none;
+}
+.nowo-chat-msg__menu .nowo-ui-kebab__summary {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: var(--nowo-chat-radius-button);
+  color: var(--nowo-chat-muted);
+  cursor: pointer;
+  list-style: none;
+}
+.nowo-chat-msg__menu .nowo-ui-kebab__summary::-webkit-details-marker {
+  display: none;
+}
+.nowo-chat-msg__menu .nowo-ui-kebab__summary:hover,
+.nowo-chat-msg__menu details[open] > .nowo-ui-kebab__summary {
+  background: var(--nowo-chat-surface-muted);
+  color: var(--nowo-chat-text);
+}
+.nowo-chat-msg__menu .nowo-ui-kebab__menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  right: 0;
+  display: flex;
+  min-width: 10rem;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  box-shadow: var(--nowo-chat-shadow-soft);
+}
+.nowo-chat-msg--mine .nowo-chat-msg__menu .nowo-ui-kebab__menu {
+  right: auto;
+  left: 0;
+}
+.nowo-chat-msg__menu .nowo-ui-kebab__item {
+  padding: 6px 10px;
+  border-radius: var(--nowo-chat-radius-button);
+  color: var(--nowo-chat-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.nowo-chat-msg__menu .nowo-ui-kebab__item[hidden] {
+  display: none;
+}
+/* The actions bar is `visibility: hidden` until hover / focus; the items stay "rendered" so UiKit's context menu, which
+   skips invisible kebab entries, offers them on a right-click, a long press (no hover) or Shift+F10. They are inside the
+   closed <details> panel, so nothing shows until the kebab opens. */
+.nowo-chat-msg__menu .nowo-ui-kebab__item {
+  visibility: visible;
+}
+.nowo-chat-msg__menu .nowo-ui-kebab__item:hover,
+.nowo-chat-msg__menu .nowo-ui-kebab__item:focus-visible {
+  background: var(--nowo-chat-surface-muted);
+}
+.nowo-chat-msg__menu .nowo-ui-kebab__item--danger {
+  color: var(--nowo-chat-danger);
+}
+/* The actions stay shown while the kebab or the context menu of the message is open. */
+.nowo-chat-msg:has(.nowo-chat-msg__menu details[open]) .nowo-chat-msg__actions,
+.nowo-chat-msg[data-nowo-ui-context-menu-open] .nowo-chat-msg__actions {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}

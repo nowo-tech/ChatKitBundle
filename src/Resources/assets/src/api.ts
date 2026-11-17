@@ -194,6 +194,17 @@ export class ChatApi {
   }
 
   /**
+   * 1.33: the address of a message (the full-page chat scrolled to it), for its "Copy link" menu item.
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid Message uuid.
+   * @returns The absolute URL.
+   */
+  async messageLink(uuid: string, messageUuid: string): Promise<string> {
+    return (await this.request<{ url: string }>('POST', this.messageUrl('messageLink', uuid, messageUuid), {})).url;
+  }
+
+  /**
    * Pinned links of a conversation, oldest first, whether the viewer may manage them and the limit (1.19).
    *
    * @param uuid Conversation uuid.
@@ -594,7 +605,7 @@ export class ChatApi {
    * @param messageUuid Message uuid.
    * @returns The URL.
    */
-  private messageUrl(kind: 'message' | 'reactions' | 'pin', uuid: string, messageUuid: string): string {
+  private messageUrl(kind: 'message' | 'reactions' | 'pin' | 'messageLink', uuid: string, messageUuid: string): string {
     return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid)).replace('__message__', encodeURIComponent(messageUuid));
   }
 

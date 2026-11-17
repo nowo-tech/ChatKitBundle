@@ -30,6 +30,13 @@ use const ENT_SUBSTITUTE;
 final class ChatMarkdownRenderer
 {
     /**
+     * 1.33 (UiKit 2.54 SECURITY): attributes of UiKit's context-menu contract (`data-nowo-ui-context-menu`, `-source`,
+     * `-scope`, `-label`, `-open` …) and `data-nowo-ui-card`. A message body must never carry them, or its content could
+     * open another element's kebab items on right-click; stripAttributes() removes them from every tag.
+     */
+    public const string RESERVED_ATTRIBUTE = '~\s+data-nowo-ui-(?:context-menu[a-z0-9_.:-]*|card)(?![a-z0-9_.:-])(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s"\'=<>`]+))?~i';
+
+    /**
      * Builds the renderer.
      *
      * @param ChatLinkUrls $links 1.19: URL rules and providers of the link cards (`!link[Title](https://…)`)
@@ -128,7 +135,30 @@ final class ChatMarkdownRenderer
         $flushList();
 
         // A code block marker left inline (text on the same line) renders as the block itself.
-        return (string) preg_replace_callback('/\x{E000}B(\d+)\x{E000}/u', static fn (array $m): string => $blocks[(int) $m[1]], implode('', $html));
+        return self::stripAttributes((string) preg_replace_callback('/\x{E000}B(\d+)\x{E000}/u', static fn (array $m): string => $blocks[(int) $m[1]], implode('', $html)));
+    }
+
+    /**
+     * 1.33: removes UiKit's reserved attributes ({@see self::RESERVED_ATTRIBUTE}) from every tag of a message's HTML. The
+     * render escapes everything first, so they cannot come from the text; this guards the HTML stored by older versions
+     * or written by the application, the #reference cards and the bot lines, which the presenter passes through it too.
+     * Text between tags is left as it is (an escaped `data-nowo-ui-card` in a message is only text).
+     *
+     * @param string $html Message HTML
+     *
+     * @return string The HTML without those attributes
+     */
+    public static function stripAttributes(string $html): string
+    {
+        if (stripos($html, 'data-nowo-ui-') === false) {
+            return $html;
+        }
+
+        return (string) preg_replace_callback(
+            '~<[a-z][a-z0-9-]*(?:\s+(?:[^\s"\'>/=]+)(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s"\'=<>`]+))?)*\s*/?>~i',
+            static fn (array $tag): string => (string) preg_replace(self::RESERVED_ATTRIBUTE, '', $tag[0]),
+            $html,
+        );
     }
 
     /**
