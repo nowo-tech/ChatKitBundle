@@ -262,7 +262,7 @@ final class ChatApiController extends AbstractController
     }
 
     /**
-     * 1.33: the address of a message (the "Copy link" item of its menu): the full-page chat of the conversation with
+     * 1.33: the path of a message (the "Copy link" item of its menu): the full-page chat of the conversation with
      * `?message=<uuid>`, which scrolls to it. `POST` with the CSRF header from the page's own origin (403
      * `cross_origin` otherwise); 404 when the conversation or the message is not visible to the caller, or deleted.
      *
@@ -270,7 +270,7 @@ final class ChatApiController extends AbstractController
      * @param string $messageUuid Message uuid
      * @param Request $request The request (CSRF header)
      *
-     * @return JsonResponse `{url}` (absolute)
+     * @return JsonResponse `{path}` (root-relative: the browser adds its own origin, the `Host` header is never used)
      */
     #[Route('/conversations/{uuid}/messages/{messageUuid}/link', name: 'message_link', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST'])]
     public function messageLink(string $uuid, string $messageUuid, Request $request): JsonResponse
@@ -280,7 +280,7 @@ final class ChatApiController extends AbstractController
         $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
         $this->deny(!$message instanceof ChatMessage || $message->isDeleted(), 'not_found', Response::HTTP_NOT_FOUND);
 
-        return $this->json(['url' => $this->generateUrl('nowo_chat_page_conversation', ['uuid' => $uuid, 'message' => $messageUuid], UrlGeneratorInterface::ABSOLUTE_URL)]);
+        return $this->json(['path' => $this->generateUrl('nowo_chat_page_conversation', ['uuid' => $uuid, 'message' => $messageUuid], UrlGeneratorInterface::ABSOLUTE_PATH)]);
     }
 
     /**
@@ -1403,15 +1403,17 @@ final class ChatApiController extends AbstractController
     }
 
     /**
-     * 1.33: a request sent by another site is refused (403 `cross_origin`): `Sec-Fetch-Site` other than `same-origin`,
-     * or an `Origin` that is not this host. A client sending neither header (no browser) still needs the CSRF header.
+     * 1.33: a request sent by another site is refused (403 `cross_origin`). The browser's `Sec-Fetch-Site` decides when
+     * it is sent (`same-origin` only); `Origin` is compared with this host only without it (audit SQ-L2: behind a proxy
+     * that terminates TLS without `trusted_proxies`, the scheme seen here differs from the browser's). A client sending
+     * neither header (no browser) still needs the CSRF header.
      */
     private function sameOrigin(Request $request): void
     {
         $site   = $request->headers->get('Sec-Fetch-Site');
         $origin = $request->headers->get('Origin');
         $this->deny(
-            ($site !== null && $site !== 'same-origin') || ($origin !== null && $origin !== $request->getSchemeAndHttpHost()),
+            $site !== null ? $site !== 'same-origin' : $origin !== null && $origin !== $request->getSchemeAndHttpHost(),
             'cross_origin',
             Response::HTTP_FORBIDDEN,
         );

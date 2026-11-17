@@ -194,14 +194,20 @@ export class ChatApi {
   }
 
   /**
-   * 1.33: the address of a message (the full-page chat scrolled to it), for its "Copy link" menu item.
+   * 1.33: the address of a message (the full-page chat scrolled to it), for its "Copy link" menu item. The server
+   * answers a root-relative path (it never builds a URL from the `Host` header); the page's own origin is prefixed here.
    *
    * @param uuid Conversation uuid.
    * @param messageUuid Message uuid.
-   * @returns The absolute URL.
+   * @returns The absolute URL on the page's origin.
+   * @throws ChatApiError When the answer is not a root-relative path.
    */
   async messageLink(uuid: string, messageUuid: string): Promise<string> {
-    return (await this.request<{ url: string }>('POST', this.messageUrl('messageLink', uuid, messageUuid), {})).url;
+    const { path } = await this.request<{ path: string }>('POST', this.messageUrl('messageLink', uuid, messageUuid), {});
+    if (typeof path !== 'string' || !/^\/(?![/\\])/.test(path)) {
+      throw new ChatApiError(500, 'invalid_response');
+    }
+    return `${window.location.origin}${path}`;
   }
 
   /**

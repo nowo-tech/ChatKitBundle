@@ -16,6 +16,7 @@ use function strlen;
 use const ENT_HTML5;
 use const ENT_QUOTES;
 use const ENT_SUBSTITUTE;
+use const PREG_OFFSET_CAPTURE;
 
 /**
  * Light Markdown for chat messages, safe by construction — the whole text is
@@ -30,11 +31,14 @@ use const ENT_SUBSTITUTE;
 final class ChatMarkdownRenderer
 {
     /**
-     * 1.33 (UiKit 2.54 SECURITY): attributes of UiKit's context-menu contract (`data-nowo-ui-context-menu`, `-source`,
-     * `-scope`, `-label`, `-open` …) and `data-nowo-ui-card`. A message body must never carry them, or its content could
-     * open another element's kebab items on right-click; stripAttributes() removes them from every tag.
+     * 1.33 (UiKit 2.54 SECURITY): UiKit's context-menu attributes (`data-nowo-ui-context-menu`, `-source`, `-scope`,
+     * `-label`, `-open` …: every name with this prefix) and `data-nowo-ui-card`. A message body must never carry them, or
+     * its content could open another element's kebab items on right-click; stripAttributes() removes them from every tag.
      */
-    public const string RESERVED_ATTRIBUTE = '~\s+data-nowo-ui-(?:context-menu[a-z0-9_.:-]*|card)(?![a-z0-9_.:-])(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s"\'=<>`]+))?~i';
+    public const string RESERVED_ATTRIBUTE_PREFIX = 'data-nowo-ui-context-menu';
+
+    /** 1.33: the UiKit card marker, also reserved (see RESERVED_ATTRIBUTE_PREFIX). */
+    public const string RESERVED_CARD_ATTRIBUTE = 'data-nowo-ui-card';
 
     /**
      * Builds the renderer.
@@ -139,10 +143,13 @@ final class ChatMarkdownRenderer
     }
 
     /**
-     * 1.33: removes UiKit's reserved attributes ({@see self::RESERVED_ATTRIBUTE}) from every tag of a message's HTML. The
-     * render escapes everything first, so they cannot come from the text; this guards the HTML stored by older versions
-     * or written by the application, the #reference cards and the bot lines, which the presenter passes through it too.
-     * Text between tags is left as it is (an escaped `data-nowo-ui-card` in a message is only text).
+     * 1.33: removes UiKit's reserved attributes ({@see self::RESERVED_ATTRIBUTE_PREFIX}, {@see self::RESERVED_CARD_ATTRIBUTE})
+     * from every tag of a message's HTML. The render escapes everything first, so they cannot come from the text; this
+     * guards the HTML stored by older versions or written by the application, the #reference cards and the bot lines,
+     * which the presenter passes through it too, and the server-rendered page (`message.html|raw`, no browser strip).
+     * Tags are read the way the HTML tokenizer reads them (audit SQ-L1): an attribute name ends at whitespace, `/`, `>`
+     * or `=`; a quoted value at its closing quote (the next attribute may follow at once); an unquoted value, backticks
+     * included, at whitespace or `>`. Text between tags is left as it is (an escaped `data-nowo-ui-card` is only text).
      *
      * @param string $html Message HTML
      *
@@ -153,12 +160,62 @@ final class ChatMarkdownRenderer
         if (stripos($html, 'data-nowo-ui-') === false) {
             return $html;
         }
+        $out    = '';
+        $length = strlen($html);
+        $offset = 0;
+        while (preg_match('/<[a-zA-Z]/', $html, $match, PREG_OFFSET_CAPTURE, $offset) === 1) {
+            $start = $match[0][1];
+            $out .= substr($html, $offset, $start - $offset);
+            [$tag, $offset] = self::stripTag($html, $start, $length);
+            $out .= $tag;
+        }
 
-        return (string) preg_replace_callback(
-            '~<[a-z][a-z0-9-]*(?:\s+(?:[^\s"\'>/=]+)(?:\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s"\'=<>`]+))?)*\s*/?>~i',
-            static fn (array $tag): string => (string) preg_replace(self::RESERVED_ATTRIBUTE, '', $tag[0]),
-            $html,
-        );
+        return $out . substr($html, $offset);
+    }
+
+    /**
+     * One start tag from `$start` (its `<`), without the reserved attributes, and the offset after it (its `>`, or the
+     * end of the HTML for a tag left open).
+     *
+     * @return array{string, int}
+     */
+    private static function stripTag(string $html, int $start, int $length): array
+    {
+        $i   = $start + 1 + strcspn($html, " \t\n\f\r/>", $start + 1);
+        $tag = substr($html, $start, $i - $start);
+        while ($i < $length && $html[$i] !== '>') {
+            // Separators before an attribute: whitespace and a "/" that does not close the tag.
+            $gap = strspn($html, " \t\n\f\r/", $i);
+            if ($gap > 0 && ($i + $gap >= $length || $html[$i + $gap] === '>')) {
+                $tag .= substr($html, $i, $gap);
+                $i += $gap;
+                break;
+            }
+            $attribute = $i + $gap;
+            // The name: a leading "=" belongs to it, then anything up to whitespace, "/", ">" or "=".
+            $end  = $attribute + 1 + strcspn($html, " \t\n\f\r/>=", $attribute + 1);
+            $name = strtolower(substr($html, $attribute, $end - $attribute));
+            $end += strspn($html, " \t\n\f\r", $end);
+            if ($end < $length && $html[$end] === '=') {
+                $end += 1 + strspn($html, " \t\n\f\r", $end + 1);
+                $quote = $end < $length ? $html[$end] : '';
+                if ($quote === '"' || $quote === "'") {
+                    $close = strpos($html, $quote, $end + 1);
+                    $end   = $close === false ? $length : $close + 1;
+                } else {
+                    $end += strcspn($html, " \t\n\f\r>", $end);
+                }
+            } else {
+                // No value: the whitespace after the name separates the next attribute.
+                $end = $attribute + strlen($name);
+            }
+            $reserved = str_starts_with($name, self::RESERVED_ATTRIBUTE_PREFIX) || $name === self::RESERVED_CARD_ATTRIBUTE;
+            // A dropped attribute takes its whitespace with it; a "/" separator stays.
+            $tag .= $reserved ? (string) preg_replace('/[ \t\n\f\r]+$/', '', substr($html, $i, $gap)) : substr($html, $i, $end - $i);
+            $i = $end;
+        }
+
+        return [$i < $length ? $tag . '>' : $tag, min($i + 1, $length)];
     }
 
     /**

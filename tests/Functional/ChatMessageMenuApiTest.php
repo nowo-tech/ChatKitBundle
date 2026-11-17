@@ -123,8 +123,16 @@ final class ChatMessageMenuApiTest extends DatabaseTestCase
 
         self::assertSame('/chat/api/conversations/__uuid__/messages/__message__/link', $config['endpoints']['messageLink']);
         // Anyone who sees the message, any age: the address of the full-page chat scrolled to it.
-        $url = $this->send(Request::METHOD_POST, $link($his), $csrf, 0, [], ['HTTP_ORIGIN' => 'http://localhost', 'HTTP_SEC_FETCH_SITE' => 'same-origin'])['url'];
-        self::assertSame('http://localhost/chat/' . $dm->getUuid() . '?message=' . $his->getUuid(), $url);
+        $path = $this->send(Request::METHOD_POST, $link($his), $csrf, 0, [], ['HTTP_ORIGIN' => 'http://localhost', 'HTTP_SEC_FETCH_SITE' => 'same-origin'])['path'];
+        self::assertSame('/chat/' . $dm->getUuid() . '?message=' . $his->getUuid(), $path);
+        // Audit SQ-I1: a forged Host never reaches the answer (a path, no host).
+        self::assertSame($path, $this->send(Request::METHOD_POST, $link($his), $csrf, 0, [], ['HTTP_HOST' => 'evil.example', 'HTTP_X_FORWARDED_HOST' => 'evil.example'])['path']);
+        // The browser's history now points at that host: back to localhost for the relative URLs below.
+        $this->client->request(Request::METHOD_GET, 'http://localhost/page');
+        // Audit SQ-L2: Sec-Fetch-Site decides when sent (a TLS-terminating proxy without trusted_proxies changes the
+        // scheme seen here, not the browser's same-origin verdict); Origin is compared only without it.
+        $this->send(Request::METHOD_POST, $link($his), $csrf, 0, [], ['HTTP_ORIGIN' => 'https://localhost', 'HTTP_SEC_FETCH_SITE' => 'same-origin']);
+        $this->send(Request::METHOD_POST, $link($his), $csrf, 0, [], ['HTTP_ORIGIN' => 'http://localhost']);
         $this->send(Request::METHOD_POST, $link($old), $csrf);
         // A deleted message: 404.
         $this->send(Request::METHOD_POST, $link($gone), $csrf, 404);

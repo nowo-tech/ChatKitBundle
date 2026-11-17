@@ -32,6 +32,15 @@ final class ChatMarkdownRendererReservedAttributesTest extends TestCase
         yield 'self-closing' => ['<br data-nowo-ui-context-menu="x"/>', '<br/>'];
         yield 'a look-alike stays' => ['<p data-nowo-ui-cards="1" data-nowo-ui-menu>a</p>', '<p data-nowo-ui-cards="1" data-nowo-ui-menu>a</p>'];
         yield 'text between tags stays' => ['<p>data-nowo-ui-context-menu="x"</p>', '<p>data-nowo-ui-context-menu="x"</p>'];
+        // Audit SQ-L1: the separators the HTML tokenizer accepts.
+        yield 'slash separator' => ['<p/data-nowo-ui-context-menu="admin-menu">a</p>', '<p/>a</p>'];
+        yield 'right after a quoted value' => ['<p class="a"data-nowo-ui-card>b</p>', '<p class="a">b</p>'];
+        yield 'after a backtick value' => ['<p title=`x` data-nowo-ui-card>c</p>', '<p title=`x`>c</p>'];
+        yield 'upper case, two in a row' => ['<p DATA-NOWO-UI-CONTEXT-MENU-SOURCE data-nowo-ui-context-menu-scope>d</p>', '<p>d</p>'];
+        yield 'a ">" inside a quoted value' => ['<p data-x="a>b" data-nowo-ui-card>e</p>', '<p data-x="a>b">e</p>'];
+        yield 'spaces around "="' => ['<p data-nowo-ui-context-menu = "m" class=c>f</p>', '<p class=c>f</p>'];
+        yield 'newline and tab separators' => ["<p\ndata-nowo-ui-card\tclass=\"c\">g</p>", "<p\tclass=\"c\">g</p>"];
+        yield 'a tag left open' => ['<p>h</p><p data-nowo-ui-card', '<p>h</p><p'];
         yield 'nothing to strip' => ['<p><strong>b</strong></p>', '<p><strong>b</strong></p>'];
     }
 
