@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "90eb4151f1df25d4510b200e7ebfa5fd",
+    "content-hash": "8d24615cc0d70fe91764f8e3e199e689",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -95,16 +95,16 @@
         },
         {
             "name": "doctrine/dbal",
-            "version": "4.5.0",
+            "version": "4.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/doctrine/dbal.git",
-                "reference": "c435cd7ea33e17d2a89288caf994cf3d4549b879"
+                "reference": "1b56fbfb22704712786fea81ff4bb156fcc6427e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/doctrine/dbal/zipball/c435cd7ea33e17d2a89288caf994cf3d4549b879",
-                "reference": "c435cd7ea33e17d2a89288caf994cf3d4549b879",
+                "url": "https://api.github.com/repos/doctrine/dbal/zipball/1b56fbfb22704712786fea81ff4bb156fcc6427e",
+                "reference": "1b56fbfb22704712786fea81ff4bb156fcc6427e",
                 "shasum": ""
             },
             "require": {
@@ -117,14 +117,15 @@
                 "doctrine/coding-standard": "14.0.0",
                 "fig/log-test": "^1",
                 "jetbrains/phpstorm-stubs": "2023.2",
-                "phpstan/phpstan": "2.1.30",
+                "phpstan/phpstan": "2.3.4",
                 "phpstan/phpstan-phpunit": "2.0.7",
                 "phpstan/phpstan-strict-rules": "^2",
                 "phpunit/phpunit": "11.5.56",
                 "slevomat/coding-standard": "8.31.1",
                 "squizlabs/php_codesniffer": "4.0.4",
                 "symfony/cache": "^6.3.8|^7.0|^8.0",
-                "symfony/console": "^5.4|^6.3|^7.0|^8.0"
+                "symfony/console": "^5.4|^6.3|^7.0|^8.0",
+                "symfony/service-contracts": "^2.2 || ^3.0"
             },
             "suggest": {
                 "symfony/console": "For helpful console commands such as SQL execution and import of files."
@@ -181,7 +182,7 @@
             ],
             "support": {
                 "issues": "https://github.com/doctrine/dbal/issues",
-                "source": "https://github.com/doctrine/dbal/tree/4.5.0"
+                "source": "https://github.com/doctrine/dbal/tree/4.6.0"
             },
             "funding": [
                 {
@@ -197,8 +198,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-09-24T16:11:26+00:00",
-            "published-time": "2026-09-26T07:58:02+00:00"
+            "time": "2026-11-14T18:08:09+00:00",
+            "published-time": "2026-11-14T18:18:19+00:00"
         },
         {
             "name": "doctrine/deprecations",
@@ -946,7 +947,7 @@
             "dist": {
                 "type": "path",
                 "url": "/var/chat-kit-bundle",
-                "reference": "c917305466c159c44828cad18f40401faf90c060"
+                "reference": "89f533e674e804cce33a396b7dbfb2ab6f07861d"
             },
             "require": {
                 "doctrine/doctrine-bundle": "^2.13 || ^3.0",
@@ -954,7 +955,7 @@
                 "nowo-tech/form-kit-bundle": "^2.17",
                 "nowo-tech/transaction-contract": "^1.0",
                 "nowo-tech/transaction-doctrine": "^1.1",
-                "nowo-tech/ui-kit-bundle": "^2.33.1",
+                "nowo-tech/ui-kit-bundle": "^2.54",
                 "php": ">=8.3 <8.6",
                 "psr/cache": "^3.0",
                 "psr/log": "^3.0",
@@ -985,7 +986,7 @@
             },
             "require-dev": {
                 "friendsofphp/php-cs-fixer": "^3.64",
-                "igor-php/igor-php": "^0.9.7",
+                "igor-php/igor-php": "^0.9.7 || ^0.10.0",
                 "nowo-tech/phpstan-frankenphp": "^1.4",
                 "nowo-tech/runtime-setting-contract": "^1.0",
                 "phpstan/phpstan": "^2.1",
@@ -1235,16 +1236,16 @@
         },
         {
             "name": "nowo-tech/transaction-contract",
-            "version": "v1.0.0",
+            "version": "v1.0.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/transaction-contract.git",
-                "reference": "7866e5067f9545e9a8303deaa912a79557038e4f"
+                "reference": "dfb6566338d726719f23699d7109d70c08c45050"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/transaction-contract/zipball/7866e5067f9545e9a8303deaa912a79557038e4f",
-                "reference": "7866e5067f9545e9a8303deaa912a79557038e4f",
+                "url": "https://api.github.com/repos/nowo-tech/transaction-contract/zipball/dfb6566338d726719f23699d7109d70c08c45050",
+                "reference": "dfb6566338d726719f23699d7109d70c08c45050",
                 "shasum": ""
             },
             "require": {
@@ -1300,32 +1301,36 @@
                 "issues": "https://github.com/nowo-tech/transaction-contract/issues",
                 "source": "https://github.com/nowo-tech/transaction-contract"
             },
-            "time": "2026-11-15T02:31:32+00:00",
-            "published-time": "2026-11-15T02:39:33+00:00"
+            "time": "2026-11-15T08:04:23+00:00",
+            "published-time": "2026-11-15T08:05:10+00:00"
         },
         {
             "name": "nowo-tech/transaction-doctrine",
-            "version": "v1.1.0",
+            "version": "v1.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/transaction-doctrine.git",
-                "reference": "c9e26d12a120427c2c643af20140989bafacdf1a"
+                "reference": "ed941a3b56575326804d418eae145ee0d5b84fe5"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/c9e26d12a120427c2c643af20140989bafacdf1a",
-                "reference": "c9e26d12a120427c2c643af20140989bafacdf1a",
+                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/ed941a3b56575326804d418eae145ee0d5b84fe5",
+                "reference": "ed941a3b56575326804d418eae145ee0d5b84fe5",
                 "shasum": ""
             },
             "require": {
                 "doctrine/dbal": "^3.8.2 || ^4.0",
                 "nowo-tech/transaction-contract": "^1.0",
-                "php": ">=8.2 <8.6"
+                "php": ">=8.2 <8.6",
+                "psr/log": "^1.0 || ^2.0 || ^3.0"
             },
             "require-dev": {
                 "doctrine/orm": "^3.0",
                 "doctrine/persistence": "^3.1 || ^4.0",
                 "friendsofphp/php-cs-fixer": "^3.0",
+                "igor-php/igor-php": "^0.10.0",
+                "nowo-tech/phpstan-frankenphp": "^1.0",
+                "phpstan/extension-installer": "^1.4",
                 "phpstan/phpstan": "^2.0",
                 "phpstan/phpstan-phpunit": "^2.0",
                 "phpunit/phpunit": "^10.0 || ^11.0",
@@ -1338,7 +1343,7 @@
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-main": "1.0.x-dev"
+                    "dev-main": "1.1.x-dev"
                 }
             },
             "autoload": {
@@ -1375,24 +1380,25 @@
                 "worker"
             ],
             "support": {
+                "docs": "https://github.com/nowo-tech/transaction-doctrine#documentation",
                 "issues": "https://github.com/nowo-tech/transaction-doctrine/issues",
                 "source": "https://github.com/nowo-tech/transaction-doctrine"
             },
-            "time": "2026-11-15T08:15:49+00:00",
-            "published-time": "2026-11-15T08:18:10+00:00"
+            "time": "2026-11-17T08:11:35+00:00",
+            "published-time": "2026-11-17T08:12:45+00:00"
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v2.52.1",
+            "version": "v2.54.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "2715214cf4c459b6aad33ba366d75b8cd0e4385f"
+                "reference": "5d97cb4afb67a09cdedd078d88e34af26a2d23a3"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/2715214cf4c459b6aad33ba366d75b8cd0e4385f",
-                "reference": "2715214cf4c459b6aad33ba366d75b8cd0e4385f",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/5d97cb4afb67a09cdedd078d88e34af26a2d23a3",
+                "reference": "5d97cb4afb67a09cdedd078d88e34af26a2d23a3",
                 "shasum": ""
             },
             "require": {
@@ -1481,8 +1487,8 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-11-16T16:23:57+00:00",
-            "published-time": "2026-11-16T16:27:15+00:00"
+            "time": "2026-11-17T14:28:32+00:00",
+            "published-time": "2026-11-17T14:31:48+00:00"
         },
         {
             "name": "pentatrion/vite-bundle",

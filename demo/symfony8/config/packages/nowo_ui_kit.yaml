@@ -5,3 +5,7 @@ nowo_ui_kit:
     css_framework: custom
     layouts:
         admin: 'layouts/admin.html.twig'
+    # 1.33 demo: UiKit 2.54 context menus on every kebab (the chat messages included): right-click, Shift+F10, the
+    # ContextMenu key or a long press opens the kebab's items. The UiKit scripts partial loads the runtime.
+    theme:
+        context_menus: true
