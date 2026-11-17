@@ -78,6 +78,21 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Requires `nowo-tech/ui-kit-bundle` **^2.54** (`composer update nowo-tech/ui-kit-bundle nowo-tech/chat-kit-bundle`). No BC break:
+
+- Every message now has a **More actions** kebab (UiKit kebab, Reply / Edit / Copy link / Pin / Delete) and is focusable
+  (`tabindex="0"`, `data-nowo-ui-context-menu-scope`). A host that overrides the `message` template (block
+  `nowo_chat_template_messages`) keeps its markup and gets no kebab; to add it, copy the block `nowo_chat_message_menu`
+  (keep its `data-part` attributes). To restyle it use the `.nowo-chat-msg__menu` rules.
+- The **context menu** is off unless you opt in: set UiKit's `nowo_ui_kit.theme.context_menus: true` (your layout's
+  UiKit `scripts` partial loads the runtime) or `nowo_chat_kit.profiles.<name>.web_ui.message_context_menu: true` (the
+  dock loads UiKit's runtime itself). `false` keeps the browser's menu on messages even under the theme flag.
+- New endpoint `POST /api/conversations/{uuid}/messages/{messageUuid}/link` (in the bundle's routes; nothing to import).
+  A reverse proxy that strips `Origin` / `Sec-Fetch-*` headers is fine; one that rewrites `Origin` to another host makes
+  Copy link answer `403 cross_origin`.
+- If your application stores or renders its own message HTML, note that the presenter now strips
+  `data-nowo-ui-context-menu*` and `data-nowo-ui-card` from it.
+
 ## To 1.32.0
 
 From **1.31.1**:

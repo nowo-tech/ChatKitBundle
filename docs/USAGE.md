@@ -26,6 +26,7 @@
 - [Chat status](#chat-status)
 - [Closing conversations](#closing-conversations)
 - [Pinned messages](#pinned-messages)
+- [Message menu and context menu](#message-menu-and-context-menu)
 - [Links](#links)
 - [Automatic replies](#automatic-replies)
 - [Quick replies](#quick-replies)
@@ -1468,8 +1469,8 @@ event.
 
 ## Pinned messages
 
-Messages can be pinned to the top of a conversation (1.10) from the message's actions (Pin / Unpin; keyboard
-reachable like the other actions). The pinned bar above the thread shows the latest pin (a click scrolls to the
+Messages can be pinned to the top of a conversation (1.10) from the message's actions or its **More actions** menu
+(Pin / Unpin; keyboard reachable like the other actions). The pinned bar above the thread shows the latest pin (a click scrolls to the
 message, loading older pages if needed, and highlights it) and **All pinned (n)** lists every pin with Unpin. A line
 "X pinned a message" appears in the thread (translated for each reader, no sound or push); every reader's bar updates
 live (realtime `pins`); deleting a pinned message unpins it. Pins are shared by the conversation, at most `max_pins`
@@ -1481,6 +1482,45 @@ get no Pin action and the API answers `403 pin_forbidden` (`404` when they canno
 `GET /api/conversations/{uuid}/pins` (`{pins, canPin}`), `POST` / `DELETE /api/conversations/{uuid}/messages/{messageUuid}/pin`.
 Summaries carry `canPin`, messages `pinned` (and a pin line `pinnedMessage`). The personal data export lists the pins a
 person made.
+
+## Message menu and context menu
+
+*(1.33)* Every message of the dock has a **More actions** kebab (UiKit's `_kebab.html.twig`, block
+`nowo_chat_message_menu` of `_templates.html.twig`) next to its hover actions, with:
+
+| Item | Shown to | Endpoint (checked again by the server) |
+|------|----------|-----------------------------------------|
+| **Reply** | whoever may write in the conversation | the composer starts with `> Name: excerpt`; sending is `POST …/messages` (SEND voter) |
+| **Edit** | the author, within 15 minutes, while they may write | `PATCH …/messages/{messageUuid}` (EDIT voter: author, window) |
+| **Copy link** | whoever sees the message | `POST …/messages/{messageUuid}/link` → `{url}` (CSRF header, same origin, VIEW voter; 404 deleted / not visible) |
+| **Pin / Unpin** | who may pin (both people of a direct conversation, agents in tickets, `ChatPinPolicyInterface` in channels) | `POST` / `DELETE …/messages/{messageUuid}/pin` |
+| **Delete** | the author, within 15 minutes | `DELETE …/messages/{messageUuid}` (DELETE voter: author, window) |
+
+The menu is a view: an item hidden or shown by mistake still meets the server's answer. Deleted messages and lines
+(pins, buzzes, system lines) have no menu. Every message is focusable (`tabindex="0"`): Tab reaches its actions and the
+kebab (Enter / Space opens it, Escape closes it and returns to the toggle).
+
+**Context menu.** With UiKit 2.54's context-menu runtime, a right-click on a message, Shift+F10 or the ContextMenu key on
+a focused message, or a long press on a touch screen opens **the same items** at the pointer (the runtime forwards each
+click to the kebab item, so nothing else can run). Selected text, links and Shift / Ctrl + right-click keep the
+browser's menu. Off by default:
+
+```yaml
+nowo_ui_kit:
+    theme:
+        context_menus: true          # every UiKit kebab, the messages included (your scripts partial loads the runtime)
+
+nowo_chat_kit:
+    profiles:
+        default:
+            web_ui:
+                message_context_menu: true   # or force it for messages only (the dock loads the runtime); false = never
+```
+
+A copied link is the full-page chat of the conversation with `?message=<uuid>`; opening it scrolls to the message and
+highlights it (`?chat=<uuid>&message=<uuid>` does the same in the dock). Message bodies never carry UiKit's
+`data-nowo-ui-context-menu*` / `data-nowo-ui-card` attributes (stripped on the server and again in the browser), so a
+message cannot open another element's menu.
 
 ## Links
 
@@ -1733,6 +1773,7 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/auto-reply` `{enabled, text, when, from?, until?, mentions}` | the caller's automatic reply (1.11) |
 | GET / POST | `/api/quick-replies` · PATCH / DELETE `/api/quick-replies/{id}` | the caller's quick replies (1.11) |
 | GET | `/api/conversations/{uuid}/pins` · POST / DELETE `/api/conversations/{uuid}/messages/{messageUuid}/pin` | pinned messages, pin / unpin (1.10) |
+| POST | `/api/conversations/{uuid}/messages/{messageUuid}/link` | `{url}`, the address of a message (1.33; CSRF header, same origin) |
 | GET / POST | `/api/conversations/{uuid}/pinned-links` · PATCH / DELETE `/api/conversations/{uuid}/pinned-links/{linkUuid}` | pinned links (1.19, [Links](#links)) |
 | GET | `/api/conversations/{uuid}/links?q=&provider=&before=` | the Links panel (1.19) |
 
