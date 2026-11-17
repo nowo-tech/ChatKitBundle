@@ -1492,7 +1492,7 @@ person made.
 |------|----------|-----------------------------------------|
 | **Reply** | whoever may write in the conversation | the composer starts with `> Name: excerpt`; sending is `POST …/messages` (SEND voter) |
 | **Edit** | the author, within 15 minutes, while they may write | `PATCH …/messages/{messageUuid}` (EDIT voter: author, window) |
-| **Copy link** | whoever sees the message | `POST …/messages/{messageUuid}/link` → `{url}` (CSRF header, same origin, VIEW voter; 404 deleted / not visible) |
+| **Copy link** | whoever sees the message | `POST …/messages/{messageUuid}/link` → `{path}` (CSRF header, same origin, VIEW voter; 404 deleted / not visible); the dock prefixes the page's origin |
 | **Pin / Unpin** | who may pin (both people of a direct conversation, agents in tickets, `ChatPinPolicyInterface` in channels) | `POST` / `DELETE …/messages/{messageUuid}/pin` |
 | **Delete** | the author, within 15 minutes | `DELETE …/messages/{messageUuid}` (DELETE voter: author, window) |
 
@@ -1516,6 +1516,10 @@ nowo_chat_kit:
             web_ui:
                 message_context_menu: true   # or force it for messages only (the dock loads the runtime); false = never
 ```
+
+With `true` the dock loads UiKit's runtime only from the page's own origin: when UiKit's asset package uses a CDN
+`base_url`, nothing is loaded (the kebab still works); load the runtime from your layout (UiKit's `scripts` partial or the
+theme flag) instead.
 
 A copied link is the full-page chat of the conversation with `?message=<uuid>`; opening it scrolls to the message and
 highlights it (`?chat=<uuid>&message=<uuid>` does the same in the dock). Message bodies never carry UiKit's
@@ -1773,7 +1777,7 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/auto-reply` `{enabled, text, when, from?, until?, mentions}` | the caller's automatic reply (1.11) |
 | GET / POST | `/api/quick-replies` · PATCH / DELETE `/api/quick-replies/{id}` | the caller's quick replies (1.11) |
 | GET | `/api/conversations/{uuid}/pins` · POST / DELETE `/api/conversations/{uuid}/messages/{messageUuid}/pin` | pinned messages, pin / unpin (1.10) |
-| POST | `/api/conversations/{uuid}/messages/{messageUuid}/link` | `{url}`, the address of a message (1.33; CSRF header, same origin) |
+| POST | `/api/conversations/{uuid}/messages/{messageUuid}/link` | `{path}`, the root-relative address of a message (1.33; CSRF header, same origin) |
 | GET / POST | `/api/conversations/{uuid}/pinned-links` · PATCH / DELETE `/api/conversations/{uuid}/pinned-links/{linkUuid}` | pinned links (1.19, [Links](#links)) |
 | GET | `/api/conversations/{uuid}/links?q=&provider=&before=` | the Links panel (1.19) |
 

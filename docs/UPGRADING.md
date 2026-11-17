@@ -78,7 +78,9 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
-Requires `nowo-tech/ui-kit-bundle` **^2.54** (`composer update nowo-tech/ui-kit-bundle nowo-tech/chat-kit-bundle`). No BC break:
+Requires `nowo-tech/ui-kit-bundle` **^2.54** (`composer update nowo-tech/ui-kit-bundle nowo-tech/chat-kit-bundle`). No BC break
+in behaviour, but the markup changes: hosts with snapshot (golden-file) tests of the dock or message markup, or of the dock
+configuration (`endpoints.messageLink`), will see a diff and must update them.
 
 - Every message now has a **More actions** kebab (UiKit kebab, Reply / Edit / Copy link / Pin / Delete) and is focusable
   (`tabindex="0"`, `data-nowo-ui-context-menu-scope`). A host that overrides the `message` template (block
@@ -87,9 +89,13 @@ Requires `nowo-tech/ui-kit-bundle` **^2.54** (`composer update nowo-tech/ui-kit-
 - The **context menu** is off unless you opt in: set UiKit's `nowo_ui_kit.theme.context_menus: true` (your layout's
   UiKit `scripts` partial loads the runtime) or `nowo_chat_kit.profiles.<name>.web_ui.message_context_menu: true` (the
   dock loads UiKit's runtime itself). `false` keeps the browser's menu on messages even under the theme flag.
-- New endpoint `POST /api/conversations/{uuid}/messages/{messageUuid}/link` (in the bundle's routes; nothing to import).
-  A reverse proxy that strips `Origin` / `Sec-Fetch-*` headers is fine; one that rewrites `Origin` to another host makes
-  Copy link answer `403 cross_origin`.
+- New endpoint `POST /api/conversations/{uuid}/messages/{messageUuid}/link` → `{path}` (in the bundle's routes; nothing
+  to import). It answers a root-relative path; the dock prefixes the page's own origin, so the `Host` header is never
+  used. Same-origin check: the browser's `Sec-Fetch-Site` decides when it is sent (`same-origin` only); without it the
+  `Origin` header is compared with the scheme and host Symfony sees. Behind a reverse proxy that terminates TLS, set
+  `framework.trusted_proxies` (and the forwarded headers) so that scheme and host are the browser's, and
+  `framework.trusted_hosts` to your domains; otherwise a browser that sends `Origin` without `Sec-Fetch-Site` gets
+  `403 cross_origin` on Copy link. A client sending neither header still needs the CSRF header.
 - If your application stores or renders its own message HTML, note that the presenter now strips
   `data-nowo-ui-context-menu*` and `data-nowo-ui-card` from it.
 
