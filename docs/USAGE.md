@@ -1656,8 +1656,8 @@ inline.
   flushes, clears or closes your manager (REQ-ARCH-001 rule 6). Without it, ChatKit flushes your pending work on its
   own before its unit, never resets or clears your manager, and replaces it only at a request boundary when a failed
   chat flush closed it.
-- **No retries inside ChatKit.** Transient failures answer `503 Service Unavailable` with `Retry-After` (1 s) on
-  ChatKit's routes, a conflict `409 Conflict`, as `{ok: false, error: "unavailable" | "conflict"}` on the API. Your own
+- **No retries inside ChatKit.** Transient failures answer `409 Conflict` with `Retry-After` (1 s; 503 with the `nowo_transaction_doctrine.conflict_response.status: 503` opt-in) on
+  ChatKit's routes, a unique-key conflict `409 Conflict` too, as `{ok: false, error: "unavailable" | "conflict"}` on the API. Your own
   controllers that call the ChatKit services map failures themselves (or enable DoctrineDeadlockRetryBundle's
   `http_mapping`).
 - **Races without failures.** A first opening that meets the row another request wrote at the same moment (a channel

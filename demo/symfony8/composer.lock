@@ -947,14 +947,14 @@
             "dist": {
                 "type": "path",
                 "url": "/var/chat-kit-bundle",
-                "reference": "89f533e674e804cce33a396b7dbfb2ab6f07861d"
+                "reference": "b9db0e8bbf31cc91fa3483f52c26395b87e99a0e"
             },
             "require": {
                 "doctrine/doctrine-bundle": "^2.13 || ^3.0",
                 "doctrine/orm": "^3.3",
                 "nowo-tech/form-kit-bundle": "^2.17",
                 "nowo-tech/transaction-contract": "^1.0",
-                "nowo-tech/transaction-doctrine": "^1.1",
+                "nowo-tech/transaction-doctrine": "^1.3",
                 "nowo-tech/ui-kit-bundle": "^2.54",
                 "php": ">=8.3 <8.6",
                 "psr/cache": "^3.0",
@@ -1306,16 +1306,16 @@
         },
         {
             "name": "nowo-tech/transaction-doctrine",
-            "version": "v1.2.0",
+            "version": "v1.3.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/transaction-doctrine.git",
-                "reference": "ed941a3b56575326804d418eae145ee0d5b84fe5"
+                "reference": "2aa5d56af9ab5ac221acf0e4c3f05652b43082ad"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/ed941a3b56575326804d418eae145ee0d5b84fe5",
-                "reference": "ed941a3b56575326804d418eae145ee0d5b84fe5",
+                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/2aa5d56af9ab5ac221acf0e4c3f05652b43082ad",
+                "reference": "2aa5d56af9ab5ac221acf0e4c3f05652b43082ad",
                 "shasum": ""
             },
             "require": {
@@ -1323,6 +1323,10 @@
                 "nowo-tech/transaction-contract": "^1.0",
                 "php": ">=8.2 <8.6",
                 "psr/log": "^1.0 || ^2.0 || ^3.0"
+            },
+            "conflict": {
+                "symfony/http-kernel": "<6.4",
+                "symfony/messenger": "<6.4"
             },
             "require-dev": {
                 "doctrine/orm": "^3.0",
@@ -1334,16 +1338,36 @@
                 "phpstan/phpstan": "^2.0",
                 "phpstan/phpstan-phpunit": "^2.0",
                 "phpunit/phpunit": "^10.0 || ^11.0",
-                "rector/rector": "^2.0"
+                "rector/rector": "^2.0",
+                "symfony/clock": "^6.4 || ^7.0 || ^8.0",
+                "symfony/config": "^6.4 || ^7.0 || ^8.0",
+                "symfony/dependency-injection": "^6.4 || ^7.0 || ^8.0",
+                "symfony/event-dispatcher": "^6.4 || ^7.0 || ^8.0",
+                "symfony/framework-bundle": "^6.4 || ^7.0 || ^8.0",
+                "symfony/http-foundation": "^6.4 || ^7.0 || ^8.0",
+                "symfony/http-kernel": "^6.4 || ^7.0 || ^8.0",
+                "symfony/messenger": "^6.4 || ^7.0 || ^8.0",
+                "symfony/property-access": "^6.4 || ^7.0 || ^8.0",
+                "symfony/security-core": "^6.4 || ^7.0 || ^8.0",
+                "symfony/serializer": "^6.4 || ^7.0 || ^8.0",
+                "symfony/translation": "^6.4 || ^7.0 || ^8.0",
+                "symfony/twig-bundle": "^6.4 || ^7.0 || ^8.0",
+                "symfony/yaml": "^6.4 || ^7.0 || ^8.0",
+                "twig/twig": "^3.0"
             },
             "suggest": {
-                "doctrine/orm": "For DoctrineTransactionRunner::forEntityManager()",
-                "doctrine/persistence": "To reset a closed entity manager through a ManagerRegistry"
+                "doctrine/orm": "For DoctrineTransactionRunner::forEntityManager() and write units on entity managers",
+                "doctrine/persistence": "To reset a closed entity manager through a ManagerRegistry (required by WriteUnit)",
+                "nowo-tech/ui-kit-bundle": "The conflict page extends UiKit's error page when UiKit is installed",
+                "symfony/clock": "To pause between write-unit attempts through the Symfony clock (testable)",
+                "symfony/http-kernel": "For the optional NowoTransactionDoctrineBundle (#[AsWriteUnit], 409 conflict responder, worker hygiene)",
+                "symfony/messenger": "For WriteUnitMiddleware (replays a consumed message after a lock conflict)",
+                "twig/twig": "For the branded HTML conflict page (overridable template)"
             },
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-main": "1.1.x-dev"
+                    "dev-main": "1.3.x-dev"
                 }
             },
             "autoload": {
@@ -1367,7 +1391,7 @@
                     "homepage": "https://nowo.tech"
                 }
             ],
-            "description": "Safe plain-Doctrine default for nowo-tech/transaction-contract: a one-attempt TransactionRunnerInterface that never leaves a poisoned connection (close instead of a failing rollback after a nested deadlock), plus the transient-failure classifier and connection repairer. No Symfony.",
+            "description": "Safe plain-Doctrine default for nowo-tech/transaction-contract: a one-attempt TransactionRunnerInterface that never leaves a poisoned connection (close instead of a failing rollback after a nested deadlock), the transient-failure classifier and connection repairer, and write units that replay a deadlock or lock wait timeout. Optional Symfony bundle: #[AsWriteUnit], Messenger middleware, 409 + Retry-After conflict responder, worker connection hygiene.",
             "homepage": "https://github.com/nowo-tech/transaction-doctrine",
             "keywords": [
                 "dbal",
@@ -1376,16 +1400,18 @@
                 "frankenphp",
                 "orm",
                 "savepoint",
+                "symfony",
                 "transaction",
-                "worker"
+                "worker",
+                "write-unit"
             ],
             "support": {
                 "docs": "https://github.com/nowo-tech/transaction-doctrine#documentation",
                 "issues": "https://github.com/nowo-tech/transaction-doctrine/issues",
                 "source": "https://github.com/nowo-tech/transaction-doctrine"
             },
-            "time": "2026-11-17T08:11:35+00:00",
-            "published-time": "2026-11-17T08:12:45+00:00"
+            "time": "2026-11-17T16:37:42+00:00",
+            "published-time": "2026-11-17T16:41:28+00:00"
         },
         {
             "name": "nowo-tech/ui-kit-bundle",

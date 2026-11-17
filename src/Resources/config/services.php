@@ -29,6 +29,8 @@ use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
+use Nowo\ChatKitBundle\Http\ChatApiExceptionListener;
+use Nowo\ChatKitBundle\Http\ChatConflictResponseFormatter;
 use Nowo\ChatKitBundle\Link\ChatLinks;
 use Nowo\ChatKitBundle\Link\ChatLinkUrls;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
@@ -53,6 +55,7 @@ use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use Nowo\TransactionContract\TransactionRunnerInterface;
+use Nowo\TransactionDoctrine\Symfony\Conflict\ConflictResponseFormatterInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -85,6 +88,8 @@ return static function (ContainerConfigurator $container): void {
             '../../Push/DeliverChatPushMessage.php',
             '../../Digest/SendChatDigestMessage.php',
             '../../Http/ChatApiException.php',
+            // 1.34: registered below only when nowo-tech/transaction-doctrine's Symfony conflict API exists.
+            '../../Http/ChatConflictResponseFormatter.php',
             '../../Service/ChatChannelDeniedException.php',
             '../../Realtime/ChatTopics.php',
             // 1.27: the port gates and value copies are built by Ports (ChatKitPortsPass), never autowired.
@@ -149,6 +154,12 @@ return static function (ContainerConfigurator $container): void {
             // 1.30: a shared manager closed by a failed chat write is replaced at the boundary (never mid-request).
             service(ChatKitTransactionRunner::SERVICE_ID)->ignoreOnUninitialized(),
         ]));
+    // 1.34: the shared lock-conflict policy (409 by default); absent when the host did not register nowo-tech/transaction-doctrine's bundle (the listener then uses 409 + 1 s).
+    $services->set(ChatApiExceptionListener::class)
+        ->arg('$policy', service('nowo_transaction_doctrine.conflict_response_policy')->nullOnInvalid());
+    if (interface_exists(ConflictResponseFormatterInterface::class)) {
+        $services->set(ChatConflictResponseFormatter::class)->tag(ConflictResponseFormatterInterface::TAG);
+    }
     // 1.30: ChatKit's runner (the extension sets the private manager's name and mode).
     $services->set(ChatKitTransactionRunner::SERVICE_ID, ChatKitTransactionRunner::class)
         ->args([service(EntityManagerInterface::class), service('doctrine'), null, false, 1, service('logger')->nullOnInvalid()]);

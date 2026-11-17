@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.34.0] - 2026-11-18](#1340---2026-11-18)
+  - [Changed](#changed)
+  - [Added](#added)
 - [[1.33.0] - 2026-11-17](#1330---2026-11-17)
 - [[1.32.0] - 2026-11-16](#1320---2026-11-16)
 - [[1.31.1] - 2026-11-15](#1311---2026-11-15)
@@ -71,6 +74,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.34.0] - 2026-11-18
+
+### Changed
+
+- **A final lock conflict answers 409 + `Retry-After` (was 503)** (owner platform decision; same as TimeTrack 1.30 and Wiki 1.42). A transient storage failure on a ChatKit route (deadlock, lock wait timeout, serialization failure, `TransientStorageFailure`) now answers the status of the shared `ConflictResponsePolicy` of nowo-tech/transaction-doctrine (required `^1.3`): **409** by default, 503 with `nowo_transaction_doctrine.conflict_response.status: 503`; `Retry-After` is the runner's hint, else the policy's. The API body stays `{"ok": false, "error": "unavailable"}`; the unique-key / optimistic-lock 409 (`"conflict"`) is unchanged. The chat page routes now throw an `HttpException` with the policy's status instead of `ServiceUnavailableHttpException`. A conflict that already committed (`ConcurrencyConflict`, `committed: true`) gets the same status with **no** `Retry-After` and a reload message (`message`: "Part of your change may have been saved. Reload before trying again."). Hosts that never register `NowoTransactionDoctrineBundle` also move to 409 (fallback policy: 409, 1 s). See UPGRADING.
+
+### Added
+
+- `Http\ChatConflictResponseFormatter`, a `ConflictResponseFormatterInterface` (tag `nowo_transaction_doctrine.conflict_response_formatter`, registered only when the interface exists): a host that lists ChatKit routes in `nowo_transaction_doctrine.controller_routes` gets ChatKit's JSON shape on `nowo_chat_api_*` routes instead of the library's `{"error": "concurrency_conflict"}`. Pages and other routes fall through. Stateless (worker mode, kernel reset off).
 
 ## [1.33.0] - 2026-11-17
 
