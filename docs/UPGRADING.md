@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.33.0](#to-1330)
 - [To 1.32.0](#to-1320)
 - [To 1.31.1](#to-1311)
 - [To 1.31.0](#to-1310)
@@ -77,6 +78,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.33.0
+
+From **1.32.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 Requires `nowo-tech/ui-kit-bundle` **^2.54** (`composer update nowo-tech/ui-kit-bundle nowo-tech/chat-kit-bundle`). No BC break
 in behaviour, but the markup changes: hosts with snapshot (golden-file) tests of the dock or message markup, or of the dock
