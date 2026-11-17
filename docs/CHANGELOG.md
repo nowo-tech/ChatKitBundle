@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.34.1] - 2026-11-18](#1341---2026-11-18)
+  - [Fixed](#fixed)
 - [[1.34.0] - 2026-11-18](#1340---2026-11-18)
   - [Changed](#changed)
   - [Added](#added)
@@ -74,6 +76,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
 
 ## [Unreleased]
+
+## [1.34.1] - 2026-11-18
+
+### Fixed
+
+- **A sent message no longer stays on "Sending…" when its realtime echo arrives before the send response** (reported by Beacon; 1.26.1–1.34.0, visible in 1.32 and 1.33). The Mercure echo painted the message first; the 201 then carried the same message, which the thread skipped as already shown (the 1.26.1 "nothing new, no repaint" path), so the pending line was never removed. The dock now reconciles by the server message id when the send response arrives: the pending line leaves and the message is shown exactly once, whether the echo came before or after the response (a catch-up or resync that replays it adds nothing). A send whose response is lost (network error or 5xx, never a 4xx refusal) after its echo was shown counts as delivered when exactly one unclaimed own message with the same text arrived while it was on its way and no other send was in flight; anything ambiguous stays failed with its retry button. No server or API change (no client nonce: matching by id needs none). The 1.33 message menu works on the reconciled line. Covered by Vitest (echo before / after the response, failed response after the echo, two quick sends, someone else's message meanwhile) and a demo Playwright spec that holds the 201 until the echo is painted (`echo-before-post.spec.ts`).
 
 ## [1.34.0] - 2026-11-18
 

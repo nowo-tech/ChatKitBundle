@@ -293,6 +293,151 @@ describe('ThreadView', () => {
     expect(view.element.querySelectorAll('.nowo-chat-msg--mine')).toHaveLength(1);
   });
 
+  describe('1.34.1: the realtime echo and the send response, in either order', () => {
+    function deferred<T>() {
+      let resolve!: (value: T) => void;
+      let reject!: (reason: unknown) => void;
+      const promise = new Promise<T>((ok, ko) => {
+        resolve = ok;
+        reject = ko;
+      });
+      return { promise, resolve, reject };
+    }
+    const pendingNodes = (view: ThreadView) => view.element.querySelectorAll('.nowo-chat-msg--pending');
+    const sendText = async (q: ReturnType<typeof setup>['q'], text: string) => {
+      const input = q<HTMLTextAreaElement>('.nowo-chat-composer__input');
+      input.value = text;
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+      await vi.advanceTimersByTimeAsync(0);
+    };
+
+    it('an echo before the response: no "Sending" left and exactly one line for the message', async () => {
+      const { view, api, q } = setup();
+      view.merge([msg({ html: '<p>earlier</p>' })], false);
+      const response = deferred<ChatMessage>();
+      api.send.mockReturnValueOnce(response.promise);
+      await sendText(q, 'now');
+      expect(pendingNodes(view)).toHaveLength(1);
+      const saved = msg({ mine: true, authorUuid: 'me', html: '<p>now</p>' });
+      // The echo is viewer-neutral (no mentionsMe), the response is the viewer's copy: either way one line.
+      view.merge([{ ...saved, mentionsMe: undefined }], true);
+      response.resolve({ ...saved, mentionsMe: false });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pendingNodes(view)).toHaveLength(0);
+      expect(view.element.textContent).not.toContain('Sending');
+      expect(view.element.querySelectorAll(`.nowo-chat-msg[data-id="${saved.id}"]`)).toHaveLength(1);
+    });
+
+    it('an identical echo before the response (nothing to repaint) still drops the pending line', async () => {
+      const { view, api, q } = setup();
+      const response = deferred<ChatMessage>();
+      api.send.mockReturnValueOnce(response.promise);
+      await sendText(q, 'same');
+      const saved = msg({ mine: true, authorUuid: 'me', html: '<p>same</p>' });
+      view.merge([saved], true);
+      expect(pendingNodes(view)).toHaveLength(1);
+      response.resolve({ ...saved });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pendingNodes(view)).toHaveLength(0);
+      expect(view.element.querySelectorAll(`.nowo-chat-msg[data-id="${saved.id}"]`)).toHaveLength(1);
+    });
+
+    it('an echo after the response renders no duplicate', async () => {
+      const { view, api, q } = setup();
+      const saved = msg({ mine: true, authorUuid: 'me', html: '<p>later</p>' });
+      api.send.mockResolvedValueOnce(saved);
+      await sendText(q, 'later');
+      expect(pendingNodes(view)).toHaveLength(0);
+      view.merge([{ ...saved }], true);
+      // A reconnect / resync replaying it is the same id again.
+      view.merge([{ ...saved }], false);
+      expect(view.element.querySelectorAll(`.nowo-chat-msg[data-id="${saved.id}"]`)).toHaveLength(1);
+      expect(view.element.querySelectorAll('.nowo-chat-msg--mine')).toHaveLength(1);
+    });
+
+    it('an echo, then a lost response (network error): delivered once, not failed', async () => {
+      const { view, api, q } = setup();
+      const response = deferred<ChatMessage>();
+      api.send.mockReturnValueOnce(response.promise);
+      await sendText(q, 'hola  **Ana**');
+      const saved = msg({ mine: true, authorUuid: 'me', html: '<p>hola <strong>Ana</strong></p>' });
+      // Someone else's message while ours is on its way is not ours.
+      view.merge([msg({ html: '<p>hola Ana</p>' })], true);
+      view.merge([saved], true);
+      response.reject(new TypeError('Failed to fetch'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pendingNodes(view)).toHaveLength(0);
+      expect(view.element.querySelector('.nowo-chat-msg--failed')).toBeNull();
+      expect(view.element.querySelectorAll(`.nowo-chat-msg[data-id="${saved.id}"]`)).toHaveLength(1);
+    });
+
+    it('an echo, then a refusal or an unmatched failure: the echo stays once and the pending line shows the error', async () => {
+      const { view, api, q } = setup();
+      const refused = deferred<ChatMessage>();
+      api.send.mockReturnValueOnce(refused.promise);
+      await sendText(q, 'uno');
+      const echo = msg({ mine: true, authorUuid: 'me', html: '<p>uno</p>' });
+      view.merge([echo], true);
+      // A 4xx saved nothing: the echo is another tab's message, the send failed.
+      refused.reject(new ChatApiError(429, 'rate_limited'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(view.element.querySelector('.nowo-chat-msg--failed')?.textContent).toContain('Slow down');
+      expect(view.element.querySelectorAll(`.nowo-chat-msg[data-id="${echo.id}"]`)).toHaveLength(1);
+      expect(view.element.textContent).not.toContain('Sending');
+
+      // A network error whose text matches no echo stays failed too (never silently dropped).
+      const lost = deferred<ChatMessage>();
+      api.send.mockReturnValueOnce(lost.promise);
+      await sendText(q, 'dos');
+      view.merge([msg({ mine: true, authorUuid: 'me', html: '<p>otro</p>' })], true);
+      lost.reject(new TypeError('Failed to fetch'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(view.element.querySelectorAll('.nowo-chat-msg--failed')).toHaveLength(2);
+      expect(view.element.textContent).not.toContain('Sending');
+    });
+
+    it('two quick sends, echoes and responses interleaved: one line each, nothing pending', async () => {
+      const { view, api, q } = setup();
+      const first = deferred<ChatMessage>();
+      const second = deferred<ChatMessage>();
+      api.send.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+      await sendText(q, 'a');
+      await sendText(q, 'b');
+      expect(pendingNodes(view)).toHaveLength(2);
+      const a = msg({ mine: true, authorUuid: 'me', html: '<p>a</p>' });
+      const b = msg({ mine: true, authorUuid: 'me', html: '<p>b</p>' });
+      view.merge([a], true);
+      view.merge([b], true);
+      second.resolve({ ...b });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pendingNodes(view)).toHaveLength(1);
+      expect(view.element.querySelector('.nowo-chat-msg--pending .nowo-chat-bubble')?.textContent).toBe('a');
+      first.resolve({ ...a });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(pendingNodes(view)).toHaveLength(0);
+      expect([...view.element.querySelectorAll<HTMLElement>('.nowo-chat-msg--mine')].map((node) => Number(node.dataset.id))).toEqual([a.id, b.id]);
+    });
+
+    it('two quick sends with the same text: a lost response stays failed while the other is on its way', async () => {
+      const { view, api, q } = setup();
+      const first = deferred<ChatMessage>();
+      const second = deferred<ChatMessage>();
+      api.send.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+      await sendText(q, 'ok');
+      await sendText(q, 'ok');
+      const echo = msg({ mine: true, authorUuid: 'me', html: '<p>ok</p>' });
+      view.merge([echo], true);
+      first.reject(new TypeError('Failed to fetch'));
+      await vi.advanceTimersByTimeAsync(0);
+      // Ambiguous (the echo may be the second send's): the first stays failed with its retry button.
+      expect(view.element.querySelectorAll('.nowo-chat-msg--failed')).toHaveLength(1);
+      second.resolve({ ...echo });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(view.element.querySelectorAll('.nowo-chat-msg--sending, .nowo-chat-msg--pending:not(.nowo-chat-msg--failed)')).toHaveLength(0);
+      expect(view.element.querySelectorAll(`.nowo-chat-msg[data-id="${echo.id}"]`)).toHaveLength(1);
+    });
+  });
+
   it('sends optimistically, confirms, and keeps failed messages with retry', async () => {
     const { view, api, host, q } = setup();
     const input = q<HTMLTextAreaElement>('.nowo-chat-composer__input');
@@ -1042,6 +1187,23 @@ describe('ThreadView', () => {
         // A tap on the kebab toggle does not fold the message's actions (touch screens).
         details.querySelector('summary')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         expect(ctx.article(theirs.id).classList.contains('is-active')).toBe(false);
+      });
+
+      it('1.34.1: the line reconciled from an echo before the send response keeps its menu and strips UiKit attributes', async () => {
+        const ctx = await loaded([], { canPin: true }, withMenu);
+        let resolve!: (value: ChatMessage) => void;
+        ctx.api.send.mockReturnValueOnce(new Promise<ChatMessage>((ok) => (resolve = ok)));
+        const input = ctx.q<HTMLTextAreaElement>('.nowo-chat-composer__input');
+        input.value = 'hi';
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+        await vi.advanceTimersByTimeAsync(0);
+        const saved = msg({ mine: true, authorUuid: 'me', uuid: 'sent', createdAt: now.toISOString(), html: '<p data-nowo-ui-context-menu="x">hi</p>' });
+        ctx.view.merge([saved], true);
+        resolve({ ...saved });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(ctx.view.element.querySelector('.nowo-chat-msg--pending')).toBeNull();
+        expect(shown(ctx.article(saved.id))).toEqual(['reply', 'edit', 'copy-link', 'pin', 'delete']);
+        expect((ctx.article(saved.id).querySelector('[data-part="bubble"]') as HTMLElement).innerHTML).toBe('<p>hi</p>');
       });
 
       it('never keeps UiKit context-menu or card attributes in a message body', async () => {
