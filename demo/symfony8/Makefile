@@ -159,6 +159,7 @@ test-e2e-context-menu: ensure-up
 		bash -lc 'npm install --no-fund --no-audit && npx playwright test tests/context-menu.spec.ts tests/context-menu-touch.spec.ts --project=chromium --project=context-menu-touch'
 
 # 1.26.2 (audit LN-I4): the realtime resync spec alone, Chromium only; the CI workflow runs it on every pull request.
+# 1.34.1: with the echo-before-the-send-response spec (scripted hub too).
 test-e2e-resync: ensure-up
 	@mkdir -p e2e/node_modules
 	@PORT=$$(grep "^PORT=" .env 2>/dev/null | cut -d= -f2 | tr -d '\r'); \
@@ -167,7 +168,7 @@ test-e2e-resync: ensure-up
 		-v "$(CURDIR)/e2e:/e2e" -w /e2e \
 		-e CI -e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
 		$(PLAYWRIGHT_IMAGE) \
-		bash -lc 'npm install --no-fund --no-audit && npx playwright test tests/resync.spec.ts --project=chromium'
+		bash -lc 'npm install --no-fund --no-audit && npx playwright test tests/resync.spec.ts tests/echo-before-post.spec.ts --project=chromium'
 
 demo-screenshots: ensure-up
 	@mkdir -p ../../docs/images/demo e2e/node_modules

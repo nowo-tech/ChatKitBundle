@@ -127,6 +127,12 @@ export class ThreadView {
   private summary: ConversationSummary;
   private messages: ChatMessage[] = [];
   private pending: PendingMessage[] = [];
+  /**
+   * 1.34.1: own messages that arrived live (the realtime echo, a catch-up or another tab) while a send was on its way
+   * and that no send response has claimed yet. A send whose response is lost after the server saved it can still be
+   * matched with its echo (see echoOf()).
+   */
+  private readonly ownEchoes = new Set<number>();
   private hasMore = false;
   /** 1.10: pinned messages (latest pin first), the bar above the thread and whether the viewer may pin. */
   private pins: ChatMessage[] = [];
@@ -1070,11 +1076,15 @@ export class ThreadView {
     const fresh: ChatMessage[] = [];
     // 1.26.1 (audit LN-DL1): a message already shown is applied only when its content changed, and repainted in place.
     const changed: ChatMessage[] = [];
+    const sending = this.pending.some((item) => item.status === 'sending');
     for (const message of incoming) {
       const current = known.get(message.id);
       if (current === undefined) {
         fresh.push(message);
         known.set(message.id, message);
+        if (sending && message.mine) {
+          this.ownEchoes.add(message.id);
+        }
       } else if (!sameMessage(current, message)) {
         const merged = { ...message, mine: current.mine };
         changed.push(merged);
@@ -1652,11 +1662,14 @@ export class ThreadView {
     pending.status = 'sending';
     this.render();
     try {
-      const message = await this.host.api.send(this.summary.uuid, pending.body);
-      this.pending = this.pending.filter((item) => item !== pending);
-      this.merge([message], true);
-      this.markReadLocally(message.id);
+      this.settle(pending, await this.host.api.send(this.summary.uuid, pending.body));
     } catch (error) {
+      const echoed = this.echoOf(pending, error);
+      if (echoed !== undefined) {
+        // The server saved it (its echo is shown) but the response was lost: delivered, not failed.
+        this.settle(pending, echoed);
+        return;
+      }
       pending.status = 'failed';
       const i18n = this.host.config.i18n;
       const code = error instanceof ChatApiError ? error.code : '';
@@ -1670,8 +1683,57 @@ export class ThreadView {
       } else {
         pending.error = t(i18n, 'error');
       }
+      if (!this.pending.some((item) => item.status === 'sending')) {
+        this.ownEchoes.clear();
+      }
       this.render();
     }
+  }
+
+  /**
+   * 1.34.1: a pending message was delivered. Its "Sending…" line leaves and the server's copy is shown once, whether
+   * the realtime echo painted it before the response (merge() then has nothing new to paint: the line is dropped by a
+   * render) or comes after it (merge() ignores a known id).
+   *
+   * @param pending The delivered pending message.
+   * @param message The server's copy.
+   */
+  private settle(pending: PendingMessage, message: ChatMessage): void {
+    this.pending = this.pending.filter((item) => item !== pending);
+    this.merge([message], true);
+    // After merge(): our own response is not an unclaimed echo for another send still on its way.
+    this.ownEchoes.delete(message.id);
+    if (!this.pending.some((item) => item.status === 'sending')) {
+      this.ownEchoes.clear();
+    }
+    if (this.log.querySelectorAll('.nowo-chat-msg--pending').length !== this.pending.length) {
+      this.render();
+    }
+    this.markReadLocally(message.id);
+  }
+
+  /**
+   * 1.34.1: a send failed without a refusal from the server (network error, 5xx): if exactly one unclaimed own message
+   * with the same text arrived live while it was on its way (and no other send is on its way), the server saved it and
+   * only the response was lost. A refusal (4xx) saved nothing. Anything ambiguous stays failed, with its retry button
+   * (never silently dropped).
+   *
+   * @param pending The pending message whose send failed.
+   * @param error The error of the send.
+   * @returns The echoed copy, or undefined.
+   */
+  private echoOf(pending: PendingMessage, error: unknown): ChatMessage | undefined {
+    // Another send on its way could own that echo: ambiguous.
+    if ((error instanceof ChatApiError && error.status >= 400 && error.status < 500) || this.pending.some((item) => item !== pending && item.status === 'sending')) {
+      return undefined;
+    }
+    // The composer text is Markdown, the echo is HTML: compare the words, without emphasis / code marks.
+    const normalise = (value: string): string => value.replace(/[*_~`]/g, '').replace(/\s+/g, ' ').trim();
+    const sent = normalise(decodeMentions(decodeReferences(decodeLinkTokens(pending.body)).text).text);
+    const matches = this.messages.filter(
+      (message) => this.ownEchoes.has(message.id) && message.kind === 'text' && !message.deleted && normalise(plain(message.html)) === sent,
+    );
+    return matches.length === 1 ? matches[0] : undefined;
   }
 
   /**
