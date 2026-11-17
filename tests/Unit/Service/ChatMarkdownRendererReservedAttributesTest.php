@@ -30,8 +30,9 @@ final class ChatMarkdownRendererReservedAttributesTest extends TestCase
         yield 'card' => ['<blockquote data-nowo-ui-card><p>q</p></blockquote>', '<blockquote><p>q</p></blockquote>'];
         yield 'several on one tag' => ['<p data-nowo-ui-card data-mention="u1" data-nowo-ui-context-menu="m">a</p>', '<p data-mention="u1">a</p>'];
         yield 'self-closing' => ['<br data-nowo-ui-context-menu="x"/>', '<br/>'];
-        yield 'a look-alike stays' => ['<p data-nowo-ui-cards="1" data-nowo-ui-menu>a</p>', '<p data-nowo-ui-cards="1" data-nowo-ui-menu>a</p>'];
-        yield 'text between tags stays' => ['<p>data-nowo-ui-context-menu="x"</p>', '<p>data-nowo-ui-context-menu="x"</p>'];
+        // Fail closed (audit SQ2-L1): a name that is left anywhere — a look-alike attribute, text — is renamed.
+        yield 'a look-alike is renamed' => ['<p data-nowo-ui-cards="1" data-nowo-ui-menu>a</p>', '<p data-removed-cards="1" data-nowo-ui-menu>a</p>'];
+        yield 'text between tags is renamed' => ['<p>data-nowo-ui-context-menu="x"</p>', '<p>data-removed-context-menu="x"</p>'];
         // Audit SQ-L1: the separators the HTML tokenizer accepts.
         yield 'slash separator' => ['<p/data-nowo-ui-context-menu="admin-menu">a</p>', '<p/>a</p>'];
         yield 'right after a quoted value' => ['<p class="a"data-nowo-ui-card>b</p>', '<p class="a">b</p>'];
@@ -42,6 +43,39 @@ final class ChatMarkdownRendererReservedAttributesTest extends TestCase
         yield 'newline and tab separators' => ["<p\ndata-nowo-ui-card\tclass=\"c\">g</p>", "<p\tclass=\"c\">g</p>"];
         yield 'a tag left open' => ['<p>h</p><p data-nowo-ui-card', '<p>h</p><p'];
         yield 'nothing to strip' => ['<p><strong>b</strong></p>', '<p><strong>b</strong></p>'];
+    }
+
+    /**
+     * Audit SQ2-L1: contexts the tag reader does not model (comments, declarations, raw-text and RCDATA elements), where a
+     * fake tag with an open quote swallows the real one. The fail-closed pass leaves no reserved name anywhere.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function hiddenContextProvider(): iterable
+    {
+        yield 'comment' => ['<!--<a title="--><p data-nowo-ui-card title="x">t</p>'];
+        yield 'comment, single quote' => ["<!--<a title='--><p data-nowo-ui-context-menu=\"m\" title='x'>t</p>"];
+        yield 'bogus comment' => ['<!x <a title="><p data-nowo-ui-card title="x">t</p>'];
+        yield 'CDATA' => ['<![CDATA[<a title="]]><p data-nowo-ui-card title="x">t</p>'];
+        yield 'processing instruction' => ['<?x <a title="?><p data-nowo-ui-card title="x">t</p>'];
+        yield 'script' => ['<script><a title="</script><p data-nowo-ui-card title="x">t</p>'];
+        yield 'style' => ['<style><a title="</style><p data-nowo-ui-card title="x">t</p>'];
+        yield 'textarea' => ['<textarea><a title="</textarea><p data-nowo-ui-card title="x">t</p>'];
+        yield 'title' => ['<title><a title="</title><p data-nowo-ui-card title="x">t</p>'];
+        yield 'xmp' => ['<xmp><a title="</xmp><p data-nowo-ui-card title="x">t</p>'];
+        yield 'iframe' => ['<iframe><a title="</iframe><p data-nowo-ui-card title="x">t</p>'];
+        yield 'noembed' => ['<noembed><a title="</noembed><p data-nowo-ui-card title="x">t</p>'];
+        yield 'noscript' => ['<noscript><a title="</noscript><p data-nowo-ui-context-menu-source title="x">t</p>'];
+        yield 'end tag swallow' => ['</x title="><p data-nowo-ui-card title="x">t</p>'];
+        yield 'plaintext' => ['<plaintext><a title="<p data-nowo-ui-card title="x">t'];
+    }
+
+    #[DataProvider('hiddenContextProvider')]
+    public function testNoReservedNameSurvivesHiddenContexts(string $html): void
+    {
+        $stripped = ChatMarkdownRenderer::stripAttributes($html);
+        self::assertDoesNotMatchRegularExpression('~data-nowo-ui-(?:context-menu|card)~i', $stripped);
+        self::assertStringContainsString('t', $stripped);
     }
 
     #[DataProvider('htmlProvider')]

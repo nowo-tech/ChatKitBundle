@@ -40,6 +40,9 @@ final class ChatMarkdownRenderer
     /** 1.33: the UiKit card marker, also reserved (see RESERVED_ATTRIBUTE_PREFIX). */
     public const string RESERVED_CARD_ATTRIBUTE = 'data-nowo-ui-card';
 
+    /** 1.33 (audit SQ2-L1): any occurrence of a reserved name, renamed after the tag reader (fail closed). */
+    private const string RESERVED_NAME = '~data-nowo-ui-(context-menu|card)~i';
+
     /**
      * Builds the renderer.
      *
@@ -149,7 +152,9 @@ final class ChatMarkdownRenderer
      * which the presenter passes through it too, and the server-rendered page (`message.html|raw`, no browser strip).
      * Tags are read the way the HTML tokenizer reads them (audit SQ-L1): an attribute name ends at whitespace, `/`, `>`
      * or `=`; a quoted value at its closing quote (the next attribute may follow at once); an unquoted value, backticks
-     * included, at whitespace or `>`. Text between tags is left as it is (an escaped `data-nowo-ui-card` is only text).
+     * included, at whitespace or `>`. Then, failing closed (audit SQ2-L1), every occurrence of the reserved names that is
+     * left anywhere — inside a comment, a declaration or a raw-text element the reader does not model, or as text — is
+     * renamed `data-removed-…`, so no element of the result can carry them.
      *
      * @param string $html Message HTML
      *
@@ -170,7 +175,10 @@ final class ChatMarkdownRenderer
             $out .= $tag;
         }
 
-        return $out . substr($html, $offset);
+        // Audit SQ2-L1, fail closed: the reader above does not know comments, declarations or raw-text elements, where
+        // a fake tag could hide a real one. Message HTML has no use for these names: any occurrence left (in text, a
+        // comment, a swallowed tag) is renamed, so no element can carry them.
+        return (string) preg_replace(self::RESERVED_NAME, 'data-removed-$1', $out . substr($html, $offset));
     }
 
     /**

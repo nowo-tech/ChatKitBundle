@@ -80,7 +80,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Security
 
-- Message bodies never carry UiKit's context-menu or card attributes (UiKit 2.54 SECURITY): `ChatMarkdownRenderer::stripAttributes()` (an HTML-tokenizer reading of every tag: `/`, a closing quote or whitespace separate attributes, backticks stay in unquoted values) removes `data-nowo-ui-context-menu*` and `data-nowo-ui-card` from the render and from every message the presenter returns (stored HTML of older versions or written by the application, reference cards, bot lines), and the dock strips them again in the browser, so a message can never open another element's kebab items on right-click.
+- Message bodies never carry UiKit's context-menu or card attributes (UiKit 2.54 SECURITY): `ChatMarkdownRenderer::stripAttributes()` (an HTML-tokenizer reading of every tag: `/`, a closing quote or whitespace separate attributes, backticks stay in unquoted values; then, failing closed, every occurrence of the two names left anywhere — comments, declarations, raw-text elements, text — is renamed `data-removed-…`) removes `data-nowo-ui-context-menu*` and `data-nowo-ui-card` from the render and from every message the presenter returns (stored HTML of older versions or written by the application, reference cards, bot lines), and the dock strips them again in the browser, so a message can never open another element's kebab items on right-click.
 
 ### Changed
 
