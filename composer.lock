@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2a0f168533fbe55dad4602a7625d38fa",
+    "content-hash": "186a162200f23d0d82f5ab5a3473f8ac",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -938,16 +938,16 @@
         },
         {
             "name": "nowo-tech/form-kit-bundle",
-            "version": "v2.17.0",
+            "version": "v2.23.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/FormKitBundle.git",
-                "reference": "dbee72ff64fbc452da5865637815d26d6c223019"
+                "reference": "1a95181865f6f7f2dd076fb6b1e32c0a41e23634"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/FormKitBundle/zipball/dbee72ff64fbc452da5865637815d26d6c223019",
-                "reference": "dbee72ff64fbc452da5865637815d26d6c223019",
+                "url": "https://api.github.com/repos/nowo-tech/FormKitBundle/zipball/1a95181865f6f7f2dd076fb6b1e32c0a41e23634",
+                "reference": "1a95181865f6f7f2dd076fb6b1e32c0a41e23634",
                 "shasum": ""
             },
             "require": {
@@ -968,7 +968,7 @@
                 "friendsofphp/php-cs-fixer": "^3.95.11",
                 "igor-php/igor-php": "^0.10.0",
                 "nowo-tech/phpstan-frankenphp": "^1.0",
-                "nowo-tech/ui-kit-bundle": "^2.15",
+                "nowo-tech/ui-kit-bundle": "^2.43",
                 "phpstan/extension-installer": "^1.2",
                 "phpstan/phpstan": "^2.0",
                 "phpstan/phpstan-phpunit": "^2.0",
@@ -997,7 +997,7 @@
                 "nowo-tech/slide-to-confirm-bundle": "For addSlideToConfirm() / addSlideToConfirmField() / addSlideToConfirmFieldType()",
                 "nowo-tech/tag-input-bundle": "For addTagInput() / addTagInputField() / addTagInputFieldType()",
                 "nowo-tech/tiptap-editor-bundle": "For addTiptapEditor() / addTiptapEditorField() / addTiptapEditorFieldType()",
-                "nowo-tech/ui-kit-bundle": "^2.15.0: addDateRange() / addDateRangeField() / addDateRangeFieldType() (date range filter field); ^2.5.3: locale tabs (locale_tabs option, TranslatableMapType, _locale_tabs include) render through the UiKit locale_tabs partial (WAI-ARIA tabs, no-JS fieldsets, keyboard, browser validation, Live Component safe); without it FormKit keeps its neutral markup",
+                "nowo-tech/ui-kit-bundle": "^2.43.1: the visible_when option's rows are hidden by the visible-when peer with chained rules (^2.23 without chains); ^2.43.0: the crop option on FileType gets translated dialog labels (UiKit ImageCrop) and the image-crop script that reads its attributes; ^2.37.0: addEmojiPicker() / addEmojiPickerField() / addEmojiPickerFieldType() (emoji picker field); ^2.15.0: addDateRange() / addDateRangeField() / addDateRangeFieldType() (date range filter field); ^2.5.3: locale tabs (locale_tabs option, TranslatableMapType, _locale_tabs include) render through the UiKit locale_tabs partial (WAI-ARIA tabs, no-JS fieldsets, keyboard, browser validation, Live Component safe); without it FormKit keeps its neutral markup",
                 "symfony/security-csrf": "Required by CsrfOnlyType / HiddenFieldsCsrfType / CsrfOnlyFormFactory / csrf_action_form(): without the form CSRF extension they throw (fail closed)",
                 "symfony/ux-autocomplete": "Entity autocomplete fields; use addAutocompleteField() / addAutocompleteFieldType() with your autocomplete FormType FQCN",
                 "symfony/ux-cropperjs": "For addCropper() / addCropperField() / addCropperFieldType() (image crop widget)",
@@ -1051,7 +1051,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-30T21:58:40+00:00"
+            "time": "2026-11-13T18:29:32+00:00",
+            "published-time": "2026-11-13T18:32:22+00:00"
         },
         {
             "name": "nowo-tech/transaction-contract",
@@ -1201,16 +1202,16 @@
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v2.42.1",
+            "version": "v2.51.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "9166d7374953104edd0bfaf69803ea1a015d6299"
+                "reference": "bd14774abdb7fb3bb755bf8fb2bf4aaee0258d15"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/9166d7374953104edd0bfaf69803ea1a015d6299",
-                "reference": "9166d7374953104edd0bfaf69803ea1a015d6299",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/bd14774abdb7fb3bb755bf8fb2bf4aaee0258d15",
+                "reference": "bd14774abdb7fb3bb755bf8fb2bf4aaee0258d15",
                 "shasum": ""
             },
             "require": {
@@ -1299,7 +1300,8 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-11-09T09:43:11+00:00"
+            "time": "2026-11-13T16:47:40+00:00",
+            "published-time": "2026-11-13T16:53:34+00:00"
         },
         {
             "name": "psr/cache",
@@ -6704,16 +6706,16 @@
         },
         {
             "name": "friendsofphp/php-cs-fixer",
-            "version": "v3.95.29",
+            "version": "v3.95.30",
             "source": {
                 "type": "git",
                 "url": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer.git",
-                "reference": "60e424d3e54b15b0174924fb123783aae0de7b0c"
+                "reference": "e85cafc4d861c122839d5409eda3325ac0ec0300"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/PHP-CS-Fixer/PHP-CS-Fixer/zipball/60e424d3e54b15b0174924fb123783aae0de7b0c",
-                "reference": "60e424d3e54b15b0174924fb123783aae0de7b0c",
+                "url": "https://api.github.com/repos/PHP-CS-Fixer/PHP-CS-Fixer/zipball/e85cafc4d861c122839d5409eda3325ac0ec0300",
+                "reference": "e85cafc4d861c122839d5409eda3325ac0ec0300",
                 "shasum": ""
             },
             "require": {
@@ -6796,7 +6798,7 @@
             ],
             "support": {
                 "issues": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/issues",
-                "source": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/tree/v3.95.29"
+                "source": "https://github.com/PHP-CS-Fixer/PHP-CS-Fixer/tree/v3.95.30"
             },
             "funding": [
                 {
@@ -6804,20 +6806,21 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-11-06T16:25:42+00:00"
+            "time": "2026-11-09T14:32:19+00:00",
+            "published-time": "2026-11-09T14:32:30+00:00"
         },
         {
             "name": "igor-php/igor-php",
-            "version": "v0.9.7",
+            "version": "v0.10.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/igor-php/igor-php.git",
-                "reference": "48935c8cf42d0764a9d54f22e9c290816c5caa91"
+                "reference": "a4f9153de9bae1e746a34dfb571462bcda6f4235"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/igor-php/igor-php/zipball/48935c8cf42d0764a9d54f22e9c290816c5caa91",
-                "reference": "48935c8cf42d0764a9d54f22e9c290816c5caa91",
+                "url": "https://api.github.com/repos/igor-php/igor-php/zipball/a4f9153de9bae1e746a34dfb571462bcda6f4235",
+                "reference": "a4f9153de9bae1e746a34dfb571462bcda6f4235",
                 "shasum": ""
             },
             "require": {
@@ -6852,9 +6855,10 @@
             ],
             "support": {
                 "issues": "https://github.com/igor-php/igor-php/issues",
-                "source": "https://github.com/igor-php/igor-php/tree/v0.9.7"
+                "source": "https://github.com/igor-php/igor-php/tree/v0.10.1"
             },
-            "time": "2026-09-22T20:33:54+00:00"
+            "time": "2026-10-02T23:10:19+00:00",
+            "published-time": "2026-10-02T23:16:11+00:00"
         },
         {
             "name": "masterminds/html5",
@@ -10918,5 +10922,5 @@
     "platform-overrides": {
         "php": "8.3.0"
     },
-    "plugin-api-version": "2.9.0"
+    "plugin-api-version": "2.11.0"
 }
