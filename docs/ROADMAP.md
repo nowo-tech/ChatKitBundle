@@ -14,7 +14,7 @@ business chat is expected to offer. It is a plan, not a commitment: every item b
 - [Later](#later)
 - [Considering](#considering)
 - [Non-goals](#non-goals)
-- [Open decisions](#open-decisions)
+- [Decided](#decided)
 
 ## Ground rules
 
@@ -119,24 +119,26 @@ Highest value for a team or business chat, building on what exists.
 
 ### Attachments and media
 
-- **File and image attachments.** Upload through a host storage port with size, type and count limits, a scan hook and
-  per-reader access checks; images get thumbnails. It is the largest gap: work chat is often about a document or a
+- **File and image attachments.** Stored through StorageKit, with size, type and count limits, a mandatory host scan
+  hook that must pass before anyone can see a file, and per-reader access checks; images get thumbnails. It is the largest gap: work chat is often about a document or a
   screenshot.
 - **Attachment gallery per conversation.** A "Files" tab next to the link index; people find a shared file without
   scrolling.
 
 ### Search
 
-- **Full-text message search.** Across the conversations the viewer may read, with filters (person, conversation, date,
-  has link or file), behind a search port so hosts can plug a search engine; finding past decisions is a core need.
+- **Full-text message search.** A built-in database full-text search, filtered per viewer to the conversations they may
+  read, with filters (person, conversation, date, has link or file); finding past decisions is a core need.
+- **Search palette provider.** A SearchKit provider so messages and conversations show up in the Ctrl/⌘+K palette of
+  the host; one search box for the whole application.
 - **Search inside one conversation** with jump-to-result in the timeline.
 
 ### Conversations and membership
 
-- **User-created group conversations.** Several people, a name, add and remove members, leave; colleagues need ad hoc
-  groups without a host-defined channel.
-- **Conversation roles.** Owner, admin and member, with rights to rename, manage members, pin and moderate; lets people
-  run their own spaces without application code.
+- **User-created group conversations.** A new `group` conversation kind, off by default: several people, a name, add
+  and remove members, leave; colleagues need ad hoc groups without a host-defined channel.
+- **Group roles.** Admin and member: admins rename, manage members, pin and moderate; lets people run their own groups
+  without application code.
 - **Channel directory.** Browse and join public channels, private channels by invitation, leave; today the dock only
   links to a host page.
 
@@ -162,6 +164,8 @@ Highest value for a team or business chat, building on what exists.
   build results into the conversation.
 - **Outgoing webhooks.** Signed delivery of message and ticket events to a host URL, with retries; lets other systems
   react without writing PHP listeners.
+- **Meeting link integration port.** A host port that creates a meeting in the system the host chooses and posts its
+  link into the conversation; calls without running real-time media in the bundle.
 - **Actionable slash commands.** Host-registered commands that run an action (create, assign, resolve) after a
   permission check; today `/` only inserts references.
 
@@ -202,8 +206,8 @@ Highest value for a team or business chat, building on what exists.
 Items with heavy privacy, security or infrastructure implications. Each needs an owner decision before a spec.
 
 - **Voice and video calls, screen share.** Real-time media needs a call set-up server, TURN relays, bandwidth and
-  recording rules; pinned call links already cover meetings held elsewhere. A first step could be an integration port
-  that starts a call in a host-chosen system and posts the link.
+  recording rules. Decided: if it is ever built, it is a separate package; the bundle itself only gets the meeting link
+  integration port (Next).
 - **Drop-in audio rooms per channel.** Same media infrastructure as calls, plus presence of who is in the room.
 - **End-to-end encryption.** Hides content from the server, which conflicts with search, link previews, references,
   moderation, retention purge, support agents and personal-data export; it also needs key management per device.
@@ -213,7 +217,7 @@ Items with heavy privacy, security or infrastructure implications. Each needs an
   retention rules and legal hold and needs a clear audit story.
 - **Single-view media.** Weak protection (screenshots) and conflicts with export and moderation.
 - **Guest and external accounts, channels shared between organisations.** Cross-tenant access widens the security
-  model (directory, access policy, retention owner, erasure); it needs a tenancy contract first.
+  model (directory, access policy, retention owner, erasure). Decided: this waits for a tenancy contract.
 - **Legal hold.** Suspends purge and erasure for selected people or conversations; legal and GDPR implications.
 - **Message translation.** Sends message text to a translation service; needs a host port and consent.
 - **Animated images and stickers from external catalogues.** Third-party requests and content moderation.
@@ -224,11 +228,14 @@ Items with heavy privacy, security or infrastructure implications. Each needs an
 - Public, anonymous chat rooms (every participant is a known host user).
 - Replacing the host's identity, user directory or file storage.
 
-## Open decisions
+## Decided
 
-1. Attachments: which storage port (an existing house storage contract or a new one), and whether a scan hook is
-   required before a file becomes visible.
-2. Search: a database implementation by default, or only the port with host engines.
-3. User-created groups: should they be a new conversation kind or channels with a bundle-side provider.
-4. Calls: integration port only, or real-time media in a separate package.
-5. Guests and cross-organisation channels: wait for a tenancy contract, or keep them out of scope.
+Owner decisions of 2026-11-18 on the questions this review raised.
+
+1. **Attachments** go through StorageKit, with a mandatory host scan hook before anyone can see a file.
+2. **Message search** is a built-in database full-text search filtered per viewer, plus a SearchKit provider for the
+   Ctrl/⌘+K palette.
+3. **User-created groups** are a new `group` conversation kind with admin and member roles, off by default.
+4. **Calls:** only an integration port that posts the meeting link. Real-time media stays under Considering, as a
+   separate package.
+5. **Guests and cross-organisation channels** wait for a tenancy contract and stay under Considering.

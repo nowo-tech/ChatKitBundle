@@ -219,7 +219,7 @@ ignored (warning, configured value applies); an exception stops the run before a
 message included: never put secrets in an exception message). A configured `retention_days` of 0 or less (for example
 an `%env(int:…)%` that coerced garbage to 0) makes the purge fail closed: error log, `FAILURE`, nothing deleted.
 The provider is global: it overrides `retention_days` for every profile. Validate the value you return (the example
-refuses anything that is not an integer of at least 1). Beacon-style example, reading an administration setting:
+refuses anything that is not an integer of at least 1). Example, reading an administration setting:
 
 ```php
 final class InstanceSettingsRetention implements RetentionPolicyProviderInterface
@@ -625,7 +625,7 @@ use Symfony\Component\DependencyInjection\Attribute\AsTaggedItem;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
-/** Beacon-like: the room channels the viewer belongs to (spec 184), "Browse channels" and "Create channel". */
+/** Example: the room channels the viewer belongs to, "Browse channels" and "Create channel". */
 #[AsTaggedItem(priority: 10)]
 final class RoomChannelsSidebar implements ChatSidebarSectionProviderInterface
 {
