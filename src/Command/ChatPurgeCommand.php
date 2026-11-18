@@ -6,8 +6,10 @@ namespace Nowo\ChatKitBundle\Command;
 
 use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationLinkRepository;
+use Nowo\ChatKitBundle\Repository\ChatIdempotencyKeyRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Repository\ChatReadMarkRepository;
+use Nowo\ChatKitBundle\Service\ChatIdempotency;
 use Nowo\ChatKitBundle\Support\ChatRetention;
 use Nowo\ChatKitBundle\Support\InvalidRetentionConfigurationException;
 use Nowo\ChatKitBundle\Support\RetentionUnavailableException;
@@ -48,6 +50,7 @@ final class ChatPurgeCommand extends Command
      * @param ChatConversationLinkRepository|null $links 1.19: pinned links not changed within the window go too (audit FZ-L3)
      * @param RetentionPolicyProviderInterface|null $retention 1.31: the host's retention, asked again on every run (null: `$retentionDays` only)
      * @param ChatReadMarkRepository|null $readMarks 1.35: read times older than the window go too (message info)
+     * @param ChatIdempotencyKeyRepository|null $idempotencyKeys 1.36: `Idempotency-Key`s older than a day go too
      */
     public function __construct(
         private readonly ChatMessageRepository $messages,
@@ -57,6 +60,7 @@ final class ChatPurgeCommand extends Command
         private readonly ?ChatConversationLinkRepository $links = null,
         private readonly ?RetentionPolicyProviderInterface $retention = null,
         private readonly ?ChatReadMarkRepository $readMarks = null,
+        private readonly ?ChatIdempotencyKeyRepository $idempotencyKeys = null,
     ) {
         parent::__construct();
     }
@@ -106,6 +110,8 @@ final class ChatPurgeCommand extends Command
                     break;
                 }
             }
+            // 1.36: idempotency keys live a day, whatever the retention window.
+            $keys = $this->idempotencyKeys?->purgeOlderThan($now->modify(sprintf('-%d hours', ChatIdempotency::TTL_HOURS))) ?? 0;
         } catch (InvalidRetentionConfigurationException $exception) {
             // Fail closed (1.31.1): nothing is deleted when the configured retention is not a positive number.
             $this->logger->error('Chat purge aborted: the configured retention_days is invalid (0 or negative).', ['configured_days' => $exception->days, 'minimum_days' => self::MIN_DAYS]);
@@ -123,7 +129,7 @@ final class ChatPurgeCommand extends Command
 
             throw $exception;
         }
-        $this->logger->info('Chat purge finished.', ['deleted' => $deleted, 'links' => $links, 'read_marks' => $readMarks, 'retention_days' => $days]);
+        $this->logger->info('Chat purge finished.', ['deleted' => $deleted, 'links' => $links, 'read_marks' => $readMarks, 'idempotency_keys' => $keys, 'retention_days' => $days]);
         (new SymfonyStyle($input, $output))->success(sprintf('Deleted %d chat message(s) and %d pinned link(s) older than %d days.', $deleted, $links, $days));
 
         return Command::SUCCESS;

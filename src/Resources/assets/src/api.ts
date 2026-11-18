@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, LinkPreview, LinksPage, Member, MessageInfo, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SidebarSection, SupportContext, SupportStatus, SupportTicket } from './types';
+import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, ForwardTarget, LinkPreview, LinksPage, Member, MessageInfo, MessageRevision, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SidebarSection, SupportContext, SupportStatus, SupportTicket, ThreadPage, ThreadSummary } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -10,6 +10,8 @@ export class ChatApiError extends Error {
   readonly reason: string;
   /** 1.26.1: seconds from the `Retry-After` header (a 429), or null without a usable one. */
   readonly retryAfter: number | null;
+  /** 1.36: index of the refused target of a forward (`forward_forbidden`), or null. */
+  readonly target: number | null;
 
   /**
    * Creates the error; its message is the error code.
@@ -18,13 +20,15 @@ export class ChatApiError extends Error {
    * @param code Machine-readable error code from the JSON body (`error`), or "error" when it has none.
    * @param reason Text for the person from the JSON body (`message`).
    * @param retryAfter Seconds from the `Retry-After` header, or null.
+   * @param target 1.36: index of the refused target of a forward, or null.
    */
-  constructor(status: number, code: string, reason = '', retryAfter: number | null = null) {
+  constructor(status: number, code: string, reason = '', retryAfter: number | null = null, target: number | null = null) {
     super(code);
     this.status = status;
     this.code = code;
     this.reason = reason;
     this.retryAfter = retryAfter;
+    this.target = target;
   }
 }
 
@@ -245,6 +249,88 @@ export class ChatApi {
   }
 
   /**
+   * 1.36: the conversations (and, with a query, people) the viewer may forward to.
+   *
+   * @param query Name filter ('' for the viewer's conversations).
+   * @returns The targets.
+   */
+  async forwardTargets(query: string): Promise<ForwardTarget[]> {
+    const q = query.trim();
+    const url = this.config.endpoints.forwardTargets ?? '';
+    return (await this.get<{ targets: ForwardTarget[] }>(q === '' ? url : `${url}?${new URLSearchParams({ q }).toString()}`)).targets;
+  }
+
+  /**
+   * 1.36: forwards a message (all targets or none). The key makes a resend after a lost answer one forward.
+   *
+   * @param uuid Conversation uuid of the message.
+   * @param messageUuid Message uuid.
+   * @param targets `{conversationUuid}` or `{contactUuid}` each.
+   * @param comment Text posted first in each target ('' for none).
+   * @param key The `Idempotency-Key`.
+   * @returns The forwarded copies with their conversations.
+   */
+  async forward(uuid: string, messageUuid: string, targets: ({ conversationUuid: string } | { contactUuid: string })[], comment: string, key: string): Promise<{ conversationUuid: string; message: ChatMessage }[]> {
+    return (await this.request<{ messages: { conversationUuid: string; message: ChatMessage }[] }>('POST', this.messageUrl('forward', uuid, messageUuid), comment.trim() === '' ? { targets } : { targets, comment }, { 'Idempotency-Key': key })).messages;
+  }
+
+  /**
+   * 1.36: a page of the message's thread.
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid The root (or a reply).
+   * @param cursor `before`: older replies; `after`: only newer ones.
+   * @returns The page.
+   */
+  async thread(uuid: string, messageUuid: string, cursor: { before?: number; after?: number } = {}): Promise<ThreadPage> {
+    const params = new URLSearchParams();
+    if (cursor.before !== undefined) {
+      params.set('before', String(cursor.before));
+    }
+    if (cursor.after !== undefined) {
+      params.set('after', String(cursor.after));
+    }
+    const query = params.toString();
+    const url = this.messageUrl('thread', uuid, messageUuid);
+    return this.get(query === '' ? url : `${url}?${query}`);
+  }
+
+  /**
+   * 1.36: replies in the message's thread. The key makes a resend after a lost answer one reply.
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid The root.
+   * @param body Reply text.
+   * @param key The `Idempotency-Key`.
+   * @returns The reply and its root.
+   */
+  async threadReply(uuid: string, messageUuid: string, body: string, key: string): Promise<{ message: ChatMessage; root: ChatMessage }> {
+    return this.request('POST', this.messageUrl('thread', uuid, messageUuid), { body }, { 'Idempotency-Key': key });
+  }
+
+  /**
+   * 1.36: moves the viewer's read cursor of a thread.
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid The root.
+   * @param messageId The newest reply read.
+   */
+  async threadRead(uuid: string, messageUuid: string, messageId: number): Promise<void> {
+    await this.request('POST', this.messageUrl('threadRead', uuid, messageUuid), { messageId });
+  }
+
+  /**
+   * 1.36: the previous texts of an edited message (author and moderators).
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid Message uuid.
+   * @returns The previous texts, newest first.
+   */
+  async revisions(uuid: string, messageUuid: string): Promise<MessageRevision[]> {
+    return (await this.get<{ revisions: MessageRevision[] }>(this.messageUrl('revisions', uuid, messageUuid))).revisions;
+  }
+
+  /**
    * Pinned links of a conversation, oldest first, whether the viewer may manage them and the limit (1.19).
    *
    * @param uuid Conversation uuid.
@@ -417,7 +503,7 @@ export class ChatApi {
   async messages(
     uuid: string,
     cursor: { before?: number; after?: number } = {},
-  ): Promise<{ messages: ChatMessage[]; hasMore: boolean; readUpTo: number | null; readers: Reader[]; saved?: string[] }> {
+  ): Promise<{ messages: ChatMessage[]; hasMore: boolean; readUpTo: number | null; readers: Reader[]; saved?: string[]; threads?: Record<string, ThreadSummary> }> {
     const params = new URLSearchParams();
     if (cursor.before !== undefined) {
       params.set('before', String(cursor.before));
@@ -645,7 +731,7 @@ export class ChatApi {
    * @param messageUuid Message uuid.
    * @returns The URL.
    */
-  private messageUrl(kind: 'message' | 'reactions' | 'pin' | 'messageLink' | 'unread' | 'info' | 'save', uuid: string, messageUuid: string): string {
+  private messageUrl(kind: 'message' | 'reactions' | 'pin' | 'messageLink' | 'unread' | 'info' | 'save' | 'forward' | 'thread' | 'threadRead' | 'revisions', uuid: string, messageUuid: string): string {
     return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid)).replace('__message__', encodeURIComponent(messageUuid));
   }
 
@@ -688,9 +774,10 @@ export class ChatApi {
    * @param method HTTP method.
    * @param url Endpoint URL.
    * @param body Value sent as JSON.
+   * @param extra 1.36: more headers (`Idempotency-Key`).
    * @returns The decoded payload.
    */
-  private async request<T>(method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, body: unknown): Promise<T> {
+  private async request<T>(method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, body: unknown, extra: Record<string, string> = {}): Promise<T> {
     if (this.csrfRejected) {
       throw new ChatApiError(403, 'invalid_csrf');
     }
@@ -701,7 +788,7 @@ export class ChatApi {
         await fetch(url, {
           method,
           credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': used },
+          headers: { ...extra, 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': used },
           body: JSON.stringify(body),
         }),
       );
@@ -796,7 +883,8 @@ export class ChatApi {
       const reason = typeof payload === 'object' && payload !== null && 'message' in payload && typeof payload.message === 'string' ? payload.message : '';
       // Retry-After in seconds when a host or proxy sends it (an HTTP date counts as unknown).
       const retry = Number(response.headers?.get('Retry-After') ?? '');
-      throw new ChatApiError(response.status, code, reason, Number.isFinite(retry) && retry > 0 ? retry : null);
+      const target = typeof payload === 'object' && payload !== null && 'target' in payload && typeof payload.target === 'number' ? payload.target : null;
+      throw new ChatApiError(response.status, code, reason, Number.isFinite(retry) && retry > 0 ? retry : null, target);
     }
     return payload as T;
   }

@@ -17,14 +17,17 @@ use Nowo\ChatKitBundle\Contract\ChatUserReferenceDirectoryInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
+use Nowo\ChatKitBundle\Entity\ChatIdempotencyKey;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageLink;
 use Nowo\ChatKitBundle\Entity\ChatMessageMention;
+use Nowo\ChatKitBundle\Entity\ChatMessageRevision;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatReadMark;
 use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
+use Nowo\ChatKitBundle\Entity\ChatThreadRead;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Event\ChatLinkRemovedEvent;
 use Nowo\ChatKitBundle\Event\ChatMentionsErasedEvent;
@@ -137,7 +140,7 @@ final readonly class ChatPersonalData
      *
      * @param ChatUserInterface $user The user whose data is exported
      *
-     * @return array{settings: array<string, mixed>, quick_replies: list<array{title: string, text: string}>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>, links: list<array<string, string|null>>, saved: list<array<string, string>>, read_marks: list<array<string, string>>} Settings, authored messages, the pins the user made and (1.19) the links the user pinned
+     * @return array{settings: array<string, mixed>, quick_replies: list<array{title: string, text: string}>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>, links: list<array<string, string|null>>, saved: list<array<string, string>>, read_marks: list<array<string, string>>, thread_reads: list<array<string, string|null>>, forwards: list<array<string, string|null>>, revisions: list<array<string, string>>} Settings, authored messages, the pins the user made and (1.19) the links the user pinned
      */
     public function export(ChatUserInterface $user): array
     {
@@ -196,6 +199,33 @@ final readonly class ChatPersonalData
             }
         }
 
+        // 1.36: the threads the user follows or read, the messages the user forwarded, the previous texts of the user's
+        // own messages.
+        $threadReads = $this->exportPages(ChatThreadRead::class, 'user', $user, static fn (ChatThreadRead $row): array => [
+            'conversation_uuid'  => $row->getRoot()->getConversation()->getUuid(),
+            'root_message_uuid'  => $row->getRoot()->getUuid(),
+            'last_read_reply_id' => $row->getLastReadReplyId() === null ? null : (string) $row->getLastReadReplyId(),
+            'following'          => $row->isFollowing() ? 'yes' : 'no',
+            'updated_at'         => $row->getUpdatedAt()->format(DATE_ATOM),
+        ], static fn (ChatThreadRead $row): bool => ChatUserReferences::same($row->getUser(), $user), false);
+        $forwards = $this->exportPages(ChatMessage::class, 'author', $user, static fn (ChatMessage $message): array => [
+            'conversation_uuid'        => $message->getConversation()->getUuid(),
+            'message_uuid'             => $message->getUuid(),
+            'source_message_uuid'      => $message->getForwardedFrom()?->getUuid(),
+            'source_conversation_uuid' => $message->getForwardedFromConversation()?->getUuid(),
+            'sent_at'                  => $message->getCreatedAt()->format(DATE_ATOM),
+        ], static fn (ChatMessage $message): bool => $message->isForwarded() && !$message->isDeleted() && ChatUserReferences::same($message->getAuthor(), $user));
+        $revisions = [];
+        foreach (array_chunk($this->exactIds(ChatMessage::class, 'author', $user), self::EXPORT_BATCH) as $chunk) {
+            /** @var list<ChatMessageRevision> $rows */
+            $rows = $this->entityManager->createQueryBuilder()->select('v', 'm')->from(ChatMessageRevision::class, 'v')
+                ->innerJoin('v.message', 'm')->where('m.id IN (:ids) AND m.deletedAt IS NULL')->setParameter('ids', $chunk)->orderBy('v.id', 'ASC')
+                ->getQuery()->getResult();
+            foreach ($rows as $revision) {
+                $revisions[] = ['message_uuid' => $revision->getMessage()->getUuid(), 'text' => $revision->getBody(), 'edited_at' => $revision->getEditedAt()->format(DATE_ATOM)];
+            }
+        }
+
         return [
             'settings' => [
                 'sound'                 => $settings->getSound(),
@@ -228,6 +258,10 @@ final readonly class ChatPersonalData
             // 1.35
             'saved'      => $saved,
             'read_marks' => $readMarks,
+            // 1.36
+            'thread_reads' => $threadReads,
+            'forwards'     => $forwards,
+            'revisions'    => $revisions,
         ];
     }
 
@@ -326,6 +360,12 @@ final readonly class ChatPersonalData
                 // 1.19: their links leave the Links panel (the messages become tombstones).
                 $qb()->delete(ChatMessageLink::class, 'k')->where('IDENTITY(k.message) IN (:ids)')
                     ->setParameter('ids', $authored)->getQuery()->execute();
+                // 1.36: their previous texts go, and forwards of them show the neutral "Forwarded".
+                $qb()->delete(ChatMessageRevision::class, 'v')->where('IDENTITY(v.message) IN (:ids)')
+                    ->setParameter('ids', $authored)->getQuery()->execute();
+                $qb()->update(ChatMessage::class, 'f')->set('f.forwardedFrom', ':none')->set('f.forwardedFromConversation', ':none')
+                    ->where('IDENTITY(f.forwardedFrom) IN (:ids)')->setParameter('none', null)
+                    ->setParameter('ids', $authored)->getQuery()->execute();
             }
             if ($authored !== []) {
                 $qb()->update(ChatMessage::class, 'm')
@@ -341,7 +381,7 @@ final readonly class ChatPersonalData
             if ($participantIds !== []) {
                 $qb()->delete(ChatReadMark::class, 'rm')->where('IDENTITY(rm.participant) IN (:ids)')->setParameter('ids', $participantIds)->getQuery()->execute();
             }
-            foreach ([[ChatReaction::class, 'r'], [ChatSavedMessage::class, 'sv'], [ChatParticipant::class, 'p'], [ChatUserSettings::class, 's'], [ChatQuickReply::class, 'q']] as [$entity, $alias]) {
+            foreach ([[ChatReaction::class, 'r'], [ChatSavedMessage::class, 'sv'], [ChatThreadRead::class, 'tr'], [ChatIdempotencyKey::class, 'ik'], [ChatParticipant::class, 'p'], [ChatUserSettings::class, 's'], [ChatQuickReply::class, 'q']] as [$entity, $alias]) {
                 $this->byUser($qb()->delete($entity, $alias), $alias, $entity, 'user', $user)->getQuery()->execute();
             }
 
@@ -354,6 +394,13 @@ final readonly class ChatPersonalData
                     $qb()->delete(ChatMessageLink::class, 'k')->where('IDENTITY(k.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
                     // 1.35: other people's saved rows of the ticket's messages.
                     $qb()->delete(ChatSavedMessage::class, 'sv')->where('IDENTITY(sv.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
+                    // 1.36: their previous texts and thread rows; forwards of them elsewhere show the neutral "Forwarded".
+                    $qb()->delete(ChatMessageRevision::class, 'v')->where('IDENTITY(v.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
+                    $qb()->delete(ChatThreadRead::class, 'tr')->where('IDENTITY(tr.root) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
+                    $qb()->update(ChatMessage::class, 'f')->set('f.forwardedFrom', ':none')->set('f.forwardedFromConversation', ':none')
+                        ->where('IDENTITY(f.forwardedFrom) IN (:ids)')->setParameter('none', null)->setParameter('ids', $messageIds)->getQuery()->execute();
+                    // Thread replies before their roots (the self-reference).
+                    $qb()->delete(ChatMessage::class, 'm')->where('m.conversation = :c AND m.threadRoot IS NOT NULL')->setParameter('c', $support)->getQuery()->execute();
                 }
                 $ticketParticipants = $qb()->select('p.id')->from(ChatParticipant::class, 'p')->where('p.conversation = :c')->setParameter('c', $support)->getQuery()->getSingleColumnResult();
                 if ($ticketParticipants !== []) {
@@ -619,6 +666,9 @@ final readonly class ChatPersonalData
             $after = $ids === [] ? null : $ids[array_key_last($ids)];
         } while (count($ids) === self::ERASE_BATCH);
 
+        // 1.36 (audit UB-3): the previous texts of edited messages (edit history) lose the token too, in the same unit.
+        $this->scrubRevisions($publicId, $token, $replace);
+
         $skipped = array_keys(array_filter($rows, static fn (bool $rewritten): bool => !$rewritten));
         $delete  = $this->entityManager->createQueryBuilder()->delete(ChatMessageMention::class, 'n')
             ->where($this->refs->field('n', 'user') . ' = :user')->setParameter('user', $this->refs->value($user));
@@ -628,6 +678,40 @@ final readonly class ChatPersonalData
         $delete->getQuery()->execute();
 
         return new ChatMentionErasure($publicId, array_keys(array_filter($rows)), $skipped);
+    }
+
+    /**
+     * 1.36 (audit UB-3): every previous text (`nowo_chat_message_revision`) holding the erased user's mention token gets
+     * the same rewrite as the messages, by id pages of {@see self::ERASE_BATCH}. A previous text that cannot be scanned
+     * (invalid UTF-8) is deleted rather than kept with the id: it is history, not the message.
+     *
+     * @param string $publicId The erased user's public id
+     * @param string $token The token pattern of that user
+     * @param string $replace The replacement (the label, escaped for preg_replace)
+     */
+    private function scrubRevisions(string $publicId, string $token, string $replace): void
+    {
+        if (preg_match('/^[A-Za-z0-9_-]{1,64}$/', $publicId) !== 1) {
+            return;
+        }
+        $after = 0;
+        do {
+            /** @var list<array{id: int|string, body: string}> $rows */
+            $rows = $this->entityManager->createQueryBuilder()->select('r.id', 'r.body')->from(ChatMessageRevision::class, 'r')
+                ->where('r.body LIKE :needle ESCAPE \'!\' AND r.id > :after')
+                ->setParameter('needle', '%](' . strtr($publicId, ['!' => '!!', '_' => '!_', '%' => '!%']) . ')%')
+                ->setParameter('after', $after)
+                ->orderBy('r.id', 'ASC')->setMaxResults(self::ERASE_BATCH)
+                ->getQuery()->getArrayResult();
+            foreach ($rows as $row) {
+                $scrubbed = preg_replace($token, $replace, $row['body']);
+                $scrubbed = $scrubbed === null ? null : $this->flattenNewMentions($row['body'], $scrubbed, $publicId);
+                $qb       = $this->entityManager->createQueryBuilder();
+                ($scrubbed === null ? $qb->delete(ChatMessageRevision::class, 'r') : $qb->update(ChatMessageRevision::class, 'r')->set('r.body', ':body')->setParameter('body', $scrubbed))
+                    ->where('r.id = :id')->setParameter('id', (int) $row['id'])->getQuery()->execute();
+                $after = (int) $row['id'];
+            }
+        } while (count($rows) === self::ERASE_BATCH);
     }
 
     /**

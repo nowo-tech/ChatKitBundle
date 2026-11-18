@@ -12,13 +12,18 @@ describe('message menu (1.33)', () => {
   });
 
   it('shows the items by the bundle rules', () => {
-    expect(visibleItems(rules({ mine: true, canPin: true }))).toEqual({ reply: true, edit: true, 'copy-link': true, pin: true, delete: true, quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false });
-    expect(visibleItems(rules({ mine: true, inWindow: false }))).toEqual({ reply: true, edit: false, 'copy-link': true, pin: false, delete: false, quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false });
-    expect(visibleItems(rules({ mine: false }))).toEqual({ reply: true, edit: false, 'copy-link': true, pin: false, delete: false, quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false });
+    expect(visibleItems(rules({ mine: true, canPin: true }))).toEqual({ reply: true, edit: true, 'copy-link': true, pin: true, delete: true, quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false, thread: false, forward: false });
+    expect(visibleItems(rules({ mine: true, inWindow: false }))).toEqual({ reply: true, edit: false, 'copy-link': true, pin: false, delete: false, quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false, thread: false, forward: false });
+    expect(visibleItems(rules({ mine: false }))).toEqual({ reply: true, edit: false, 'copy-link': true, pin: false, delete: false, quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false, thread: false, forward: false });
     // Read-only: no reply nor edit; the author still deletes within the window.
-    expect(visibleItems(rules({ mine: true, canSend: false }))).toEqual({ reply: false, edit: false, 'copy-link': true, pin: false, delete: true, quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false });
-    expect(visibleItems(rules({ usable: false, mine: true, canPin: true }))).toEqual({ reply: false, edit: false, 'copy-link': false, pin: false, delete: false, quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false });
+    expect(visibleItems(rules({ mine: true, canSend: false }))).toEqual({ reply: false, edit: false, 'copy-link': true, pin: false, delete: true, quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false, thread: false, forward: false });
+    expect(visibleItems(rules({ usable: false, mine: true, canPin: true }))).toEqual({ reply: false, edit: false, 'copy-link': false, pin: false, delete: false, quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false, thread: false, forward: false });
     expect(visibleItems(rules({ canLink: false }))['copy-link']).toBe(false);
+    // 1.36: a reply has no Pin and no "Reply in thread"; Forward for whoever reads it, the thread for writers.
+    const offered = { thread: true, forward: true };
+    expect(visibleItems(rules({ offered, canPin: true }))).toMatchObject({ thread: true, forward: true, pin: true });
+    expect(visibleItems(rules({ offered, canPin: true, reply: true }))).toMatchObject({ thread: false, forward: true, pin: false });
+    expect(visibleItems(rules({ offered, canSend: false }))).toMatchObject({ thread: false, forward: true });
   });
 
   it('strips UiKit context-menu and card attributes, keeping the others', () => {
@@ -70,7 +75,7 @@ describe('message menu (1.33)', () => {
     expect(visibleItems(rules({ offered }))).toMatchObject({ quote: true, 'copy-text': true, save: true, 'mark-unread': true, info: true });
     expect(visibleItems(rules({ offered, mine: true }))['mark-unread']).toBe(false);
     expect(visibleItems(rules({ offered, canSend: false })).quote).toBe(false);
-    expect(visibleItems(rules({ offered, usable: false }))).toMatchObject({ quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false });
+    expect(visibleItems(rules({ offered, usable: false }))).toMatchObject({ quote: false, 'copy-text': false, save: false, 'mark-unread': false, info: false, thread: false, forward: false });
   });
 
   it('1.35: the plain text of a rendered message', () => {

@@ -15,12 +15,14 @@ use Doctrine\ORM\Events;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
+use Nowo\ChatKitBundle\Entity\ChatIdempotencyKey;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
+use Nowo\ChatKitBundle\Entity\ChatThreadRead;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Security\ChatAccess;
@@ -63,6 +65,8 @@ final class UserReferenceListener implements ResetInterface
         ChatQuickReply::class       => ['user' => false],
         ChatReaction::class         => ['user' => false],
         ChatSavedMessage::class     => ['user' => false],
+        ChatThreadRead::class       => ['user' => false],
+        ChatIdempotencyKey::class   => ['user' => false],
         ChatUserSettings::class     => ['user' => false],
     ];
 

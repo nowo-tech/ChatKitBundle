@@ -29,14 +29,17 @@ final class NowoChatKitExtensionTableNamesTest extends TestCase
         self::assertSame([
             'conversation'      => 'nowo_chat_conversation',
             'conversation_link' => 'nowo_chat_conversation_link',
+            'idempotency'       => 'nowo_chat_idempotency',
             'message'           => 'nowo_chat_message',
             'message_link'      => 'nowo_chat_message_link',
             'message_mention'   => 'nowo_chat_message_mention',
+            'message_revision'  => 'nowo_chat_message_revision',
             'participant'       => 'nowo_chat_participant',
             'quick_reply'       => 'nowo_chat_quick_reply',
             'reaction'          => 'nowo_chat_reaction',
             'read_mark'         => 'nowo_chat_read_mark',
             'saved_message'     => 'nowo_chat_saved_message',
+            'thread_read'       => 'nowo_chat_thread_read',
             'ticket_counter'    => 'nowo_chat_ticket_counter',
             'user_settings'     => 'nowo_chat_user_settings',
         ], $container->getParameter('nowo_chat_kit.doctrine.tables'));

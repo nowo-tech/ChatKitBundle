@@ -19,7 +19,7 @@ use function is_string;
 #[ORM\Entity(repositoryClass: ChatMessageRepository::class)]
 #[ORM\Table(name: 'nowo_chat_message')]
 #[ORM\UniqueConstraint(name: 'uniq_nowo_chat_message_uuid', columns: ['uuid'])]
-#[ORM\Index(name: 'idx_nowo_chat_message_unread', columns: ['conversation_id', 'id', 'author_id', 'deleted_at'])]
+#[ORM\Index(name: 'idx_nowo_chat_message_unread', columns: ['conversation_id', 'thread_root_id', 'id', 'author_id', 'deleted_at'])]
 #[ORM\Index(name: 'idx_nowo_chat_message_created', columns: ['created_at'])]
 class ChatMessage
 {
@@ -88,6 +88,33 @@ class ChatMessage
 
     /** 1.24: `deletedBy` as a reference (`doctrine.user_reference: id` maps this instead of the relation). */
     private ?string $deletedByRef = null;
+
+    /** 1.36: the root of the thread this message replies in; null for a message of the main timeline. */
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\JoinColumn(name: 'thread_root_id', nullable: true, onDelete: 'CASCADE')]
+    private ?self $threadRoot = null;
+
+    /** 1.36: replies of the thread this message starts (only on a root; atomic updates under the conversation lock). */
+    #[ORM\Column(name: 'thread_reply_count', options: ['default' => 0])]
+    private int $threadReplyCount = 0;
+
+    /** 1.36: when the newest reply of the thread was sent (only on a root). */
+    #[ORM\Column(name: 'thread_last_reply_at', nullable: true)]
+    private ?DateTimeImmutable $threadLastReplyAt = null;
+
+    /** 1.36: the message this one forwards (null when it is not a forward, or the source is gone). */
+    #[ORM\ManyToOne(targetEntity: self::class)]
+    #[ORM\JoinColumn(name: 'forwarded_from_message_id', nullable: true, onDelete: 'SET NULL')]
+    private ?self $forwardedFrom = null;
+
+    /** 1.36: the conversation the forwarded message came from (null when it is not a forward, or it is gone). */
+    #[ORM\ManyToOne(targetEntity: ChatConversation::class)]
+    #[ORM\JoinColumn(name: 'forwarded_from_conversation_id', nullable: true, onDelete: 'SET NULL')]
+    private ?ChatConversation $forwardedFromConversation = null;
+
+    /** 1.36: the message is a forward (its markers survive a purge of the source as a neutral "Forwarded"). */
+    #[ORM\Column(name: 'forwarded', options: ['default' => false])]
+    private bool $forwarded = false;
 
     /** 1.10: pinned to the top of its conversation since then (shared by every participant); null = not pinned. */
     #[ORM\Column(name: 'pinned_at', nullable: true)]
@@ -214,6 +241,90 @@ class ChatMessage
     public function isPinnable(): bool
     {
         return $this->kind === self::KIND_TEXT && !$this->isDeleted();
+    }
+
+    /**
+     * 1.36: the root of the thread this message replies in.
+     *
+     * @return self|null The root; null for a message of the main timeline
+     */
+    public function getThreadRoot(): ?self
+    {
+        return $this->threadRoot;
+    }
+
+    /**
+     * 1.36: makes this (new) message a reply of a thread (one level: a reply to a reply attaches to its root).
+     *
+     * @param self $root The root (a main-timeline text message of the same conversation)
+     */
+    public function replyIn(self $root): void
+    {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->threadRoot = $root->threadRoot ?? $root;
+    }
+
+    /**
+     * 1.36: whether a thread can start on (or continue under) this message: a shown text message of the main timeline.
+     */
+    public function canStartThread(): bool
+    {
+        return $this->kind === self::KIND_TEXT && !$this->isDeleted() && !$this->threadRoot instanceof self;
+    }
+
+    /**
+     * 1.36: replies of the thread this message starts.
+     */
+    public function getThreadReplyCount(): int
+    {
+        return $this->threadReplyCount;
+    }
+
+    /**
+     * 1.36: when the newest reply of the thread this message starts was sent.
+     */
+    public function getThreadLastReplyAt(): ?DateTimeImmutable
+    {
+        return $this->threadLastReplyAt;
+    }
+
+    /**
+     * 1.36: marks the message as a forward of another one.
+     *
+     * @param self $source The forwarded message
+     */
+    public function forwardOf(self $source): void
+    {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->forwarded = true;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->forwardedFrom = $source;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->forwardedFromConversation = $source->getConversation();
+    }
+
+    /**
+     * 1.36: whether the message is a forward.
+     */
+    public function isForwarded(): bool
+    {
+        return $this->forwarded;
+    }
+
+    /**
+     * 1.36: the forwarded message (null when it is not a forward, or the source is gone).
+     */
+    public function getForwardedFrom(): ?self
+    {
+        return $this->forwardedFrom;
+    }
+
+    /**
+     * 1.36: the conversation of the forwarded message (null when it is not a forward, or it is gone).
+     */
+    public function getForwardedFromConversation(): ?ChatConversation
+    {
+        return $this->forwardedFromConversation;
     }
 
     /**

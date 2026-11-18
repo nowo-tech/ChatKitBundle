@@ -14,6 +14,8 @@ use Nowo\ChatKitBundle\Push\DeliverChatPushMessage;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Symfony\Component\Messenger\MessageBusInterface;
 
+use const DATE_ATOM;
+
 /**
  * Turns chat changes into realtime events (private per-user topics) and queues Web Push for the other
  * recipients (through Messenger when available, otherwise inline). Payloads are viewer-neutral; the client
@@ -45,15 +47,32 @@ final readonly class ChatNotifier
      *
      * @param ChatMessage $message The stored message
      * @param array<string, list<string>> $reactions Reactions by emoji (public ids of the reacting users)
+     * @param list<ChatUserInterface>|null $only 1.36: Web Push and the digest only for these people (the followers of a
+     *                                           thread, who may still read the conversation); null: every recipient
      */
-    public function messageCreated(ChatMessage $message, array $reactions = []): void
+    public function messageCreated(ChatMessage $message, array $reactions = [], ?array $only = null): void
     {
         $this->messageEvent('message', $message, $reactions);
         if ($message->isDeleted()) {
             return;
         }
+        $recipients = $this->recipients->of($message->getConversation());
+        if ($only !== null) {
+            $recipients = array_values(array_filter(
+                $recipients,
+                static function (ChatUserInterface $user) use ($only): bool {
+                    foreach ($only as $follower) {
+                        if (ChatUserReferences::same($user, $follower)) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                },
+            ));
+        }
         $others = array_values(array_filter(
-            $this->recipients->of($message->getConversation()),
+            $recipients,
             static fn (ChatUserInterface $user): bool => !ChatUserReferences::same($user, $message->getAuthor()),
         ));
         $this->digest?->schedule($others);
@@ -70,6 +89,35 @@ final readonly class ChatNotifier
         } else {
             ($this->push)($command);
         }
+    }
+
+    /**
+     * 1.36: a thread got a reply (or lost one): its followers who may still read the conversation update the root's
+     * "new replies" badge.
+     *
+     * @param ChatMessage $root The root of the thread
+     * @param list<ChatUserInterface> $followers The thread's followers
+     */
+    public function thread(ChatMessage $root, array $followers): void
+    {
+        $readers = array_values(array_filter(
+            $this->recipients->of($root->getConversation()),
+            static function (ChatUserInterface $user) use ($followers): bool {
+                foreach ($followers as $follower) {
+                    if (ChatUserReferences::same($user, $follower)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            },
+        ));
+        $this->publisher->publish('thread', [
+            'conversationUuid' => $root->getConversation()->getUuid(),
+            'rootUuid'         => $root->getUuid(),
+            'replyCount'       => $root->getThreadReplyCount(),
+            'lastReplyAt'      => $root->getThreadLastReplyAt()?->format(DATE_ATOM),
+        ], $readers);
     }
 
     /**

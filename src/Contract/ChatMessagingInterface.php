@@ -63,14 +63,23 @@ interface ChatMessagingInterface
     /** 1.35: the actor may open the message's read info. */
     public const string INFO = 'info';
 
+    /** 1.36: the actor may forward the message. */
+    public const string FORWARD = 'forward';
+
+    /** 1.36: the actor may reply in the message's thread. */
+    public const string THREAD = 'thread';
+
+    /** 1.36: the actor may read the message's previous texts. */
+    public const string HISTORY = 'history';
+
     /**
-     * Whether the actor may do `$action` on the conversation (or, for EDIT, DELETE, REACT and, 1.35, SAVE, MARK_UNREAD and INFO, on its message), by uuid:
+     * Whether the actor may do `$action` on the conversation (or, for EDIT, DELETE, REACT and, 1.35, SAVE, MARK_UNREAD and INFO, 1.36, FORWARD, THREAD and HISTORY, on its message), by uuid:
      * the authorization of a DDD host that keeps the bundle's entities out of its code. False for an unknown uuid too.
      *
      * @param ChatUserInterface $actor The user
      * @param string $conversationUuid Public uuid of the conversation
      * @param string $action One of the constants of this interface
-     * @param string|null $messageUuid Public uuid of the message (EDIT, DELETE, REACT, SAVE, MARK_UNREAD, INFO)
+     * @param string|null $messageUuid Public uuid of the message (EDIT, DELETE, REACT, SAVE, MARK_UNREAD, INFO, FORWARD, THREAD, HISTORY)
      *
      * @return bool True when allowed
      */

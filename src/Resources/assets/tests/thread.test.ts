@@ -1271,6 +1271,136 @@ describe('ThreadView', () => {
       });
     });
 
+    describe('1.36: forward, threads and edit history', () => {
+      const menuConfig = {
+        order: ['reply', 'thread', 'quote', 'forward', 'copy_text', 'copy_link', 'save', 'mark_unread', 'pin', 'info', 'edit', 'delete'],
+        items: { reply: true, thread: true, quote: true, forward: true, copy_text: true, copy_link: true, save: false, mark_unread: false, pin: true, info: true, edit: true, delete: true },
+        quick: [],
+        picker: false,
+        quoteMaxLength: 40,
+        saveDockEntry: false,
+        forwardMaxTargets: 3,
+        editHistory: true,
+      };
+      const strings = {
+        ...i18n, pin: 'Pin', unpin: 'Unpin', forwarded: 'Forwarded', forwarded_from_channel: 'From #%name%', forwarded_from_direct: 'From a DM', forwarded_one: 'Sent to 1', forwarded_many: 'Sent to %count%',
+        thread_one_reply: '1 reply', thread_replies_count: '%count% replies', thread_last_reply: 'last %time%', thread_new_replies: 'new', thread_title: 'Thread', info_title: 'Info', info_close: 'Close', info_read_count: '%read% of %total%', info_edits: 'Edits', info_show_history: 'Show',
+      };
+      const endpoints = { page: '/chat/__uuid__', messageLink: '/l', thread: '/t/__uuid__/__message__', forward: '/f/__uuid__/__message__', forwardTargets: '/ft', info: '/i', revisions: '/r' };
+      const full = { i18n: strings, endpoints, menu: menuConfig } as unknown as Partial<ChatConfig>;
+      const item = (article: HTMLElement, name: string) => article.querySelector<HTMLAnchorElement>(`[data-part="menu-${name}"]`) as HTMLAnchorElement;
+      const threadPage = (root: ChatMessage) => ({ root, replies: [], hasMore: false, replyCount: root.thread?.count ?? 0, readUpTo: null, following: true });
+
+      it('offers Reply in thread and Forward, marks forwards and shows thread summaries', async () => {
+        vi.setSystemTime(now);
+        const root = msg({ uuid: 'root', thread: { count: 2, lastReplyAt: '2026-10-15T10:05:00Z' } });
+        const single = msg({ uuid: 'single', thread: { count: 1, lastReplyAt: null } });
+        const fromChannel = msg({ uuid: 'fc', forwarded: { from: 'channel', label: 'Acme' } });
+        const fromDm = msg({ uuid: 'fd', forwarded: { from: 'direct', label: null } });
+        const neutral = msg({ uuid: 'fn', forwarded: { from: null, label: null } });
+        const threads = { root: { count: 2, lastReplyAt: '2026-10-15T10:05:00Z', unread: true, following: true, repliers: [{ uuid: 'p', name: 'Luis', initials: 'LU', avatarUrl: null }] } };
+        const ctx = setup({}, { messages: vi.fn().mockResolvedValue({ messages: [root, single, fromChannel, fromDm, neutral], hasMore: false, readUpTo: null, readers: [], threads }) }, full);
+        await ctx.view.load();
+        const article = (id: number) => ctx.view.element.querySelector<HTMLElement>(`[data-id="${id}"]`) as HTMLElement;
+        expect(item(article(root.id), 'thread').hidden).toBe(false);
+        expect(item(article(root.id), 'forward').hidden).toBe(false);
+        const summaryButton = article(root.id).querySelector<HTMLButtonElement>('[data-part="thread-summary"]') as HTMLButtonElement;
+        expect(summaryButton.classList.contains('is-unread')).toBe(true);
+        expect(summaryButton.getAttribute('aria-label')).toBe('2 replies, new');
+        expect(summaryButton.querySelectorAll('.nowo-chat-avatar')).toHaveLength(1);
+        expect(article(single.id).querySelector('[data-part="thread-summary"]')?.textContent).toBe('1 reply');
+        expect(article(fromChannel.id).querySelector('[data-part="forwarded"]')?.textContent).toBe('From #Acme');
+        expect(article(fromDm.id).querySelector('[data-part="forwarded"]')?.textContent).toBe('From a DM');
+        expect(article(neutral.id).querySelector('[data-part="forwarded"]')?.textContent).toBe('Forwarded');
+
+        // The summary opens the panel (and clears the mark); a realtime reply goes to the panel, not the timeline.
+        const thread = vi.fn().mockResolvedValue(threadPage(root));
+        const threadRead = vi.fn().mockResolvedValue(undefined);
+        Object.assign(ctx.host.api, { thread, threadRead });
+        summaryButton.click();
+        await vi.waitFor(() => expect(thread).toHaveBeenCalledWith('c1', 'root', {}));
+        expect(article(root.id).querySelector('[data-part="thread-summary"]')?.classList.contains('is-unread')).toBe(false);
+        const reply = msg({ uuid: 'reply', threadRootUuid: 'root' });
+        ctx.view.merge([reply], true);
+        expect(ctx.view.element.querySelector(`[data-id="${reply.id}"]`)).toBeNull();
+        expect(document.querySelector(`.nowo-chat-thread-panel [data-id="${reply.id}"]`)).not.toBeNull();
+        ctx.view.update({ ...reply, edited: true });
+        // A `thread` event while the panel is open keeps it read; the root's count follows.
+        ctx.view.threadChanged('root', 3, '2026-10-15T10:06:00Z');
+        expect(article(root.id).querySelector('[data-part="thread-summary"]')?.textContent).toContain('3 replies');
+        expect(article(root.id).querySelector('[data-part="thread-summary"]')?.classList.contains('is-unread')).toBe(false);
+        ctx.view.threadChanged('unknown', 1, null);
+        // "Reply in thread" from the menu reopens it; closing it drops the panel.
+        item(article(root.id), 'thread').click();
+        await vi.waitFor(() => expect(document.querySelectorAll('dialog.nowo-chat-thread-panel')).toHaveLength(1));
+        (document.querySelector('[data-part="thread-close"]') as HTMLButtonElement).click();
+        ctx.view.threadChanged('root', 4, null);
+        expect(article(root.id).querySelector('[data-part="thread-summary"]')?.classList.contains('is-unread')).toBe(true);
+        // The panel's reply repaints the root through rootChanged.
+        item(article(root.id), 'thread').click();
+        await vi.waitFor(() => expect(document.querySelector('dialog.nowo-chat-thread-panel')).not.toBeNull());
+        const threadReply = vi.fn().mockResolvedValue({ message: msg({ uuid: 'r2', threadRootUuid: 'root' }), root: { ...root, thread: { count: 5, lastReplyAt: null } } });
+        Object.assign(ctx.host.api, { threadReply });
+        (document.querySelector('[data-part="thread-input"]') as HTMLTextAreaElement).value = 'hi';
+        (document.querySelector('[data-part="thread-send"]') as HTMLButtonElement).click();
+        await vi.waitFor(() => expect(article(root.id).querySelector('[data-part="thread-summary"]')?.textContent).toContain('5 replies'));
+      });
+
+      it('hides the thread items on replies and without the configuration; forwards through the dialog', async () => {
+        vi.setSystemTime(now);
+        const plainOne = msg({ uuid: 'plain' });
+        const replyRow = msg({ uuid: 'rr', threadRootUuid: 'x', thread: { count: 0, lastReplyAt: null } });
+        const ctx = await loaded([plainOne], { canPin: true }, full);
+        // A reply never shows in the timeline; a stray one in the page is dropped.
+        ctx.view.merge([replyRow], true);
+        expect(ctx.view.element.querySelector(`[data-id="${replyRow.id}"]`)).toBeNull();
+        ctx.view.update(replyRow);
+        const forwardTargets = vi.fn().mockResolvedValue([{ conversationUuid: 'c2', contactUuid: null, kind: 'channel', title: 'Acme', initials: 'A', avatarUrl: null }]);
+        const forward = vi.fn().mockResolvedValueOnce([{ conversationUuid: 'c2', message: msg() }]).mockResolvedValueOnce([{ conversationUuid: 'c2', message: msg() }, { conversationUuid: 'c3', message: msg() }]);
+        Object.assign(ctx.host.api, { forwardTargets, forward });
+        for (const expected of ['Sent to 1', 'Sent to 2']) {
+          item(ctx.article(plainOne.id), 'forward').click();
+          const dialog = document.querySelector('dialog.nowo-chat-forward') as HTMLDialogElement;
+          await vi.waitFor(() => expect(dialog.querySelector('[data-part="forward-target"]')).not.toBeNull());
+          (dialog.querySelector('[data-part="forward-target"]') as HTMLInputElement).click();
+          (dialog.querySelector('[data-part="forward-send"]') as HTMLButtonElement).click();
+          await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe(expected));
+        }
+        document.body.replaceChildren();
+        // Off by configuration (or without the endpoints): no items, no summary.
+        const off = await loaded([msg({ uuid: 'off', thread: { count: 2, lastReplyAt: null } })], {}, { ...full, menu: { ...menuConfig, items: { ...menuConfig.items, thread: false, forward: false } } } as unknown as Partial<ChatConfig>);
+        const offArticle = off.view.element.querySelector<HTMLElement>('article.nowo-chat-msg') as HTMLElement;
+        expect(item(offArticle, 'thread').hidden).toBe(true);
+        expect(item(offArticle, 'forward').hidden).toBe(true);
+        expect(offArticle.querySelector('[data-part="thread-summary"]')).toBeNull();
+        document.body.replaceChildren();
+        const noEndpoints = await loaded([msg({ uuid: 'ne' })], {}, { ...full, endpoints: { page: '/chat/__uuid__' } } as unknown as Partial<ChatConfig>);
+        const neArticle = noEndpoints.view.element.querySelector<HTMLElement>('article.nowo-chat-msg') as HTMLElement;
+        expect(item(neArticle, 'thread').hidden).toBe(true);
+        expect(item(neArticle, 'forward').hidden).toBe(true);
+      });
+
+      it('gives the info dialog the previous texts for the author only', async () => {
+        const mine = msg({ mine: true, authorUuid: 'me', uuid: 'mine' });
+        const ctx = await loaded([mine], {}, full);
+        const messageInfo = vi.fn().mockResolvedValue({ mode: 'people', memberCount: 1, readCount: 0, readTimes: true, readers: [], editedAt: '2026-10-15T10:01:00Z', edits: [{ editedAt: '2026-10-15T10:01:00Z' }] });
+        const revisions = vi.fn().mockResolvedValue([{ editedAt: '2026-10-15T10:01:00Z', text: 'old', html: '<p>old</p>' }]);
+        Object.assign(ctx.host.api, { messageInfo, revisions });
+        item(ctx.article(mine.id), 'info').click();
+        await vi.waitFor(() => expect(document.querySelector('[data-part="info-history"]')).not.toBeNull());
+        (document.querySelector('[data-part="info-history"]') as HTMLButtonElement).click();
+        await vi.waitFor(() => expect(revisions).toHaveBeenCalledWith('c1', 'mine'));
+        (document.querySelector('[data-part="info-close"]') as HTMLButtonElement).click();
+        document.body.replaceChildren();
+        // Edit history off: the edits list shows, no previous texts.
+        const off = await loaded([mine], {}, { ...full, menu: { ...menuConfig, editHistory: false } } as unknown as Partial<ChatConfig>);
+        Object.assign(off.host.api, { messageInfo });
+        item(off.article(mine.id), 'info').click();
+        await vi.waitFor(() => expect(document.querySelector('[data-part="info-edits"]')).not.toBeNull());
+        expect(document.querySelector('[data-part="info-history"]')).toBeNull();
+      });
+    });
+
     describe('1.33: the "More actions" kebab and its context menu', () => {
       const names = ['reply', 'edit', 'copy-link', 'pin', 'delete'] as const;
       const withMenu = { i18n: { ...i18n, pin: 'Pin', unpin: 'Unpin', link_copied: 'Link copied' }, endpoints: { page: '/chat/__uuid__', messageLink: '/chat/api/conversations/__uuid__/messages/__message__/link' } } as unknown as Partial<ChatConfig>;

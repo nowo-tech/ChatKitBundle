@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Controller;
 
+use Closure;
 use DateInterval;
 use DateTimeImmutable;
 use InvalidArgumentException;
@@ -41,10 +42,16 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatChannelDeniedException;
+use Nowo\ChatKitBundle\Service\ChatEditHistory;
+use Nowo\ChatKitBundle\Service\ChatForwarder;
+use Nowo\ChatKitBundle\Service\ChatForwardRefused;
+use Nowo\ChatKitBundle\Service\ChatIdempotency;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
+use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatSupportInbox;
+use Nowo\ChatKitBundle\Service\ChatThreads;
 use Nowo\ChatKitBundle\Support\ChatSupportTickets;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Clock\Clock;
@@ -58,12 +65,15 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
+use function array_is_list;
 use function array_slice;
 use function assert;
 use function count;
 use function is_array;
 use function is_int;
 use function is_string;
+use function max;
+use function min;
 use function strlen;
 
 use const DATE_ATOM;
@@ -85,6 +95,9 @@ final class ChatApiController extends AbstractController
     private const int CONTACTS_LIMIT      = 30;
     private const int MEMBERS_LIMIT       = 20;
 
+    /** 1.36: rows of the forward picker. */
+    private const int FORWARD_TARGETS_LIMIT = 30;
+
     /** 1.24: longest timed mute (one year); a mute without `minutes` lasts until the user unmutes. */
     private const int MAX_MUTE_MINUTES = 525_600;
 
@@ -98,6 +111,10 @@ final class ChatApiController extends AbstractController
      * @param ClockInterface $clock Clock for the realtime token expiry
      * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      * @param ChatMessageActions|null $menu 1.35: save for later, mark unread, message info; null offers none
+     * @param ChatForwarder|null $forwarder 1.36: forward; null offers none
+     * @param ChatThreads|null $threads 1.36: threads; null offers none
+     * @param ChatEditHistory|null $history 1.36: edit history; null offers none
+     * @param ChatIdempotency|null $idempotency 1.36: `Idempotency-Key` of forwards, thread replies and (optional) sends
      */
     public function __construct(
         private readonly ChatServiceInterface $chat,
@@ -136,6 +153,10 @@ final class ChatApiController extends AbstractController
         private readonly ?ChatQuickReplyRepository $quickReplies = null,
         private readonly ?CurrentChatUserResolverInterface $currentUser = null,
         private readonly ?ChatMessageActions $menu = null,
+        private readonly ?ChatForwarder $forwarder = null,
+        private readonly ?ChatThreads $threads = null,
+        private readonly ?ChatEditHistory $history = null,
+        private readonly ?ChatIdempotency $idempotency = null,
     ) {
     }
 
@@ -687,7 +708,9 @@ final class ChatApiController extends AbstractController
                 'name'      => $participant->getUser()->getChatDisplayName(),
                 'messageId' => $participant->getReceiptMessageId(),
             ], $this->currentReaders($conversation, $user)),
-        ] + ($this->menu?->saveEnabled() === true ? ['saved' => $this->menu->savedUuids($user, $page)] : []));
+        ] + ($this->menu?->saveEnabled() === true ? ['saved' => $this->menu->savedUuids($user, $page)] : [])
+            // 1.36: the viewer's view of the threads on the page (unread replies of followed ones, the newest repliers).
+            + ($this->threads?->enabled() === true ? ['threads' => $this->threadSummaries($user, $page)] : []));
     }
 
     /**
@@ -798,8 +821,19 @@ final class ChatApiController extends AbstractController
         $conversation = $this->find($uuid, ChatVoter::VIEW);
         $this->deny(!$this->isGranted(ChatVoter::SEND, $conversation), 'read_only', Response::HTTP_FORBIDDEN);
         $this->deny(!$this->sendLimiter->create('nowo_chat_send_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        $body = (string) ($this->payload($request)['body'] ?? '');
+        // 1.36 (Q-B15): an optional `Idempotency-Key` makes a resent message one message (ChatKit's own service only).
+        $key = $request->headers->get(ChatIdempotency::HEADER);
         try {
-            $message = $this->chat->send($user, $conversation, (string) ($this->payload($request)['body'] ?? ''));
+            if ($key !== null && $this->chat instanceof ChatService && $this->idempotency instanceof ChatIdempotency) {
+                $this->deny(!ChatIdempotency::isValidKey($key), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
+                $chat                  = $this->chat;
+                [$messages, $replayed] = $this->idempotency->run($user, $key, ChatIdempotency::hash(['send', $conversation->getUuid(), $body]), static fn (Closure $before, Closure $after): array => [$chat->sendWith($user, $conversation, $body, $before, $after)]);
+                $this->deny($messages === [], 'not_found', Response::HTTP_NOT_FOUND);
+
+                return $this->json(['message' => $this->presenter->message($messages[0], $user, $this->reactionsOf($messages[0]))] + ($replayed ? ['replayed' => true] : []), $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
+            }
+            $message = $this->chat->send($user, $conversation, $body);
         } catch (InvalidArgumentException $exception) {
             throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
         }
@@ -980,7 +1014,212 @@ final class ChatApiController extends AbstractController
         $user = $this->reader();
         $menu = $this->menu();
 
-        return $this->json($menu->info($user, $this->findMessage($uuid, $messageUuid, ChatVoter::INFO)));
+        $message = $this->findMessage($uuid, $messageUuid, ChatVoter::INFO);
+
+        // 1.36: when it was edited (edit history), for every reader of the info.
+        return $this->json($menu->info($user, $message) + ($this->history?->enabled() === true ? ['edits' => $this->history->edits($message)] : []));
+    }
+
+    /**
+     * 1.36: the conversations the caller may forward to (`?q=` filters by name, at most 80 characters): their
+     * conversations where they may write (tickets for agents only) and, with a query, people for a new direct
+     * conversation. 404 when forward is off.
+     *
+     * @param Request $request The request (query `q`)
+     *
+     * @return JsonResponse `{targets: list<{conversationUuid|null, contactUuid|null, kind, title, initials, avatarUrl}>}`
+     */
+    #[Route('/forward-targets', name: 'forward_targets', methods: ['GET'])]
+    public function forwardTargets(Request $request): JsonResponse
+    {
+        $user      = $this->reader();
+        $forwarder = $this->forwarder;
+        $this->deny($forwarder?->enabled() !== true, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($forwarder instanceof ChatForwarder);
+        $query       = mb_strtolower(mb_substr(trim((string) $request->query->get('q', '')), 0, 80));
+        $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
+        $targets     = [];
+        $direct      = [];
+        foreach ($this->conversations->findListForUser($user, $channelKeys, $this->access->isSupportAgent($user), self::LIST_LIMIT) as $conversation) {
+            if (!$forwarder->mayForwardInto($user, $conversation)) {
+                continue;
+            }
+            $peer = $this->access->directPeer($conversation, $user);
+            $row  = $this->presenter->conversation($conversation, $user, $peer, $conversation->isChannel() ? $this->access->channel((string) $conversation->getChannelKey()) : null, true, 0, null, $this->access->isSupportAgent($user));
+            if ($query !== '' && !str_contains(mb_strtolower($row['title']), $query)) {
+                continue;
+            }
+            if ($peer instanceof ChatUserInterface) {
+                $direct[$peer->getChatPublicId()] = true;
+            }
+            $targets[] = ['conversationUuid' => $conversation->getUuid(), 'contactUuid' => null, 'kind' => $conversation->getKind()->value, 'title' => $row['title'], 'initials' => $row['initials'], 'avatarUrl' => $row['avatarUrl']];
+        }
+        if ($query !== '') {
+            foreach ($this->directory->contactsFor($user, $query, self::CONTACTS_LIMIT) as $contact) {
+                $other = $contact->user;
+                if (isset($direct[$other->getChatPublicId()]) || ChatUserReferences::same($other, $user) || !$forwarder->mayForwardTo($user, $other)) {
+                    continue;
+                }
+                $targets[] = ['conversationUuid' => null, 'contactUuid' => $other->getChatPublicId(), 'kind' => 'direct', 'title' => $other->getChatDisplayName(), 'initials' => $other->getChatInitials(), 'avatarUrl' => $this->presenter->avatarUrl($other)];
+            }
+        }
+
+        return $this->json(['targets' => array_slice($targets, 0, self::FORWARD_TARGETS_LIMIT)]);
+    }
+
+    /**
+     * 1.36: forwards the message (`{targets: [{conversationUuid} | {contactUuid}], comment?}`) with a required
+     * `Idempotency-Key` (400 `idempotency_key_required`): all or nothing — 403 `forward_forbidden` with the `target`
+     * index (and the veto's `reason`) when a target is refused. A replay of the key answers the first forward (200).
+     * Each target counts against the send budget. 404 when forward is off or the message may not be forwarded.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request JSON body `{targets, comment}`
+     *
+     * @return JsonResponse `{messages: list<{conversationUuid, message}>}` with status 201
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/forward', name: 'forward', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST'])]
+    public function forwardMessage(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $user      = $this->writer($request);
+        $forwarder = $this->forwarder;
+        $this->deny($forwarder?->enabled() !== true, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($forwarder instanceof ChatForwarder);
+        $source  = $this->findMessage($uuid, $messageUuid, ChatVoter::FORWARD);
+        $key     = $this->idempotencyKey($request);
+        $payload = $this->payload($request);
+        $targets = $payload['targets'] ?? null;
+        $this->deny(!is_array($targets) || !array_is_list($targets), 'invalid_targets', Response::HTTP_UNPROCESSABLE_ENTITY);
+        assert(is_array($targets) && array_is_list($targets));
+        $this->deny(!$this->sendLimiter->create('nowo_chat_send_' . $user->getChatPublicId())->consume(max(1, min(count($targets), 20)))->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        $comment = $payload['comment'] ?? null;
+        try {
+            [$copies, $replayed] = $forwarder->forward($user, $source, $targets, is_string($comment) ? $comment : null, $key);
+        } catch (ChatForwardRefused $refused) {
+            throw new ChatApiException('forward_forbidden', Response::HTTP_FORBIDDEN, $refused, '', ['target' => $refused->target] + ($refused->reason === '' ? [] : ['reason' => $refused->reason]));
+        } catch (InvalidArgumentException $exception) {
+            throw new ChatApiException($exception->getMessage(), $exception->getMessage() === 'not_found' ? Response::HTTP_NOT_FOUND : Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
+        }
+
+        return $this->json([
+            'messages' => array_map(fn (ChatMessage $copy): array => ['conversationUuid' => $copy->getConversation()->getUuid(), 'message' => $this->presenter->message($copy, $user)], $copies),
+        ] + ($replayed ? ['replayed' => true] : []), $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
+    }
+
+    /**
+     * 1.36: a page of the message's thread (`?before=` older replies, `?after=` catch-up) with the root, the caller's
+     * read cursor and whether the caller follows it. The thread of a reply is its root's. 404 when threads are off.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid (the root or one of its replies)
+     * @param Request $request The request (query `before`, `after`)
+     *
+     * @return JsonResponse `{root, replies, hasMore, replyCount, readUpTo, following}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/thread', name: 'thread', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['GET'])]
+    public function thread(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $user    = $this->reader();
+        $threads = $this->threadsOn();
+        $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
+        $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($message instanceof ChatMessage);
+        $root      = ChatThreads::rootOf($message);
+        $page      = $threads->page($user, $root, $request->query->getInt('before') ?: null, $request->query->getInt('after') ?: null);
+        $replies   = $page['replies'];
+        $reactions = $this->reactions->summaryFor(array_map(static fn (ChatMessage $reply): int => (int) $reply->getId(), [$root, ...$replies]));
+        $this->references->prime($user, [$root, ...$replies]);
+        $this->presenter->primeAvatars(array_map(static fn (ChatMessage $reply): ?ChatUserInterface => $reply->getAuthor(), [$root, ...$replies]));
+        $this->presenter->primeAuthorBadges([$root, ...$replies]);
+
+        return $this->json([
+            'root'       => $this->presenter->message($root, $user, $reactions[(int) $root->getId()] ?? []),
+            'replies'    => array_map(fn (ChatMessage $reply): array => $this->presenter->message($reply, $user, $reactions[(int) $reply->getId()] ?? []), $replies),
+            'hasMore'    => $page['hasMore'],
+            'replyCount' => $root->getThreadReplyCount(),
+            'readUpTo'   => $page['readUpTo'],
+            'following'  => $page['following'],
+        ] + ($this->menu?->saveEnabled() === true ? ['saved' => $this->menu->savedUuids($user, [$root, ...$replies])] : []));
+    }
+
+    /**
+     * 1.36: replies in the message's thread (`{body}`) with a required `Idempotency-Key` (400
+     * `idempotency_key_required`); a reply to a reply goes to its root. The send pipeline (mentions, references, links,
+     * the send budget); Web Push to the thread's followers. 404 when threads are off or the message takes no thread.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request JSON body `{body}`
+     *
+     * @return JsonResponse `{message, root}` with status 201 (200 for a replay)
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/thread', name: 'thread_reply', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST'])]
+    public function threadReply(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $user    = $this->writer($request);
+        $threads = $this->threadsOn();
+        $root    = $this->findMessage($uuid, $messageUuid, ChatVoter::THREAD);
+        $key     = $this->idempotencyKey($request);
+        $this->deny(!$this->sendLimiter->create('nowo_chat_send_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        try {
+            [$reply, $replayed] = $threads->reply($user, $root, (string) ($this->payload($request)['body'] ?? ''), $key);
+        } catch (InvalidArgumentException $exception) {
+            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
+        }
+        $root = ChatThreads::rootOf($reply);
+
+        return $this->json([
+            'message' => $this->presenter->message($reply, $user, $this->reactionsOf($reply)),
+            'root'    => $this->presenter->message($root, $user, $this->reactionsOf($root)),
+        ] + ($replayed ? ['replayed' => true] : []), $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
+    }
+
+    /**
+     * 1.36: moves the caller's read cursor of the message's thread to the posted `messageId` (never back, never past its
+     * newest reply). 404 when threads are off.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid The root (or a reply) uuid
+     * @param Request $request JSON body `{messageId}`
+     *
+     * @return JsonResponse `{ok: true}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/thread/read', name: 'thread_read', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST'])]
+    public function threadRead(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $user    = $this->writer($request);
+        $threads = $this->threadsOn();
+        $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
+        $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($message instanceof ChatMessage);
+        $threads->markRead($user, ChatThreads::rootOf($message), (int) ($this->payload($request)['messageId'] ?? 0));
+
+        return $this->json(['ok' => true]);
+    }
+
+    /**
+     * 1.36: the previous texts of an edited message, newest first, rendered for the caller: its author, moderators and
+     * whom ChatHistoryPolicyInterface allows; 403 `history_forbidden` for other readers. 404 when edit history is off.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     *
+     * @return JsonResponse `{revisions: list<{editedAt, text, html}>}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/revisions', name: 'revisions', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['GET'])]
+    public function revisions(string $uuid, string $messageUuid): JsonResponse
+    {
+        $user    = $this->reader();
+        $history = $this->history;
+        $this->deny($history?->enabled() !== true, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($history instanceof ChatEditHistory);
+        $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
+        $this->deny(!$message instanceof ChatMessage || $message->isDeleted(), 'not_found', Response::HTTP_NOT_FOUND);
+        assert($message instanceof ChatMessage);
+        $this->deny(!$this->isGranted(ChatVoter::HISTORY, $message), 'history_forbidden', Response::HTTP_FORBIDDEN);
+
+        return $this->json(['revisions' => $history->revisions($user, $message)]);
     }
 
     /**
@@ -1554,6 +1793,50 @@ final class ChatApiController extends AbstractController
         }
 
         return $message;
+    }
+
+    /** 1.36: threads (404 when they are off). */
+    private function threadsOn(): ChatThreads
+    {
+        $threads = $this->threads;
+        $this->deny($threads?->enabled() !== true, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($threads instanceof ChatThreads);
+
+        return $threads;
+    }
+
+    /** 1.36: the required `Idempotency-Key` (400 when missing or malformed). */
+    private function idempotencyKey(Request $request): string
+    {
+        $key = $request->headers->get(ChatIdempotency::HEADER);
+        $this->deny($key === null || !$this->idempotency instanceof ChatIdempotency, 'idempotency_key_required', Response::HTTP_BAD_REQUEST);
+        $this->deny(!ChatIdempotency::isValidKey($key), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
+
+        return (string) $key;
+    }
+
+    /**
+     * 1.36: the viewer's thread summaries of a page, with the newest repliers' pictures.
+     *
+     * @param list<ChatMessage> $page
+     *
+     * @return array<string, array{count: int, lastReplyAt: string|null, unread: bool, following: bool, repliers: list<array{uuid: string, name: string, initials: string, avatarUrl: string|null}>}>
+     */
+    private function threadSummaries(ChatUserInterface $user, array $page): array
+    {
+        $summaries = $this->threads?->summaries($user, $page) ?? [];
+        $people    = [];
+        foreach ($summaries as $summary) {
+            $people = [...$people, ...$summary['repliers']];
+        }
+        $this->presenter->primeAvatars($people);
+
+        return array_map(fn (array $summary): array => ['repliers' => array_map(fn (ChatUserInterface $person): array => [
+            'uuid'      => $person->getChatPublicId(),
+            'name'      => $person->getChatDisplayName(),
+            'initials'  => $person->getChatInitials(),
+            'avatarUrl' => $this->presenter->avatarUrl($person),
+        ], $summary['repliers'])] + $summary, $summaries);
     }
 
     /** 1.35: the message menu's actions (404 when the application built the controller without them). */

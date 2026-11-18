@@ -85,6 +85,49 @@ export interface ChatMessage {
   references?: Reference[];
   /** Viewer-neutral realtime payload: its reference cards are fetched for the viewer (`GET` the message). */
   refsPending?: boolean;
+  /** 1.36: a forward: where it came from (`from`/`label` only when the viewer may read the source; else "Forwarded"). */
+  forwarded?: { from: 'channel' | 'direct' | 'support' | null; label: string | null };
+  /** 1.36: a thread reply: its root's uuid (never shown in the main timeline). */
+  threadRootUuid?: string;
+  /** 1.36: a thread root: its replies. */
+  thread?: { count: number; lastReplyAt: string | null };
+}
+
+/** 1.36: the viewer's view of a thread on a page (`threads` of `GET …/messages`). */
+export interface ThreadSummary {
+  count: number;
+  lastReplyAt: string | null;
+  unread: boolean;
+  following: boolean;
+  repliers: { uuid: string; name: string; initials: string; avatarUrl: string | null }[];
+}
+
+/** 1.36: a page of a thread (`GET …/thread`). */
+export interface ThreadPage {
+  root: ChatMessage;
+  replies: ChatMessage[];
+  hasMore: boolean;
+  replyCount: number;
+  readUpTo: number | null;
+  following: boolean;
+}
+
+/** 1.36: a conversation (or a person for a new direct conversation) the forward picker offers. */
+export interface ForwardTarget {
+  conversationUuid: string | null;
+  contactUuid: string | null;
+  kind: 'direct' | 'channel' | 'support';
+  title: string;
+  initials: string;
+  avatarUrl: string | null;
+}
+
+/** 1.36: a previous text of an edited message (`GET …/revisions`). */
+export interface MessageRevision {
+  editedAt: string;
+  /** Plain text for the viewer (a #reference the viewer may not open is the neutral placeholder). */
+  text: string;
+  html: string;
 }
 
 /** A #reference the viewer may open: an issue, a task, a project … (ChatReference). */
@@ -219,6 +262,10 @@ export interface MessageMenuSettings {
   picker: boolean;
   quoteMaxLength: number;
   saveDockEntry: boolean;
+  /** 1.36: conversations one forward may go to. */
+  forwardMaxTargets?: number;
+  /** 1.36: edit history is kept (the info dialog lists the edits). */
+  editHistory?: boolean;
 }
 
 /** 1.35: one person of message info. */
@@ -239,6 +286,8 @@ export interface MessageInfo {
   readTimes: boolean;
   readers: MessageInfoReader[];
   editedAt: string | null;
+  /** 1.36: when the message was edited (edit history on), newest first. */
+  edits?: { editedAt: string }[];
 }
 
 /** Another participant's read cursor (✓✓ in DMs, "Seen by N" in channels). */
@@ -262,7 +311,8 @@ export type RealtimeEvent =
   | { type: 'pins'; conversationUuid: string }
   | { type: 'links'; conversationUuid: string }
   | { type: 'unread'; conversationUuid: string; readUpTo: number | null }
-  | { type: 'saved'; conversationUuid: string; messageUuid: string; saved: boolean };
+  | { type: 'saved'; conversationUuid: string; messageUuid: string; saved: boolean }
+  | { type: 'thread'; conversationUuid: string; rootUuid: string; replyCount: number; lastReplyAt: string | null };
 
 /** 1.17: `hide` (invisible and inert), `inert` (painted, inert) or `none` (1.16 behaviour). */
 export type DockOverlayMode = 'hide' | 'inert' | 'none';
@@ -350,6 +400,13 @@ export interface ChatConfig {
     /** 1.35: the Saved list (`GET`, `?before=`) and its page. */
     saved?: string;
     savedPage?: string;
+    /** 1.36: the forward picker (`GET ?q=`). */
+    forwardTargets?: string;
+    /** 1.36: forward (`POST`), the thread (`GET`, `POST`), its read cursor (`POST`), the previous texts (`GET`) (`__uuid__`, `__message__`). */
+    forward?: string;
+    thread?: string;
+    threadRead?: string;
+    revisions?: string;
   };
   /** 1.35: the message menu (absent before 1.35: the 1.33 items only). */
   menu?: MessageMenuSettings;

@@ -147,7 +147,13 @@ nowo_chat_kit:
 | `profiles.<name>.message_menu.message_info.read_times` | bool | `true` | 1.35: store and show read times (only of people who share them: the reciprocal **Share read times** preference). `false`: who read it, never when. |
 | `profiles.<name>.message_menu.message_info.per_person_max_members` | int 2–500 | `20` | 1.35: up to this many people besides the author, the info lists them; above it, counts only, and no read time is stored. |
 | `profiles.<name>.message_menu.message_info.own_messages_only` | bool | `true` | 1.35: read info on the viewer's own messages only; support agents (moderators) see it on every message outside direct conversations. |
-| `profiles.<name>.message_menu.order` | list | `reply, quote, copy_text, copy_link, save, mark_unread, pin, info, edit, delete` | 1.35: order of the menu items; a subset hides the others. Separators go between groups (reply/quote · copy_text…pin · info/edit · delete). |
+| `profiles.<name>.message_menu.forward.enabled` | bool | `false` | 1.36: **Forward** — copy a text message to other conversations or to a new direct conversation (all targets or none). |
+| `profiles.<name>.message_menu.forward.max_targets` | int 1–20 | `5` | 1.36: conversations one forward may go to. Each target counts against the send rate limit. |
+| `profiles.<name>.message_menu.forward.from_support` | bool | `false` | 1.36: messages of support tickets may be forwarded out. Forwarding **into** a ticket is for agents only, whatever this says. |
+| `profiles.<name>.message_menu.threads.enabled` | bool | `false` | 1.36: **Reply in thread** — one-level threads under a message. Replies stay out of the main timeline and its unread badge. Stores thread read state: off by default. |
+| `profiles.<name>.message_menu.edit_history.enabled` | bool | `false` | 1.36: keep the previous texts of edited messages; the author and moderators read them (`GET …/revisions`), everyone sees the edit times in message info. Stores data: off by default. |
+| `profiles.<name>.message_menu.edit_history.max_revisions` | int 1–200 | `20` | 1.36: previous texts kept per message; older ones are dropped in the same write. |
+| `profiles.<name>.message_menu.order` | list | `reply, thread, quote, forward, copy_text, copy_link, save, mark_unread, pin, info, edit, delete` | 1.35: order of the menu items; a subset hides the others. Separators go between groups (reply/thread/quote/forward · copy_text…pin · info/edit · delete). 1.36 added `thread` and `forward`. |
 | `profiles.<name>.limits.*` | int | see below | Rate limits. |
 
 ## Retention from the application (1.31)

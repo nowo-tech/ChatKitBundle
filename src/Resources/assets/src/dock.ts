@@ -1332,6 +1332,11 @@ export class ChatDock implements ThreadHost {
         this.windows.get(event.conversationUuid)?.update(message);
         return;
       }
+      if (message.threadRootUuid !== undefined) {
+        // 1.36: a thread reply stays out of the timeline, the list and the badge (its followers get the `thread` event).
+        this.windows.get(event.conversationUuid)?.merge([message], false);
+        return;
+      }
       this.listTyping.delete(event.conversationUuid);
       if (!message.mine) {
         // 1.25: the host rows of the sidebar count it too (a window that reads it clears them again).
@@ -1379,6 +1384,10 @@ export class ChatDock implements ThreadHost {
     }
     if (event.type === 'saved') {
       this.windows.get(event.conversationUuid)?.savedChanged(event.messageUuid, event.saved);
+      return;
+    }
+    if (event.type === 'thread') {
+      this.windows.get(event.conversationUuid)?.threadChanged(event.rootUuid, event.replyCount, event.lastReplyAt);
       return;
     }
     if (event.type === 'typing') {

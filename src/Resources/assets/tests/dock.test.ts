@@ -1490,6 +1490,24 @@ describe('ChatDock', () => {
       expect(api.conversations).toHaveBeenCalled();
     });
 
+    it('1.36: thread replies stay out of the list and the badge; thread events reach the open window', async () => {
+      const { dock } = mount([summary('a')], { endpoints, i18n: i18nPlus });
+      await dock.start();
+      await dock.open(summary('a'));
+      const window = (dock as unknown as { windows: Map<string, { merge: (m: unknown[], n: boolean) => void; threadChanged: (r: string, c: number, l: string | null) => void }> }).windows.get('a');
+      const merge = vi.spyOn(window as { merge: (m: unknown[], n: boolean) => void }, 'merge');
+      const threadChanged = vi.spyOn(window as { threadChanged: (r: string, c: number, l: string | null) => void }, 'threadChanged');
+      api.conversations.mockClear();
+      const reply = { id: 99, uuid: 'r', authorUuid: 'x', authorName: 'X', authorInitials: 'X', kind: 'text', html: '<p>r</p>', createdAt: '2026-10-15T10:00:00Z', edited: false, deleted: false, moderated: false, threadRootUuid: 'root' };
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', message: reply as never });
+      realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'closed', message: reply as never });
+      expect(merge).toHaveBeenCalledWith([expect.objectContaining({ uuid: 'r', mine: false })], false);
+      expect(api.conversations).not.toHaveBeenCalled();
+      realtimeHandlers?.onEvent({ type: 'thread', conversationUuid: 'a', rootUuid: 'root', replyCount: 2, lastReplyAt: null });
+      realtimeHandlers?.onEvent({ type: 'thread', conversationUuid: 'closed', rootUuid: 'root', replyCount: 2, lastReplyAt: null });
+      expect(threadChanged).toHaveBeenCalledWith('root', 2, null);
+    });
+
     it('reloads the pinned bar on a pins event, never rings for a pinned line, and previews it in the list', async () => {
       api.pins.mockResolvedValue({ pins: [], canPin: true });
       const { dock, q } = mount([summary('a'), summary('b')], { endpoints, i18n: i18nPlus });

@@ -81,6 +81,62 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+**1.36 (forward, threads, edit history).** From **1.35.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+php bin/console doctrine:migrations:diff   # then review and run the migration
+```
+
+**Schema.** Three new tables (`nowo_chat_message_revision`, `nowo_chat_thread_read`, `nowo_chat_idempotency`) and six
+columns on `nowo_chat_message`, all with defaults: `thread_root_id`, `thread_reply_count` (0), `thread_last_reply_at`,
+`forwarded_from_message_id`, `forwarded_from_conversation_id` and `forwarded` (false). The unread index
+`idx_nowo_chat_message_unread` gains `thread_root_id` and is rebuilt (Q-B14). On large tables, run that step in a
+maintenance window, or online: `ALGORITHM=INPLACE, LOCK=NONE` on MySQL / MariaDB, `CREATE INDEX CONCURRENTLY` (then
+`DROP INDEX CONCURRENTLY` of the old one) on PostgreSQL. On MySQL / MariaDB (default names, `relation` mode) the
+migration is equivalent to:
+
+```sql
+ALTER TABLE nowo_chat_message ADD thread_root_id INT DEFAULT NULL, ADD thread_reply_count INT DEFAULT 0 NOT NULL,
+  ADD thread_last_reply_at DATETIME DEFAULT NULL, ADD forwarded_from_message_id INT DEFAULT NULL,
+  ADD forwarded_from_conversation_id INT DEFAULT NULL, ADD forwarded TINYINT(1) DEFAULT 0 NOT NULL;
+DROP INDEX idx_nowo_chat_message_unread ON nowo_chat_message;
+CREATE INDEX idx_nowo_chat_message_unread ON nowo_chat_message (conversation_id, thread_root_id, id, author_id, deleted_at);
+CREATE TABLE nowo_chat_message_revision (id INT AUTO_INCREMENT NOT NULL, body LONGTEXT NOT NULL, edited_at DATETIME NOT NULL,
+  message_id INT NOT NULL, INDEX idx_nowo_chat_revision_message (message_id, id), PRIMARY KEY (id));
+CREATE TABLE nowo_chat_thread_read (id INT AUTO_INCREMENT NOT NULL, last_read_reply_id INT DEFAULT NULL,
+  following TINYINT(1) DEFAULT 1 NOT NULL, updated_at DATETIME NOT NULL, root_message_id INT NOT NULL, user_id INT NOT NULL,
+  UNIQUE INDEX uniq_nowo_chat_thread_read (root_message_id, user_id), PRIMARY KEY (id));
+CREATE TABLE nowo_chat_idempotency (id INT AUTO_INCREMENT NOT NULL, result JSON DEFAULT NULL, created_at DATETIME NOT NULL,
+  idempotency_key VARCHAR(80) NOT NULL, request_hash VARCHAR(64) NOT NULL, user_id INT NOT NULL,
+  INDEX idx_nowo_chat_idempotency_at (created_at), UNIQUE INDEX uniq_nowo_chat_idempotency (user_id, idempotency_key), PRIMARY KEY (id));
+-- plus the foreign keys Doctrine generates: thread_root_id and the revision / thread tables ON DELETE CASCADE,
+-- the forward columns ON DELETE SET NULL
+```
+
+**Nothing changes until you enable the items:**
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            message_menu:
+                forward: { enabled: true }        # max_targets: 5, from_support: false
+                threads: { enabled: true }
+                edit_history: { enabled: true }   # max_revisions: 20
+```
+
+- A host whose `message_menu.order` lists the items keeps its order: add `thread` and `forward` to show them.
+- A host that overrides `nowo_chat_message_menu` renders the new items with `data-part="menu-thread"` and
+  `data-part="menu-forward"`.
+- Implementations of `ChatMessageActionsInterface` (introduced in 1.35) add `forward()`, `thread()`,
+  `replyInThread()` and `revisions()`.
+- `ChatService::edit()` with the same text as stored is no longer an edit (no "edited" mark, no event).
+- Messages of the main timeline, the unread counts, the list previews and `findLatest()` leave thread replies out.
+  Queries of your own on `nowo_chat_message` should add `thread_root_id IS NULL` where they mean the main timeline.
+- **Privacy:** previous texts and thread read state are personal data. Document them in your privacy notice;
+  `ChatPersonalData` exports and erases them.
+
 ## To 1.35.0
 
 From **1.34.1**:

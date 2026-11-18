@@ -14,6 +14,8 @@ use Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
+use Nowo\ChatKitBundle\Contract\ChatForwardPolicyInterface;
+use Nowo\ChatKitBundle\Contract\ChatHistoryPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatMessageActionsInterface;
 use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
@@ -30,6 +32,8 @@ use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
+use Nowo\ChatKitBundle\Forward\AllowAllChatForwardPolicy;
+use Nowo\ChatKitBundle\History\NoChatHistoryReaders;
 use Nowo\ChatKitBundle\Http\ChatApiExceptionListener;
 use Nowo\ChatKitBundle\Http\ChatConflictResponseFormatter;
 use Nowo\ChatKitBundle\Link\ChatLinks;
@@ -46,6 +50,7 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Nowo\ChatKitBundle\Service\ChatMentions;
+use Nowo\ChatKitBundle\Service\ChatMenuOptions;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
 use Nowo\ChatKitBundle\Service\ChatMessageMenu;
 use Nowo\ChatKitBundle\Service\ChatMessaging;
@@ -99,6 +104,7 @@ return static function (ContainerConfigurator $container): void {
             // 1.27: the port gates and value copies are built by Ports (ChatKitPortsPass), never autowired.
             '../../Port',
             '../../Service/ChatNotFoundException.php',
+            '../../Service/{ChatIdempotencyConflict,ChatDraft,ChatForwardRefused}.php',
             '../../Doctrine/ChatUserLookAlikeException.php',
             '../../Support/InvalidRetentionConfigurationException.php',
             // 1.32: registered by the extension only with `runtime.retention_days` (needs the optional contract).
@@ -186,6 +192,9 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatAvatarUrlResolverInterface::class, NullChatAvatarUrlResolver::class);
     // 1.29 (Beacon spec 234): author badges; the application aliases the interface to its own provider.
     $services->alias(ChatAuthorBadgeProviderInterface::class, NoChatAuthorBadges::class);
+    // 1.36: the forward veto (allows what ChatKit's checks allow) and who else reads edit history (nobody).
+    $services->alias(ChatForwardPolicyInterface::class, AllowAllChatForwardPolicy::class);
+    $services->alias(ChatHistoryPolicyInterface::class, NoChatHistoryReaders::class);
     $services->set(NullChatRealtime::class);
     if (interface_exists(HubInterface::class)) {
         $services->alias(ChatRealtimeInterface::class, MercureChatRealtime::class);
@@ -230,6 +239,11 @@ return static function (ContainerConfigurator $container): void {
     // 1.35: read times of message info, and the message menu's actions (save, unread, info).
     $services->get(ChatReadTimes::class)
         ->arg('$messageInfo', param('nowo_chat_kit.message_menu.message_info'));
+    // 1.36: forward, threads and edit history (flags and limits).
+    $services->get(ChatMenuOptions::class)
+        ->arg('$forward', param('nowo_chat_kit.message_menu.forward'))
+        ->arg('$threads', param('nowo_chat_kit.message_menu.threads'))
+        ->arg('$editHistory', param('nowo_chat_kit.message_menu.edit_history'));
     $services->get(ChatMessageActions::class)
         ->arg('$save', param('nowo_chat_kit.message_menu.save'))
         ->arg('$markUnread', param('nowo_chat_kit.message_menu.mark_unread'));

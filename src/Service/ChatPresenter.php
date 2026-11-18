@@ -14,6 +14,7 @@ use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Model\ChatAuthorBadge;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Support\ChatSupportPolicy;
 use Nowo\ChatKitBundle\Support\ChatSupportTopics;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -52,6 +53,7 @@ final readonly class ChatPresenter
         private ?ChatReferences $references = null,
         private ?ChatAvatars $avatars = null,
         private ?ChatAuthorBadges $authorBadges = null,
+        private ?ChatAccess $access = null,
     ) {
     }
 
@@ -247,14 +249,42 @@ final readonly class ChatPresenter
             // Cards of the references the viewer may open (the editor turns them back into tokens); `refsPending`:
             // a viewer-neutral payload the client fetches again for its user — its #reference slots, or a bot line,
             // translated in the locale of the request that posted it (an agent's), not the reader's.
-            'references'  => $filled['references'],
-            'refsPending' => $filled['pending'] || (($bot || $system) && !$viewer instanceof ChatUserInterface),
+            'references' => $filled['references'],
+            // 1.36: a forward's marker names its source only for a viewer who may read it.
+            'refsPending' => $filled['pending'] || (($bot || $system || $message->isForwarded()) && !$viewer instanceof ChatUserInterface),
             // 1.10: pinned to the top of the conversation; a pin line names the message it is about.
             'pinned'        => $message->getPinnedAt() instanceof DateTimeImmutable,
             'pinnedMessage' => $message->getPinnedMessageUuid(),
         ] + ($all === null ? [] : ['mentionAll' => $all])
             // 1.29 (Beacon spec 234): only when the author has badges, so a host without a provider sees 1.28's shape.
-            + ($badges === [] ? [] : ['authorBadges' => array_map(static fn (ChatAuthorBadge $badge): array => $badge->toArray(), $badges)]);
+            + ($badges === [] ? [] : ['authorBadges' => array_map(static fn (ChatAuthorBadge $badge): array => $badge->toArray(), $badges)])
+            // 1.36: only on forwards, thread replies and thread roots, so other messages keep 1.35's shape.
+            + ($message->isForwarded() && !$message->isDeleted() ? ['forwarded' => $this->forwardMarker($message, $viewer)] : [])
+            + ($message->getThreadRoot() instanceof ChatMessage ? ['threadRootUuid' => $message->getThreadRoot()->getUuid()] : [])
+            + ($message->getThreadReplyCount() > 0 ? ['thread' => [
+                'count'       => $message->getThreadReplyCount(),
+                'lastReplyAt' => $message->getThreadLastReplyAt()?->format(DATE_ATOM),
+            ]] : []);
+    }
+
+    /**
+     * 1.36: where a forward came from, for this viewer: the kind of the source conversation and (a channel) its name,
+     * only when the viewer may read it now; otherwise nothing (the neutral "Forwarded"). The source's author is never
+     * named.
+     *
+     * @param ChatMessage $message The forward
+     * @param ChatUserInterface|null $viewer The viewer; null for a viewer-neutral payload (the client fetches it again)
+     *
+     * @return array{from: string|null, label: string|null}
+     */
+    public function forwardMarker(ChatMessage $message, ?ChatUserInterface $viewer): array
+    {
+        $source = $message->getForwardedFromConversation();
+        if (!$source instanceof ChatConversation || !$viewer instanceof ChatUserInterface || !$this->access instanceof ChatAccess || !$this->access->canView($source, $viewer)) {
+            return ['from' => null, 'label' => null];
+        }
+
+        return ['from' => $source->getKind()->value, 'label' => $source->isChannel() ? $this->access->channel((string) $source->getChannelKey())?->label : null];
     }
 
     /**

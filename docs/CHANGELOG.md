@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+  - [Added](#added)
+  - [Changed](#changed)
 - [[1.35.0] - 2026-11-18](#1350---2026-11-18)
   - [Added](#added)
   - [Changed](#changed)
@@ -195,6 +197,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - [Added](#added-36)
 
 ## [Unreleased]
+
+### Added
+
+- **Forward, threads and edit history** (1.36; Beacon request, owner decision D-20261118-02, contract
+  `chatkit-menu-1118` §3.3, §3.7, §3.8b). All three store data and are off by default.
+  - **Forward** (`message_menu.forward`: `enabled`, `max_targets` 5, `from_support` false):
+    `GET /chat/api/forward-targets?q=` and `POST …/messages/{m}/forward {targets, comment?}` with a required
+    `Idempotency-Key`. All or nothing: SEND on each target, tickets for agents only, `ChatMessageForwardingEvent`
+    (cancelable) and the new port `ChatForwardPolicyInterface` (`ChatForwardRequest`); one refusal answers 403
+    `forward_forbidden` with the `target` index and nothing is written. The copy mentions nobody (tokens become plain
+    names, `@channel` / `@here` plain words) and keeps its #reference tokens. Its marker names the source conversation
+    only to readers who may read it ("Forwarded" otherwise), never the author. `ChatMessageForwardedEvent` after the
+    commit. A dialog with search and multi-select, a full-height sheet on phones.
+  - **Threads** (`message_menu.threads.enabled`): one level deep; `GET` / `POST …/messages/{m}/thread` (POST with a
+    required `Idempotency-Key`) and `POST …/thread/read`. Replies stay out of the main timeline, its unread badge and
+    the list previews. The root counts them (`thread: {count, lastReplyAt}`; `threads` on the messages page with the
+    reader's `unread`, `following` and newest `repliers`). The root's author, the repliers and the people a reply
+    names with an @mention follow the thread (new table `nowo_chat_thread_read`; `@channel` / `@here` notify only): they get its Web Push and the realtime `thread`
+    event. Replies are never pinned. `ChatThreadReplyEvent`, and `ChatMessageSentEvent::threadRootUuid()`. A thread
+    panel: a side panel on wide screens, a full-height sheet on phones.
+  - **Edit history** (`message_menu.edit_history`: `enabled`, `max_revisions` 20): each edit keeps the text it
+    replaced (new table `nowo_chat_message_revision`, pruned in the same write). Message info lists the edit times
+    (`edits`); `GET …/messages/{m}/revisions` gives the previous texts, rendered for the reader, to the author,
+    moderators and whom the new port `ChatHistoryPolicyInterface` (`ChatHistoryRequest`) allows (403
+    `history_forbidden` otherwise). A deleted message keeps none. New `ChatMessageEditedEvent` after every edit.
+  - **Idempotency keys** (REQ-RUNTIME-003 rule 7): new table `nowo_chat_idempotency`, claimed first in the write's
+    unit of work. A replay of the same key and request answers the first result (200 `replayed: true`); the same key
+    with another request answers 422 `idempotency_mismatch`. Optional on `POST …/messages` (Q-B15). `nowo:chat:purge`
+    drops keys older than a day.
+  - New voter attributes `nowo_chat.message.forward`, `.thread` and `.history`; `ChatMessagingInterface::FORWARD`,
+    `THREAD` and `HISTORY`; `ChatMessageActionsInterface::forward()`, `thread()`, `replyInThread()` and `revisions()`.
+    `ChatMessageView` gains `threadRootUuid`, `threadReplyCount` and `forwarded`.
+  - GDPR: the export gains `thread_reads`, `forwards` and `revisions`. The erasure deletes the user's thread rows,
+    idempotency keys and the previous texts of their messages, scrubs their mention tokens from other people's previous
+    texts, and forwards of their messages show the neutral marker. The purge takes a root's thread with it.
+    Residuals (docs/SECURITY.md): a forward is the forwarder's message and keeps the copied text after the source is
+    deleted, purged or its author erased; a `#reference` the forwarder may not open is copied without its title.
+  - Two-process race tests on MySQL, MariaDB and PostgreSQL: one forward from two workers under one key, concurrent
+    replies in one thread, concurrent edits of one message.
+  - Translations in the 7 locales, Vitest and PHPUnit.
 
 ### Changed
 

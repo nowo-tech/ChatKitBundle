@@ -38,7 +38,7 @@ test('the message menu is a bottom sheet; a quick reaction reacts; the backdrop 
   expect(Math.round(box.width)).toBe(viewport.width);
   expect(Math.abs(box.y + box.height - viewport.height)).toBeLessThan(2);
   await expect(sheet.getByRole('group', { name: 'Quick reactions' })).toBeVisible();
-  expect((await sheet.getByRole('menuitem', { name: 'Reply' }).boundingBox())!.height).toBeGreaterThanOrEqual(43);
+  expect((await sheet.getByRole('menuitem', { name: 'Reply', exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(43);
 
   // The backdrop closes it without reaching the page.
   await page.mouse.click(viewport.width / 2, 10);
