@@ -1621,7 +1621,7 @@ comment. `POST …/forward {targets: [{conversationUuid} | {contactUuid}], comme
 - Replies never show in the main timeline and never count in the conversation's unread badge. The root carries
   `thread: {count, lastReplyAt}`, and `GET …/messages` adds `threads` with each root's view for the reader: `unread`,
   `following` and up to three `repliers`.
-- The root's author, everyone who replied and everyone a reply mentions follow the thread
+- The root's author, everyone who replied and everyone a reply names with an @mention follow the thread (`@channel` and `@here` notify but do not make anyone follow)
   (`nowo_chat_thread_read`). Followers get the Web Push of new replies and the realtime `thread` event
   (`{rootUuid, replyCount, lastReplyAt}`), which marks the root with "new replies".
 - A reply takes edit, delete, reactions, save and info through the usual message endpoints. It is never pinned.
@@ -1632,10 +1632,10 @@ The thread opens in a panel: a side panel on wide screens, a full-height sheet o
 
 **Edit history.** Each edit keeps the text it replaced (up to `edit_history.max_revisions` per message, in the edit's
 own write). Message info lists the edit times (`edits: [{editedAt}]`). `GET …/revisions` →
-`{revisions: [{editedAt, body, html}]}` is for the author, moderators (support agents outside direct conversations)
+`{revisions: [{editedAt, text, html}]}` is for the author, moderators (support agents outside direct conversations)
 and whom `ChatHistoryPolicyInterface::mayReadHistory(ChatHistoryRequest)` allows; anyone else gets 403
 `history_forbidden`. The previous texts are rendered for the reader when they are read, so a `#reference` shows only
-what that reader may open. Deleting a message deletes its previous texts. Saving the same text again is no edit.
+what that reader may open (`text` is plain text and `html` the sanitised render; the stored Markdown is never returned). Deleting a message deletes its previous texts. Saving the same text again is no edit.
 `ChatMessageEditedEvent` (with the revision id) is dispatched after every edit.
 
 **Optional key on send.** `POST …/messages` accepts an `Idempotency-Key` too (Q-B15): the same key and text answer the

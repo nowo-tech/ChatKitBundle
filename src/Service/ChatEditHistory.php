@@ -84,19 +84,23 @@ final readonly class ChatEditHistory
 
     /**
      * The previous texts, newest first, rendered for the viewer (edit history on, the message not deleted: ChatVoter::HISTORY).
+     * Never the stored Markdown (audit UB-1): a #reference keeps its title only for a viewer who may open the item; the
+     * HTML shows the neutral chip and the plain text the neutral placeholder otherwise.
      *
      * @param ChatUserInterface $viewer The viewer ({@see self::mayRead()} said yes)
      * @param ChatMessage $message The message
      *
-     * @return list<array{editedAt: string, body: string, html: string}>
+     * @return list<array{editedAt: string, text: string, html: string}>
      */
     public function revisions(ChatUserInterface $viewer, ChatMessage $message): array
     {
         return array_map(function (ChatMessageRevision $revision) use ($viewer): array {
-            $html = $this->markdown->render($revision->getBody());
-            $html = $this->references?->fill($html, $revision->getBody(), $viewer)['html'] ?? $html;
+            $body = $revision->getBody();
+            $html = $this->markdown->render($body);
+            $html = $this->references?->fill($html, $body, $viewer)['html'] ?? $html;
+            $text = $this->references?->plainText($this->markdown, $body, $viewer, ChatMessage::MAX_LENGTH) ?? $this->markdown->plainText($body, ChatMessage::MAX_LENGTH);
 
-            return ['editedAt' => $revision->getEditedAt()->format(DATE_ATOM), 'body' => $revision->getBody(), 'html' => ChatMarkdownRenderer::stripAttributes($html)];
+            return ['editedAt' => $revision->getEditedAt()->format(DATE_ATOM), 'text' => $text, 'html' => ChatMarkdownRenderer::stripAttributes($html)];
         }, $this->revisions->forMessage($message));
     }
 }

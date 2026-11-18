@@ -1384,7 +1384,7 @@ describe('ThreadView', () => {
         const mine = msg({ mine: true, authorUuid: 'me', uuid: 'mine' });
         const ctx = await loaded([mine], {}, full);
         const messageInfo = vi.fn().mockResolvedValue({ mode: 'people', memberCount: 1, readCount: 0, readTimes: true, readers: [], editedAt: '2026-10-15T10:01:00Z', edits: [{ editedAt: '2026-10-15T10:01:00Z' }] });
-        const revisions = vi.fn().mockResolvedValue([{ editedAt: '2026-10-15T10:01:00Z', body: 'old', html: '<p>old</p>' }]);
+        const revisions = vi.fn().mockResolvedValue([{ editedAt: '2026-10-15T10:01:00Z', text: 'old', html: '<p>old</p>' }]);
         Object.assign(ctx.host.api, { messageInfo, revisions });
         item(ctx.article(mine.id), 'info').click();
         await vi.waitFor(() => expect(document.querySelector('[data-part="info-history"]')).not.toBeNull());

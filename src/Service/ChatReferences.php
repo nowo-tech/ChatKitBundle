@@ -45,6 +45,9 @@ final class ChatReferences implements ResetInterface
     /** What ChatMarkdownRenderer writes for each token: an empty slot filled for the viewer at read time. */
     public const string SLOT = '<span class="nowo-chat-ref-slot"></span>';
 
+    /** 1.36 (audit UB-2): the title of a forwarded token the forwarder could not open. */
+    public const string NEUTRAL_TITLE = '…';
+
     /** 1.10.1: a slot alone in its paragraph (only cards, spaces and line breaks) becomes a full-width card. */
     private const string BLOCK_SLOT = '<span class="nowo-chat-ref-slot" data-block></span>';
 
@@ -317,6 +320,34 @@ final class ChatReferences implements ResetInterface
         }
 
         return $markdown->plainText($body, $maxLength);
+    }
+
+    /**
+     * 1.36 (audit UB-2): the text a forward copies — every #reference token stays (each reader of the copy sees what they
+     * may open), but a token the forwarder may not open loses its title (`#[…](type:id)`), so the copy, its export, its
+     * snapshot and its events never carry a title the forwarder could not read. Code spans and blocks stay as written.
+     *
+     * @param ChatUserInterface $viewer The forwarder
+     * @param string $body The source's Markdown
+     *
+     * @return string The Markdown to copy
+     */
+    public function neutralizeFor(ChatUserInterface $viewer, string $body): string
+    {
+        $tokens = self::parse($body);
+        if ($tokens === []) {
+            return $body;
+        }
+        $cards = $this->resolveFor($viewer, $tokens);
+
+        return (string) preg_replace_callback(self::CODE_OR_TOKEN, static function (array $match) use ($cards): string {
+            if ($match[1] !== '') {
+                return $match[1];
+            }
+            $reference = $cards[$match[3] . ':' . $match[4]] ?? null;
+
+            return $reference instanceof ChatReference ? self::token($reference) : '#[' . self::NEUTRAL_TITLE . '](' . $match[3] . ':' . $match[4] . ')';
+        }, $body);
     }
 
     /**

@@ -146,10 +146,18 @@ dependencies current. Security fixes are released as patch versions of the suppo
 - **Forward (1.36):** a forward is all or nothing, and every target is checked before anything is written (SEND,
   tickets for agents only, the host's event and port). The copy mentions nobody. The marker names the source
   conversation only to readers who may read it. Support tickets are never forwarded out unless `forward.from_support`
-  is on.
+  is on. A `#reference` the forwarder may not open is copied without its title (`#[…](type:id)`).
+  - **GDPR residuals of forwards (document them in your privacy notice):** a forward is a new message of the
+    forwarder. It keeps the copied text when the source is deleted, purged or its author erased (only the link to the
+    source goes, and the marker turns neutral), it is listed in the forwarder's export (not the source author's), and
+    an erasure of the source's author does not rewrite it. Mentions in it are already plain names.
+  - A direct conversation that a forward opened is removed again when the forward then fails without writing
+    anything. If another request wrote into it meanwhile, it stays.
 - **Edit history (1.36, personal data):** previous texts are stored only with `message_menu.edit_history.enabled`, go
   with the message (delete, purge, erasure) and are read only by the author, moderators and whom
-  `ChatHistoryPolicyInterface` allows. They are rendered for the reader at read time. The export lists the previous
+  `ChatHistoryPolicyInterface` allows. They are rendered for the reader at read time, never as the stored Markdown,
+  so a `#reference` title shows only to whoever may open it. Erasing a user also scrubs their mention tokens from
+  other people's previous texts. The export lists the previous
   texts of the user's own messages.
 - **Threads (1.36):** `nowo_chat_thread_read` keeps who follows a thread and how far they read it. It goes with the
   root (purge) and with the user (erasure), and the export lists it.

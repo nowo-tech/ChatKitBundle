@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Database;
 
 use Doctrine\DBAL\ParameterType;
+use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Service\ChatService;
+use Nowo\ChatKitBundle\Service\ChatThreads;
 use Nowo\ChatKitBundle\Tests\Database\Support\LoadDatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use RuntimeException;
@@ -159,6 +161,34 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
     }
 
     /**
+     * 1.36 (audit UB-4): two workers delete the same replies: each delete counts once on the root.
+     */
+    public function testTheSameRepliesDeletedTwice(): void
+    {
+        $this->seed();
+        $this->replies(self::CALLS);
+        [$a, $b] = $this->race('delreply', 'delreply');
+        $this->assertClean($a, $b);
+        self::assertSame(0, (int) $this->connection()->fetchOne('SELECT thread_reply_count FROM nowo_chat_message WHERE thread_root_id IS NULL ORDER BY id LIMIT 1'));
+        self::assertSame(self::CALLS, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE thread_root_id IS NOT NULL AND deleted_at IS NOT NULL'));
+    }
+
+    /**
+     * 1.36 (audit UB-4): replies racing the deletion of their root: none lands after it, and the count matches.
+     */
+    public function testRepliesAgainstTheDeletionOfTheirRoot(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('thread', 'delroot');
+        $this->assertClean($a, $b);
+        $root = $this->connection()->fetchAssociative('SELECT id, thread_reply_count, deleted_at FROM nowo_chat_message WHERE thread_root_id IS NULL ORDER BY id LIMIT 1');
+        self::assertIsArray($root);
+        self::assertNotNull($root['deleted_at']);
+        self::assertSame((int) $root['thread_reply_count'], (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE thread_root_id = ?', [$root['id']]));
+        self::assertSame(0, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE thread_root_id = ? AND created_at > ?', [$root['id'], $root['deleted_at']]));
+    }
+
+    /**
      * @param array{ok: int, failures: array<string, int>, poisoned: int, closed: int} ...$writers
      */
     private function assertClean(array ...$writers): void
@@ -178,6 +208,17 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
         $luis  = $users->findOneBy(['name' => 'luis']) ?? self::fail('luis');
         for ($i = 0; $i < $count; ++$i) {
             $chat->send($ana, $chat->openDirect($ana, $luis), 'more ' . $i);
+        }
+    }
+
+    private function replies(int $count): void
+    {
+        $users   = $this->em->getRepository(TestUser::class);
+        $ana     = $users->findOneBy(['name' => 'ana']) ?? self::fail('ana');
+        $root    = $this->em->getRepository(ChatMessage::class)->findOneBy([], ['id' => 'ASC']) ?? self::fail('root');
+        $threads = $this->get(ChatThreads::class);
+        for ($i = 0; $i < $count; ++$i) {
+            $threads->reply($ana, $root, 'reply ' . $i, 'seed-' . $i);
         }
     }
 

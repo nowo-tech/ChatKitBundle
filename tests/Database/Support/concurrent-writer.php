@@ -15,7 +15,8 @@ declare(strict_types=1);
  *
  * 1.36: `forward` forwards the first message into the conversation under one shared `Idempotency-Key` (one effect for
  * both workers); `thread` replies in the first message's thread (a key per call); `edit` edits the first message (edit
- * history on).
+ * history on); `delreply` deletes the first message's replies one by one (both workers the same ones); `delroot`
+ * deletes the first message halfway through.
  *
  * Prints one JSON line: {ok, failures, poisoned, closed}.
  */
@@ -37,7 +38,7 @@ require dirname(__DIR__, 3) . '/vendor/autoload.php';
 
 [, $mode, $calls, $tag, $start] = $argv + [null, 'send', '50', 'a', '0'];
 $menuModes                      = ['menu', 'savecap', 'unread', 'readonly', 'optout'];
-$threadModes                    = ['forward', 'thread', 'edit'];
+$threadModes                    = ['forward', 'thread', 'edit', 'delreply', 'delroot'];
 $kernel                         = new TestKernel(match (true) {
     in_array($mode, $menuModes, true)   => ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true, 'max_per_user' => $mode === 'savecap' ? 1 : 500], 'message_info' => ['enabled' => true]]]]],
     in_array($mode, $threadModes, true) => ['profiles' => ['default' => ['message_menu' => ['forward' => ['enabled' => true], 'threads' => ['enabled' => true], 'edit_history' => ['enabled' => true, 'max_revisions' => 200]]]]],
@@ -85,6 +86,9 @@ for ($i = 0; $i < (int) $calls; ++$i) {
         'forward'  => 'forward',
         'thread'   => 'thread',
         'edit'     => 'edit',
+        // 1.36 (audit UB-4): both workers delete the same replies; one deletes the root while the other replies.
+        'delreply' => 'delreply',
+        'delroot'  => $i === intdiv((int) $calls, 2) ? 'delroot' : 'idle',
         default    => 'send',
     };
     try {
@@ -102,11 +106,14 @@ for ($i = 0; $i < (int) $calls; ++$i) {
             'unsave'  => $menu->markSaved($luis, $last(), false),
             'unread'  => $menu->markUnreadFrom($luis, $last()),
             // Each call another of the first messages; over the cap the service refuses (a soft cap, docs/CONCURRENCY.md).
-            'savecap' => $menu->markSaved($luis, $em()->getRepository(ChatMessage::class)->findOneBy(['conversation' => $dm], ['id' => 'ASC']) ?? throw new RuntimeException('first'), true),
-            'forward' => $forwarder->forward($luis, $first(), [['conversationUuid' => $dm->getUuid()]], null, 'one-forward'),
-            'thread'  => $threads->reply($tag === 'a' ? $ana : $luis, $first(), $tag . ' reply ' . $i, $tag . '-' . $i),
-            'edit'    => $chat->edit($first(), $tag . ' edit ' . $i),
-            'optout'  => (static function () use ($settings, $luis, $i): void {
+            'savecap'  => $menu->markSaved($luis, $em()->getRepository(ChatMessage::class)->findOneBy(['conversation' => $dm], ['id' => 'ASC']) ?? throw new RuntimeException('first'), true),
+            'forward'  => $forwarder->forward($luis, $first(), [['conversationUuid' => $dm->getUuid()]], null, 'one-forward'),
+            'thread'   => $threads->reply($tag === 'a' ? $ana : $luis, $first(), $tag . ' reply ' . $i, $tag . '-' . $i),
+            'edit'     => $chat->edit($first(), $tag . ' edit ' . $i),
+            'delreply' => $chat->delete($ana, $em()->getRepository(ChatMessage::class)->findBy(['threadRoot' => $first()], ['id' => 'ASC'])[$i] ?? throw new RuntimeException('reply')),
+            'delroot'  => $chat->delete($ana, $first()),
+            'idle'     => usleep(2000),
+            'optout'   => (static function () use ($settings, $luis, $i): void {
                 $mine = $settings->forUser($luis);
                 $mine->setShareReadTimes($i % 2 === 0);
                 $settings->save($mine);
@@ -115,7 +122,8 @@ for ($i = 0; $i < (int) $calls; ++$i) {
         ++$ok;
     } catch (InvalidArgumentException $refused) {
         // `too_many_saved`: the cap answered, as it should.
-        $refused->getMessage() === 'too_many_saved' ? ++$ok : $failures[$op . ': ' . $refused->getMessage()] = ($failures[$op . ': ' . $refused->getMessage()] ?? 0) + 1;
+        // 1.36: `not_threadable`: a reply to a root deleted meanwhile is refused, as it should.
+        in_array($refused->getMessage(), ['too_many_saved', 'not_threadable'], true) ? ++$ok : $failures[$op . ': ' . $refused->getMessage()] = ($failures[$op . ': ' . $refused->getMessage()] ?? 0) + 1;
     } catch (Throwable $failure) {
         $failures[$op . ': ' . $failure::class] = ($failures[$op . ': ' . $failure::class] ?? 0) + 1;
     }

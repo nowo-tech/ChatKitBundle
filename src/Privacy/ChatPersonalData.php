@@ -666,6 +666,9 @@ final readonly class ChatPersonalData
             $after = $ids === [] ? null : $ids[array_key_last($ids)];
         } while (count($ids) === self::ERASE_BATCH);
 
+        // 1.36 (audit UB-3): the previous texts of edited messages (edit history) lose the token too, in the same unit.
+        $this->scrubRevisions($publicId, $token, $replace);
+
         $skipped = array_keys(array_filter($rows, static fn (bool $rewritten): bool => !$rewritten));
         $delete  = $this->entityManager->createQueryBuilder()->delete(ChatMessageMention::class, 'n')
             ->where($this->refs->field('n', 'user') . ' = :user')->setParameter('user', $this->refs->value($user));
@@ -675,6 +678,40 @@ final readonly class ChatPersonalData
         $delete->getQuery()->execute();
 
         return new ChatMentionErasure($publicId, array_keys(array_filter($rows)), $skipped);
+    }
+
+    /**
+     * 1.36 (audit UB-3): every previous text (`nowo_chat_message_revision`) holding the erased user's mention token gets
+     * the same rewrite as the messages, by id pages of {@see self::ERASE_BATCH}. A previous text that cannot be scanned
+     * (invalid UTF-8) is deleted rather than kept with the id: it is history, not the message.
+     *
+     * @param string $publicId The erased user's public id
+     * @param string $token The token pattern of that user
+     * @param string $replace The replacement (the label, escaped for preg_replace)
+     */
+    private function scrubRevisions(string $publicId, string $token, string $replace): void
+    {
+        if (preg_match('/^[A-Za-z0-9_-]{1,64}$/', $publicId) !== 1) {
+            return;
+        }
+        $after = 0;
+        do {
+            /** @var list<array{id: int|string, body: string}> $rows */
+            $rows = $this->entityManager->createQueryBuilder()->select('r.id', 'r.body')->from(ChatMessageRevision::class, 'r')
+                ->where('r.body LIKE :needle ESCAPE \'!\' AND r.id > :after')
+                ->setParameter('needle', '%](' . strtr($publicId, ['!' => '!!', '_' => '!_', '%' => '!%']) . ')%')
+                ->setParameter('after', $after)
+                ->orderBy('r.id', 'ASC')->setMaxResults(self::ERASE_BATCH)
+                ->getQuery()->getArrayResult();
+            foreach ($rows as $row) {
+                $scrubbed = preg_replace($token, $replace, $row['body']);
+                $scrubbed = $scrubbed === null ? null : $this->flattenNewMentions($row['body'], $scrubbed, $publicId);
+                $qb       = $this->entityManager->createQueryBuilder();
+                ($scrubbed === null ? $qb->delete(ChatMessageRevision::class, 'r') : $qb->update(ChatMessageRevision::class, 'r')->set('r.body', ':body')->setParameter('body', $scrubbed))
+                    ->where('r.id = :id')->setParameter('id', (int) $row['id'])->getQuery()->execute();
+                $after = (int) $row['id'];
+            }
+        } while (count($rows) === self::ERASE_BATCH);
     }
 
     /**

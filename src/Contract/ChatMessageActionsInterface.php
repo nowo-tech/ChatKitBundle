@@ -129,7 +129,7 @@ interface ChatMessageActionsInterface
      *
      * @throws ChatNotFoundException When the conversation or the message is unknown or not allowed (HISTORY)
      *
-     * @return list<array{editedAt: string, body: string, html: string}>
+     * @return list<array{editedAt: string, text: string, html: string}>
      */
     public function revisions(ChatUserInterface $actor, string $conversationUuid, string $messageUuid): array;
 }

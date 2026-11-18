@@ -336,7 +336,7 @@ final class ChatMessageMenu136ApiTest extends DatabaseTestCase
         }
         // The same text again is no edit; two previous texts are kept (max_revisions), newest first.
         $this->client->request(Request::METHOD_GET, $base . '/revisions');
-        self::assertSame(['three', 'two'], array_column($this->decode()['revisions'], 'body'));
+        self::assertSame(['three', 'two'], array_column($this->decode()['revisions'], 'text'));
         $this->client->request(Request::METHOD_GET, $base . '/info');
         self::assertCount(2, $this->decode()['edits']);
         // Another member: 403; a moderator (an agent in a channel): the texts.

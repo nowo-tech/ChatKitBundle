@@ -188,7 +188,7 @@ describe('chat api client', () => {
   });
 
   it('1.36: forward targets, forward, thread, thread replies and reads, revisions', async () => {
-    const fetchMock = respond({ targets: [{ title: 'Acme' }], messages: [{ conversationUuid: 'x' }], root: { uuid: 'r' }, replies: [], message: { uuid: 'm' }, revisions: [{ body: 'old' }] });
+    const fetchMock = respond({ targets: [{ title: 'Acme' }], messages: [{ conversationUuid: 'x' }], root: { uuid: 'r' }, replies: [], message: { uuid: 'm' }, revisions: [{ text: 'old' }] });
     vi.stubGlobal('fetch', fetchMock);
     const api = new ChatApi({
       ...config,
@@ -210,7 +210,7 @@ describe('chat api client', () => {
     expect(fetchMock).toHaveBeenLastCalledWith('/t/c/m', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'Idempotency-Key': 'key-3' }) }));
     await api.threadRead('c', 'm', 7);
     expect(fetchMock).toHaveBeenLastCalledWith('/tr/c/m', expect.objectContaining({ body: JSON.stringify({ messageId: 7 }) }));
-    expect((await api.revisions('c', 'm'))[0]?.body).toBe('old');
+    expect((await api.revisions('c', 'm'))[0]?.text).toBe('old');
     expect(fetchMock.mock.lastCall?.[0]).toBe('/r/c/m');
     // Without the endpoints (older servers) the URL is empty.
     await new ChatApi(config).forwardTargets('');

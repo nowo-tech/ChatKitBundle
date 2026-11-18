@@ -213,7 +213,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     required `Idempotency-Key`) and `POST …/thread/read`. Replies stay out of the main timeline, its unread badge and
     the list previews. The root counts them (`thread: {count, lastReplyAt}`; `threads` on the messages page with the
     reader's `unread`, `following` and newest `repliers`). The root's author, the repliers and the people a reply
-    mentions follow the thread (new table `nowo_chat_thread_read`): they get its Web Push and the realtime `thread`
+    names with an @mention follow the thread (new table `nowo_chat_thread_read`; `@channel` / `@here` notify only): they get its Web Push and the realtime `thread`
     event. Replies are never pinned. `ChatThreadReplyEvent`, and `ChatMessageSentEvent::threadRootUuid()`. A thread
     panel: a side panel on wide screens, a full-height sheet on phones.
   - **Edit history** (`message_menu.edit_history`: `enabled`, `max_revisions` 20): each edit keeps the text it
@@ -229,8 +229,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     `THREAD` and `HISTORY`; `ChatMessageActionsInterface::forward()`, `thread()`, `replyInThread()` and `revisions()`.
     `ChatMessageView` gains `threadRootUuid`, `threadReplyCount` and `forwarded`.
   - GDPR: the export gains `thread_reads`, `forwards` and `revisions`. The erasure deletes the user's thread rows,
-    idempotency keys and the previous texts of their messages, and forwards of their messages show the neutral marker.
-    The purge takes a root's thread with it.
+    idempotency keys and the previous texts of their messages, scrubs their mention tokens from other people's previous
+    texts, and forwards of their messages show the neutral marker. The purge takes a root's thread with it.
+    Residuals (docs/SECURITY.md): a forward is the forwarder's message and keeps the copied text after the source is
+    deleted, purged or its author erased; a `#reference` the forwarder may not open is copied without its title.
   - Two-process race tests on MySQL, MariaDB and PostgreSQL: one forward from two workers under one key, concurrent
     replies in one thread, concurrent edits of one message.
   - Translations in the 7 locales, Vitest and PHPUnit.

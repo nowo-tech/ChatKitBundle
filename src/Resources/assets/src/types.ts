@@ -125,7 +125,8 @@ export interface ForwardTarget {
 /** 1.36: a previous text of an edited message (`GET …/revisions`). */
 export interface MessageRevision {
   editedAt: string;
-  body: string;
+  /** Plain text for the viewer (a #reference the viewer may not open is the neutral placeholder). */
+  text: string;
   html: string;
 }
 

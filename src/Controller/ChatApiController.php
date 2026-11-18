@@ -1205,7 +1205,7 @@ final class ChatApiController extends AbstractController
      * @param string $uuid Conversation uuid
      * @param string $messageUuid Message uuid
      *
-     * @return JsonResponse `{revisions: list<{editedAt, body, html}>}`
+     * @return JsonResponse `{revisions: list<{editedAt, text, html}>}`
      */
     #[Route('/conversations/{uuid}/messages/{messageUuid}/revisions', name: 'revisions', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['GET'])]
     public function revisions(string $uuid, string $messageUuid): JsonResponse

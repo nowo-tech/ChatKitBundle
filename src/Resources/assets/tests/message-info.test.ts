@@ -87,7 +87,7 @@ describe('message info: edit history (1.36)', () => {
   });
 
   it('lists the edits and, on demand, the previous texts', async () => {
-    const revisions = vi.fn().mockResolvedValue([{ editedAt: '2026-10-15T10:03:00Z', body: 'old', html: '<p>old</p>' }]);
+    const revisions = vi.fn().mockResolvedValue([{ editedAt: '2026-10-15T10:03:00Z', text: 'old', html: '<p>old</p>' }]);
     const dialog = openMessageInfo(info({ edits: [{ editedAt: '2026-10-15T10:03:00Z' }] }), { ...i18n, info_edits: 'Edits', info_show_history: 'Show', info_replaced_at: 'Replaced %time%' }, 'en', null, revisions);
     expect(dialog.querySelectorAll('[data-part="info-edit"]')).toHaveLength(1);
     (dialog.querySelector('[data-part="info-history"]') as HTMLButtonElement).click();

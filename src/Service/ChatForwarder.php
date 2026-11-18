@@ -18,6 +18,7 @@ use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Throwable;
 
 use function array_filter;
 use function array_values;
@@ -41,6 +42,7 @@ final readonly class ChatForwarder
     /**
      * @param ChatForwardPolicyInterface $policy The application's veto (the default allows every forward)
      * @param EventDispatcherInterface|null $events ChatMessageForwardingEvent (before) and ChatMessageForwardedEvent (after the commit)
+     * @param ChatReferences|null $references Neutralizes the #references the forwarder may not open (audit UB-2)
      */
     public function __construct(
         private ChatService $chat,
@@ -52,6 +54,7 @@ final readonly class ChatForwarder
         private ChatIdempotency $idempotency,
         private ChatForwardPolicyInterface $policy,
         private ?EventDispatcherInterface $events = null,
+        private ?ChatReferences $references = null,
     ) {
     }
 
@@ -127,16 +130,30 @@ final readonly class ChatForwarder
         // @igor-ignore - The closure runs once, now, inside run(), and is kept nowhere (stateless, per call).
         [$messages, $replayed] = $this->idempotency->run($actor, $key, $hash, function (Closure $before, Closure $after) use ($actor, $source, $resolved, $comment): array {
             $drafts = [];
-            $body   = self::plainText($source->getBody());
+            $opened = [];
+            // Audit UB-2: a #reference the forwarder may not open is copied without its title.
+            $body = self::plainText($this->references?->neutralizeFor($actor, $source->getBody()) ?? $source->getBody());
             foreach ($resolved as [$conversation, $person]) {
-                $conversation ??= $this->chat->openDirect($actor, $person ?? throw new InvalidArgumentException('not_found'));
+                if (!$conversation instanceof ChatConversation) {
+                    $conversation = $this->chat->openDirect($actor, $person ?? throw new InvalidArgumentException('not_found'));
+                    $opened[]     = $conversation;
+                }
                 if ($comment !== null) {
                     $drafts[] = new ChatDraft($conversation, $comment);
                 }
                 $drafts[] = new ChatDraft($conversation, $body, null, $source);
             }
+            try {
+                return $this->chat->post($actor, $drafts, $before, $after);
+            } catch (Throwable $failure) {
+                // Audit UB-7: a direct conversation this forward opened goes again when the forward wrote nothing (not when
+                // another request with the key committed: that one wrote into it).
+                foreach ($failure instanceof ChatIdempotencyConflict ? [] : $opened as $conversation) {
+                    $this->chat->dropEmptyDirect($conversation);
+                }
 
-            return $this->chat->post($actor, $drafts, $before, $after);
+                throw $failure;
+            }
         });
         $copies = array_values(array_filter($messages, static fn (ChatMessage $message): bool => $message->isForwarded()));
         if (!$replayed) {

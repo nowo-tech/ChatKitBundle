@@ -52,6 +52,7 @@ use Symfony\Component\Clock\ClockInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Throwable;
 
+use function array_filter;
 use function array_map;
 use function array_values;
 use function assert;
@@ -265,7 +266,7 @@ final readonly class ChatService implements ChatServiceInterface
      * @param (Closure(): bool)|null $before First statement of the unit; false aborts it
      * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit
      *
-     * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link`; nothing is written
+     * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link` or (a root deleted meanwhile) `not_threadable`; nothing is written
      * @throws ChatIdempotencyConflict When `$before` refused the unit; nothing is written
      *
      * @return list<ChatMessage> The stored messages, in order
@@ -368,11 +369,17 @@ final readonly class ChatService implements ChatServiceInterface
     public function delete(ChatUserInterface $by, ChatMessage $message): void
     {
         // A deleted message leaves the pinned bar.
-        $wasPinned = $message->getPinnedAt() instanceof DateTimeImmutable;
-        $now       = $this->clock->now();
-        $message   = $this->write(function () use ($by, $message, $now): ChatMessage {
+        $wasPinned           = $message->getPinnedAt() instanceof DateTimeImmutable;
+        $now                 = $this->clock->now();
+        [$message, $deleted] = $this->write(function () use ($by, $message, $now): array {
             $message = ChatKitWrites::attach($this->entityManager, $message);
             $this->conversations->lockActivity($message->getConversation());
+            // 1.36 (audit UB-4): read again under the lock; a delete another request committed first is not repeated (a
+            // reply would leave its root's count twice).
+            $this->entityManager->refresh($message);
+            if ($message->isDeleted()) {
+                return [$message, false];
+            }
             $message->delete($by, $now);
             $message->pin(null, null);
             foreach ($this->reactionRepository->findBy(['message' => $message]) as $reaction) {
@@ -390,8 +397,11 @@ final readonly class ChatService implements ChatServiceInterface
                 $this->entityManager->refresh($root);
             }
 
-            return $message;
+            return [$message, true];
         });
+        if (!$deleted) {
+            return;
+        }
         $this->notifier->messageUpdated($message);
         $root = $message->getThreadRoot();
         if ($root instanceof ChatMessage) {
@@ -402,6 +412,34 @@ final readonly class ChatService implements ChatServiceInterface
             $this->notifier->pinsChanged($message->getConversation());
         }
         $this->events?->dispatch(new ChatMessageDeletedEvent($message, $by, $message->isModerated()));
+    }
+
+    /**
+     * 1.36 (audit UB-7): removes a direct conversation that holds no message (one a failed forward opened), with its
+     * participant rows, in one unit of work under its row lock. A conversation with any message (another request wrote
+     * meanwhile) stays.
+     *
+     * @param ChatConversation $conversation The direct conversation
+     *
+     * @return bool True when it was removed
+     *
+     * @internal
+     */
+    public function dropEmptyDirect(ChatConversation $conversation): bool
+    {
+        return $this->write(function () use ($conversation): bool {
+            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+            $this->conversations->lockActivity($conversation);
+            $qb = $this->entityManager->createQueryBuilder();
+            if ((int) $qb->select('COUNT(m.id)')->from(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $conversation)->getQuery()->getSingleScalarResult() > 0) {
+                return false;
+            }
+            $this->entityManager->createQueryBuilder()->delete(ChatParticipant::class, 'p')->where('p.conversation = :c')->setParameter('c', $conversation)->getQuery()->execute();
+            $this->entityManager->createQueryBuilder()->delete(ChatConversation::class, 'c')->where('c.id = :id')->setParameter('id', $conversation->getId())->getQuery()->execute();
+            $this->entityManager->detach($conversation);
+
+            return true;
+        });
     }
 
     /**
@@ -752,6 +790,11 @@ final readonly class ChatService implements ChatServiceInterface
                 $message->mentionAll($group);
                 $root = $draft->threadRoot instanceof ChatMessage ? ChatKitWrites::attach($this->entityManager, $draft->threadRoot) : null;
                 if ($root instanceof ChatMessage) {
+                    // 1.36 (audit UB-4): the root read again under the conversation's lock: one deleted meanwhile takes no reply.
+                    $this->entityManager->refresh($root);
+                    if (!$root->canStartThread()) {
+                        throw new InvalidArgumentException('not_threadable');
+                    }
                     $message->replyIn($root);
                 }
                 if ($draft->forwardOf instanceof ChatMessage) {
@@ -811,7 +854,9 @@ final readonly class ChatService implements ChatServiceInterface
         $this->entityManager->refresh($root);
         $author = $reply->getAuthor();
         assert($author instanceof ChatUserInterface);
-        $followers  = array_values($mentioned);
+        // Audit UB-5: only the people the reply names follow it (@channel / @here notify, they do not follow).
+        $named      = ChatMentions::parse($reply->getBody());
+        $followers  = array_values(array_filter($mentioned, static fn (ChatUserInterface $user): bool => isset($named[$user->getChatPublicId()])));
         $rootAuthor = $root->getAuthor();
         if ($rootAuthor instanceof ChatUserInterface && !$rootAuthor instanceof UnresolvedChatUser) {
             $followers[] = $rootAuthor;

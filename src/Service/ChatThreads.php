@@ -29,7 +29,7 @@ use const DATE_ATOM;
 /**
  * 1.36 (Beacon, D-20261118-02): one-level threads (`message_menu.threads`). A reply is a ChatMessage of the same
  * conversation with a thread root; it stays out of the main timeline and its unread badge, its root counts it, and its
- * followers (the root's author, the repliers, the people a reply mentions) get its Web Push and a "new replies" badge.
+ * followers (the root's author, the repliers, the people a reply names with @mention; @channel and @here notify without following) get its Web Push and a "new replies" badge.
  * Access (VIEW, ChatVoter::THREAD) is the caller's job. Stateless.
  */
 final readonly class ChatThreads
