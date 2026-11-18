@@ -135,7 +135,9 @@ endif
 
 # Playwright e2e + README screenshots (REQ-DEMO-013). Uses the official Playwright image.
 # PORT is read canonically: .env, then .env.example (tr -d '\r' for CRLF files).
-PLAYWRIGHT_IMAGE ?= mcr.microsoft.com/playwright:v1.63.0-jammy
+# The image tag always follows the exact @playwright/test version pinned in e2e/package.json (browsers ship with the image).
+PLAYWRIGHT_VERSION := $(shell sed -n 's/.*"@playwright\/test": "\([0-9.]*\)".*/\1/p' e2e/package.json)
+PLAYWRIGHT_IMAGE ?= mcr.microsoft.com/playwright:v$(PLAYWRIGHT_VERSION)-jammy
 
 test-e2e: ensure-up
 	@mkdir -p e2e/node_modules
@@ -145,7 +147,7 @@ test-e2e: ensure-up
 		-v "$(CURDIR)/e2e:/e2e" -w /e2e \
 		-e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
 		$(PLAYWRIGHT_IMAGE) \
-		bash -lc 'npm install --no-fund --no-audit && npx playwright test --project=chromium --project=phone-chromium --project=phone-webkit --project=context-menu-touch'
+		bash -lc 'npm ci --no-fund --no-audit && npx playwright test --project=chromium --project=phone-chromium --project=phone-webkit --project=context-menu-touch'
 
 # 1.33: the message context menu specs alone (right-click, keyboard, long press).
 test-e2e-context-menu: ensure-up
@@ -156,7 +158,7 @@ test-e2e-context-menu: ensure-up
 		-v "$(CURDIR)/e2e:/e2e" -w /e2e \
 		-e CI -e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
 		$(PLAYWRIGHT_IMAGE) \
-		bash -lc 'npm install --no-fund --no-audit && npx playwright test tests/context-menu.spec.ts tests/context-menu-touch.spec.ts --project=chromium --project=context-menu-touch'
+		bash -lc 'npm ci --no-fund --no-audit && npx playwright test tests/context-menu.spec.ts tests/context-menu-touch.spec.ts --project=chromium --project=context-menu-touch'
 
 # 1.26.2 (audit LN-I4): the realtime resync spec alone, Chromium only; the CI workflow runs it on every pull request.
 # 1.34.1: with the echo-before-the-send-response spec (scripted hub too).
@@ -168,7 +170,7 @@ test-e2e-resync: ensure-up
 		-v "$(CURDIR)/e2e:/e2e" -w /e2e \
 		-e CI -e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
 		$(PLAYWRIGHT_IMAGE) \
-		bash -lc 'npm install --no-fund --no-audit && npx playwright test tests/resync.spec.ts tests/echo-before-post.spec.ts --project=chromium'
+		bash -lc 'npm ci --no-fund --no-audit && npx playwright test tests/resync.spec.ts tests/echo-before-post.spec.ts --project=chromium'
 
 demo-screenshots: ensure-up
 	@mkdir -p ../../docs/images/demo e2e/node_modules
@@ -181,5 +183,5 @@ demo-screenshots: ensure-up
 		-e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
 		-e SCREENSHOT_DIR=/screenshots \
 		$(PLAYWRIGHT_IMAGE) \
-		bash -lc 'npm install --no-fund --no-audit && npx playwright test --project=screenshots && node scripts/to-webp.mjs /screenshots'
+		bash -lc 'npm ci --no-fund --no-audit && npx playwright test --project=screenshots && node scripts/to-webp.mjs /screenshots'
 	@echo "Screenshots written under docs/images/demo/ (WebP)"
