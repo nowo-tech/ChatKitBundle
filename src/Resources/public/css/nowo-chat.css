@@ -1207,6 +1207,7 @@
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher__chevron,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__compose,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__tuck,
+.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__saved,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__close {
   display: none;
 }

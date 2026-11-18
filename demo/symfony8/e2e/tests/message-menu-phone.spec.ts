@@ -44,7 +44,8 @@ test('the message menu is a bottom sheet; a quick reaction reacts; the backdrop 
   await page.mouse.click(viewport.width / 2, 10);
   await expect(sheet).toHaveCount(0);
 
-  // A quick reaction from the sheet.
+  // A quick reaction from the sheet (UiKit swallows the browser's menu for a moment after the closing tap).
+  await page.waitForTimeout(1000);
   await mine.locator('.nowo-chat-bubble').click({ button: 'right' });
   await expect(sheet).toBeVisible();
   await sheet.getByRole('menuitem', { name: 'React with 👍' }).click();

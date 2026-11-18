@@ -103,6 +103,8 @@ export interface ThreadHost {
 
 const TYPING_SEND_EVERY_MS = 3_000;
 const TYPING_SHOW_MS = 5_000;
+/** How long an action's notice shows (ms). */
+const FLASH_MS = 3000;
 const NEAR_BOTTOM_PX = 48;
 
 /** localStorage key: the formatting toolbar stays open (1.11). */
@@ -192,6 +194,8 @@ export class ThreadView {
   /** Outside-click listener of the open popover (emoji or reactions), removed on every close. */
   private popoverOutside: ((event: MouseEvent) => void) | null = null;
   private reactionPanel: HTMLElement | null = null;
+  /** 1.35: until when a flashed notice (an action's feedback) is kept by applySummary() (epoch ms). */
+  private flashUntil = 0;
   /** 1.35: uuids of the messages the viewer saved for later (from the pages and the `saved` events). */
   private readonly savedUuids = new Set<string>();
   /** 1.35: "Mark unread from here" holds the automatic read until the viewer scrolls, types or sends again. */
@@ -629,9 +633,12 @@ export class ThreadView {
     this.resolveBtn.hidden = !(this.host.config.isAgent && summary.kind === 'support' && (summary.supportStatus === 'open' || summary.supportStatus === 'waiting'));
     this.setUnread(this.minimised ? summary.unread : 0);
     this.input.disabled = !summary.canSend;
-    this.notice.hidden = summary.canSend;
-    // 1.24: a read-only channel says so (hosts that override the strings without the new key keep the old text).
-    this.notice.textContent = summary.canSend ? '' : t(i18n, summary.kind === 'channel' && i18n.channel_read_only !== undefined ? 'channel_read_only' : 'read_only');
+    // 1.35: a notice flashing right now (an action's feedback) stays until its own timer resets it.
+    if (Date.now() >= this.flashUntil) {
+      this.notice.hidden = summary.canSend;
+      // 1.24: a read-only channel says so (hosts that override the strings without the new key keep the old text).
+      this.notice.textContent = summary.canSend ? '' : t(i18n, summary.kind === 'channel' && i18n.channel_read_only !== undefined ? 'channel_read_only' : 'read_only');
+    }
     this.applyMute();
     this.composer.hidden = !summary.canSend;
     this.updateComposerState();
@@ -1392,12 +1399,13 @@ export class ThreadView {
    * @param message Text to show.
    */
   private flashNotice(message: string): void {
+    this.flashUntil = Date.now() + FLASH_MS;
     this.notice.hidden = false;
     this.notice.textContent = message;
     window.setTimeout(() => {
       this.notice.hidden = this.summary.canSend;
       this.notice.textContent = this.summary.canSend ? '' : t(this.host.config.i18n, 'read_only');
-    }, 3000);
+    }, FLASH_MS);
   }
 
   /** One popover at a time (emoji picker or reaction bar); an outside click closes it. */

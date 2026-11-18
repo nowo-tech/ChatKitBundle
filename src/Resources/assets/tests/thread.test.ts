@@ -1221,6 +1221,9 @@ describe('ThreadView', () => {
         item(ctx.article(theirs.id), 'mark-unread').click();
         await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe('Marked unread'));
         expect(markUnread).toHaveBeenCalledWith('c1', 'theirs');
+        // The list refresh that follows keeps the action's notice until its own timer resets it.
+        ctx.view.applySummary(summary());
+        expect(ctx.q('[data-part="notice"]').textContent).toBe('Marked unread');
         expect(unreadChanged).toHaveBeenCalledWith('c1');
         // A scroll by itself does not read it again; the viewer's wheel does.
         const body = scrolled(ctx.view, 700);

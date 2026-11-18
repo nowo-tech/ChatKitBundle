@@ -25,13 +25,13 @@ async function openConversation(page: Page, user: string, with_: string): Promis
 }
 
 /** Bob writes to Alice from his own browser. */
-async function bobWrites(browser: Browser, text: string): Promise<void> {
+async function bobWrites(browser: Browser, text: string, shown: string = text): Promise<void> {
   const context = await browser.newContext();
   const page = await context.newPage();
   const window = await openConversation(page, 'bob', 'Alice Martin');
   await window.locator('.nowo-chat-composer__input').fill(text);
   await window.locator('.nowo-chat-composer__input').press('Enter');
-  await expect(window.locator('.nowo-chat-msg:not(.nowo-chat-msg--pending)', { hasText: text })).toBeVisible();
+  await expect(window.locator('.nowo-chat-msg:not(.nowo-chat-msg--pending)', { hasText: shown })).toBeVisible();
   await context.close();
 }
 
@@ -46,9 +46,11 @@ async function rightClick(page: Page, message: Locator): Promise<void> {
 
 async function theirMessage(page: Page, browser: Browser, prefix: string): Promise<{ window: Locator; message: Locator; text: string }> {
   const text = `${prefix} ${Date.now()}`;
-  await bobWrites(browser, text);
+  // What the bubble shows (the Markdown rendered).
+  const shown = text.replace(/\*\*/g, '');
+  await bobWrites(browser, text, shown);
   const window = await openConversation(page, 'alice', 'Bob Lee');
-  const message = window.locator('.nowo-chat-msg:not(.nowo-chat-msg--mine)', { hasText: text }).last();
+  const message = window.locator('.nowo-chat-msg:not(.nowo-chat-msg--mine)', { hasText: shown }).last();
   await expect(message).toBeVisible();
   return { window, message, text };
 }
