@@ -44,6 +44,9 @@ final readonly class TablePrefixListener
         'participant'       => 'nowo_chat_participant',
         'quick_reply'       => 'nowo_chat_quick_reply',
         'reaction'          => 'nowo_chat_reaction',
+        // 1.35: read times (message info) and saved messages.
+        'read_mark'     => 'nowo_chat_read_mark',
+        'saved_message' => 'nowo_chat_saved_message',
         // 1.30: the ticket number counter.
         'ticket_counter' => 'nowo_chat_ticket_counter',
         'user_settings'  => 'nowo_chat_user_settings',

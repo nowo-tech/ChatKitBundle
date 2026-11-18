@@ -12,6 +12,7 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 
 use function in_array;
+use function max;
 
 /**
  * Per-user state in a conversation — read cursor (receipts, unread counts) and mute.
@@ -32,6 +33,14 @@ class ChatParticipant
     /** Id of the newest message the user has seen (no FK: purges must not cascade into read state). */
     #[ORM\Column(name: 'last_read_message_id', nullable: true)]
     private ?int $lastReadMessageId = null;
+
+    /**
+     * 1.35: what other people see of this reader (✓✓, "Seen by", message info): only moves forward. Null = the same as
+     * `last_read_message_id` (rows written before 1.35, and whenever the two are equal), so no data migration is needed;
+     * it differs only after "Mark unread from here" moved the read cursor back.
+     */
+    #[ORM\Column(name: 'receipt_message_id', nullable: true)]
+    private ?int $receiptMessageId = null;
 
     #[ORM\Column(name: 'muted_until', nullable: true)]
     private ?DateTimeImmutable $mutedUntil = null;
@@ -123,7 +132,8 @@ class ChatParticipant
     }
 
     /**
-     * The cursor only moves forward (an older "read" from a stale tab is ignored).
+     * The cursor only moves forward (an older "read" from a stale tab is ignored). 1.35: the receipt cursor follows it
+     * (never back).
      *
      * @param int $messageId Id of the last message read
      *
@@ -136,6 +146,41 @@ class ChatParticipant
         }
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->lastReadMessageId = $messageId;
+        if ($this->receiptMessageId !== null && $this->receiptMessageId <= $messageId) {
+            // Caught up with what others already saw: the two cursors are one again.
+            $this->receiptMessageId = null;
+        }
+
+        return true;
+    }
+
+    /**
+     * 1.35: the read receipt other people see (✓✓, "Seen by", message info): never lower than it ever was.
+     *
+     * @return int|null A message id, or null when nothing was read yet
+     */
+    public function getReceiptMessageId(): ?int
+    {
+        return $this->receiptMessageId ?? $this->lastReadMessageId;
+    }
+
+    /**
+     * 1.35: "Mark unread from here" — moves the read cursor back to just before a message (the unread badge comes back).
+     * The receipt cursor keeps what other people already saw.
+     *
+     * @param int|null $beforeMessageId Id of the newest message before the one marked (null: nothing before it)
+     *
+     * @return bool True when the read cursor moved back
+     */
+    public function markUnreadFrom(?int $beforeMessageId): bool
+    {
+        $current = $this->lastReadMessageId;
+        if ($current === null || ($beforeMessageId !== null && $beforeMessageId >= $current)) {
+            return false;
+        }
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->receiptMessageId  = max($this->receiptMessageId ?? $current, $current);
+        $this->lastReadMessageId = $beforeMessageId;
 
         return true;
     }

@@ -23,6 +23,8 @@ use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
+use Nowo\ChatKitBundle\Entity\ChatReadMark;
+use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Event\ChatLinkRemovedEvent;
 use Nowo\ChatKitBundle\Event\ChatMentionsErasedEvent;
@@ -135,7 +137,7 @@ final readonly class ChatPersonalData
      *
      * @param ChatUserInterface $user The user whose data is exported
      *
-     * @return array{settings: array<string, mixed>, quick_replies: list<array{title: string, text: string}>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>, links: list<array<string, string|null>>} Settings, authored messages, the pins the user made and (1.19) the links the user pinned
+     * @return array{settings: array<string, mixed>, quick_replies: list<array{title: string, text: string}>, messages: list<array<string, string|null>>, pins: list<array<string, string|null>>, links: list<array<string, string|null>>, saved: list<array<string, string>>, read_marks: list<array<string, string>>} Settings, authored messages, the pins the user made and (1.19) the links the user pinned
      */
     public function export(ChatUserInterface $user): array
     {
@@ -169,6 +171,31 @@ final readonly class ChatPersonalData
             'updated_at'        => $link->getUpdatedAt()?->format(DATE_ATOM),
         ], static fn (ChatConversationLink $link): bool => ChatUserReferences::same($link->getCreatedBy(), $user));
 
+        // 1.35: messages the user saved for later (the message text only while the user may still read it is not the
+        // export's business: the uuid and the time are the user's own data).
+        $saved = $this->exportPages(ChatSavedMessage::class, 'user', $user, static fn (ChatSavedMessage $row): array => [
+            'conversation_uuid' => $row->getMessage()->getConversation()->getUuid(),
+            'message_uuid'      => $row->getMessage()->getUuid(),
+            'saved_at'          => $row->getSavedAt()->format(DATE_ATOM),
+        ], static fn (ChatSavedMessage $row): bool => ChatUserReferences::same($row->getUser(), $user), false);
+        // 1.35: when the user's read receipt reached messages (message info), per conversation.
+        $participantIds = $this->exactIds(ChatParticipant::class, 'user', $user);
+        $readMarks      = [];
+        if ($participantIds !== []) {
+            /** @var list<ChatReadMark> $marks */
+            $marks = $this->entityManager->createQueryBuilder()->select('r', 'p', 'c')->from(ChatReadMark::class, 'r')
+                ->innerJoin('r.participant', 'p')->innerJoin('p.conversation', 'c')
+                ->where('p.id IN (:ids)')->setParameter('ids', $participantIds)->orderBy('r.id', 'ASC')
+                ->getQuery()->getResult();
+            foreach ($marks as $mark) {
+                $readMarks[] = [
+                    'conversation_uuid' => $mark->getParticipant()->getConversation()->getUuid(),
+                    'up_to_message_id'  => (string) $mark->getUpToMessageId(),
+                    'read_at'           => $mark->getReadAt()->format(DATE_ATOM),
+                ];
+            }
+        }
+
         return [
             'settings' => [
                 'sound'                 => $settings->getSound(),
@@ -185,10 +212,12 @@ final readonly class ChatPersonalData
                 'send_key'              => $settings->getSendKey(),
                 'email_digest'          => $settings->isEmailDigest(),
                 'show_online'           => $settings->isPresenceVisible(),
-                'status'                => $settings->getStatus($now),
-                'status_text'           => $settings->getStatusText($now),
-                'status_emoji'          => $settings->getStatusEmoji($now),
-                'status_expires_at'     => $settings->getStatusExpiresAt($now)?->format(DATE_ATOM),
+                // 1.35
+                'share_read_times'  => $settings->isShareReadTimes(),
+                'status'            => $settings->getStatus($now),
+                'status_text'       => $settings->getStatusText($now),
+                'status_emoji'      => $settings->getStatusEmoji($now),
+                'status_expires_at' => $settings->getStatusExpiresAt($now)?->format(DATE_ATOM),
                 // 1.11
                 'auto_reply' => $settings->autoReplyView(),
             ],
@@ -196,6 +225,9 @@ final readonly class ChatPersonalData
             'messages'      => $messages,
             'pins'          => $pins,
             'links'         => $links,
+            // 1.35
+            'saved'      => $saved,
+            'read_marks' => $readMarks,
         ];
     }
 
@@ -304,7 +336,12 @@ final readonly class ChatPersonalData
                     ->setParameter('ids', $authored)
                     ->getQuery()->execute();
             }
-            foreach ([[ChatReaction::class, 'r'], [ChatParticipant::class, 'p'], [ChatUserSettings::class, 's'], [ChatQuickReply::class, 'q']] as [$entity, $alias]) {
+            // 1.35: the user's read times go before their participant rows (no cascade is relied on).
+            $participantIds = $this->exactIds(ChatParticipant::class, 'user', $user);
+            if ($participantIds !== []) {
+                $qb()->delete(ChatReadMark::class, 'rm')->where('IDENTITY(rm.participant) IN (:ids)')->setParameter('ids', $participantIds)->getQuery()->execute();
+            }
+            foreach ([[ChatReaction::class, 'r'], [ChatSavedMessage::class, 'sv'], [ChatParticipant::class, 'p'], [ChatUserSettings::class, 's'], [ChatQuickReply::class, 'q']] as [$entity, $alias]) {
                 $this->byUser($qb()->delete($entity, $alias), $alias, $entity, 'user', $user)->getQuery()->execute();
             }
 
@@ -315,6 +352,12 @@ final readonly class ChatPersonalData
                 if ($messageIds !== []) {
                     $qb()->delete(ChatReaction::class, 'r')->where('IDENTITY(r.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
                     $qb()->delete(ChatMessageLink::class, 'k')->where('IDENTITY(k.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
+                    // 1.35: other people's saved rows of the ticket's messages.
+                    $qb()->delete(ChatSavedMessage::class, 'sv')->where('IDENTITY(sv.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
+                }
+                $ticketParticipants = $qb()->select('p.id')->from(ChatParticipant::class, 'p')->where('p.conversation = :c')->setParameter('c', $support)->getQuery()->getSingleColumnResult();
+                if ($ticketParticipants !== []) {
+                    $qb()->delete(ChatReadMark::class, 'rm')->where('IDENTITY(rm.participant) IN (:ids)')->setParameter('ids', $ticketParticipants)->getQuery()->execute();
                 }
                 $qb()->delete(ChatConversationLink::class, 'l')->where('l.conversation = :c')->setParameter('c', $support)->getQuery()->execute();
                 $qb()->delete(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->execute();

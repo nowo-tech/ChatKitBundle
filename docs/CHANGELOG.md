@@ -77,6 +77,74 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Richer message menu** (Beacon request, owner decision D-20261118-02; contract in the Beacon request
+  `chatkit-menu-1118`). Each item is configured under `message_menu` and checked again on the server. Items that store
+  data are off by default.
+  - **Quick reactions:** a row of emoji at the top of the menu (`message_menu.quick_reactions.emojis`, default
+    👍 ❤️ 😂 😮 😢 🙏) and **More…**, which opens the dock's emoji picker. With `quick_reactions.picker` (default on)
+    the reaction endpoint also accepts the picker's curated set (`ChatEmojiCatalog`, kept equal to `emoji.ts` by a
+    test); any other string is still refused. A quick emoji the server would refuse fails the container build.
+  - **Copy text:** the plain text the viewer sees (Markdown stripped, mentions as names, references as shown). Client
+    side.
+  - **Quote:** the whole message as a Markdown quote in the composer (`> **Name** wrote:`, at most
+    `quote.max_length` characters). Mentions become plain names, so quoting notifies nobody.
+  - **Mark unread from here:** `POST …/messages/{m}/unread` moves the viewer's read marker to just before the message,
+    and the unread badge comes back. A new `receipt_message_id` keeps what other people saw, so ✓✓, "Seen by" and
+    message info never go back. It is not offered on one's own message. The window stops marking the conversation
+    read until the viewer scrolls, types or sends again. Realtime `unread` reaches the user's other tabs.
+  - **Save for later** (`message_menu.save.enabled`, off by default):
+    - `PUT` / `DELETE …/messages/{m}/save` (idempotent), with `max_per_user` (default 500, `0` = unlimited);
+    - `GET /chat/api/saved` and the page `GET /chat/saved` (route `nowo_chat_page_saved`, server rendered, "Remove"
+      with JavaScript);
+    - a **Saved** entry in the dock header (`save.dock_entry`).
+
+    Saved messages of a conversation the user may no longer read are hidden, not removed. Realtime `saved` keeps the
+    user's tabs in step.
+  - **Message info** (`message_menu.message_info.enabled`, off by default): `GET …/messages/{m}/info` returns who
+    read the message and when, in a dialog that becomes a bottom sheet on phones.
+    - The viewer sees the info on their own messages only; moderators (support agents) see it on every message
+      (`own_messages_only`).
+    - People are listed up to `per_person_max_members` (default 20); above that, counts only. The info also gives
+      the last edit time.
+    - Read times are stored in the new `nowo_chat_read_mark` table, only with `read_times` on, only for people who
+      share them, and only in conversations small enough to list people. Advances within a minute are compacted, and
+      `nowo:chat:purge` removes them with the retention.
+  - **Share read times** (owner decision on Q-B12): a per-user preference (`shareReadTimes`, default on; the
+    `ChatPreferencesType` checkbox and the settings endpoint).
+    - It is reciprocal: a user who turns it off shares no read time and sees nobody's. Turning it off deletes their
+      stored read times.
+    - The ✓✓ read state keeps working for everyone.
+  - The kebab uses UiKit 2.58: a reactions row, separators between groups (`message_menu.order`) and a phone bottom
+    sheet for the kebab and its context menu. Role menu, keyboard (Left / Right in the row), Shift+F10 / ContextMenu
+    and long press all work as in 1.33.
+  - New voter attributes `nowo_chat.message.save`, `nowo_chat.message.mark_unread` and `nowo_chat.message.info`, and
+    the matching `ChatMessagingInterface::SAVE` / `MARK_UNREAD` / `INFO` actions.
+  - New `ChatMessageActionsInterface` (by uuid, for DDD hosts): `setSaved()`, `savedMessages()`,
+    `markUnreadFrom()`, `messageInfo()`.
+  - New events `ChatMessageSavedEvent`, `ChatMessageUnsavedEvent` and `ChatConversationMarkedUnreadEvent`, all
+    dispatched after the commit.
+  - GDPR: the export gains `saved`, `read_marks` and `settings.share_read_times`. The erasure deletes the user's saved
+    messages and read times, and those of the user's support tickets.
+  - Translations in the 7 locales, Vitest, PHPUnit and Playwright (desktop and phone).
+- **Conflict code on every conflict answer** (REQ-RUNTIME-003 rule 6): the JSON body gains `code` (`CONFLICT_001`:
+  retry is safe; `CONFLICT_002`: part of the request committed, read again), and every 409 / 503 conflict answer, API
+  or page, carries the `X-Conflict-Code` header. The existing `error` keys are unchanged. `ChatConflictResponseFormatter`
+  adds both as well.
+- `docs/CONCURRENCY.md`: the write paths, their concurrency control, the conflict codes and the accepted residual
+  risk (REQ-RUNTIME-003).
+
+### Changed
+
+- Requires `nowo-tech/ui-kit-bundle` **^2.58** (kebab rows, separators, bottom sheet) and
+  `nowo-tech/transaction-doctrine` **^1.5** (`ConflictCode`).
+- The message kebab's items follow `message_menu.order` (default: Reply, Quote, Copy text, Copy link, Save, Mark
+  unread, Pin, Message info, Edit, Delete, with separators between groups). Hosts that override the
+  `nowo_chat_message_menu` block keep their own markup.
+- Read receipts (`readers` of the messages endpoint, realtime `read` to other people) come from the receipt cursor. It
+  has the same value as before until someone marks a message unread.
+
 ## [1.34.1] - 2026-11-18
 
 ### Fixed

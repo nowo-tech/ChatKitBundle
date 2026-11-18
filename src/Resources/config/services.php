@@ -15,6 +15,7 @@ use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatMessageActionsInterface;
 use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
@@ -45,7 +46,10 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Nowo\ChatKitBundle\Service\ChatMentions;
+use Nowo\ChatKitBundle\Service\ChatMessageActions;
+use Nowo\ChatKitBundle\Service\ChatMessageMenu;
 use Nowo\ChatKitBundle\Service\ChatMessaging;
+use Nowo\ChatKitBundle\Service\ChatReadTimes;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
@@ -168,6 +172,8 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatServiceInterface::class, ChatService::class);
     // 1.27: the same service by public uuid, answering with views (REQ-ARCH-001 rule 1; DDD hosts).
     $services->alias(ChatMessagingInterface::class, ChatMessaging::class);
+    // 1.35: the message menu by public uuid (DDD hosts).
+    $services->alias(ChatMessageActionsInterface::class, ChatMessageMenu::class);
     // 1.24: who the signed-in user is in the chat (default: the security user when it implements ChatUserInterface).
     $services->alias(CurrentChatUserResolverInterface::class, SecurityChatUserResolver::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);
@@ -221,8 +227,14 @@ return static function (ContainerConfigurator $container): void {
     // 1.24: @channel / @here budget per writer (no limiter without framework.rate_limiter: no budget).
     $services->get(ChatMentions::class)
         ->arg('$mentionAllLimiter', service('limiter.nowo_chat_mention_all')->nullOnInvalid());
+    // 1.35: read times of message info, and the message menu's actions (save, unread, info).
+    $services->get(ChatReadTimes::class)
+        ->arg('$messageInfo', param('nowo_chat_kit.message_menu.message_info'));
+    $services->get(ChatMessageActions::class)
+        ->arg('$save', param('nowo_chat_kit.message_menu.save'))
+        ->arg('$markUnread', param('nowo_chat_kit.message_menu.mark_unread'));
     $services->get(ChatService::class)
-        ->arg('$reactions', param('nowo_chat_kit.reactions'))
+        ->arg('$reactions', param('nowo_chat_kit.accepted_reactions'))
         ->arg('$maxPins', param('nowo_chat_kit.max_pins'));
     // 1.19: links (pinned links, link cards, the Links panel).
     $services->get(ChatLinkUrls::class)
@@ -247,7 +259,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$dockSidebar', param('nowo_chat_kit.web_ui.dock.sidebar_sections'))
         ->arg('$dialogRuntime', param('nowo_chat_kit.web_ui.dock.dialog_runtime'))
         ->arg('$packages', service('assets.packages')->nullOnInvalid())
-        ->arg('$messageContextMenu', param('nowo_chat_kit.web_ui.message_context_menu'));
+        ->arg('$messageContextMenu', param('nowo_chat_kit.web_ui.message_context_menu'))
+        ->arg('$messageMenu', param('nowo_chat_kit.message_menu'));
     // 1.25: the host sections of the sidebar (UX icon names rendered with the dock's icon set).
     $services->get(ChatSidebar::class)
         ->arg('$iconRenderer', service(IconRendererInterface::class)->nullOnInvalid())

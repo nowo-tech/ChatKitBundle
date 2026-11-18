@@ -106,6 +106,49 @@ final readonly class ChatNotifier
     }
 
     /**
+     * 1.35: the reader's own read cursor moved without the receipt (after "Mark unread from here"): only the reader's
+     * other tabs and devices hear it; other people keep the receipt they saw.
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $reader The reader
+     * @param int $messageId The reader's read cursor
+     */
+    public function readOwn(ChatConversation $conversation, ChatUserInterface $reader, int $messageId): void
+    {
+        $this->publisher->publish('read', [
+            'conversationUuid' => $conversation->getUuid(),
+            'userUuid'         => $reader->getChatPublicId(),
+            'userName'         => $reader->getChatDisplayName(),
+            'messageId'        => $messageId,
+        ], [$reader]);
+    }
+
+    /**
+     * 1.35: "Mark unread from here": the user's other tabs and devices move their read cursor back and reload the list.
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $user The user
+     * @param int|null $readUpTo The read cursor now (null: nothing read)
+     */
+    public function unread(ChatConversation $conversation, ChatUserInterface $user, ?int $readUpTo): void
+    {
+        $this->publisher->publish('unread', ['conversationUuid' => $conversation->getUuid(), 'readUpTo' => $readUpTo], [$user]);
+        $this->listChanged($user);
+    }
+
+    /**
+     * 1.35: the user saved or unsaved a message: their other tabs and devices follow.
+     *
+     * @param ChatUserInterface $user The user
+     * @param ChatMessage $message The message
+     * @param bool $saved Whether it is saved now
+     */
+    public function saved(ChatUserInterface $user, ChatMessage $message, bool $saved): void
+    {
+        $this->publisher->publish('saved', ['conversationUuid' => $message->getConversation()->getUuid(), 'messageUuid' => $message->getUuid(), 'saved' => $saved], [$user]);
+    }
+
+    /**
      * Sends a "typing" ping to the other recipients. Ephemeral: never stored.
      *
      * @param ChatConversation $conversation The conversation being typed in

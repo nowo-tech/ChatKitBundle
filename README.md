@@ -144,6 +144,7 @@ and `make -C demo/symfony8 demo-screenshots` (see [docs/CONTRIBUTING.md](docs/CO
 - [Coverage policy](docs/COVERAGE.md)
 - [Demo FrankenPHP](docs/DEMO-FRANKENPHP.md)
 - [FrankenPHP worker audit](docs/FRANKENPHP-WORKER-AUDIT.md)
+- [Concurrency (REQ-RUNTIME-003)](docs/CONCURRENCY.md)
 - [GitHub CI](docs/GITHUB_CI.md)
 - [GitHub About](docs/GITHUB.md)
 

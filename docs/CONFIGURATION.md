@@ -135,6 +135,19 @@ nowo_chat_kit:
 | `profiles.<name>.links.allow_http` | bool | `false` | 1.19: also accept `http:` links (pinned links and link cards). `https:` only by default; no other scheme ever. |
 | `profiles.<name>.links.channel_managers` | `members` \| `admins` | `members` | 1.19: who manages the pinned links of a channel: every member, or only whom `ChatLinkPolicyInterface::canManageLinksInChannel()` allows (else `ChatPinPolicyInterface::canPinInChannel()`, else nobody). Both people of a direct conversation always do; in tickets, the agents. |
 | `profiles.<name>.links.providers` | map | teams, meet, zoom, jitsi, webex | 1.19: known providers, `key => {label, hosts, icon, fallback_icon}`: `hosts` are lowercase hostnames (a subdomain matches too; only the hostname is looked at), `icon` the UX Icons name of the dock icon `provider_<key>` (null: the built-in `fallback_icon`, default `video`). Keys: `a-z`, `0-9`, `_` (not `other`). A map you set replaces the default one (`Configuration::DEFAULT_LINK_PROVIDERS`). |
+| `profiles.<name>.message_menu.quick_reactions.emojis` | list | `👍 ❤️ 😂 😮 😢 🙏` | 1.35: the row of emoji at the top of the message menu (`[]` hides it). Each must be one of `reactions`, or of the picker catalog (`ChatEmojiCatalog`) with `picker` on; anything else fails the container build. |
+| `profiles.<name>.message_menu.quick_reactions.picker` | bool | `true` | 1.35: **More…** opens the emoji picker; the reaction endpoint then accepts `reactions` plus the picker catalog, nothing else. |
+| `profiles.<name>.message_menu.copy_text` | bool | `true` | 1.35: **Copy text** (client side: the plain text the viewer sees). |
+| `profiles.<name>.message_menu.quote.enabled` / `.max_length` | bool / int 20–4000 | `true` / `1000` | 1.35: **Quote** — the message as a Markdown quote in the composer (mentions as plain names), cut at `max_length` characters. |
+| `profiles.<name>.message_menu.mark_unread` | bool | `true` | 1.35: **Mark unread from here** (not on one's own messages). The receipts other people see never go back. |
+| `profiles.<name>.message_menu.save.enabled` | bool | `false` | 1.35: **Save for later** and the Saved list (`GET /chat/saved`, `GET /chat/api/saved`). Stores data: off by default. |
+| `profiles.<name>.message_menu.save.max_per_user` | int ≥ 0 | `500` | 1.35: saved messages per user (`422 too_many_saved` beyond; `0` = unlimited). A soft cap: two saves racing at the limit may both pass. |
+| `profiles.<name>.message_menu.save.dock_entry` | bool | `true` | 1.35: a **Saved** link in the dock header (when save is enabled). |
+| `profiles.<name>.message_menu.message_info.enabled` | bool | `false` | 1.35: **Message info** — who read a message and when. Stores read times: off by default. |
+| `profiles.<name>.message_menu.message_info.read_times` | bool | `true` | 1.35: store and show read times (only of people who share them: the reciprocal **Share read times** preference). `false`: who read it, never when. |
+| `profiles.<name>.message_menu.message_info.per_person_max_members` | int 2–500 | `20` | 1.35: up to this many people besides the author, the info lists them; above it, counts only, and no read time is stored. |
+| `profiles.<name>.message_menu.message_info.own_messages_only` | bool | `true` | 1.35: read info on the viewer's own messages only; support agents (moderators) see it on every message outside direct conversations. |
+| `profiles.<name>.message_menu.order` | list | `reply, quote, copy_text, copy_link, save, mark_unread, pin, info, edit, delete` | 1.35: order of the menu items; a subset hides the others. Separators go between groups (reply/quote · copy_text…pin · info/edit · delete). |
 | `profiles.<name>.limits.*` | int | see below | Rate limits. |
 
 ## Retention from the application (1.31)

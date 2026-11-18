@@ -53,6 +53,23 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
         }
     }
 
+    /**
+     * 1.35: the message menu's writes (save, unsave, mark unread, read with read times) against a sender of the same
+     * conversation: every call succeeds, nothing is left open, and no message is saved twice.
+     */
+    public function testTheMessageMenuAgainstASender(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('send', 'menu');
+
+        foreach ([$a, $b] as $writer) {
+            self::assertSame(self::CALLS, $writer['ok'], 'failures: ' . json_encode($writer['failures']));
+            self::assertSame(0, $writer['poisoned']);
+            self::assertSame(0, $writer['closed']);
+        }
+        self::assertSame(0, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM (SELECT message_id FROM nowo_chat_saved_message GROUP BY user_id, message_id HAVING COUNT(*) > 1) d'));
+    }
+
     private function seed(): void
     {
         $ana  = $this->user('ana');

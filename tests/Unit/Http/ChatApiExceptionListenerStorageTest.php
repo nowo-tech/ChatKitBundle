@@ -60,7 +60,9 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
         $response = $event->getResponse();
         self::assertNotNull($response);
         self::assertSame($status, $response->getStatusCode());
-        self::assertSame($retryAfter !== null ? '{"ok":false,"error":"unavailable"}' : '{"ok":false,"error":"conflict"}', $response->getContent(), 'no SQL, no driver text');
+        self::assertSame($retryAfter !== null ? '{"ok":false,"error":"unavailable","code":"CONFLICT_001"}' : '{"ok":false,"error":"conflict","code":"CONFLICT_001"}', $response->getContent(), 'no SQL, no driver text');
+        // 1.35 (REQ-RUNTIME-003 rule 6): every conflict answer carries its code in a header too.
+        self::assertSame('CONFLICT_001', $response->headers->get('X-Conflict-Code'));
         self::assertSame($retryAfter, $response->headers->get('Retry-After'));
         self::assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
     }
@@ -73,7 +75,7 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
         $replaced = $event->getThrowable();
         self::assertInstanceOf(HttpException::class, $replaced);
         self::assertSame(409, $replaced->getStatusCode());
-        self::assertSame(['Retry-After' => '3'], $replaced->getHeaders());
+        self::assertSame(['Retry-After' => '3', 'X-Conflict-Code' => 'CONFLICT_001'], $replaced->getHeaders());
         self::assertSame($failure, $replaced->getPrevious());
         self::assertNull($event->getResponse());
 
@@ -82,6 +84,7 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
         (new ChatApiExceptionListener())->onStorageFailure($event);
         self::assertInstanceOf(ConflictHttpException::class, $event->getThrowable());
         self::assertSame($unique, $event->getThrowable()->getPrevious());
+        self::assertSame(['X-Conflict-Code' => 'CONFLICT_001'], $event->getThrowable()->getHeaders());
     }
 
     public function testThe503OptInOfThePolicyKeepsTheOldStatusForJsonAndHtml(): void
@@ -92,7 +95,7 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
         (new ChatApiExceptionListener($policy))->onStorageFailure($event);
         self::assertSame(503, $event->getResponse()?->getStatusCode());
         self::assertSame('4', $event->getResponse()->headers->get('Retry-After'));
-        self::assertSame('{"ok":false,"error":"unavailable"}', $event->getResponse()->getContent());
+        self::assertSame('{"ok":false,"error":"unavailable","code":"CONFLICT_001"}', $event->getResponse()->getContent());
 
         $event = $this->event('nowo_chat_page_send', new TransientStorageFailure(9));
         (new ChatApiExceptionListener($policy))->onStorageFailure($event);
@@ -124,14 +127,15 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
         $response = $event->getResponse();
         self::assertSame(409, $response?->getStatusCode());
         self::assertFalse($response->headers->has('Retry-After'));
-        self::assertSame(['ok' => false, 'error' => 'unavailable', 'message' => ChatApiExceptionListener::PARTIAL_MESSAGE], json_decode((string) $response->getContent(), true));
+        self::assertSame(['ok' => false, 'error' => 'unavailable', 'code' => 'CONFLICT_002', 'message' => ChatApiExceptionListener::PARTIAL_MESSAGE], json_decode((string) $response->getContent(), true));
+        self::assertSame('CONFLICT_002', $response->headers->get('X-Conflict-Code'));
 
         $event = $this->event('nowo_chat_page_send', $conflict);
         (new ChatApiExceptionListener())->onStorageFailure($event);
         $page = $event->getThrowable();
         self::assertInstanceOf(HttpException::class, $page);
         self::assertSame(409, $page->getStatusCode());
-        self::assertSame([], $page->getHeaders());
+        self::assertSame(['X-Conflict-Code' => 'CONFLICT_002'], $page->getHeaders());
         self::assertSame($conflict, $page->getPrevious());
 
         // Not committed: the retry is invited.

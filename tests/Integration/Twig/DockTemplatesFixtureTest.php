@@ -15,6 +15,14 @@ final class DockTemplatesFixtureTest extends DatabaseTestCase
 {
     private const string FIXTURE = __DIR__ . '/../../../src/Resources/assets/tests/fixtures/templates.html';
 
+    /**
+     * 1.35: every message menu item is offered, so the browser tests see each of them.
+     */
+    protected function chatKitConfig(): array
+    {
+        return ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true], 'message_info' => ['enabled' => true]]]]];
+    }
+
     public function testFixtureMatchesTheTemplates(): void
     {
         $html = $this->renderDockTemplates() . "\n";

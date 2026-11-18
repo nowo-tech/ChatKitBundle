@@ -79,6 +79,7 @@ final readonly class ChatService implements ChatServiceInterface
      * @param ChatReferences|null $references Validates #reference tokens; null keeps them as written
      * @param ChatLinks|null $links 1.19: validates the link cards and keeps the link index; null keeps cards as written and indexes nothing
      * @param TransactionRunnerInterface|null $transactions 1.30: runs every write unit of work; null uses ChatKit's default runner
+     * @param ChatReadTimes|null $readTimes 1.35: stores read times for message info; null stores none
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -98,6 +99,7 @@ final readonly class ChatService implements ChatServiceInterface
         private ?ChatAutoReplier $autoReplies = null,
         private ?ChatLinks $links = null,
         ?TransactionRunnerInterface $transactions = null,
+        private ?ChatReadTimes $readTimes = null,
     ) {
         // 1.30: the container passes the runner bound to TransactionRunnerInterface; direct construction gets the default.
         $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
@@ -446,18 +448,28 @@ final readonly class ChatService implements ChatServiceInterface
         // 1.30: the cursor and the mention rows it marks read in one unit of work. The conversation's row is locked
         // first, shared (readers do not wait for each other) unless the cursor's row must be created, so it never meets a
         // new message's unit of work in the other order (audit QD-L2).
-        $moved = $this->write(function () use ($user, $conversation, $messageId, $member, $now): bool {
+        // 1.35: the receipt cursor (what other people see) moves only past what they saw already; after "Mark unread from
+        // here" a read that catches up again reaches only the reader's own tabs.
+        [$moved, $receiptMoved] = $this->write(function () use ($user, $conversation, $messageId, $member, $now): array {
             $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
             $this->conversations->lockActivity($conversation, $member);
-            $moved = $this->participants->claim($conversation, $user, $now)->markReadUpTo($messageId);
+            $participant = $this->participants->claim($conversation, $user, $now);
+            $receipt     = $participant->getReceiptMessageId();
+            $moved       = $participant->markReadUpTo($messageId);
             if ($moved) {
                 $this->mentionRows?->markReadUpTo($user, $conversation, $messageId, $now);
             }
+            $receiptMoved = $moved && ($receipt === null || $messageId > $receipt);
+            if ($receiptMoved) {
+                $this->readTimes?->record($participant, $user, $messageId, $now);
+            }
 
-            return $moved;
+            return [$moved, $receiptMoved];
         });
-        if ($moved) {
+        if ($receiptMoved) {
             $this->notifier->read($conversation, $user, $messageId);
+        } elseif ($moved) {
+            $this->notifier->readOwn($conversation, $user, $messageId);
         }
 
         return $moved;
@@ -670,8 +682,10 @@ final readonly class ChatService implements ChatServiceInterface
     {
         // The id of the new message (the author's read cursor points at it).
         $this->entityManager->flush();
-        // The author has read everything up to their own message.
-        $participant->markReadUpTo((int) $message->getId());
+        // The author has read everything up to their own message (1.35: and the read time of what they had not read yet).
+        if ($participant->markReadUpTo((int) $message->getId())) {
+            $this->readTimes?->record($participant, $participant->getUser(), (int) $message->getId(), $message->getCreatedAt());
+        }
         // 1.10: a new message brings the conversation back to the lists of those who closed it (not muted ones; a
         // resolved or closed ticket stays closed).
         $conversation = $message->getConversation();

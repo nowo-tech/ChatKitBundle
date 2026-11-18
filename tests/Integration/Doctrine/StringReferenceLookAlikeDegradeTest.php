@@ -12,10 +12,13 @@ use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
+use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
+use Nowo\ChatKitBundle\Repository\ChatSavedMessageRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+use Nowo\ChatKitBundle\Service\ChatMessageActions;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefChatUser;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefDirectory;
@@ -73,12 +76,15 @@ final class StringReferenceLookAlikeDegradeTest extends TestCase
         $withBob = $chat->openDirect($ana, $bob);
         $message = $chat->send($ana, $withBob, 'hi');
         $chat->toggleReaction($bob, $message, '👍');
+        // 1.35: and a saved message.
+        $actions = $this->get(ChatMessageActions::class);
+        $actions->setSaved($bob, $message, true);
         $settings = $this->get(ChatUserSettingsRepository::class);
         $settings->save($settings->forUser($bob));
         $this->get(StringReferenceSchemaGuard::class)->assertReady();
 
         // The schema folds again behind the passed check.
-        foreach ([ChatParticipant::class, ChatReaction::class, ChatUserSettings::class] as $class) {
+        foreach ([ChatParticipant::class, ChatReaction::class, ChatSavedMessage::class, ChatUserSettings::class] as $class) {
             $this->fold($this->em->getClassMetadata($class)->getTableName(), 'user_id');
         }
         $this->em->clear();
@@ -93,6 +99,7 @@ final class StringReferenceLookAlikeDegradeTest extends TestCase
         // Reads: Bob sees none of bob's rows, and nothing throws (this runs on every page of the host).
         self::assertNull($this->get(ChatParticipantRepository::class)->findOneFor($withBob, $bigB));
         self::assertNull($this->get(ChatReactionRepository::class)->findOneFor($message, $bigB, '👍'));
+        self::assertNull($this->get(ChatSavedMessageRepository::class)->findOneFor($message, $bigB));
         $defaults = $settings->forUser($bigB);
         self::assertNull($defaults->getId(), 'unsaved defaults, not bob\'s row');
         self::assertNull($settings->forUsers([$bigB])['Bob']->getId(), 'the list path agrees with the single one');
@@ -102,6 +109,7 @@ final class StringReferenceLookAlikeDegradeTest extends TestCase
         foreach ([
             'participant' => static fn () => $chat->participant($withBob, $bigB),
             'reaction'    => static fn () => $chat->toggleReaction($bigB, $message, '👍'),
+            'saved'       => static fn () => $actions->setSaved($bigB, $message, true),
             'settings'    => static fn () => $settings->save($defaults),
         ] as $what => $write) {
             try {

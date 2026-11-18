@@ -37,18 +37,18 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
       testMatch: /.*\.spec\.ts/,
-      testIgnore: /(screenshots|phone|context-menu-touch)\.spec\.ts/,
+      testIgnore: /(screenshots|phone|context-menu-touch|message-menu-phone)\.spec\.ts/,
     },
     // 1.23: the phone layout at 390 × 844 in Chromium and WebKit (host mobile UX audit, MUX-02 / 08 / 25 / 91).
     {
       name: 'phone-chromium',
       use: { ...devices['Pixel 7'], viewport: { width: 390, height: 844 } },
-      testMatch: /phone\.spec\.ts/,
+      testMatch: /(phone|message-menu-phone)\.spec\.ts/,
     },
     {
       name: 'phone-webkit',
       use: { ...devices['iPhone 14'], viewport: { width: 390, height: 844 } },
-      testMatch: /phone\.spec\.ts/,
+      testMatch: /(phone|message-menu-phone)\.spec\.ts/,
     },
     // 1.33: long press on a message (UiKit 2.54 context menu), Chromium with touch emulation (pointer: coarse).
     {

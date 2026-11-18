@@ -227,6 +227,32 @@ final class SchemaNamesTest extends TestCase
                 'FK_F6AD5573A76ED395' => 'user_id -> test_user',
             ],
         ],
+        // 1.35: read times (message info) and saved messages.
+        'nowo_chat_read_mark' => [
+            'indexes' => [
+                'IDX_90713239D1C3019'          => 'participant_id',
+                'idx_nowo_chat_read_mark_at'   => 'read_at',
+                'idx_nowo_chat_read_mark_upto' => 'participant_id,up_to_message_id',
+            ],
+            'unique' => [],
+            'fk'     => [
+                'FK_90713239D1C3019' => 'participant_id -> nowo_chat_participant',
+            ],
+        ],
+        'nowo_chat_saved_message' => [
+            'indexes' => [
+                'IDX_C835FCC3537A1329'             => 'message_id',
+                'IDX_C835FCC3A76ED395'             => 'user_id',
+                'idx_nowo_chat_saved_message_list' => 'user_id,saved_at,id',
+            ],
+            'unique' => [
+                'uniq_nowo_chat_saved_message' => 'user_id,message_id',
+            ],
+            'fk' => [
+                'FK_C835FCC3537A1329' => 'message_id -> nowo_chat_message',
+                'FK_C835FCC3A76ED395' => 'user_id -> test_user',
+            ],
+        ],
         // 1.30: the ticket number counter (primary key only).
         'nowo_chat_ticket_counter' => [
             'indexes' => [],
@@ -353,6 +379,32 @@ final class SchemaNamesTest extends TestCase
             'fk' => [
                 'FK_90F5D0C7537A1329' => 'message_id -> chat_message',
                 'FK_90F5D0C7A76ED395' => 'user_id -> test_user',
+            ],
+        ],
+        // 1.35: read times (message info) and saved messages.
+        'chat_read_mark' => [
+            'indexes' => [
+                'IDX_C56D3C339D1C3019'    => 'participant_id',
+                'idx_chat_read_mark_at'   => 'read_at',
+                'idx_chat_read_mark_upto' => 'participant_id,up_to_message_id',
+            ],
+            'unique' => [],
+            'fk'     => [
+                'FK_C56D3C339D1C3019' => 'participant_id -> chat_participant',
+            ],
+        ],
+        'chat_saved_message' => [
+            'indexes' => [
+                'IDX_A6FDA737537A1329'        => 'message_id',
+                'IDX_A6FDA737A76ED395'        => 'user_id',
+                'idx_chat_saved_message_list' => 'user_id,saved_at,id',
+            ],
+            'unique' => [
+                'uniq_chat_saved_message' => 'user_id,message_id',
+            ],
+            'fk' => [
+                'FK_A6FDA737537A1329' => 'message_id -> chat_message',
+                'FK_A6FDA737A76ED395' => 'user_id -> test_user',
             ],
         ],
         // 1.30: the ticket number counter (primary key only).

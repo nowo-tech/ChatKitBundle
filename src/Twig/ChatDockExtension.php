@@ -69,6 +69,20 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
     /** 1.33: UiKit's context-menu runtime, in UiKit's asset package (`web_ui.message_context_menu: true`). */
     public const string CONTEXT_MENU_RUNTIME = 'js/nowo-ui-context-menu.js';
 
+    /** 1.35: separator group of each message menu item (a separator goes between two groups). */
+    public const array MENU_GROUPS = [
+        'reply'       => 'compose',
+        'quote'       => 'compose',
+        'copy_text'   => 'keep',
+        'copy_link'   => 'keep',
+        'save'        => 'keep',
+        'mark_unread' => 'keep',
+        'pin'         => 'keep',
+        'info'        => 'manage',
+        'edit'        => 'manage',
+        'delete'      => 'danger',
+    ];
+
     /** 1.26: name of UiKit's asset package. */
     public const string UI_KIT_PACKAGE = 'nowo_ui_kit';
 
@@ -98,6 +112,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param Packages|null $packages 1.26: asset packages (the URL of UiKit's js/nowo-ui-dialog.js); null without symfony/asset
      * @param ChatAuthorBadges|null $authorBadges 1.29: whether the application gives author badges; null: it does not
      * @param bool|null $messageContextMenu 1.33: the message context menu (`web_ui.message_context_menu`): null follows UiKit's theme flag, true / false force it
+     * @param array<string, mixed> $messageMenu 1.35: `message_menu` (quick reactions, items and their order)
      */
     public function __construct(
         private readonly Security $security,
@@ -133,6 +148,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly ?Packages $packages = null,
         private readonly ?ChatAuthorBadges $authorBadges = null,
         private readonly ?bool $messageContextMenu = null,
+        private readonly array $messageMenu = [],
     ) {
     }
 
@@ -167,6 +183,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'nowo_chat_author_badges' => $this->authorBadges?->enabled() ?? false,
             // 1.33: the message context menu (null: UiKit's theme flag; true / false: forced by web_ui.message_context_menu).
             'nowo_chat_message_context_menu' => $this->messageContextMenu,
+            // 1.35: the items of each message's menu, in order, with their group (separators between groups) and the
+            // quick reactions row.
+            'nowo_chat_message_menu' => $this->menuTemplate(),
         ];
     }
 
@@ -217,7 +236,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'maxLength'         => ChatMessage::MAX_LENGTH,
             'editWindowSeconds' => ChatMessage::EDIT_WINDOW_SECONDS,
             'reactions'         => $this->reactions,
-            'endpoints'         => [
+            // 1.35: the message menu (items offered, quick reactions, quote length, the Saved entry of the dock).
+            'menu'      => $this->menuConfig(),
+            'endpoints' => [
                 'conversations'  => $this->urls->generate('nowo_chat_api_conversations'),
                 'contacts'       => $this->urls->generate('nowo_chat_api_contacts'),
                 'direct'         => $this->urls->generate('nowo_chat_api_open_direct'),
@@ -255,6 +276,12 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'messageLink' => $this->pattern('nowo_chat_api_message_link', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 // 1.24: mute / unmute a conversation for the user.
                 'mute' => $this->pattern('nowo_chat_api_mute'),
+                // 1.35: the message menu (the client offers an item only when its endpoint is here).
+                'unread'    => $this->pattern('nowo_chat_api_unread', ['messageUuid' => self::PLACEHOLDER], '__message__'),
+                'info'      => $this->pattern('nowo_chat_api_info', ['messageUuid' => self::PLACEHOLDER], '__message__'),
+                'save'      => $this->pattern('nowo_chat_api_save', ['messageUuid' => self::PLACEHOLDER], '__message__'),
+                'saved'     => $this->urls->generate('nowo_chat_api_saved'),
+                'savedPage' => $this->urls->generate('nowo_chat_page_saved'),
                 // 1.26: the session's current CSRF token (asked for once when the page's token is refused).
                 'csrf' => $this->urls->generate('nowo_chat_api_csrf'),
             ] + $this->linkEndpoints(),
@@ -282,6 +309,59 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         ] + ($this->channelsUrl === null || preg_match(Configuration::CHANNELS_URL_PATTERN, $this->channelsUrl) !== 1 ? [] : ['channelsUrl' => $this->channelsUrl])
             + $this->sidebarConfig()
             + $this->contextMenuConfig();
+    }
+
+    /**
+     * 1.35: what the message template renders: the items offered (in `message_menu.order`, each with its separator group)
+     * and the quick reactions.
+     *
+     * @return array{items: list<array{name: string, group: string}>, quick: list<string>, picker: bool, saved: bool}
+     */
+    private function menuTemplate(): array
+    {
+        $menu  = $this->menuConfig();
+        $items = [];
+        foreach ($menu['order'] as $name) {
+            if ($menu['items'][$name] ?? false) {
+                $items[] = ['name' => $name, 'group' => self::MENU_GROUPS[$name]];
+            }
+        }
+
+        return ['items' => $items, 'quick' => $menu['quick'], 'picker' => $menu['picker'], 'saved' => $menu['saveDockEntry']];
+    }
+
+    /**
+     * 1.35: the message menu for the client and the template (defaults when the extension is built without it).
+     *
+     * @return array{order: list<string>, items: array<string, bool>, quick: list<string>, picker: bool, quoteMaxLength: int, saveDockEntry: bool}
+     */
+    private function menuConfig(): array
+    {
+        $menu = $this->messageMenu;
+        /** @var list<string> $order */
+        $order = $menu['order'] ?? Configuration::MESSAGE_MENU_ITEMS;
+        /** @var list<string> $quick */
+        $quick = $menu['quick_reactions']['emojis'] ?? Configuration::DEFAULT_QUICK_REACTIONS;
+
+        return [
+            'order' => $order,
+            'items' => [
+                'reply'       => true,
+                'quote'       => ($menu['quote']['enabled'] ?? true) === true,
+                'copy_text'   => ($menu['copy_text'] ?? true) === true,
+                'copy_link'   => true,
+                'save'        => ($menu['save']['enabled'] ?? false) === true,
+                'mark_unread' => ($menu['mark_unread'] ?? true) === true,
+                'pin'         => true,
+                'info'        => ($menu['message_info']['enabled'] ?? false) === true,
+                'edit'        => true,
+                'delete'      => true,
+            ],
+            'quick'          => $quick,
+            'picker'         => ($menu['quick_reactions']['picker'] ?? true) === true,
+            'quoteMaxLength' => (int) ($menu['quote']['max_length'] ?? 1000),
+            'saveDockEntry'  => ($menu['save']['enabled'] ?? false) === true && ($menu['save']['dock_entry'] ?? true) === true,
+        ];
     }
 
     /**

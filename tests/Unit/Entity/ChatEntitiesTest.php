@@ -347,6 +347,7 @@ final class ChatEntitiesTest extends TestCase
             'presence'       => false,
             'push'           => false,
             'emailDigest'    => false,
+            'shareReadTimes' => true,
         ], $settings->preferences());
         self::assertSame('bell', $settings->getSound(), 'the 1.x single sound is the new-message sound');
 

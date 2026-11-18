@@ -28,4 +28,14 @@ final class ChatPage
     {
         return new PageHeader(new Label('chat.page_title', self::BUNDLE));
     }
+
+    /**
+     * 1.35: header of the Saved page (`chat.saved_title`, intro `chat.saved_intro`).
+     *
+     * @return PageHeader The page header view model
+     */
+    public static function savedHeader(): PageHeader
+    {
+        return new PageHeader(new Label('chat.saved_title', self::BUNDLE), new Label('chat.saved_intro', self::BUNDLE));
+    }
 }

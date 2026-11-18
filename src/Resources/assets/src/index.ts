@@ -8,11 +8,13 @@
  */
 import { ChatDock, type ChatDockOptions } from './dock';
 import { markPageRead } from './page';
+import { bindSavedPage } from './saved-page';
 import type { ChatConfig } from './types';
 
 export { ChatDock } from './dock';
 export type { ChatDockOptions } from './dock';
 export { markPageRead } from './page';
+export { bindSavedPage } from './saved-page';
 export { acquireOverlay, OVERLAY_CLOSE_EVENT, OVERLAY_OPEN_EVENT, OVERLAY_ROOT_ATTR } from './overlay';
 export type { ChatOverlayHandle, ChatOverlayKind, ChatOverlayOptions } from './overlay';
 export { PREFS_EVENT, saveChatPreference } from './prefs';
@@ -118,6 +120,7 @@ export function autoStart(): void {
   /** Mounts the docks and marks the open full-page conversation read. */
   const start = (): void => {
     markPageRead();
+    bindSavedPage();
     mountAll();
   };
   if (document.readyState === 'loading') {

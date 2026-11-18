@@ -122,6 +122,7 @@ final class ChatPrivacyTest extends DatabaseTestCase
             'send_key'              => 'enter',
             'email_digest'          => true,
             'show_online'           => true,
+            'share_read_times'      => true,
             'status'                => 'available',
             'status_text'           => null,
             'status_emoji'          => null,

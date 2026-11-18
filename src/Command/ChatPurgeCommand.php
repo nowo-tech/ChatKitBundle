@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Command;
 use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationLinkRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Repository\ChatReadMarkRepository;
 use Nowo\ChatKitBundle\Support\ChatRetention;
 use Nowo\ChatKitBundle\Support\InvalidRetentionConfigurationException;
 use Nowo\ChatKitBundle\Support\RetentionUnavailableException;
@@ -22,6 +23,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Throwable;
 
+use function count;
 use function sprintf;
 
 use const DATE_ATOM;
@@ -45,6 +47,7 @@ final class ChatPurgeCommand extends Command
      * @param LoggerInterface $logger Start / end / failure of a purge run (counts only, never message content)
      * @param ChatConversationLinkRepository|null $links 1.19: pinned links not changed within the window go too (audit FZ-L3)
      * @param RetentionPolicyProviderInterface|null $retention 1.31: the host's retention, asked again on every run (null: `$retentionDays` only)
+     * @param ChatReadMarkRepository|null $readMarks 1.35: read times older than the window go too (message info)
      */
     public function __construct(
         private readonly ChatMessageRepository $messages,
@@ -53,6 +56,7 @@ final class ChatPurgeCommand extends Command
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly ?ChatConversationLinkRepository $links = null,
         private readonly ?RetentionPolicyProviderInterface $retention = null,
+        private readonly ?ChatReadMarkRepository $readMarks = null,
     ) {
         parent::__construct();
     }
@@ -64,9 +68,10 @@ final class ChatPurgeCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $deleted = 0;
-        $links   = 0;
-        $max     = max(1, (int) $input->getOption('max-batches'));
+        $deleted   = 0;
+        $links     = 0;
+        $readMarks = 0;
+        $max       = max(1, (int) $input->getOption('max-batches'));
         try {
             $days   = (new ChatRetention($this->retentionDays, $this->retention, $this->logger))->days();
             $now    = $this->clock->now();
@@ -92,6 +97,15 @@ final class ChatPurgeCommand extends Command
                     break;
                 }
             }
+            // 1.35: read times (personal data) older than the window, in small units.
+            for ($batch = 0; $this->readMarks instanceof ChatReadMarkRepository && $batch < $max; ++$batch) {
+                $ids = $this->readMarks->idsBefore($cutoff);
+                $this->readMarks->deleteIds($ids);
+                $readMarks += count($ids);
+                if (count($ids) < ChatReadMarkRepository::PURGE_BATCH) {
+                    break;
+                }
+            }
         } catch (InvalidRetentionConfigurationException $exception) {
             // Fail closed (1.31.1): nothing is deleted when the configured retention is not a positive number.
             $this->logger->error('Chat purge aborted: the configured retention_days is invalid (0 or negative).', ['configured_days' => $exception->days, 'minimum_days' => self::MIN_DAYS]);
@@ -109,7 +123,7 @@ final class ChatPurgeCommand extends Command
 
             throw $exception;
         }
-        $this->logger->info('Chat purge finished.', ['deleted' => $deleted, 'links' => $links, 'retention_days' => $days]);
+        $this->logger->info('Chat purge finished.', ['deleted' => $deleted, 'links' => $links, 'read_marks' => $readMarks, 'retention_days' => $days]);
         (new SymfonyStyle($input, $output))->success(sprintf('Deleted %d chat message(s) and %d pinned link(s) older than %d days.', $deleted, $links, $days));
 
         return Command::SUCCESS;
