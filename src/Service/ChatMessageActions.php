@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Service;
 
 use DateTimeImmutable;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
@@ -188,10 +189,15 @@ final readonly class ChatMessageActions
             }
             $cursor = (int) $batch[count($batch) - 1]->getId();
         }
-        $more = count($rows) > self::SAVED_PAGE || $cursor !== null;
-        $rows = array_slice($rows, 0, self::SAVED_PAGE);
+        if (count($rows) > self::SAVED_PAGE) {
+            $rows = array_slice($rows, 0, self::SAVED_PAGE);
 
-        return ['rows' => $rows, 'next' => $more && $rows !== [] ? (int) $rows[count($rows) - 1]->getId() : null];
+            return ['rows' => $rows, 'next' => (int) $rows[self::SAVED_PAGE - 1]->getId()];
+        }
+
+        // Audit TK-6: the scan stopped before the end of the list (a run of hidden rows): its cursor goes on, even
+        // with nothing to show on this page.
+        return ['rows' => $rows, 'next' => $cursor];
     }
 
     /**
@@ -236,8 +242,10 @@ final readonly class ChatMessageActions
         [$moved, $readUpTo] = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($user, $conversation, $before, $member, $now): array {
             $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
             $this->conversations->lockActivity($conversation, $member);
+            // Audit TK-7: the participant row is read again under an exclusive lock (a read racing in another tab).
             $participant = $this->participants->claim($conversation, $user, $now);
-            $moved       = $participant->markUnreadFrom($before);
+            $this->entityManager->refresh($participant, LockMode::PESSIMISTIC_WRITE);
+            $moved = $participant->markUnreadFrom($before);
 
             return [$moved, $participant->getLastReadMessageId()];
         });
@@ -286,6 +294,13 @@ final readonly class ChatMessageActions
         foreach ($author instanceof ChatUserInterface ? $this->participants->findReaders($conversation, $author, 500) : [] as $participant) {
             $receipts[(string) ChatUserReferences::key($participant->getUser())] = $participant;
         }
+        if ($conversation->isSupport() && !$this->access->isSupportAgent($viewer)) {
+            // Audit TK-1: a requester sees the agents who took part in the ticket (a read receipt), never the roster.
+            $people = array_values(array_filter(
+                $people,
+                fn (ChatUserInterface $user): bool => !$this->access->isSupportAgent($user) || isset($receipts[(string) ChatUserReferences::key($user)]),
+            ));
+        }
         $read      = static fn (ChatUserInterface $user): ?ChatParticipant => ($row = $receipts[(string) ChatUserReferences::key($user)] ?? null) instanceof ChatParticipant && (int) $row->getReceiptMessageId() >= (int) $message->getId() ? $row : null;
         $readCount = count(array_filter($people, static fn (ChatUserInterface $user): bool => $read($user) instanceof ChatParticipant));
         $base      = ['memberCount' => count($people), 'readCount' => $readCount, 'editedAt' => $message->getEditedAt()?->format(DATE_ATOM)];
@@ -297,7 +312,12 @@ final readonly class ChatMessageActions
         $at    = [];
         if ($times) {
             $sharing = array_filter(array_map($read, $people), fn (?ChatParticipant $row): bool => $row instanceof ChatParticipant && $this->readTimes->shares($row->getUser()));
-            $at      = $this->marks->readTimes(array_values(array_map(static fn (ChatParticipant $row): int => (int) $row->getId(), $sharing)), (int) $message->getId());
+            // Audit TK-2 / TK-4: never a time stored before the reader last turned sharing back on.
+            $since = [];
+            foreach ($sharing as $row) {
+                $since[(int) $row->getId()] = $this->readTimes->sharedSince($row->getUser());
+            }
+            $at = $this->marks->readTimes(array_values(array_map(static fn (ChatParticipant $row): int => (int) $row->getId(), $sharing)), (int) $message->getId(), $since);
         }
         $this->avatars?->prime($people);
         $readers = array_map(function (ChatUserInterface $user) use ($read, $at): array {
@@ -317,23 +337,6 @@ final readonly class ChatMessageActions
         usort($readers, static fn (array $a, array $b): int => [$b['read'], $b['readAt'] ?? '', $a['name']] <=> [$a['read'], $a['readAt'] ?? '', $b['name']]);
 
         return ['mode' => 'people', 'readTimes' => $times, 'readers' => $readers] + $base;
-    }
-
-    /**
-     * The user changed "Share read times": turning it off deletes every stored read time of theirs (one unit of work).
-     *
-     * @param ChatUserInterface $user The user
-     * @param bool $share The new value
-     *
-     * @return int Read times deleted
-     */
-    public function shareReadTimesChanged(ChatUserInterface $user, bool $share): int
-    {
-        if ($share) {
-            return 0;
-        }
-
-        return (int) ChatKitWrites::runRecovering($this->transactions, $this->entityManager, fn (): int => $this->readTimes->forget($user));
     }
 
     private function isModerator(ChatUserInterface $viewer, ChatMessage $message): bool

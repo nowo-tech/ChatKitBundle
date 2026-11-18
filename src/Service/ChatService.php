@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Service;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use LogicException;
@@ -453,9 +454,12 @@ final readonly class ChatService implements ChatServiceInterface
         [$moved, $receiptMoved] = $this->write(function () use ($user, $conversation, $messageId, $member, $now): array {
             $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
             $this->conversations->lockActivity($conversation, $member);
+            // Audit TK-7: the participant row is read again under an exclusive lock, so a "mark unread" racing this read
+            // in another tab is applied before or after it, never lost.
             $participant = $this->participants->claim($conversation, $user, $now);
-            $receipt     = $participant->getReceiptMessageId();
-            $moved       = $participant->markReadUpTo($messageId);
+            $this->entityManager->refresh($participant, LockMode::PESSIMISTIC_WRITE);
+            $receipt = $participant->getReceiptMessageId();
+            $moved   = $participant->markReadUpTo($messageId);
             if ($moved) {
                 $this->mentionRows?->markReadUpTo($user, $conversation, $messageId, $now);
             }

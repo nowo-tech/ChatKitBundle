@@ -162,7 +162,12 @@ class ChatParticipant
      */
     public function getReceiptMessageId(): ?int
     {
-        return $this->receiptMessageId ?? $this->lastReadMessageId;
+        // Audit TK-7: never below the read cursor, whatever a racing write left in the column.
+        if ($this->receiptMessageId === null || $this->lastReadMessageId === null) {
+            return $this->receiptMessageId ?? $this->lastReadMessageId;
+        }
+
+        return max($this->receiptMessageId, $this->lastReadMessageId);
     }
 
     /**

@@ -179,6 +179,10 @@ class ChatUserSettings
     #[ORM\Column(name: 'share_read_times', options: ['default' => true])]
     private bool $shareReadTimes = true;
 
+    /** 1.35 (audit TK-2 / TK-4): when sharing was last turned back on; read times stored before it are never shown. */
+    #[ORM\Column(name: 'read_times_shared_since', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?DateTimeImmutable $readTimesSharedSince = null;
+
     /** Email listing the conversations still unread a while after a message (when the application sends it). */
     #[ORM\Column(name: 'email_digest', options: ['default' => true])]
     private bool $emailDigest = true;
@@ -320,8 +324,22 @@ class ChatUserSettings
      */
     public function setShareReadTimes(bool $share): void
     {
+        if ($share && !$this->shareReadTimes) {
+            // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+            $this->readTimesSharedSince = new DateTimeImmutable();
+        }
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->shareReadTimes = $share;
+    }
+
+    /**
+     * 1.35 (audit TK-2 / TK-4): when the user last turned sharing back on (read times stored before it are ignored).
+     *
+     * @return DateTimeImmutable|null The moment, or null when sharing was never turned off and on again
+     */
+    public function getReadTimesSharedSince(): ?DateTimeImmutable
+    {
+        return $this->readTimesSharedSince;
     }
 
     /**

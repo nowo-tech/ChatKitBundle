@@ -398,6 +398,8 @@ jobs:
           # DBAL 3 (savepoints on, as ChatKit requires there); the tests' own SQL inserts need identity ids on PostgreSQL.
           - { name: 'MySQL 8.4, DBAL 3', url: 'mysql://root:ci-not-secret@127.0.0.1:3306/race?serverVersion=8.4.0&charset=utf8mb4', generation: '', dbal: '^3.8.2' }
           - { name: 'PostgreSQL 16, DBAL 3', url: 'postgresql://postgres:ci-not-secret@127.0.0.1:5432/race?serverVersion=16&charset=utf8', generation: 'identity', dbal: '^3.8.2' }
+          # 1.35 (audit TK I2): MariaDB too, as docs/CONCURRENCY.md says.
+          - { name: 'MariaDB 11.4', url: 'mysql://root:ci-not-secret@127.0.0.1:3307/race?serverVersion=11.4.0-MariaDB&charset=utf8mb4', generation: '', dbal: '' }
     services:
       mysql:
         image: mysql:8.4
@@ -407,6 +409,15 @@ jobs:
         ports: ['3306:3306']
         options: >-
           --health-cmd "mysqladmin ping -h127.0.0.1 -uroot -pci-not-secret --silent"
+          --health-interval 5s --health-timeout 5s --health-retries 30
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: ci-not-secret
+          MARIADB_DATABASE: race
+        ports: ['3307:3306']
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
           --health-interval 5s --health-timeout 5s --health-retries 30
       postgres:
         image: postgres:16-alpine

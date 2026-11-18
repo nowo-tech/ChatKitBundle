@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Contract;
 
+use InvalidArgumentException;
 use Nowo\ChatKitBundle\Model\ChatMessageView;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Service\ChatNotFoundException;
@@ -23,7 +24,10 @@ interface ChatMessageActionsInterface
      * @param string $messageUuid Public uuid of the message
      * @param bool $saved True to save, false to unsave
      *
-     * @throws ChatNotFoundException When the conversation or the message is unknown or not allowed
+     * @throws ChatNotFoundException When the conversation or the message is unknown or not allowed (a line or a tombstone
+     *                               included: the SAVE voter attribute refuses them)
+     * @throws InvalidArgumentException `too_many_saved` when the actor already saved `message_menu.save.max_per_user` messages
+     *                                  (`not_savable` when a caller of ChatMessageActions passes a line or a tombstone)
      *
      * @return bool Whether the message is saved now
      */

@@ -11,7 +11,6 @@ use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReadMark;
 
 use function array_map;
-use function is_string;
 
 /**
  * 1.35: read times of participants (message info, `message_info.read_times`).
@@ -54,7 +53,8 @@ class ChatReadMarkRepository extends ServiceEntityRepository
             ->setMaxResults(1)
             ->getQuery()
             ->getOneOrNullResult();
-        if ($newest instanceof ChatReadMark && $now->getTimestamp() - $newest->getReadAt()->getTimestamp() < self::COMPACT_SECONDS) {
+        // Audit TK-3: compaction is bounded by the row's first time, so a chain of reads never moves an early time.
+        if ($newest instanceof ChatReadMark && $now->getTimestamp() - $newest->getStartedAt()->getTimestamp() < self::COMPACT_SECONDS) {
             $newest->extend($upTo, $now);
 
             return;
@@ -67,51 +67,36 @@ class ChatReadMarkRepository extends ServiceEntityRepository
      *
      * @param list<int> $participantIds Participant rows
      * @param int $messageId The message
+     * @param array<int, DateTimeImmutable|null> $since participant id => times stored before this moment are ignored (audit TK-2 / TK-4: sharing turned back on)
      *
      * @return array<int, DateTimeImmutable> participant id => read time (participants without a row are left out)
      */
-    public function readTimes(array $participantIds, int $messageId): array
+    public function readTimes(array $participantIds, int $messageId, array $since = []): array
     {
         if ($participantIds === []) {
             return [];
         }
-        /** @var list<array{p: int|string, at: DateTimeImmutable|string}> $rows */
+        /** @var list<ChatReadMark> $rows */
         $rows = $this->createQueryBuilder('r')
-            ->select('IDENTITY(r.participant) AS p', 'MIN(r.readAt) AS at')
             ->where('IDENTITY(r.participant) IN (:ids)')
             ->andWhere('r.upToMessageId >= :m')
             ->setParameter('ids', $participantIds)
             ->setParameter('m', $messageId)
-            ->groupBy('r.participant')
             ->getQuery()
-            ->getArrayResult();
+            ->getResult();
         $times = [];
         foreach ($rows as $row) {
-            $times[(int) $row['p']] = is_string($row['at']) ? new DateTimeImmutable($row['at']) : $row['at'];
+            $id     = (int) $row->getParticipant()->getId();
+            $cutoff = $since[$id] ?? null;
+            if ($cutoff instanceof DateTimeImmutable && $row->getStartedAt() < $cutoff) {
+                continue;
+            }
+            if (!isset($times[$id]) || $row->getReadAt() < $times[$id]) {
+                $times[$id] = $row->getReadAt();
+            }
         }
 
         return $times;
-    }
-
-    /**
-     * Deletes the read times of participant rows (a user who stopped sharing them, an erasure), inside the caller's
-     * unit of work.
-     *
-     * @param list<int> $participantIds Participant rows
-     *
-     * @return int Rows deleted
-     */
-    public function deleteFor(array $participantIds): int
-    {
-        if ($participantIds === []) {
-            return 0;
-        }
-
-        return (int) $this->createQueryBuilder('r')->delete()
-            ->where('IDENTITY(r.participant) IN (:ids)')
-            ->setParameter('ids', array_map('intval', $participantIds))
-            ->getQuery()
-            ->execute();
     }
 
     /**

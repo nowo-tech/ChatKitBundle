@@ -894,8 +894,8 @@ final class ChatApiController extends AbstractController
     }
 
     /**
-     * 1.35: "Save for later" (`PUT`) and "Remove from saved" (`DELETE`); both idempotent. 404 when the item is off or the
-     * message is not visible; 422 `not_savable` (a line, a tombstone) or `too_many_saved` (`max_per_user`).
+     * 1.35: "Save for later" (`PUT`, SAVE voter: 404 for a line or a tombstone) and "Remove from saved" (`DELETE`); both
+     * idempotent. 404 when the item is off or the message is not visible; 422 `too_many_saved` (`max_per_user`).
      *
      * @param string $uuid Conversation uuid
      * @param string $messageUuid Message uuid
@@ -909,10 +909,16 @@ final class ChatApiController extends AbstractController
         $user = $this->writer($request);
         $menu = $this->menu();
         $this->deny(!$menu->saveEnabled(), 'not_found', Response::HTTP_NOT_FOUND);
-        $save    = $request->isMethod('PUT');
-        $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
-        $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
-        assert($message instanceof ChatMessage);
+        $save = $request->isMethod('PUT');
+        if ($save) {
+            // Audit TK I1: the SAVE voter attribute decides (a host voter on it is honoured, as on the DDD path).
+            $message = $this->findMessage($uuid, $messageUuid, ChatVoter::SAVE);
+        } else {
+            // Unsaving needs only the conversation: a message deleted since can still leave the list.
+            $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
+            $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
+            assert($message instanceof ChatMessage);
+        }
         try {
             return $this->json(['saved' => $menu->markSaved($user, $message, $save)]);
         } catch (InvalidArgumentException $exception) {
@@ -1237,10 +1243,7 @@ final class ChatApiController extends AbstractController
             throw new ChatApiException('invalid_setting', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         $this->settings->save($mine);
-        if (($payload['key'] ?? null) === 'shareReadTimes') {
-            // 1.35: stopping to share read times deletes the stored ones.
-            $this->menu?->shareReadTimesChanged($user, $mine->isShareReadTimes());
-        }
+        // 1.35: stopping to share read times deletes the stored ones in the same flush (ChatReadTimesOptOutListener).
         $preferences = $mine->preferences();
         $this->notifier->preferencesChanged($user, $preferences);
 

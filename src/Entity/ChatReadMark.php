@@ -25,6 +25,10 @@ class ChatReadMark
     #[ORM\Column]
     private ?int $id = null;
 
+    /** When the row was first written: compaction extends it only within ChatReadMarkRepository::COMPACT_SECONDS of it. */
+    #[ORM\Column(name: 'started_at')]
+    private DateTimeImmutable $startedAt;
+
     /**
      * Records that the participant's receipt reached a message.
      *
@@ -41,6 +45,18 @@ class ChatReadMark
         #[ORM\Column(name: 'read_at')]
         private DateTimeImmutable $readAt,
     ) {
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->startedAt = $readAt;
+    }
+
+    /**
+     * When the row was first written (audit TK-3).
+     *
+     * @return DateTimeImmutable The first read time of the row
+     */
+    public function getStartedAt(): DateTimeImmutable
+    {
+        return $this->startedAt;
     }
 
     /**

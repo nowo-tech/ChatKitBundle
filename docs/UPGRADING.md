@@ -83,26 +83,27 @@ This guide lists the changes integrators must apply when upgrading between versi
 From **1.34.1**:
 
 ```bash
-composer update nowo-tech/chat-kit-bundle nowo-tech/ui-kit-bundle nowo-tech/transaction-doctrine
+composer update nowo-tech/chat-kit-bundle nowo-tech/ui-kit-bundle nowo-tech/transaction-doctrine   # ui-kit ^2.58.1, transaction-doctrine ^1.6
 php bin/console doctrine:migrations:diff   # then review and run the migration
 ```
 
 **Schema (additive).** The richer message menu adds:
 
 - two tables: `nowo_chat_saved_message` and `nowo_chat_read_mark`;
-- two columns with defaults, so there is no data migration: `nowo_chat_participant.receipt_message_id` (nullable;
-  null means "same as `last_read_message_id`") and `nowo_chat_user_settings.share_read_times` (default true).
+- three columns with defaults, so there is no data migration: `nowo_chat_participant.receipt_message_id` (nullable;
+  null means "same as `last_read_message_id`"), `nowo_chat_user_settings.share_read_times` (default true) and
+  `nowo_chat_user_settings.read_times_shared_since` (nullable).
 
 The names follow `doctrine.table_name_prefix` / `table_prefix`, and the user columns follow `doctrine.user_reference`,
 as every other chat table. On MySQL / MariaDB (default names, `relation` mode) the migration is equivalent to:
 
 ```sql
 ALTER TABLE nowo_chat_participant ADD receipt_message_id INT DEFAULT NULL;
-ALTER TABLE nowo_chat_user_settings ADD share_read_times TINYINT(1) DEFAULT 1 NOT NULL;
+ALTER TABLE nowo_chat_user_settings ADD share_read_times TINYINT(1) DEFAULT 1 NOT NULL, ADD read_times_shared_since DATETIME DEFAULT NULL;
 CREATE TABLE nowo_chat_saved_message (id INT AUTO_INCREMENT NOT NULL, saved_at DATETIME NOT NULL, message_id INT NOT NULL,
   user_id INT NOT NULL, INDEX idx_nowo_chat_saved_message_list (user_id, saved_at, id),
   UNIQUE INDEX uniq_nowo_chat_saved_message (user_id, message_id), PRIMARY KEY (id));
-CREATE TABLE nowo_chat_read_mark (id INT AUTO_INCREMENT NOT NULL, up_to_message_id INT NOT NULL, read_at DATETIME NOT NULL,
+CREATE TABLE nowo_chat_read_mark (id INT AUTO_INCREMENT NOT NULL, started_at DATETIME NOT NULL, up_to_message_id INT NOT NULL, read_at DATETIME NOT NULL,
   participant_id INT NOT NULL, INDEX idx_nowo_chat_read_mark_upto (participant_id, up_to_message_id),
   INDEX idx_nowo_chat_read_mark_at (read_at), PRIMARY KEY (id));
 -- plus the foreign keys (ON DELETE CASCADE) Doctrine generates

@@ -18,7 +18,6 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
-use function array_filter;
 use function array_map;
 use function array_values;
 use function is_int;
@@ -65,24 +64,6 @@ class ChatParticipantRepository extends ServiceEntityRepository
             ->setMaxResults($limit)
             ->getQuery()
             ->getResult();
-    }
-
-    /**
-     * 1.35: ids of exactly this user's participant rows (their read times go with an opt-out or an erasure).
-     *
-     * @param ChatUserInterface $user The user
-     *
-     * @return list<int> Row ids
-     */
-    public function idsOfUser(ChatUserInterface $user): array
-    {
-        /** @var list<ChatParticipant> $rows */
-        $rows = $this->findBy($this->refs->criteria('user', $user));
-
-        return array_values(array_map(
-            static fn (ChatParticipant $row): int => (int) $row->getId(),
-            array_filter($rows, static fn (ChatParticipant $row): bool => ChatUserReferences::same($row->getUser(), $user)),
-        ));
     }
 
     /**

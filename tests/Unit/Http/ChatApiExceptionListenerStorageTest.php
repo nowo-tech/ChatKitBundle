@@ -13,6 +13,8 @@ use Nowo\ChatKitBundle\Http\ChatApiExceptionListener;
 use Nowo\TransactionContract\TransientStorageFailure;
 use Nowo\TransactionDoctrine\Symfony\Conflict\ConflictResponsePolicy;
 use Nowo\TransactionDoctrine\TransientFailureKind;
+use Nowo\TransactionDoctrine\WriteUnit\CommitLedger;
+use Nowo\TransactionDoctrine\WriteUnit\CommitMark;
 use Nowo\TransactionDoctrine\WriteUnit\ConcurrencyConflict;
 use PDOException;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -75,7 +77,7 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
         $replaced = $event->getThrowable();
         self::assertInstanceOf(HttpException::class, $replaced);
         self::assertSame(409, $replaced->getStatusCode());
-        self::assertSame(['Retry-After' => '3', 'X-Conflict-Code' => 'CONFLICT_001'], $replaced->getHeaders());
+        self::assertSame(['X-Conflict-Code' => 'CONFLICT_001', 'Retry-After' => '3'], $replaced->getHeaders());
         self::assertSame($failure, $replaced->getPrevious());
         self::assertNull($event->getResponse());
 
@@ -165,6 +167,35 @@ final class ChatApiExceptionListenerStorageTest extends TestCase
 
         self::assertNull($event->getResponse());
         self::assertSame($failure, $event->getThrowable());
+    }
+
+    /**
+     * 1.35 (audit TK-8, transaction-doctrine 1.6): a conflict after a commit earlier in the same request answers
+     * CONFLICT_002 without Retry-After, on the API and on the pages; a unique-key conflict too.
+     */
+    public function testAnEarlierCommitOfTheRequestMakesTheConflictCommitted(): void
+    {
+        foreach (['nowo_chat_api_settings', 'nowo_chat_page_send'] as $route) {
+            foreach ([new TransientStorageFailure(3), new UniqueConstraintViolationException(PdoDriverException::new(new PDOException('Duplicate')), null)] as $failure) {
+                $ledger = new CommitLedger();
+                $event  = $this->event($route, $failure);
+                $event->getRequest()->attributes->set(CommitMark::REQUEST_ATTRIBUTE, new CommitMark($ledger));
+                $ledger->record();
+                (new ChatApiExceptionListener())->onStorageFailure($event);
+                if ($route === 'nowo_chat_api_settings') {
+                    $response = $event->getResponse();
+                    self::assertNotNull($response);
+                    self::assertSame('CONFLICT_002', $response->headers->get('X-Conflict-Code'));
+                    self::assertFalse($response->headers->has('Retry-After'));
+                    self::assertSame(ChatApiExceptionListener::PARTIAL_MESSAGE, json_decode((string) $response->getContent(), true)['message'] ?? null);
+                } else {
+                    $page = $event->getThrowable();
+                    self::assertInstanceOf(HttpException::class, $page);
+                    self::assertSame(['X-Conflict-Code' => 'CONFLICT_002'], $page->getHeaders());
+                    self::assertSame(ChatApiExceptionListener::PARTIAL_MESSAGE, $page->getMessage());
+                }
+            }
+        }
     }
 
     private function event(?string $route, Throwable $failure): ExceptionEvent

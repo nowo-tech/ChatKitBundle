@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Tests\Database;
 
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Database\Support\LoadDatabaseTestCase;
+use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use RuntimeException;
 
 use function is_resource;
@@ -68,6 +69,66 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
             self::assertSame(0, $writer['closed']);
         }
         self::assertSame(0, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM (SELECT message_id FROM nowo_chat_saved_message GROUP BY user_id, message_id HAVING COUNT(*) > 1) d'));
+    }
+
+    /**
+     * 1.35 (audit TK I3): the same user saving the same message from two workers at the cap: one row, no failure.
+     */
+    public function testTwoSavesAtTheCap(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('savecap', 'savecap');
+        $this->assertClean($a, $b);
+        self::assertSame(1, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_saved_message'));
+    }
+
+    /**
+     * 1.35 (audit TK-7): "mark unread" in one tab against reads in another: no lost update, and the receipt other
+     * people see is never behind the reader's own read cursor.
+     */
+    public function testMarkUnreadAgainstReads(): void
+    {
+        $this->seed();
+        $this->moreMessages(3);
+        [$a, $b] = $this->race('unread', 'readonly');
+        $this->assertClean($a, $b);
+        $row = $this->connection()->fetchAssociative('SELECT last_read_message_id, receipt_message_id FROM nowo_chat_participant WHERE user_id = (SELECT id FROM test_user WHERE name = ?)', ['luis']);
+        self::assertIsArray($row);
+        self::assertTrue($row['receipt_message_id'] === null || (int) $row['receipt_message_id'] >= (int) $row['last_read_message_id'], (string) json_encode($row));
+    }
+
+    /**
+     * 1.35 (audit TK-4): "Share read times" turned off and on against reads: every call succeeds, nothing is left open.
+     */
+    public function testOptOutAgainstReads(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('optout', 'readonly');
+        $this->assertClean($a, $b);
+        self::assertSame(0, (int) $this->connection()->fetchOne('SELECT share_read_times FROM nowo_chat_user_settings WHERE user_id = (SELECT id FROM test_user WHERE name = ?)', ['luis']));
+    }
+
+    /**
+     * @param array{ok: int, failures: array<string, int>, poisoned: int, closed: int} ...$writers
+     */
+    private function assertClean(array ...$writers): void
+    {
+        foreach ($writers as $writer) {
+            self::assertSame(self::CALLS, $writer['ok'], 'failures: ' . json_encode($writer['failures']));
+            self::assertSame(0, $writer['poisoned']);
+            self::assertSame(0, $writer['closed']);
+        }
+    }
+
+    private function moreMessages(int $count): void
+    {
+        $chat  = $this->get(ChatService::class);
+        $users = $this->em->getRepository(TestUser::class);
+        $ana   = $users->findOneBy(['name' => 'ana']) ?? self::fail('ana');
+        $luis  = $users->findOneBy(['name' => 'luis']) ?? self::fail('luis');
+        for ($i = 0; $i < $count; ++$i) {
+            $chat->send($ana, $chat->openDirect($ana, $luis), 'more ' . $i);
+        }
     }
 
     private function seed(): void

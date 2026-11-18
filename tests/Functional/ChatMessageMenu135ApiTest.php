@@ -213,10 +213,12 @@ final class ChatMessageMenu135ApiTest extends DatabaseTestCase
         $chat->delete($this->fresh($luis), $this->fresh($one));
         $this->client->request(Request::METHOD_GET, '/chat/api/saved');
         self::assertSame([], $this->decode()['items']);
-        // A deleted message cannot be saved (one saved before stays saved: idempotent); an unknown one is 404.
-        self::assertTrue($save($this->fresh($one))['saved']);
+        // A deleted message cannot be saved, even one saved before; it can still be unsaved. An unknown one is 404.
+        $save($this->fresh($one), status: 404);
+        self::assertFalse($save($this->fresh($one), Request::METHOD_DELETE)['saved']);
         $chat->delete($this->fresh($luis), $this->fresh($two));
-        self::assertSame('not_savable', $save($this->fresh($two), status: 422)['error']);
+        // The SAVE voter attribute: a tombstone is not savable (404, like any message the viewer may not save).
+        $save($this->fresh($two), status: 404);
         $this->send(Request::METHOD_PUT, '/chat/api/conversations/' . $dm->getUuid() . '/messages/00000000-0000-4000-8000-000000000000/save', $csrf, 404);
         // Someone outside the conversation: 404.
         $csrf = $this->login($this->user('Bea'))['csrf'];

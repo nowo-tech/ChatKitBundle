@@ -98,7 +98,6 @@ final class ChatMessageActionsTest extends DatabaseTestCase
         self::assertFalse($actions->mayReadInfo($ana, ChatMessage::system($support, 'x')));
         $chat->delete($ana, $more);
         self::assertFalse($actions->mayReadInfo($ana, $more));
-        self::assertSame(0, $actions->shareReadTimesChanged($ana, true));
         // A bot line has no author: nobody is listed as its author.
         $bot = ChatMessage::bot($support, 'chat.support_greeting', 'NowoChatKitBundle');
         $this->em->persist($bot);
@@ -124,11 +123,10 @@ final class ChatMessageActionsTest extends DatabaseTestCase
         $participant = $marks[0]->getParticipant();
         self::assertArrayHasKey((int) $participant->getId(), $repository->readTimes([(int) $participant->getId()], (int) $one->getId()));
         self::assertSame([], $repository->readTimes([], 1));
-        self::assertSame(0, $repository->deleteFor([]));
         $repository->deleteIds([]);
         // A row older than a minute: the next advance adds one.
         $meta = $this->em->getClassMetadata(ChatReadMark::class);
-        $this->em->getConnection()->update($meta->getTableName(), [$meta->getColumnName('readAt') => '2020-01-01 00:00:00'], [$meta->getColumnName('id') => $marks[0]->getId()]);
+        $this->em->getConnection()->update($meta->getTableName(), [$meta->getColumnName('readAt') => '2020-01-01 00:00:00', $meta->getColumnName('startedAt') => '2020-01-01 00:00:00'], [$meta->getColumnName('id') => $marks[0]->getId()]);
         $this->em->clear();
         $three = $chat->send($this->fresh($ana), $this->fresh($dm), 'three');
         $chat->markRead($this->fresh($luis), $this->fresh($dm), (int) $three->getId());
@@ -138,7 +136,6 @@ final class ChatMessageActionsTest extends DatabaseTestCase
         $tester = new CommandTester($this->get(ChatPurgeCommand::class));
         $tester->execute([]);
         self::assertCount(1, $this->marksOf($luis));
-        self::assertSame(1, $repository->deleteFor([(int) $participant->getId()]));
     }
 
     public function testTheDddFacadeAndTheVoter(): void

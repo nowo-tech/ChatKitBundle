@@ -108,13 +108,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
       (`own_messages_only`).
     - People are listed up to `per_person_max_members` (default 20); above that, counts only. The info also gives
       the last edit time.
+    - In a support ticket, a requester sees only the agents who took part (a read receipt), never the agent roster,
+      and they are the only agents counted.
     - Read times are stored in the new `nowo_chat_read_mark` table, only with `read_times` on, only for people who
       share them, and only in conversations small enough to list people. Advances within a minute are compacted, and
       `nowo:chat:purge` removes them with the retention.
   - **Share read times** (owner decision on Q-B12): a per-user preference (`shareReadTimes`, default on; the
     `ChatPreferencesType` checkbox and the settings endpoint).
     - It is reciprocal: a user who turns it off shares no read time and sees nobody's. Turning it off deletes their
-      stored read times.
+      stored read times in the same flush, whatever saves the setting (the settings endpoint, `ChatPreferencesType`,
+      a DDD host). Times stored before sharing was turned back on are never shown.
     - The ✓✓ read state keeps working for everyone.
   - The kebab uses UiKit 2.58: a reactions row, separators between groups (`message_menu.order`) and a phone bottom
     sheet for the kebab and its context menu. Role menu, keyboard (Left / Right in the row), Shift+F10 / ContextMenu
@@ -130,18 +133,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Translations in the 7 locales, Vitest, PHPUnit and Playwright (desktop and phone).
 - **Conflict code on every conflict answer** (REQ-RUNTIME-003 rule 6): the JSON body gains `code` (`CONFLICT_001`:
   retry is safe; `CONFLICT_002`: part of the request committed, read again), and every 409 / 503 conflict answer, API
-  or page, carries the `X-Conflict-Code` header. The existing `error` keys are unchanged. `ChatConflictResponseFormatter`
+  or page, carries the `X-Conflict-Code` header. A commit earlier in the same request counts too (transaction-doctrine
+  1.6's request watermark, `ConflictCode::forRequest()`): such a conflict answers `CONFLICT_002` without `Retry-After`.
+- A group mention (`@channel`, `@here`) inside a quote (`> …` lines, what Quote and Reply insert) notifies nobody. The existing `error` keys are unchanged. `ChatConflictResponseFormatter`
   adds both as well.
 - `docs/CONCURRENCY.md`: the write paths, their concurrency control, the conflict codes and the accepted residual
   risk (REQ-RUNTIME-003).
 
 ### Changed
 
-- Requires `nowo-tech/ui-kit-bundle` **^2.58** (kebab rows, separators, bottom sheet) and
-  `nowo-tech/transaction-doctrine` **^1.5** (`ConflictCode`).
+- Requires `nowo-tech/ui-kit-bundle` **^2.58.1** (kebab rows, separators, bottom sheet; 2.58.1: the long press that
+  opens a sheet never runs the item under the finger) and `nowo-tech/transaction-doctrine` **^1.6** (`ConflictCode`,
+  the request commit watermark).
 - The message kebab's items follow `message_menu.order` (default: Reply, Quote, Copy text, Copy link, Save, Mark
   unread, Pin, Message info, Edit, Delete, with separators between groups). Hosts that override the
   `nowo_chat_message_menu` block keep their own markup.
+- Reads and "mark unread" lock the reader's participant row (`SELECT … FOR UPDATE`), so one never overwrites the other.
 - Read receipts (`readers` of the messages endpoint, realtime `read` to other people) come from the receipt cursor. It
   has the same value as before until someone marks a message unread.
 

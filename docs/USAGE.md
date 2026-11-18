@@ -1568,7 +1568,8 @@ window stops marking the conversation read until the viewer scrolls, types or se
 - Read times are recorded when a person's receipt moves (a read, or their own message). They are stored only with
   `read_times` on and only for people who keep **Share read times**.
 - That preference (`shareReadTimes`, `ChatPreferencesType`, settings endpoint) is **reciprocal**: off, the person's
-  read times are deleted and no longer stored, and they see nobody's read times. Everybody's read state (✓✓, "Seen by",
+  read times are deleted (in the same flush, whatever saves the setting) and no longer stored, and they see nobody's
+  read times. Times stored before sharing is turned back on are never shown. Everybody's read state (✓✓, "Seen by",
   who read it) stays.
 
 **DDD hosts.** `ChatMessageActionsInterface` (by uuid): `markSaved()`, `savedMessages()`, `markUnreadFrom()` and

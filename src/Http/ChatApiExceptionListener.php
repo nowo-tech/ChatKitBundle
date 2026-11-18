@@ -51,7 +51,7 @@ final class ChatApiExceptionListener
     public const string PARTIAL_MESSAGE = 'Part of your change may have been saved. Reload before trying again.';
 
     /** 1.35 (REQ-RUNTIME-003 rule 6): the header every conflict answer carries (`CONFLICT_001` | `CONFLICT_002`). */
-    public const string CODE_HEADER = 'X-Conflict-Code';
+    public const string CODE_HEADER = ConflictResponsePolicy::CODE_HEADER;
 
     private TransientFailureClassifier $classifier;
 
@@ -102,32 +102,29 @@ final class ChatApiExceptionListener
         if ($retryAfter === null && !$conflict) {
             return;
         }
-        // 1.35 (REQ-RUNTIME-003 rule 6): CONFLICT_002 when the request already committed part of its work (no Retry-After,
-        // read again), CONFLICT_001 otherwise; in the JSON body and in the X-Conflict-Code header of every answer.
-        // TODO(transaction-doctrine 1.6): adopt its request watermark, so earlier commits of the same request count too.
-        $committed = $retryAfter !== null && (self::committed($error) || ConflictCode::forFailure($error) === ConflictCode::Committed);
-        $code      = $committed ? ConflictCode::COMMITTED : ConflictCode::RETRY_SAFE;
-        $headers   = [self::CODE_HEADER => $code];
+        // 1.35 (REQ-RUNTIME-003 rule 6): CONFLICT_002 when the request already committed part of its work — in this
+        // unit, or earlier in the same request (transaction-doctrine 1.6's request watermark) — with no Retry-After (read
+        // again); CONFLICT_001 otherwise. In the JSON body and in the X-Conflict-Code header of every answer.
+        $code      = self::committed($error) ? ConflictCode::Committed : ConflictCode::forRequest($event->getRequest(), $error);
+        $committed = !$code->retrySafe();
+        $headers   = $retryAfter !== null ? $this->policy->headersFor($code, $retryAfter) : [ConflictResponsePolicy::CODE_HEADER => $code->value];
         if (!str_starts_with($route, self::API_ROUTE_PREFIX)) {
-            if ($conflict) {
+            if ($conflict && !$committed) {
                 $event->setThrowable(new ConflictHttpException('The chat changed meanwhile. Reload and try again.', $error, 0, $headers));
             } elseif ($committed) {
-                $event->setThrowable(new HttpException($this->policy->status, self::PARTIAL_MESSAGE, $error, $headers));
+                $event->setThrowable(new HttpException($conflict ? Response::HTTP_CONFLICT : $this->policy->status, self::PARTIAL_MESSAGE, $error, $headers));
             } else {
-                $event->setThrowable(new HttpException($this->policy->status, TransientStorageFailure::DEFAULT_MESSAGE, $error, $this->policy->headers($retryAfter) + $headers));
+                $event->setThrowable(new HttpException($this->policy->status, TransientStorageFailure::DEFAULT_MESSAGE, $error, $headers));
             }
 
             return;
         }
-        $body = ['ok' => false, 'error' => $conflict ? 'conflict' : 'unavailable', 'code' => $code];
+        $body = ['ok' => false, 'error' => $conflict ? 'conflict' : 'unavailable', 'code' => $code->value];
         if ($committed) {
             $body['message'] = self::PARTIAL_MESSAGE;
         }
         $response = new JsonResponse($body, $conflict ? Response::HTTP_CONFLICT : $this->policy->status, $headers);
         $response->headers->set('Cache-Control', 'no-store, private');
-        if ($retryAfter !== null && !$committed) {
-            $response->headers->add($this->policy->headers($retryAfter));
-        }
         $event->setResponse($response);
     }
 

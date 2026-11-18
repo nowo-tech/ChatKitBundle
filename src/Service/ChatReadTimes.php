@@ -8,7 +8,6 @@ use DateTimeImmutable;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatRecipients;
-use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatReadMarkRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 
@@ -29,7 +28,6 @@ final readonly class ChatReadTimes
      */
     public function __construct(
         private ChatReadMarkRepository $marks,
-        private ChatParticipantRepository $participants,
         private ChatUserSettingsRepository $settings,
         private ChatRecipients $recipients,
         private array $messageInfo = [],
@@ -79,6 +77,16 @@ final readonly class ChatReadTimes
     }
 
     /**
+     * When the user last turned sharing back on: read times stored before it are never shown (audit TK-2 / TK-4).
+     *
+     * @param ChatUserInterface $user The user
+     */
+    public function sharedSince(ChatUserInterface $user): ?DateTimeImmutable
+    {
+        return $this->settings->forUser($user)->getReadTimesSharedSince();
+    }
+
+    /**
      * Inside the caller's unit of work (the conversation row locked): stores when the receipt reached a message, when
      * read times are on, the reader shares them and the conversation is small enough.
      *
@@ -94,17 +102,5 @@ final readonly class ChatReadTimes
             return;
         }
         $this->marks->record($participant, $receipt, $now);
-    }
-
-    /**
-     * Inside the caller's unit of work: deletes every read time of the user (they stopped sharing, data minimisation).
-     *
-     * @param ChatUserInterface $user The user
-     *
-     * @return int Rows deleted
-     */
-    public function forget(ChatUserInterface $user): int
-    {
-        return $this->marks->deleteFor($this->participants->idsOfUser($user));
     }
 }

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b5aee38171db06dc3f3467563e2be143",
+    "content-hash": "e9841b6311adb81f32a9e8be392889e7",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -951,15 +951,15 @@
             "dist": {
                 "type": "path",
                 "url": "/var/chat-kit-bundle",
-                "reference": "c941d1b88780d7d47278e434a7f523577ce64ae8"
+                "reference": "f4172cf283d235b803fa26c98251b3a66ed6cfdb"
             },
             "require": {
                 "doctrine/doctrine-bundle": "^2.13 || ^3.0",
                 "doctrine/orm": "^3.3",
                 "nowo-tech/form-kit-bundle": "^2.17",
                 "nowo-tech/transaction-contract": "^1.0",
-                "nowo-tech/transaction-doctrine": "^1.5",
-                "nowo-tech/ui-kit-bundle": "^2.58",
+                "nowo-tech/transaction-doctrine": "^1.6",
+                "nowo-tech/ui-kit-bundle": "^2.58.1",
                 "php": ">=8.3 <8.6",
                 "psr/cache": "^3.0",
                 "psr/log": "^3.0",
@@ -1310,16 +1310,16 @@
         },
         {
             "name": "nowo-tech/transaction-doctrine",
-            "version": "v1.5.0",
+            "version": "v1.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/transaction-doctrine.git",
-                "reference": "5b1369c60fe1ee3cd5b7e4f0dce458e3dac8fdc2"
+                "reference": "707309320afbe69add2450ed31f67d32f888fe93"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/5b1369c60fe1ee3cd5b7e4f0dce458e3dac8fdc2",
-                "reference": "5b1369c60fe1ee3cd5b7e4f0dce458e3dac8fdc2",
+                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/707309320afbe69add2450ed31f67d32f888fe93",
+                "reference": "707309320afbe69add2450ed31f67d32f888fe93",
                 "shasum": ""
             },
             "require": {
@@ -1415,21 +1415,21 @@
                 "issues": "https://github.com/nowo-tech/transaction-doctrine/issues",
                 "source": "https://github.com/nowo-tech/transaction-doctrine"
             },
-            "time": "2026-11-18T12:10:08+00:00",
-            "published-time": "2026-11-18T12:12:21+00:00"
+            "time": "2026-11-18T15:30:13+00:00",
+            "published-time": "2026-11-18T15:33:30+00:00"
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v2.58.0",
+            "version": "v2.58.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "8b3127642a29b4dc5c91a9f5cb9feecb329e075d"
+                "reference": "1b4fc0130612c03de3313a879080165f9f76cd0f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/8b3127642a29b4dc5c91a9f5cb9feecb329e075d",
-                "reference": "8b3127642a29b4dc5c91a9f5cb9feecb329e075d",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/1b4fc0130612c03de3313a879080165f9f76cd0f",
+                "reference": "1b4fc0130612c03de3313a879080165f9f76cd0f",
                 "shasum": ""
             },
             "require": {
@@ -1518,8 +1518,8 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-11-18T13:44:33+00:00",
-            "published-time": "2026-11-18T13:47:19+00:00"
+            "time": "2026-11-18T15:42:30+00:00",
+            "published-time": "2026-11-18T15:45:49+00:00"
         },
         {
             "name": "pentatrion/vite-bundle",

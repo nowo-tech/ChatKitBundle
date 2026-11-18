@@ -32,11 +32,11 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | Send a message, buzz, system line | the conversation row is locked first (`lockActivity`, `SELECT … FOR UPDATE`), so lines of one conversation queue instead of deadlocking | the client resends a failed send |
 | Edit, delete, pin | the conversation row lock, then the message | idempotent target state |
 | React | conversation lock, then re-read under it; the insert goes through a savepoint on the unique `(message, user, emoji)` key | toggle re-read under the lock |
-| Read cursor (`POST …/read`) | shared conversation lock; the cursor only moves forward | forward-only |
-| 1.35 read times | inside the read / send unit, under the same lock; an advance within 60 s updates the newest row | forward-only |
-| 1.35 mark unread | shared conversation lock (exclusive when the participant row must be created); the read cursor moves back, the receipt cursor never | idempotent (same target cursor) |
+| Read cursor (`POST …/read`) | shared conversation lock, then the reader's participant row `FOR UPDATE` (1.35, audit TK-7); the cursor only moves forward | forward-only |
+| 1.35 read times | inside the read / send unit, under the same locks; an advance within 60 s of the newest row's first time updates it | forward-only |
+| 1.35 mark unread | shared conversation lock (exclusive when the participant row must be created), then the participant row `FOR UPDATE`; the read cursor moves back, the receipt cursor never | idempotent (same target cursor) |
 | 1.35 save / unsave | savepoint insert on the unique `(user, message)` key; a save racing another keeps the first row | idempotent `PUT` / `DELETE` |
-| 1.35 share read times off | one unit deletes the user's read times | idempotent |
+| 1.35 share read times off | the settings flush deletes the user's read times (`ChatReadTimesOptOutListener`, same transaction); a read racing it writes a row that stays hidden (it is older than the next re-enable) | idempotent |
 | Participant rows, direct conversations, channel conversations | unique keys and a savepoint insert; the loser re-reads the winner's row | — |
 | Ticket numbers | a dedicated counter row with an atomic update | — |
 | GDPR erasure | one unit for the whole erasure | — |
@@ -54,11 +54,12 @@ took first answers 409 `conflict`. Since 1.35 every conflict answer carries its 
 | `CONFLICT_002` | part of the request committed: read again, do not repeat | `{"ok": false, "error": "unavailable", "code": "CONFLICT_002", "message": "…reload…"}` | `X-Conflict-Code`, no `Retry-After` |
 
 Chat pages throw an `HttpException` with the same status and headers. The host's error page renders it, with the
-original failure as previous. The code comes from transaction-doctrine's `ConflictCode::forFailure()` and
-`ConcurrencyConflict::$committed`.
+original failure as previous. The code comes from `ConcurrencyConflict::$committed` and transaction-doctrine's `ConflictCode::forRequest()`.
 
-**Planned:** transaction-doctrine 1.6 adds a request watermark, so commits made earlier in the same request also count
-as "part committed". ChatKit will adopt its helper when it ships.
+**Request-level detection.** Since transaction-doctrine 1.6 the code also counts commits made earlier in the same
+request: the request's `CommitMark` (taken at `kernel.request` with `commit_detection` on) goes through
+`ConflictCode::forRequest()`. A conflict after any commit of the request answers `CONFLICT_002`, and
+`ConflictResponsePolicy::headersFor()` then leaves out `Retry-After`.
 
 ## Host options
 
@@ -73,6 +74,8 @@ as "part committed". ChatKit will adopt its helper when it ships.
 - `tests/Functional/ChatLoadReadinessWorkerTest` checks that a lock wait or a unique violation answers 409 with the code
   and leaves the next request healthy.
 - `tests/Unit/Http/ChatApiExceptionListenerStorageTest` covers each failure kind and its code.
+- `tests/Database/ConcurrentWritersTest` (two worker processes, one database) also races the message menu against a
+  sender, two saves at the cap, mark unread against reads, and the opt-out against reads.
 - `tests/Integration/Service/ChatMessageActionsTest` covers saving the same message twice and repeated mark unread.
 
 ## Accepted residual risk
