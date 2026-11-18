@@ -153,6 +153,9 @@ dependencies current. Security fixes are released as patch versions of the suppo
     an erasure of the source's author does not rewrite it. Mentions in it are already plain names.
   - A direct conversation that a forward opened is removed again when the forward then fails without writing
     anything. If another request wrote into it meanwhile, it stays.
+    The other person may have opened it in the meantime (it was listed for them, and the realtime "conversation"
+    event that announced it is not retracted). If they had not written yet, it disappears from their list; a message
+    they did write keeps it (the check runs under the conversation's row lock).
 - **Edit history (1.36, personal data):** previous texts are stored only with `message_menu.edit_history.enabled`, go
   with the message (delete, purge, erasure) and are read only by the author, moderators and whom
   `ChatHistoryPolicyInterface` allows. They are rendered for the reader at read time, never as the stored Markdown,

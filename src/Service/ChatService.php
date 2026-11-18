@@ -428,15 +428,19 @@ final readonly class ChatService implements ChatServiceInterface
     public function dropEmptyDirect(ChatConversation $conversation): bool
     {
         return $this->write(function () use ($conversation): bool {
-            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
+            // Audit UB2-1: the row lock is the unit's first read (by id: no entity read before it). On MySQL / MariaDB a
+            // plain read first would fix the REPEATABLE READ snapshot, and the count below would miss a first message
+            // committed before the lock was granted; it would then be deleted with the conversation.
             $this->conversations->lockActivity($conversation);
-            $qb = $this->entityManager->createQueryBuilder();
-            if ((int) $qb->select('COUNT(m.id)')->from(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $conversation)->getQuery()->getSingleScalarResult() > 0) {
+            $id = (int) $conversation->getId();
+            if ((int) $this->entityManager->createQueryBuilder()->select('COUNT(m.id)')->from(ChatMessage::class, 'm')->where('IDENTITY(m.conversation) = :id')->setParameter('id', $id)->getQuery()->getSingleScalarResult() > 0) {
                 return false;
             }
-            $this->entityManager->createQueryBuilder()->delete(ChatParticipant::class, 'p')->where('p.conversation = :c')->setParameter('c', $conversation)->getQuery()->execute();
-            $this->entityManager->createQueryBuilder()->delete(ChatConversation::class, 'c')->where('c.id = :id')->setParameter('id', $conversation->getId())->getQuery()->execute();
-            $this->entityManager->detach($conversation);
+            $this->entityManager->createQueryBuilder()->delete(ChatParticipant::class, 'p')->where('IDENTITY(p.conversation) = :id')->setParameter('id', $id)->getQuery()->execute();
+            $this->entityManager->createQueryBuilder()->delete(ChatConversation::class, 'c')->where('c.id = :id')->setParameter('id', $id)->getQuery()->execute();
+            if ($this->entityManager->contains($conversation)) {
+                $this->entityManager->detach($conversation);
+            }
 
             return true;
         });
