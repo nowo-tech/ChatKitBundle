@@ -1,5 +1,5 @@
 /**
- * 1.25: the grouped, collapsible conversation list (Slack-style sidebar) of the full-page chat and, with
+ * 1.25: the grouped, collapsible conversation list (a sidebar of sections) of the full-page chat and, with
  * `web_ui.dock.sidebar_sections`, of the dock. Sections: "Recent" / "Unread" (a toggle), the host sections of
  * ChatSidebarSectionProviderInterface (`GET …/api/sidebar`) and "Direct messages and groups" (every listed
  * conversation no host section shows), ordered by position.

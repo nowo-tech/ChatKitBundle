@@ -1,5 +1,5 @@
 /**
- * The floating chat dock (LinkedIn-style), built from the Twig <template> markup. The "Messaging" panel
+ * The floating chat dock (docked conversation windows along the bottom edge), built from the Twig <template> markup. The "Messaging" panel
  * bottom-right is the launcher and the conversation list; open conversations dock to its left as windows that
  * survive every navigation (DockStore) and stay in step across browser tabs (BroadcastChannel). On phones the
  * launcher opens a full-screen sheet. Everything happens in place: no request reloads or navigates the page.

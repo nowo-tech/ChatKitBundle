@@ -2209,7 +2209,7 @@
 .nowo-chat .nowo-ui-dialog {
   pointer-events: auto;
 }
-/* 1.25: the grouped sidebar (Slack-style): sections that fold, compact rows, the host's actions. The full-page chat
+/* 1.25: the grouped sidebar: sections that fold, compact rows, the host's actions. The full-page chat
    gives the list a wider column while it is grouped — on wide screens only (1.26): phones keep the one-column rule
    above (the list, or the conversation). */
 @media (min-width: 769px) {

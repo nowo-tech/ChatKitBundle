@@ -4,7 +4,7 @@
 
 > ⭐ **Found this useful?** [Install from Packagist](https://packagist.org/packages/nowo-tech/chat-kit-bundle) · Give it a **star** on [GitHub](https://github.com/nowo-tech/ChatKitBundle) so more developers can find it.
 
-**Chat Kit Bundle** — floating LinkedIn-style chat for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens.
+**Chat Kit Bundle** — floating chat dock for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens.
 
 > 📋 **Compatible with Symfony 7.4+ and 8.0–8.1+** — PHP 8.3+ (Symfony 8.x requires PHP 8.4+).
 
@@ -38,7 +38,7 @@ This bundle is **FrankenPHP worker mode friendly**, including worker mode with t
 - **Full-page chat** (`/chat/`) that also works without JavaScript; "open in a page" from every window
 - **Link previews** of your own pages (checked per viewer) and an optional **email digest** of unread conversations
 - **Web Push** only when the application is not open in any tab (your push stack, through one interface)
-- LinkedIn-style **floating dock**: windows that survive navigation and stay in step across browser tabs; full-screen sheet on phones
+- **Floating dock**: windows that survive navigation and stay in step across browser tabs; full-screen sheet on phones
 - **Customisable markup**: every piece of the UI is a Twig `<template>` the TypeScript clones — override any block
 - **UiKit page contract** (REQ-UI-003, `nowo-tech/ui-kit-bundle` ^2.2): the full-page chat renders in the host's UiKit layout and the `--nowo-chat-*` tokens follow the UiKit theme ([templates](docs/TEMPLATES.md))
 - **Theme tokens** (`--nowo-chat-*`, defaulting to the UiKit tokens, light / dark fallbacks) and **Symfony UX Icons** (Tabler by default, any set)

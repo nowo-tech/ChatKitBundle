@@ -1941,7 +1941,7 @@ export class ThreadView {
 
     const bubble = part(article, 'bubble');
     if (message.deleted) {
-      // WhatsApp-style tombstone: a ban icon and "You deleted this message" / "This message was deleted".
+      // Tombstone: a ban icon and "You deleted this message" / "This message was deleted".
       bubble.classList.add('nowo-chat-bubble--deleted');
       const key = message.moderated ? 'moderated_message' : message.mine ? 'deleted_message_mine' : 'deleted_message';
       bubble.replaceChildren(this.host.templates.icon('ban', 14), h('span', { text: t(i18n, key) }));

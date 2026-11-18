@@ -593,7 +593,7 @@ or the page stays at that minimum. `--nowo-chat-page-height` does not apply on s
 
 ### Sidebar sections (1.25)
 
-The list becomes one grouped, collapsible sidebar (Slack-style) on the full-page chat as soon as one
+The list becomes one grouped, collapsible sidebar (sections) on the full-page chat as soon as one
 `ChatSidebarSectionProviderInterface` service exists, and in the floating dock too with
 `web_ui.dock.sidebar_sections: true` (both without a provider shows the bundle's own sections only):
 
@@ -1529,8 +1529,8 @@ message cannot open another element's menu.
 
 ### Message menu (1.35)
 
-*(1.35, Beacon request, owner decision D-20261118-02)* The kebab and its context menu offer the actions people know
-from Slack and WhatsApp. They are configured under `message_menu` ([CONFIGURATION](CONFIGURATION.md#reference)), and
+*(1.35, Beacon request, owner decision D-20261118-02)* The kebab and its context menu offer the everyday message actions
+(react, quote, copy, save, mark unread, info). They are configured under `message_menu` ([CONFIGURATION](CONFIGURATION.md#reference)), and
 every one is checked again on the server:
 
 | Item | Shown to | Server |
