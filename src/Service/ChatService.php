@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Service;
 
+use Closure;
 use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\LockMode;
@@ -15,6 +16,7 @@ use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatKitRows;
 use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
+use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -23,8 +25,10 @@ use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Event\ChatChannelOpeningEvent;
 use Nowo\ChatKitBundle\Event\ChatMentionEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageDeletedEvent;
+use Nowo\ChatKitBundle\Event\ChatMessageEditedEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
 use Nowo\ChatKitBundle\Event\ChatSupportStatusChangedEvent;
+use Nowo\ChatKitBundle\Event\ChatThreadReplyEvent;
 use Nowo\ChatKitBundle\Event\SupportTicketReopenedEvent;
 use Nowo\ChatKitBundle\Event\SupportTicketStatusChangedEvent;
 use Nowo\ChatKitBundle\Link\ChatLinks;
@@ -35,8 +39,10 @@ use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Repository\ChatMessageRevisionRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
+use Nowo\ChatKitBundle\Repository\ChatThreadReadRepository;
 use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
 use Nowo\TransactionContract\TransactionRunnerInterface;
@@ -46,9 +52,13 @@ use Symfony\Component\Clock\ClockInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Throwable;
 
+use function array_map;
+use function array_values;
+use function assert;
 use function count;
 use function in_array;
 use function is_string;
+use function ksort;
 
 /**
  * Conversation lifecycle and messages. Authorization is the caller's job (ChatVoter); this service only keeps
@@ -81,6 +91,9 @@ final readonly class ChatService implements ChatServiceInterface
      * @param ChatLinks|null $links 1.19: validates the link cards and keeps the link index; null keeps cards as written and indexes nothing
      * @param TransactionRunnerInterface|null $transactions 1.30: runs every write unit of work; null uses ChatKit's default runner
      * @param ChatReadTimes|null $readTimes 1.35: stores read times for message info; null stores none
+     * @param ChatThreadReadRepository|null $threadReads 1.36: thread followers and read cursors; null records none
+     * @param ChatMessageRevisionRepository|null $revisions 1.36: previous texts of edited messages; null keeps none
+     * @param ChatMenuOptions|null $menuOptions 1.36: whether edit history is kept (`message_menu.edit_history`)
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -101,6 +114,9 @@ final readonly class ChatService implements ChatServiceInterface
         private ?ChatLinks $links = null,
         ?TransactionRunnerInterface $transactions = null,
         private ?ChatReadTimes $readTimes = null,
+        private ?ChatThreadReadRepository $threadReads = null,
+        private ?ChatMessageRevisionRepository $revisions = null,
+        private ?ChatMenuOptions $menuOptions = null,
     ) {
         // 1.30: the container passes the runner bound to TransactionRunnerInterface; direct construction gets the default.
         $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
@@ -201,43 +217,27 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function send(ChatUserInterface $author, ChatConversation $conversation, string $body): ChatMessage
     {
-        $body                       = $this->normalize($body);
-        $body                       = $this->links?->normalizeCards($body) ?? $body;
-        $body                       = $this->references?->validate($conversation, $author, $body) ?? $body;
-        [$body, $mentioned, $group] = $this->mentions?->resolve($conversation, $author, $body) ?? [$body, [], null];
-        // 1.28 (audit PV-D7): a look-alike refusal of the author's participant row comes before any write.
-        $this->checkMember($conversation, $author);
-        // 1.30 (audit QD-I2): rendered before the unit of work, not under the conversation's row lock.
-        $html = $this->markdown->render($body);
-        $now  = $this->clock->now();
-        // 1.30: one unit of work (message, mentions, links, activity, support status, read cursor, reopened lists).
-        [$message, $mentioned, $reopened] = $this->write(function () use ($author, $conversation, $body, $html, $mentioned, $group, $now): array {
-            $conversation = ChatKitWrites::attach($this->entityManager, $conversation);
-            $this->bump($conversation, $now);
-            $participant = $this->participants->claim($conversation, $author, $now);
-            $message     = new ChatMessage($conversation, $author, $body, $html, $now);
-            $message->mentionAll($group);
-            $this->entityManager->persist($message);
-            // 1.19: the message's links go to the index of the Links panel (flushed with the message).
-            $this->links?->index($message);
-            $mentioned = $this->mentions?->sync($message, $mentioned) ?? [];
-            $reopened  = $this->supportTransition($conversation, $author);
-            $this->store($message, $participant);
+        return $this->sendWith($author, $conversation, $body);
+    }
 
-            return [$message, $mentioned, $reopened];
-        });
-        $conversation = $message->getConversation();
-        $this->announce($message);
-        if ($reopened) {
-            $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $author));
-            if ($conversation->isTicket()) {
-                $this->events?->dispatch(new SupportTicketStatusChangedEvent($conversation, SupportStatus::Resolved, $author));
-                $this->events?->dispatch(new SupportTicketReopenedEvent($conversation, $author));
-            }
-        }
-        if ($mentioned !== []) {
-            $this->events?->dispatch(new ChatMentionEvent($message, $mentioned, $conversation));
-        }
+    /**
+     * 1.36: send() with the statements an `Idempotency-Key` adds to its unit of work (post()).
+     *
+     * @param ChatUserInterface $author The writer
+     * @param ChatConversation $conversation The conversation
+     * @param string $body Raw Markdown text
+     * @param (Closure(): bool)|null $before First statement of the unit; false aborts it (ChatIdempotencyConflict)
+     * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit
+     *
+     * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link`
+     *
+     * @return ChatMessage The stored message
+     *
+     * @internal
+     */
+    public function sendWith(ChatUserInterface $author, ChatConversation $conversation, string $body, ?Closure $before = null, ?Closure $after = null): ChatMessage
+    {
+        [[$message, $mentioned]] = $this->postAll($author, [new ChatDraft($conversation, $body)], $before, $after);
         // 1.11: automatic replies of the other person (direct) or of the people mentioned (channels), after the commit.
         try {
             $this->autoReplies?->afterSend($message, array_values($mentioned));
@@ -247,6 +247,34 @@ final readonly class ChatService implements ChatServiceInterface
         }
 
         return $message;
+    }
+
+    /**
+     * 1.36: writes several messages in one unit of work — the main timeline, thread replies (`ChatDraft::$threadRoot`),
+     * forwards (`ChatDraft::$forwardOf`: the text is copied as given, nobody is mentioned) — with the same pipeline as
+     * send(): mentions, references, links, support status, read cursors; realtime, Web Push and events after the commit.
+     * The conversations are locked in id order. `$before` runs first in the unit (an idempotency claim: returning false
+     * rolls the unit back and throws ChatIdempotencyConflict), `$after` last with the new messages.
+     *
+     * A thread reply stays out of the main timeline: it does not move the conversation's activity, the author's read
+     * cursor or the closed lists; its root counts it, and its followers (the root's author, the repliers, the people it
+     * mentions) are notified. No automatic reply answers a reply or a forward.
+     *
+     * @param ChatUserInterface $author The writer
+     * @param list<ChatDraft> $drafts The messages, in order
+     * @param (Closure(): bool)|null $before First statement of the unit; false aborts it
+     * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit
+     *
+     * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link`; nothing is written
+     * @throws ChatIdempotencyConflict When `$before` refused the unit; nothing is written
+     *
+     * @return list<ChatMessage> The stored messages, in order
+     *
+     * @internal
+     */
+    public function post(ChatUserInterface $author, array $drafts, ?Closure $before = null, ?Closure $after = null): array
+    {
+        return array_map(static fn (array $row): ChatMessage => $row[0], $this->postAll($author, $drafts, $before, $after));
     }
 
     /**
@@ -296,23 +324,38 @@ final readonly class ChatService implements ChatServiceInterface
         [$body, $mentioned, $group] = $author instanceof ChatUserInterface && $this->mentions instanceof ChatMentions
             ? $this->mentions->resolve($message->getConversation(), $author, $body, $message->getMentionAll())
             : [$body, [], null];
-        $html              = $this->markdown->render($body);
-        $now               = $this->clock->now();
-        [$message, $added] = $this->write(function () use ($message, $body, $html, $now, $mentioned, $group): array {
+        // 1.36: the same text again (a replay, a save without change) is no edit.
+        if ($body === $message->getBody()) {
+            return;
+        }
+        $html                                   = $this->markdown->render($body);
+        $now                                    = $this->clock->now();
+        $history                                = $this->menuOptions?->historyEnabled() === true ? $this->revisions : null;
+        [$message, $added, $revision, $changed] = $this->write(function () use ($message, $body, $html, $now, $mentioned, $group, $history): array {
             $message = ChatKitWrites::attach($this->entityManager, $message);
             // The conversation's row first, as every unit of work that writes its rows (one lock order: audit QD-L2).
             $this->conversations->lockActivity($message->getConversation());
+            // 1.36: the text another edit committed meanwhile is the previous text (read under the lock).
+            $this->entityManager->refresh($message);
+            if ($body === $message->getBody() || $message->isDeleted()) {
+                return [$message, [], null, false];
+            }
+            $revision = $history?->record($message, $message->getBody(), $now, $this->menuOptions?->maxRevisions() ?? 20);
             $message->edit($body, $html, $now);
             $message->mentionAll($group);
             $added = $this->mentions?->sync($message, $mentioned) ?? [];
             $this->links?->index($message);
 
-            return [$message, $added];
+            return [$message, $added, $revision, true];
         });
+        if (!$changed) {
+            return;
+        }
         $this->notifier->messageUpdated($message, $this->reactionsOf($message));
         if ($added !== []) {
             $this->events?->dispatch(new ChatMentionEvent($message, $added, $message->getConversation(), true));
         }
+        $this->events?->dispatch(new ChatMessageEditedEvent($message, $revision?->getId()));
     }
 
     /**
@@ -338,10 +381,23 @@ final readonly class ChatService implements ChatServiceInterface
             $this->mentionRows?->removeFor($message);
             // 1.19: a deleted message leaves the Links panel.
             $this->links?->forget($message);
+            // 1.36: a deleted message keeps no text (its previous ones go too), and a deleted reply leaves the count.
+            $this->revisions?->deleteFor([(int) $message->getId()]);
+            $root = $message->getThreadRoot();
+            if ($root instanceof ChatMessage) {
+                $this->entityManager->flush();
+                $this->messageRepository?->countReply($root, -1, null);
+                $this->entityManager->refresh($root);
+            }
 
             return $message;
         });
         $this->notifier->messageUpdated($message);
+        $root = $message->getThreadRoot();
+        if ($root instanceof ChatMessage) {
+            $this->notifier->messageUpdated($root, $this->reactionsOf($root));
+            $this->notifier->thread($root, $this->threadReads?->followers($root) ?? []);
+        }
         if ($wasPinned) {
             $this->notifier->pinsChanged($message->getConversation());
         }
@@ -512,7 +568,8 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function pin(ChatUserInterface $user, ChatMessage $message, bool $pinned): void
     {
-        if (!$message->isPinnable()) {
+        // 1.36: a thread reply is not pinned to the conversation.
+        if (!$message->isPinnable() || $message->getThreadRoot() instanceof ChatMessage) {
             throw new InvalidArgumentException('not_pinnable');
         }
         if ($pinned === ($message->getPinnedAt() instanceof DateTimeImmutable)) {
@@ -634,6 +691,142 @@ final readonly class ChatService implements ChatServiceInterface
     }
 
     /**
+     * 1.36: the pipeline of send() for several drafts (post()).
+     *
+     * @param list<ChatDraft> $drafts
+     * @param (Closure(): bool)|null $before
+     * @param (Closure(list<ChatMessage>): void)|null $after
+     *
+     * @return list<array{ChatMessage, array<int|string, ChatUserInterface>}> Each message with the people it mentions
+     */
+    private function postAll(ChatUserInterface $author, array $drafts, ?Closure $before, ?Closure $after): array
+    {
+        $prepared = [];
+        foreach ($drafts as $draft) {
+            $conversation = $draft->conversation;
+            $forward      = $draft->forwardOf instanceof ChatMessage;
+            $body         = $this->normalize($draft->body);
+            $body         = $this->links?->normalizeCards($body) ?? $body;
+            // A forward keeps its #reference tokens: they are resolved for each reader of the target (the neutral chip
+            // for whoever may not open them), and it mentions nobody.
+            $body                       = $forward ? $body : ($this->references?->validate($conversation, $author, $body) ?? $body);
+            [$body, $mentioned, $group] = $forward ? [$body, [], null] : ($this->mentions?->resolve($conversation, $author, $body) ?? [$body, [], null]);
+            // 1.28 (audit PV-D7): a look-alike refusal of the author's participant row comes before any write.
+            $this->checkMember($conversation, $author);
+            // 1.30 (audit QD-I2): rendered before the unit of work, not under the conversation's row lock.
+            $prepared[] = [$draft, $body, $this->markdown->render($body), $mentioned, $group];
+        }
+        $now = $this->clock->now();
+        // 1.30: one unit of work (messages, mentions, links, activity, support status, read cursors, reopened lists).
+        $written = $this->write(function () use ($author, $prepared, $now, $before, $after): array {
+            if ($before instanceof Closure && $before() !== true) {
+                throw new ChatIdempotencyConflict();
+            }
+            // One lock order for several conversations: by id. A conversation that gets a main-timeline message moves
+            // its activity forward; one that only gets thread replies is locked without it.
+            $locks = [];
+            foreach ($prepared as [$draft]) {
+                $id         = (int) $draft->conversation->getId();
+                $locks[$id] = ($locks[$id] ?? false) || !$draft->threadRoot instanceof ChatMessage;
+            }
+            ksort($locks);
+            $attached = [];
+            foreach ($locks as $id => $main) {
+                $conversation = null;
+                foreach ($prepared as [$draft]) {
+                    if ((int) $draft->conversation->getId() === $id) {
+                        $conversation = ChatKitWrites::attach($this->entityManager, $draft->conversation);
+
+                        break;
+                    }
+                }
+                assert($conversation instanceof ChatConversation);
+                $main ? $this->bump($conversation, $now) : $this->conversations->lockActivity($conversation);
+                $attached[$id] = $conversation;
+            }
+            $rows = [];
+            foreach ($prepared as [$draft, $body, $html, $mentioned, $group]) {
+                $conversation = $attached[(int) $draft->conversation->getId()];
+                $participant  = $this->participants->claim($conversation, $author, $now);
+                $message      = new ChatMessage($conversation, $author, $body, $html, $now);
+                $message->mentionAll($group);
+                $root = $draft->threadRoot instanceof ChatMessage ? ChatKitWrites::attach($this->entityManager, $draft->threadRoot) : null;
+                if ($root instanceof ChatMessage) {
+                    $message->replyIn($root);
+                }
+                if ($draft->forwardOf instanceof ChatMessage) {
+                    $message->forwardOf(ChatKitWrites::attach($this->entityManager, $draft->forwardOf));
+                }
+                $this->entityManager->persist($message);
+                // 1.19: the message's links go to the index of the Links panel (flushed with the message).
+                $this->links?->index($message);
+                $mentioned = $this->mentions?->sync($message, $mentioned) ?? [];
+                $reopened  = !$root instanceof ChatMessage && $this->supportTransition($conversation, $author);
+                if ($root instanceof ChatMessage) {
+                    $this->storeReply($message, $mentioned, $now);
+                } else {
+                    $this->store($message, $participant);
+                }
+                $rows[] = [$message, $mentioned, $reopened];
+            }
+            if ($after instanceof Closure) {
+                $after(array_map(static fn (array $row): ChatMessage => $row[0], $rows));
+            }
+
+            return $rows;
+        });
+        $result = [];
+        foreach ($written as [$message, $mentioned, $reopened]) {
+            $conversation = $message->getConversation();
+            $this->announce($message);
+            if ($reopened) {
+                $this->events?->dispatch(new ChatSupportStatusChangedEvent($conversation, $author));
+                if ($conversation->isTicket()) {
+                    $this->events?->dispatch(new SupportTicketStatusChangedEvent($conversation, SupportStatus::Resolved, $author));
+                    $this->events?->dispatch(new SupportTicketReopenedEvent($conversation, $author));
+                }
+            }
+            if ($mentioned !== []) {
+                $this->events?->dispatch(new ChatMentionEvent($message, $mentioned, $conversation));
+            }
+            $result[] = [$message, $mentioned];
+        }
+
+        return $result;
+    }
+
+    /**
+     * 1.36: inside the unit of work of a thread reply: stores it, counts it on its root (one statement, under the
+     * conversation's lock), and records the followers — the author (who has read it), the root's author and the people
+     * it mentions.
+     *
+     * @param array<int|string, ChatUserInterface> $mentioned
+     */
+    private function storeReply(ChatMessage $reply, array $mentioned, DateTimeImmutable $now): void
+    {
+        $this->entityManager->flush();
+        $root = $reply->getThreadRoot();
+        assert($root instanceof ChatMessage);
+        $this->messageRepository?->countReply($root, 1, $now);
+        $this->entityManager->refresh($root);
+        $author = $reply->getAuthor();
+        assert($author instanceof ChatUserInterface);
+        $followers  = array_values($mentioned);
+        $rootAuthor = $root->getAuthor();
+        if ($rootAuthor instanceof ChatUserInterface && !$rootAuthor instanceof UnresolvedChatUser) {
+            $followers[] = $rootAuthor;
+        }
+        if ($this->threadReads instanceof ChatThreadReadRepository) {
+            $this->threadReads->readUpTo($this->threadReads->claim($root, $author, $now), (int) $reply->getId(), $now);
+            foreach ($followers as $follower) {
+                if (!ChatUserReferences::same($follower, $author)) {
+                    $this->threadReads->claim($root, $follower, $now);
+                }
+            }
+        }
+    }
+
+    /**
      * @return array<string, list<string>>
      */
     private function reactionsOf(ChatMessage $message): array
@@ -703,8 +896,20 @@ final readonly class ChatService implements ChatServiceInterface
      */
     private function announce(ChatMessage $message): void
     {
-        $this->notifier->messageCreated($message);
+        $root = $message->getThreadRoot();
+        if (!$root instanceof ChatMessage) {
+            $this->notifier->messageCreated($message);
+            $this->events?->dispatch(new ChatMessageSentEvent($message));
+
+            return;
+        }
+        // 1.36: every reader's open thread gets the reply and the root its count; Web Push only to the followers.
+        $followers = $this->threadReads?->followers($root) ?? [];
+        $this->notifier->messageCreated($message, [], $followers);
+        $this->notifier->messageUpdated($root, $this->reactionsOf($root));
+        $this->notifier->thread($root, $followers);
         $this->events?->dispatch(new ChatMessageSentEvent($message));
+        $this->events?->dispatch(new ChatThreadReplyEvent($root, $message));
     }
 
     /**

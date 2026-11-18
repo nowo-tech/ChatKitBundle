@@ -1583,6 +1583,70 @@ commit.
 `menu-react-more`; the separators are `menu-separator`). A host that overrides `nowo_chat_message_menu` keeps those
 parts for the items it wants.
 
+### Forward, threads and edit history (1.36)
+
+*(1.36, Beacon request, owner decision D-20261118-02)* Three more items, all off by default because they store data:
+
+| Item | Shown to | Server |
+|------|----------|--------|
+| **Reply in thread** (`menu-thread`) | whoever may write, on a message of the main timeline (`threads.enabled`) | `GET` / `POST …/messages/{m}/thread`, `POST …/messages/{m}/thread/read` |
+| **Forward** (`menu-forward`) | whoever sees a text message (`forward.enabled`) | `GET /chat/api/forward-targets?q=`, `POST …/messages/{m}/forward` |
+| **Edits** in message info | the info's readers; previous texts for the author and moderators (`edit_history.enabled`) | `GET …/messages/{m}/revisions` |
+
+**Forward.** The dialog lists the viewer's conversations where they may write (tickets for support agents only) and,
+when a name is typed, people for a new direct conversation. The viewer picks up to `forward.max_targets` and may add a
+comment. `POST …/forward {targets: [{conversationUuid} | {contactUuid}], comment?}` needs an `Idempotency-Key` header
+(400 `idempotency_key_required` without it):
+
+- **All or nothing.** Every target is checked before anything is written: SEND there, tickets for agents only, a person
+  the viewer may start a direct conversation with and write to, `ChatMessageForwardingEvent` (call `deny('reason')`)
+  and `ChatForwardPolicyInterface::mayForward(ChatForwardRequest)`. One refusal answers 403 `forward_forbidden` with
+  the `target` index (and the veto's `reason`), and nothing is written.
+- **The copy.** The text is copied with mention tokens turned into plain names and `@channel` / `@here` as plain
+  words, so nobody is notified again. `#reference` tokens stay, so each reader sees what they may open. Links are
+  indexed again in the target. The comment is posted first, as the forwarder's own message.
+- **The marker.** A reader who may read the source conversation sees "Forwarded from #channel" (or "from a direct
+  conversation"); everyone else sees a neutral "Forwarded". The source's author is never named. The marker is computed
+  for each reader when the message is read, so it follows access changes, and it turns neutral once the source is
+  purged or its author erased.
+- **Replays.** The same key and request answer the first forward again (200 `replayed: true`); the same key with
+  another request answers 422 `idempotency_mismatch`. Keys are kept a day.
+- `ChatMessageForwardedEvent` is dispatched after the commit, once per target.
+
+**Threads.** A thread is one level deep: a reply to a reply goes to its root.
+
+- `POST …/messages/{m}/thread {body}` (with an `Idempotency-Key`) posts a reply through the send pipeline: mentions,
+  references, links, the send rate limit.
+- `GET …/thread?before=&after=` → `{root, replies, hasMore, replyCount, readUpTo, following}`.
+- Replies never show in the main timeline and never count in the conversation's unread badge. The root carries
+  `thread: {count, lastReplyAt}`, and `GET …/messages` adds `threads` with each root's view for the reader: `unread`,
+  `following` and up to three `repliers`.
+- The root's author, everyone who replied and everyone a reply mentions follow the thread
+  (`nowo_chat_thread_read`). Followers get the Web Push of new replies and the realtime `thread` event
+  (`{rootUuid, replyCount, lastReplyAt}`), which marks the root with "new replies".
+- A reply takes edit, delete, reactions, save and info through the usual message endpoints. It is never pinned.
+- `ChatThreadReplyEvent` is dispatched after the commit, and `ChatMessageSentEvent::threadRootUuid()` tells a reply
+  apart.
+
+The thread opens in a panel: a side panel on wide screens, a full-height sheet on phones.
+
+**Edit history.** Each edit keeps the text it replaced (up to `edit_history.max_revisions` per message, in the edit's
+own write). Message info lists the edit times (`edits: [{editedAt}]`). `GET …/revisions` →
+`{revisions: [{editedAt, body, html}]}` is for the author, moderators (support agents outside direct conversations)
+and whom `ChatHistoryPolicyInterface::mayReadHistory(ChatHistoryRequest)` allows; anyone else gets 403
+`history_forbidden`. The previous texts are rendered for the reader when they are read, so a `#reference` shows only
+what that reader may open. Deleting a message deletes its previous texts. Saving the same text again is no edit.
+`ChatMessageEditedEvent` (with the revision id) is dispatched after every edit.
+
+**Optional key on send.** `POST …/messages` accepts an `Idempotency-Key` too (Q-B15): the same key and text answer the
+first message again. Without the header nothing changes.
+
+**DDD hosts.** `ChatMessageActionsInterface` gains `forward()`, `thread()`, `replyInThread()` and `revisions()`.
+`ChatMessagingInterface::can()` answers `FORWARD`, `THREAD` and `HISTORY`. The voter attributes are
+`nowo_chat.message.forward`, `nowo_chat.message.thread` and `nowo_chat.message.history`. The ports
+`ChatForwardPolicyInterface` (default: allow) and `ChatHistoryPolicyInterface` (default: nobody else) take their own
+value objects.
+
 ## Links
 
 1.19. Links such as the Teams meeting of a team, in a channel or in a direct conversation:

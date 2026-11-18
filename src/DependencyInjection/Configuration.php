@@ -50,7 +50,7 @@ final class Configuration implements ConfigurationInterface
     public const array DOCK_OVERLAY_MODES = ['hide', 'inert', 'none'];
 
     /** 1.35: items of the message menu, in their default order (`message_menu.order`). */
-    public const array MESSAGE_MENU_ITEMS = ['reply', 'quote', 'copy_text', 'copy_link', 'save', 'mark_unread', 'pin', 'info', 'edit', 'delete'];
+    public const array MESSAGE_MENU_ITEMS = ['reply', 'thread', 'quote', 'forward', 'copy_text', 'copy_link', 'save', 'mark_unread', 'pin', 'info', 'edit', 'delete'];
 
     /** 1.35: default quick reactions of the message menu. */
     public const array DEFAULT_QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -544,7 +544,7 @@ final class Configuration implements ConfigurationInterface
     {
         $node = (new TreeBuilder('message_menu'))->getRootNode();
         $node
-            ->info('1.35: the message menu (kebab and context menu): quick reactions, copy text, quote, mark unread, save for later, message info. Every item is checked again on the server.')
+            ->info('1.35: the message menu (kebab and context menu): quick reactions, copy text, quote, mark unread, save for later, message info; 1.36: forward, threads, edit history. Every item is checked again on the server.')
             ->addDefaultsIfNotSet()
             ->children()
                 ->arrayNode('quick_reactions')
@@ -622,6 +622,52 @@ final class Configuration implements ConfigurationInterface
                         ->booleanNode('own_messages_only')
                             ->info('Read info on the viewer\'s own messages only; moderators (support agents) see it on every message.')
                             ->defaultTrue()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('forward')
+                    ->info('1.36: "Forward": copies a text message to other conversations (or a new direct conversation).')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('enabled')
+                            ->info('Offer "Forward". Off by default.')
+                            ->defaultFalse()
+                        ->end()
+                        ->integerNode('max_targets')
+                            ->info('Conversations one forward may go to.')
+                            ->defaultValue(5)
+                            ->min(1)
+                            ->max(20)
+                        ->end()
+                        ->booleanNode('from_support')
+                            ->info('Messages of support conversations may be forwarded out (off: never).')
+                            ->defaultFalse()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('threads')
+                    ->info('1.36: "Reply in thread": one-level threads under a message; replies stay out of the main timeline.')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('enabled')
+                            ->info('Offer threads. Stores thread read state: off by default.')
+                            ->defaultFalse()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('edit_history')
+                    ->info('1.36: edit history: the previous texts of an edited message, for its author and moderators.')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('enabled')
+                            ->info('Keep the previous texts. Stores data: off by default.')
+                            ->defaultFalse()
+                        ->end()
+                        ->integerNode('max_revisions')
+                            ->info('Previous texts kept per message; older ones are dropped in the same write.')
+                            ->defaultValue(20)
+                            ->min(1)
+                            ->max(200)
                         ->end()
                     ->end()
                 ->end()

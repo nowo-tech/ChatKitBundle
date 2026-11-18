@@ -55,6 +55,9 @@ final class ConfigurationTest extends TestCase
                 'mark_unread'     => true,
                 'save'            => ['enabled' => false, 'max_per_user' => 500, 'dock_entry' => true],
                 'message_info'    => ['enabled' => false, 'read_times' => true, 'per_person_max_members' => 20, 'own_messages_only' => true],
+                'forward'         => ['enabled' => false, 'max_targets' => 5, 'from_support' => false],
+                'threads'         => ['enabled' => false],
+                'edit_history'    => ['enabled' => false, 'max_revisions' => 20],
                 'order'           => Configuration::MESSAGE_MENU_ITEMS,
             ],
             'status_presets' => Configuration::DEFAULT_STATUS_PRESETS,
@@ -230,7 +233,7 @@ final class ConfigurationTest extends TestCase
         $config = $this->process([['profiles' => ['default' => ['message_menu' => ['order' => ['delete', 'reply'], 'quick_reactions' => ['emojis' => []]]]]]]);
         self::assertSame(['delete', 'reply'], $config['profiles']['default']['message_menu']['order']);
         self::assertSame([], $config['profiles']['default']['message_menu']['quick_reactions']['emojis']);
-        foreach ([['order' => ['reply', 'reply']], ['order' => ['forward']], ['quick_reactions' => ['emojis' => ['']]], ['quick_reactions' => ['emojis' => [str_repeat('x', 33)]]]] as $menu) {
+        foreach ([['order' => ['reply', 'reply']], ['order' => ['share']], ['quick_reactions' => ['emojis' => ['']]], ['quick_reactions' => ['emojis' => [str_repeat('x', 33)]]]] as $menu) {
             try {
                 $this->process([['profiles' => ['default' => ['message_menu' => $menu]]]]);
                 self::fail('Invalid message_menu accepted: ' . json_encode($menu));

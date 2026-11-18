@@ -38,15 +38,19 @@ final readonly class TablePrefixListener
     public const array TABLES = [
         'conversation'      => 'nowo_chat_conversation',
         'conversation_link' => 'nowo_chat_conversation_link',
-        'message'           => 'nowo_chat_message',
-        'message_link'      => 'nowo_chat_message_link',
-        'message_mention'   => 'nowo_chat_message_mention',
-        'participant'       => 'nowo_chat_participant',
-        'quick_reply'       => 'nowo_chat_quick_reply',
-        'reaction'          => 'nowo_chat_reaction',
+        // 1.36: idempotency keys, edit history and thread read state (alphabetical, as the schema lists them).
+        'idempotency'      => 'nowo_chat_idempotency',
+        'message'          => 'nowo_chat_message',
+        'message_link'     => 'nowo_chat_message_link',
+        'message_mention'  => 'nowo_chat_message_mention',
+        'message_revision' => 'nowo_chat_message_revision',
+        'participant'      => 'nowo_chat_participant',
+        'quick_reply'      => 'nowo_chat_quick_reply',
+        'reaction'         => 'nowo_chat_reaction',
         // 1.35: read times (message info) and saved messages.
         'read_mark'     => 'nowo_chat_read_mark',
         'saved_message' => 'nowo_chat_saved_message',
+        'thread_read'   => 'nowo_chat_thread_read',
         // 1.30: the ticket number counter.
         'ticket_counter' => 'nowo_chat_ticket_counter',
         'user_settings'  => 'nowo_chat_user_settings',

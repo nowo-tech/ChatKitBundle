@@ -40,10 +40,12 @@ export interface MessageMenuRules {
   canReact?: boolean;
   /** 1.35: the message is in the viewer's Saved list (the item says "Remove from saved"). */
   saved?: boolean;
+  /** 1.36: the message is a thread reply (no Pin, no "Reply in thread" from the main timeline). */
+  reply?: boolean;
 }
 
 /** The items of the menu, by `data-part`. */
-export type MessageMenuItem = 'reply' | 'edit' | 'copy-link' | 'pin' | 'delete' | 'quote' | 'copy-text' | 'save' | 'mark-unread' | 'info';
+export type MessageMenuItem = 'reply' | 'edit' | 'copy-link' | 'pin' | 'delete' | 'quote' | 'copy-text' | 'save' | 'mark-unread' | 'info' | 'thread' | 'forward';
 
 /**
  * Which items the viewer sees: Reply to whoever may write; Edit for the author within the window (who may still
@@ -59,7 +61,7 @@ export function visibleItems(rules: MessageMenuRules): Record<MessageMenuItem, b
     reply: rules.usable && rules.canSend,
     edit: own && rules.canSend,
     'copy-link': rules.usable && rules.canLink,
-    pin: rules.usable && rules.canPin,
+    pin: rules.usable && rules.canPin && rules.reply !== true,
     delete: own,
     // 1.35: Quote needs the composer; Mark unread is never offered on one's own message; Info (the server decides
     // again whose messages) only on one's own unless the server says otherwise when asked.
@@ -68,6 +70,9 @@ export function visibleItems(rules: MessageMenuRules): Record<MessageMenuItem, b
     save: offered('save'),
     'mark-unread': offered('mark_unread') && !rules.mine,
     info: offered('info'),
+    // 1.36: a thread under a message of the main timeline, for whoever may write; Forward for whoever reads it.
+    thread: offered('thread') && rules.canSend && rules.reply !== true,
+    forward: offered('forward'),
   };
 }
 

@@ -20,7 +20,7 @@ final class DockTemplatesFixtureTest extends DatabaseTestCase
      */
     protected function chatKitConfig(): array
     {
-        return ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true], 'message_info' => ['enabled' => true]]]]];
+        return ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true], 'message_info' => ['enabled' => true], 'forward' => ['enabled' => true], 'threads' => ['enabled' => true]]]]];
     }
 
     public function testFixtureMatchesTheTemplates(): void

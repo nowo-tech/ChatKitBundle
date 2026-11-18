@@ -14,10 +14,12 @@ import { decodeReferences, ReferenceAutocomplete } from './reference';
 import { ConversationLinks, copyText, decodeLinkTokens, linksSettings, linkToken } from './links';
 import { plainText, quoteBlock, quoteOf, stripReservedAttributes, tidySeparators, visibleItems, type MessageMenuItem } from './message-menu';
 import { openMessageInfo } from './message-info';
+import { openForwardDialog } from './forward-dialog';
+import { ThreadPanel } from './thread-panel';
 import { SupportPanel } from './support';
 import { customStatus, statusLabel } from './status';
 import { part, text, type Templates } from './templates';
-import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader } from './types';
+import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader, ThreadSummary } from './types';
 
 /** What a conversation window needs from the dock that hosts it (ChatDock). */
 export interface ThreadHost {
@@ -198,6 +200,10 @@ export class ThreadView {
   private flashUntil = 0;
   /** 1.35: uuids of the messages the viewer saved for later (from the pages and the `saved` events). */
   private readonly savedUuids = new Set<string>();
+  /** 1.36: the viewer's view of the threads on the shown pages (unread replies, the newest repliers). */
+  private readonly threadInfo = new Map<string, ThreadSummary>();
+  /** 1.36: the open thread panel. */
+  private threadPanel: ThreadPanel | null = null;
   /** 1.35: "Mark unread from here" holds the automatic read until the viewer scrolls, types or sends again. */
   private unreadHold: AbortController | null = null;
   /** Message being edited (its bubble shows the inline editor). */
@@ -880,6 +886,7 @@ export class ThreadView {
       this.readUpTo = page.readUpTo ?? 0;
       this.setReaders(page.readers);
       this.noteSaved(page.saved);
+      this.noteThreads(page.threads);
       this.loaded = true;
       this.render();
       this.scrollToBottom(false);
@@ -915,6 +922,7 @@ export class ThreadView {
     }
     this.setReaders(page.readers);
     this.noteSaved(page.saved);
+    this.noteThreads(page.threads);
     this.syncedUpTo = Math.max(this.syncedUpTo, page.messages.at(-1)?.id ?? 0);
     this.merge(page.messages, true);
     if (page.messages.length === 0) {
@@ -1056,6 +1064,7 @@ export class ThreadView {
         }
         this.setReaders(page.readers);
         this.noteSaved(page.saved);
+        this.noteThreads(page.threads);
         // Everything after the cursor up to this page's newest message is now held (pages are contiguous).
         const newest = page.messages.at(-1)?.id ?? 0;
         this.syncedUpTo = Math.max(this.syncedUpTo, newest);
@@ -1081,6 +1090,14 @@ export class ThreadView {
    * @param notify Whether to report the new ones to the host (false when they came from another tab).
    */
   merge(incoming: ChatMessage[], notify: boolean): void {
+    // 1.36: thread replies never join the main timeline (an open thread panel shows them).
+    incoming = incoming.filter((message) => {
+      if (message.threadRootUuid === undefined) {
+        return true;
+      }
+      this.threadPanel?.receive(message);
+      return false;
+    });
     // Audit LP-L1: a re-read on its way must not apply its older copies over these.
     incoming.forEach((message) => this.touchedDuringReread?.add(message.id));
     this.apply(incoming, notify);
@@ -1182,6 +1199,12 @@ export class ThreadView {
    * @param message Updated message (unknown ids are ignored; `mine` is kept from the loaded one).
    */
   update(message: ChatMessage): void {
+    if (message.threadRootUuid !== undefined) {
+      // 1.36: a reply changed (edit, delete, reactions): the open thread panel repaints it.
+      this.threadPanel?.receive(message);
+      return;
+    }
+    this.threadPanel?.updateRoot(message);
     const index = this.messages.findIndex((item) => item.id === message.id);
     if (index < 0) {
       return;
@@ -1962,6 +1985,12 @@ export class ThreadView {
       }
     }
 
+    if (!message.deleted && message.forwarded !== undefined) {
+      // 1.36: a forward says so; its source only when the viewer may read it (the server decides).
+      const from = message.forwarded.from === 'channel' && message.forwarded.label !== null ? t(i18n, 'forwarded_from_channel', { name: message.forwarded.label }) : message.forwarded.from === 'direct' ? t(i18n, 'forwarded_from_direct') : t(i18n, 'forwarded');
+      bubble.before(h('p', { class: 'nowo-chat-msg__forwarded', 'data-part': 'forwarded', text: from }));
+    }
+    this.renderThreadSummary(article, message);
     const time = part(article, 'time');
     paintMessageTime(time, message.createdAt, i18n, this.host.config.locale);
     part(article, 'edited').hidden = !message.edited || message.deleted;
@@ -2123,8 +2152,12 @@ export class ThreadView {
         mark_unread: offered.mark_unread === true && (endpoints.unread ?? '') !== '',
         // Own messages; moderators (support agents) outside direct conversations (the server decides again).
         info: offered.info === true && (endpoints.info ?? '') !== '' && (message.mine || (config.isAgent && this.summary.kind !== 'direct')),
+        // 1.36
+        thread: offered.thread === true && (endpoints.thread ?? '') !== '',
+        forward: offered.forward === true && (endpoints.forward ?? '') !== '',
       },
       saved,
+      reply: message.threadRootUuid !== undefined,
     });
     const details = menu.querySelector('details');
     const closeKebab = (): void => {
@@ -2143,6 +2176,8 @@ export class ThreadView {
       save: () => void this.toggleSaved(message),
       'mark-unread': () => void this.markUnreadFrom(message),
       info: () => void this.showInfo(message, article),
+      thread: () => this.openThread(message, article),
+      forward: () => this.forward(message, article),
     };
     let any = false;
     for (const [name, run] of Object.entries(actions) as [MessageMenuItem, () => void][]) {
@@ -2378,10 +2413,119 @@ export class ThreadView {
   private async showInfo(message: ChatMessage, article: HTMLElement): Promise<void> {
     const config = this.host.config;
     try {
-      openMessageInfo(await this.host.api.messageInfo(this.summary.uuid, message.uuid), config.i18n, config.locale, article);
+      // 1.36: the previous texts for the author and moderators (the server decides again: 403 for anyone else).
+      const history = config.menu?.editHistory === true && (config.endpoints.revisions ?? '') !== '' && (message.mine || (config.isAgent && this.summary.kind !== 'direct'));
+      openMessageInfo(await this.host.api.messageInfo(this.summary.uuid, message.uuid), config.i18n, config.locale, article, history ? () => this.host.api.revisions(this.summary.uuid, message.uuid) : null);
     } catch {
       this.flashNotice(t(config.i18n, 'error'));
     }
+  }
+
+  /**
+   * 1.36: the "N replies" button under a thread root (unread replies of a followed thread are marked), which opens the
+   * thread panel.
+   *
+   * @param article Rendered line of the message.
+   * @param message The message.
+   */
+  private renderThreadSummary(article: HTMLElement, message: ChatMessage): void {
+    const count = message.thread?.count ?? 0;
+    if (count === 0 || this.host.config.menu?.items.thread !== true) {
+      return;
+    }
+    const i18n = this.host.config.i18n;
+    const info = this.threadInfo.get(message.uuid);
+    const label = t(i18n, count === 1 ? 'thread_one_reply' : 'thread_replies_count', { count });
+    const last = message.thread?.lastReplyAt ?? null;
+    const button = h(
+      'button',
+      { type: 'button', class: `nowo-chat-msg__thread${info?.unread === true ? ' is-unread' : ''}`, 'data-part': 'thread-summary', 'aria-label': info?.unread === true ? `${label}, ${t(i18n, 'thread_new_replies')}` : label },
+      h('span', { class: 'nowo-chat-msg__thread-avatars', 'aria-hidden': 'true' }, ...(info?.repliers ?? []).map((person) => this.host.templates.avatar(person.initials, 'direct', 'sm', false, undefined, person.avatarUrl))),
+      h('span', { class: 'nowo-chat-msg__thread-count', text: label }),
+      last === null ? null : h('time', { class: 'nowo-chat-msg__thread-last', datetime: last, text: t(i18n, 'thread_last_reply', { time: timeLabel(last, this.host.config.locale) }) }),
+    );
+    button.addEventListener('click', () => this.openThread(message, article));
+    const anchor = article.querySelector('[data-part="reactions"]') ?? part(article, 'bubble');
+    anchor.after(button);
+  }
+
+  /**
+   * 1.36: the thread summaries of a page the server sent (`threads`; absent while threads are off).
+   *
+   * @param threads By root uuid.
+   */
+  private noteThreads(threads: Record<string, ThreadSummary> | undefined): void {
+    for (const [uuid, summary] of Object.entries(threads ?? {})) {
+      this.threadInfo.set(uuid, summary);
+    }
+  }
+
+  /**
+   * 1.36: a thread got a reply (realtime `thread`, for followers): the root's count and its "new replies" mark follow.
+   *
+   * @param rootUuid The root.
+   * @param replyCount Its replies now.
+   * @param lastReplyAt Its newest reply time.
+   */
+  threadChanged(rootUuid: string, replyCount: number, lastReplyAt: string | null): void {
+    const root = this.messages.find((message) => message.uuid === rootUuid);
+    if (root === undefined) {
+      return;
+    }
+    const open = this.threadPanel?.rootUuid === rootUuid;
+    const known = this.threadInfo.get(rootUuid);
+    this.threadInfo.set(rootUuid, { count: replyCount, lastReplyAt, unread: !open, following: true, repliers: known?.repliers ?? [] });
+    this.update({ ...root, thread: { count: replyCount, lastReplyAt } });
+  }
+
+  /**
+   * 1.36: "Reply in thread" or the "N replies" button: the thread panel of the message.
+   *
+   * @param message The root (or a reply).
+   * @param article Its rendered line (focused again when the panel closes).
+   */
+  private openThread(message: ChatMessage, article: HTMLElement): void {
+    const config = this.host.config;
+    this.threadPanel?.close();
+    const rootUuid = message.threadRootUuid ?? message.uuid;
+    const known = this.threadInfo.get(rootUuid);
+    if (known !== undefined) {
+      this.threadInfo.set(rootUuid, { ...known, unread: false });
+    }
+    const panel = new ThreadPanel({
+      api: this.host.api,
+      i18n: config.i18n,
+      locale: config.locale,
+      conversationUuid: this.summary.uuid,
+      message,
+      canSend: this.summary.canSend,
+      maxLength: config.maxLength,
+      returnTo: article,
+      rootChanged: (root) => this.update(root),
+      closed: () => {
+        if (this.threadPanel === panel) {
+          this.threadPanel = null;
+        }
+      },
+    });
+    this.threadPanel = panel;
+    const root = this.messages.find((candidate) => candidate.uuid === rootUuid);
+    if (root !== undefined && known?.unread === true) {
+      this.update(root);
+    }
+  }
+
+  /**
+   * 1.36: Forward — the picker dialog; the notice says how many conversations it went to.
+   *
+   * @param message The message.
+   * @param article Its rendered line (focused again when the dialog closes).
+   */
+  private forward(message: ChatMessage, article: HTMLElement): void {
+    const config = this.host.config;
+    openForwardDialog(this.host.api, config.i18n, this.summary.uuid, message.uuid, config.menu?.forwardMaxTargets ?? 5, article, (count) => {
+      this.flashNotice(t(config.i18n, count === 1 ? 'forwarded_one' : 'forwarded_many', { count }));
+    });
   }
 
   /**

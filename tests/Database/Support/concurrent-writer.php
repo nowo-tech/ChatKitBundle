@@ -13,6 +13,10 @@ declare(strict_types=1);
  * `savecap` saves the first message under `max_per_user: 1`; `unread` marks unread and reads in turn; `readonly` reads;
  * `optout` turns "Share read times" off and on (ending off).
  *
+ * 1.36: `forward` forwards the first message into the conversation under one shared `Idempotency-Key` (one effect for
+ * both workers); `thread` replies in the first message's thread (a key per call); `edit` edits the first message (edit
+ * history on).
+ *
  * Prints one JSON line: {ok, failures, poisoned, closed}.
  */
 
@@ -21,8 +25,10 @@ use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+use Nowo\ChatKitBundle\Service\ChatForwarder;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
 use Nowo\ChatKitBundle\Service\ChatService;
+use Nowo\ChatKitBundle\Service\ChatThreads;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
@@ -31,7 +37,12 @@ require dirname(__DIR__, 3) . '/vendor/autoload.php';
 
 [, $mode, $calls, $tag, $start] = $argv + [null, 'send', '50', 'a', '0'];
 $menuModes                      = ['menu', 'savecap', 'unread', 'readonly', 'optout'];
-$kernel                         = new TestKernel(in_array($mode, $menuModes, true) ? ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true, 'max_per_user' => $mode === 'savecap' ? 1 : 500], 'message_info' => ['enabled' => true]]]]] : []);
+$threadModes                    = ['forward', 'thread', 'edit'];
+$kernel                         = new TestKernel(match (true) {
+    in_array($mode, $menuModes, true)   => ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true, 'max_per_user' => $mode === 'savecap' ? 1 : 500], 'message_info' => ['enabled' => true]]]]],
+    in_array($mode, $threadModes, true) => ['profiles' => ['default' => ['message_menu' => ['forward' => ['enabled' => true], 'threads' => ['enabled' => true], 'edit_history' => ['enabled' => true, 'max_revisions' => 200]]]]],
+    default                             => [],
+});
 $kernel->boot();
 $container = $kernel->getContainer();
 $registry  = $container->get('doctrine');
@@ -40,6 +51,10 @@ $chat = $container->get(ChatService::class);
 assert($chat instanceof ChatService);
 $menu = $container->get(ChatMessageActions::class);
 assert($menu instanceof ChatMessageActions);
+$forwarder = $container->get(ChatForwarder::class);
+assert($forwarder instanceof ChatForwarder);
+$threads = $container->get(ChatThreads::class);
+assert($threads instanceof ChatThreads);
 $settings = $container->get(ChatUserSettingsRepository::class);
 assert($settings instanceof ChatUserSettingsRepository);
 $boundary = $container->get(ChatRequestBoundaryListener::class);
@@ -67,13 +82,17 @@ for ($i = 0; $i < (int) $calls; ++$i) {
         'unread'   => $i % 2 === 0 ? 'unread' : 'read',
         'readonly' => 'read',
         'optout'   => 'optout',
+        'forward'  => 'forward',
+        'thread'   => 'thread',
+        'edit'     => 'edit',
         default    => 'send',
     };
     try {
-        $ana  = $em()->getRepository(TestUser::class)->findOneBy(['name' => 'ana']) ?? throw new RuntimeException('ana');
-        $luis = $em()->getRepository(TestUser::class)->findOneBy(['name' => 'luis']) ?? throw new RuntimeException('luis');
-        $dm   = $em()->getRepository(ChatConversation::class)->findOneBy(['kind' => 'direct']) ?? throw new RuntimeException('dm');
-        $last = static fn (): ChatMessage => $em()->getRepository(ChatMessage::class)->findOneBy(['conversation' => $dm], ['id' => 'DESC']) ?? throw new RuntimeException('message');
+        $ana   = $em()->getRepository(TestUser::class)->findOneBy(['name' => 'ana']) ?? throw new RuntimeException('ana');
+        $luis  = $em()->getRepository(TestUser::class)->findOneBy(['name' => 'luis']) ?? throw new RuntimeException('luis');
+        $dm    = $em()->getRepository(ChatConversation::class)->findOneBy(['kind' => 'direct']) ?? throw new RuntimeException('dm');
+        $last  = static fn (): ChatMessage => $em()->getRepository(ChatMessage::class)->findOneBy(['conversation' => $dm], ['id' => 'DESC']) ?? throw new RuntimeException('message');
+        $first = static fn (): ChatMessage => $em()->getRepository(ChatMessage::class)->findOneBy(['conversation' => $dm], ['id' => 'ASC']) ?? throw new RuntimeException('first');
         match ($op) {
             'send'    => $chat->send($tag === 'a' ? $ana : $luis, $dm, $tag . ' ' . $i . ' @[ana](' . $ana->getChatPublicId() . ')'),
             'react'   => $chat->toggleReaction($luis, $last(), '👍'),
@@ -84,6 +103,9 @@ for ($i = 0; $i < (int) $calls; ++$i) {
             'unread'  => $menu->markUnreadFrom($luis, $last()),
             // Each call another of the first messages; over the cap the service refuses (a soft cap, docs/CONCURRENCY.md).
             'savecap' => $menu->markSaved($luis, $em()->getRepository(ChatMessage::class)->findOneBy(['conversation' => $dm], ['id' => 'ASC']) ?? throw new RuntimeException('first'), true),
+            'forward' => $forwarder->forward($luis, $first(), [['conversationUuid' => $dm->getUuid()]], null, 'one-forward'),
+            'thread'  => $threads->reply($tag === 'a' ? $ana : $luis, $first(), $tag . ' reply ' . $i, $tag . '-' . $i),
+            'edit'    => $chat->edit($first(), $tag . ' edit ' . $i),
             'optout'  => (static function () use ($settings, $luis, $i): void {
                 $mine = $settings->forUser($luis);
                 $mine->setShareReadTimes($i % 2 === 0);

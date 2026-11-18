@@ -29,6 +29,9 @@ final readonly class ChatMessageView
      * @param bool $deleted Whether it is a tombstone
      * @param DateTimeImmutable $createdAt Creation time
      * @param DateTimeImmutable|null $editedAt Last edit; null when never edited
+     * @param string|null $threadRootUuid 1.36: public uuid of the thread root of a thread reply; null in the main timeline
+     * @param int $threadReplyCount 1.36: replies of the thread this message starts
+     * @param bool $forwarded 1.36: whether the message is a forward
      */
     public function __construct(
         public int $id,
@@ -45,6 +48,9 @@ final readonly class ChatMessageView
         public bool $deleted,
         public DateTimeImmutable $createdAt,
         public ?DateTimeImmutable $editedAt,
+        public ?string $threadRootUuid = null,
+        public int $threadReplyCount = 0,
+        public bool $forwarded = false,
     ) {
     }
 
@@ -75,6 +81,9 @@ final readonly class ChatMessageView
             $message->isDeleted(),
             $message->getCreatedAt(),
             $message->getEditedAt(),
+            $message->getThreadRoot()?->getUuid(),
+            $message->getThreadReplyCount(),
+            $message->isForwarded(),
         );
     }
 }

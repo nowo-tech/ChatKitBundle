@@ -5,10 +5,13 @@ nowo_chat_kit:
         default:
             enabled: true
             user_class: App\Entity\User
-            # 1.35: every item of the message menu (save for later and message info store data: off by default).
+            # 1.35 / 1.36: every item of the message menu (the items that store data are off by default).
             message_menu:
                 save: { enabled: true }
                 message_info: { enabled: true }
+                forward: { enabled: true }
+                threads: { enabled: true }
+                edit_history: { enabled: true }
             # The full-page chat (/chat/) renders in nowo_ui_kit.layouts.admin (web_ui.layout_template: null);
             # REQ-UI-003 — the 1.x page_layout option is deprecated.
             # web_ui:

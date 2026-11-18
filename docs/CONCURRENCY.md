@@ -37,6 +37,11 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | 1.35 mark unread | shared conversation lock (exclusive when the participant row must be created), then the participant row `FOR UPDATE`; the read cursor moves back, the receipt cursor never | idempotent (same target cursor) |
 | 1.35 save / unsave | savepoint insert on the unique `(user, message)` key; a save racing another keeps the first row | idempotent `PUT` / `DELETE` |
 | 1.35 share read times off | the settings flush deletes the user's read times (`ChatReadTimesOptOutListener`, same transaction); a read racing it writes a row that stays hidden (it is older than the next re-enable) | idempotent |
+| 1.36 forward | every target checked first; one unit claims the `Idempotency-Key` (savepoint insert on the unique `(user, key)`), then locks the target conversations in id order and writes the comment and the copy of each | `Idempotency-Key` (required): a replay answers the first forward |
+| 1.36 thread reply | the `Idempotency-Key` claim, the conversation row lock (as send, without moving its activity), then an atomic `thread_reply_count + 1` on the root | `Idempotency-Key` (required) |
+| 1.36 thread read | savepoint insert on the unique `(root, user)` key; the cursor moves forward in one statement | forward-only |
+| 1.36 edit + revision | the conversation row lock, then the message is read again under it: the text another edit committed is the previous text; the revision insert and the prune happen in the same unit | the same text again is no edit |
+| 1.36 send with `Idempotency-Key` | the key claim first in the send's unit | a replay answers the first message |
 | Participant rows, direct conversations, channel conversations | unique keys and a savepoint insert; the loser re-reads the winner's row | — |
 | Ticket numbers | a dedicated counter row with an atomic update | — |
 | GDPR erasure | one unit for the whole erasure | — |
@@ -77,6 +82,8 @@ request: the request's `CommitMark` (taken at `kernel.request` with `commit_dete
 - `tests/Database/ConcurrentWritersTest` (two worker processes, one database) also races the message menu against a
   sender, two saves at the cap, mark unread against reads, and the opt-out against reads.
 - `tests/Integration/Service/ChatMessageActionsTest` covers saving the same message twice and repeated mark unread.
+- 1.36: `ConcurrentWritersTest` also sends one forward from two workers under one key (one copy), concurrent replies
+  in one thread (the count matches the replies) and concurrent edits of one message (every previous text is kept once).
 
 ## Accepted residual risk
 

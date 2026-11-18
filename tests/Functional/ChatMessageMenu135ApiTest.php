@@ -66,7 +66,7 @@ final class ChatMessageMenu135ApiTest extends DatabaseTestCase
         $his  = $chat->send($luis, $dm, 'hello');
 
         $config = $this->login($ana);
-        self::assertSame(['reply' => true, 'quote' => true, 'copy_text' => true, 'copy_link' => true, 'save' => false, 'mark_unread' => true, 'pin' => true, 'info' => false, 'edit' => true, 'delete' => true], $config['menu']['items']);
+        self::assertSame(['reply' => true, 'thread' => false, 'quote' => true, 'forward' => false, 'copy_text' => true, 'copy_link' => true, 'save' => false, 'mark_unread' => true, 'pin' => true, 'info' => false, 'edit' => true, 'delete' => true], $config['menu']['items']);
         self::assertSame(['👍', '❤️', '😂', '😮', '😢', '🙏'], $config['menu']['quick']);
         self::assertFalse($config['menu']['saveDockEntry']);
         $base = '/chat/api/conversations/' . $dm->getUuid() . '/messages/' . $his->getUuid();

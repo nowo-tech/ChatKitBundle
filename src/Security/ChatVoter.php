@@ -8,7 +8,10 @@ use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Service\ChatEditHistory;
+use Nowo\ChatKitBundle\Service\ChatMenuOptions;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
+use Nowo\ChatKitBundle\Service\ChatThreads;
 use Nowo\ChatKitBundle\Support\ChatSupportPolicy;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
@@ -21,7 +24,8 @@ use function in_array;
 /**
  * Every chat permission. Controllers ask this voter; they never decide inline.
  *
- * Conversation attributes: VIEW, SEND, MODERATE, RESOLVE. Message attributes: EDIT, DELETE, REACT.
+ * Conversation attributes: VIEW, SEND, MODERATE, RESOLVE. Message attributes: EDIT, DELETE, REACT; 1.35: SAVE,
+ * MARK_UNREAD, INFO; 1.36: FORWARD, THREAD, HISTORY.
  *
  * @extends Voter<string, ChatConversation|ChatMessage>
  */
@@ -44,8 +48,17 @@ final class ChatVoter extends Voter
     /** 1.35: open the message's read info (`message_menu.message_info`). */
     public const string INFO = 'nowo_chat.message.info';
 
+    /** 1.36: forward the message to other conversations (`message_menu.forward`). */
+    public const string FORWARD = 'nowo_chat.message.forward';
+
+    /** 1.36: reply in the message's thread (`message_menu.threads`). */
+    public const string THREAD = 'nowo_chat.message.thread';
+
+    /** 1.36: read the previous texts of the message (`message_menu.edit_history`). */
+    public const string HISTORY = 'nowo_chat.message.history';
+
     private const array CONVERSATION_ATTRIBUTES = [self::VIEW, self::SEND, self::MODERATE, self::RESOLVE];
-    private const array MESSAGE_ATTRIBUTES      = [self::EDIT, self::DELETE, self::REACT, self::SAVE, self::MARK_UNREAD, self::INFO];
+    private const array MESSAGE_ATTRIBUTES      = [self::EDIT, self::DELETE, self::REACT, self::SAVE, self::MARK_UNREAD, self::INFO, self::FORWARD, self::THREAD, self::HISTORY];
 
     /**
      * Builds the voter from the access checks and a clock (edit window).
@@ -55,6 +68,8 @@ final class ChatVoter extends Voter
      * @param ChatSupportPolicy|null $support Read-only rule of support tickets; null: tickets never turn read-only
      * @param CurrentChatUserResolverInterface|null $currentUser 1.24: maps the token's user to the chat participant; null: the user itself when it implements ChatUserInterface
      * @param ChatMessageActions|null $menu 1.35: which message menu items are offered; null: SAVE, MARK_UNREAD and INFO are never granted
+     * @param ChatMenuOptions|null $options 1.36: whether forward, threads and edit history are offered; null: FORWARD, THREAD and HISTORY are never granted
+     * @param ChatEditHistory|null $history 1.36: who reads previous texts (author, moderators, the application's policy)
      */
     public function __construct(
         private readonly ChatAccess $access,
@@ -62,6 +77,8 @@ final class ChatVoter extends Voter
         private readonly ?ChatSupportPolicy $support = null,
         private readonly ?CurrentChatUserResolverInterface $currentUser = null,
         private readonly ?ChatMessageActions $menu = null,
+        private readonly ?ChatMenuOptions $options = null,
+        private readonly ?ChatEditHistory $history = null,
     ) {
     }
 
@@ -124,6 +141,12 @@ final class ChatVoter extends Voter
             self::SAVE        => $this->menu?->saveEnabled() === true && $message->isPinnable() && $this->canView($conversation, $user),
             self::MARK_UNREAD => $this->menu?->markUnreadEnabled() === true && !$message->isAuthoredBy($user) && $this->canView($conversation, $user),
             self::INFO        => $this->menu?->infoEnabled() === true && $this->canView($conversation, $user) && $this->menu->mayReadInfo($user, $message),
+            // 1.36: forward a text message (not a line, a bot message or a tombstone); from a ticket only with `from_support`.
+            self::FORWARD => $this->options?->forwardEnabled() === true && $message->isPinnable()
+                && (!$conversation->isSupport() || $this->options->forwardFromSupport()) && $this->canView($conversation, $user),
+            // 1.36: a thread under a shown text message of the main timeline (a reply's thread is its root's).
+            self::THREAD  => $this->options?->threadsEnabled() === true && ChatThreads::rootOf($message)->canStartThread() && $this->canSend($conversation, $user),
+            self::HISTORY => $this->history?->enabled() === true && $this->canView($conversation, $user) && $this->history->mayRead($user, $message),
             // 1.24: system lines take no reactions either.
             default => !$message->isBuzz() && !$message->isSystem() && $this->canSend($conversation, $user), // REACT
         };

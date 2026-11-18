@@ -55,6 +55,10 @@ final readonly class ChatMessaging implements ChatMessagingInterface
         self::SAVE        => ChatVoter::SAVE,
         self::MARK_UNREAD => ChatVoter::MARK_UNREAD,
         self::INFO        => ChatVoter::INFO,
+        // 1.36
+        self::FORWARD => ChatVoter::FORWARD,
+        self::THREAD  => ChatVoter::THREAD,
+        self::HISTORY => ChatVoter::HISTORY,
     ];
 
     /**
@@ -92,7 +96,7 @@ final readonly class ChatMessaging implements ChatMessagingInterface
         if (!$conversation instanceof ChatConversation) {
             return false;
         }
-        if (in_array($action, [self::EDIT, self::DELETE, self::REACT, self::SAVE, self::MARK_UNREAD, self::INFO], true)) {
+        if (in_array($action, [self::EDIT, self::DELETE, self::REACT, self::SAVE, self::MARK_UNREAD, self::INFO, self::FORWARD, self::THREAD, self::HISTORY], true)) {
             $message = $messageUuid === null ? null : $this->findMessage($conversation, $messageUuid);
 
             return $message instanceof ChatMessage && $this->voter->decide(self::ATTRIBUTES[$action], $message, $actor);

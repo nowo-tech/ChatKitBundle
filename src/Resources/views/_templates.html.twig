@@ -335,7 +335,8 @@
                 {{ ui.icon_button('trash', 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'delete') }}
                 {% block nowo_chat_message_menu %}
                     {# 1.33: the UiKit kebab of the message. 1.35: the quick reactions row, then the items of message_menu.order
-                     # (Reply, Quote, Copy text, Copy link, Save, Mark unread, Pin, Message info, Edit, Delete) with separators
+                     # (Reply, 1.36: Reply in thread, Quote, 1.36: Forward, Copy text, Copy link, Save, Mark unread, Pin, Message
+                     # info, Edit, Delete) with separators
                      # between their groups, and `sheet: true` (a bottom sheet on phones, UiKit 2.58). Every item starts
                      # hidden; the script shows the ones the viewer may use (the server checks each action again). It is the
                      # source of the message's context menu (right-click, Shift+F10, ContextMenu key, long press) when
@@ -343,7 +344,7 @@
                     {% set _t = 'NowoChatKitBundle' %}
                     {% set _menu = nowo_chat_message_menu ?? {items: [], quick: [], picker: false} %}
                     {% set _labels = {
-                        reply: 'chat.reply', quote: 'chat.quote', copy_text: 'chat.copy_text', copy_link: 'chat.copy_link',
+                        reply: 'chat.reply', thread: 'chat.reply_in_thread', quote: 'chat.quote', forward: 'chat.forward', copy_text: 'chat.copy_text', copy_link: 'chat.copy_link',
                         save: 'chat.save_message', mark_unread: 'chat.mark_unread', pin: 'chat.pin', info: 'chat.message_info',
                         edit: 'chat.edit', delete: 'chat.delete',
                     } %}

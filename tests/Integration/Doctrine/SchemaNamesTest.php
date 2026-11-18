@@ -150,22 +150,40 @@ final class SchemaNamesTest extends TestCase
                 'FK_C437798CB03A8386' => 'created_by_id -> test_user',
             ],
         ],
+        'nowo_chat_idempotency' => [
+            'indexes' => [
+                'IDX_2B49E36CA76ED395'         => 'user_id',
+                'idx_nowo_chat_idempotency_at' => 'created_at',
+            ],
+            'unique' => [
+                'uniq_nowo_chat_idempotency' => 'user_id,idempotency_key',
+            ],
+            'fk' => [
+                'FK_2B49E36CA76ED395' => 'user_id -> test_user',
+            ],
+        ],
         'nowo_chat_message' => [
             'indexes' => [
+                'IDX_A40D82CC4645CC3E'          => 'forwarded_from_message_id',
                 'IDX_A40D82CC59662AC1'          => 'pinned_by_id',
                 'IDX_A40D82CC9AC0396'           => 'conversation_id',
+                'IDX_A40D82CCBDD9A572'          => 'forwarded_from_conversation_id',
                 'IDX_A40D82CCC76F1F52'          => 'deleted_by_id',
+                'IDX_A40D82CCC8BC80CF'          => 'thread_root_id',
                 'IDX_A40D82CCF675F31B'          => 'author_id',
                 'idx_nowo_chat_message_created' => 'created_at',
-                'idx_nowo_chat_message_unread'  => 'conversation_id,id,author_id,deleted_at',
+                'idx_nowo_chat_message_unread'  => 'conversation_id,thread_root_id,id,author_id,deleted_at',
             ],
             'unique' => [
                 'uniq_nowo_chat_message_uuid' => 'uuid',
             ],
             'fk' => [
+                'FK_A40D82CC4645CC3E' => 'forwarded_from_message_id -> nowo_chat_message',
                 'FK_A40D82CC59662AC1' => 'pinned_by_id -> test_user',
                 'FK_A40D82CC9AC0396'  => 'conversation_id -> nowo_chat_conversation',
+                'FK_A40D82CCBDD9A572' => 'forwarded_from_conversation_id -> nowo_chat_conversation',
                 'FK_A40D82CCC76F1F52' => 'deleted_by_id -> test_user',
+                'FK_A40D82CCC8BC80CF' => 'thread_root_id -> nowo_chat_message',
                 'FK_A40D82CCF675F31B' => 'author_id -> test_user',
             ],
         ],
@@ -190,6 +208,16 @@ final class SchemaNamesTest extends TestCase
             'fk' => [
                 'FK_9DF33B9B537A1329' => 'message_id -> nowo_chat_message',
                 'FK_9DF33B9BA76ED395' => 'user_id -> test_user',
+            ],
+        ],
+        'nowo_chat_message_revision' => [
+            'indexes' => [
+                'IDX_EF14106F537A1329'           => 'message_id',
+                'idx_nowo_chat_revision_message' => 'message_id,id',
+            ],
+            'unique' => [],
+            'fk'     => [
+                'FK_EF14106F537A1329' => 'message_id -> nowo_chat_message',
             ],
         ],
         'nowo_chat_participant' => [
@@ -227,7 +255,6 @@ final class SchemaNamesTest extends TestCase
                 'FK_F6AD5573A76ED395' => 'user_id -> test_user',
             ],
         ],
-        // 1.35: read times (message info) and saved messages.
         'nowo_chat_read_mark' => [
             'indexes' => [
                 'IDX_90713239D1C3019'          => 'participant_id',
@@ -253,7 +280,19 @@ final class SchemaNamesTest extends TestCase
                 'FK_C835FCC3A76ED395' => 'user_id -> test_user',
             ],
         ],
-        // 1.30: the ticket number counter (primary key only).
+        'nowo_chat_thread_read' => [
+            'indexes' => [
+                'IDX_C2874913A76ED395' => 'user_id',
+                'IDX_C2874913F639B458' => 'root_message_id',
+            ],
+            'unique' => [
+                'uniq_nowo_chat_thread_read' => 'root_message_id,user_id',
+            ],
+            'fk' => [
+                'FK_C2874913A76ED395' => 'user_id -> test_user',
+                'FK_C2874913F639B458' => 'root_message_id -> nowo_chat_message',
+            ],
+        ],
         'nowo_chat_ticket_counter' => [
             'indexes' => [],
             'unique'  => [],
@@ -304,22 +343,40 @@ final class SchemaNamesTest extends TestCase
                 'FK_4F32834B03A8386' => 'created_by_id -> test_user',
             ],
         ],
+        'chat_idempotency' => [
+            'indexes' => [
+                'IDX_CA5A000EA76ED395'    => 'user_id',
+                'idx_chat_idempotency_at' => 'created_at',
+            ],
+            'unique' => [
+                'uniq_chat_idempotency' => 'user_id,idempotency_key',
+            ],
+            'fk' => [
+                'FK_CA5A000EA76ED395' => 'user_id -> test_user',
+            ],
+        ],
         'chat_message' => [
             'indexes' => [
+                'IDX_FAB3FC164645CC3E'     => 'forwarded_from_message_id',
                 'IDX_FAB3FC1659662AC1'     => 'pinned_by_id',
                 'IDX_FAB3FC169AC0396'      => 'conversation_id',
+                'IDX_FAB3FC16BDD9A572'     => 'forwarded_from_conversation_id',
                 'IDX_FAB3FC16C76F1F52'     => 'deleted_by_id',
+                'IDX_FAB3FC16C8BC80CF'     => 'thread_root_id',
                 'IDX_FAB3FC16F675F31B'     => 'author_id',
                 'idx_chat_message_created' => 'created_at',
-                'idx_chat_message_unread'  => 'conversation_id,id,author_id,deleted_at',
+                'idx_chat_message_unread'  => 'conversation_id,thread_root_id,id,author_id,deleted_at',
             ],
             'unique' => [
                 'uniq_chat_message_uuid' => 'uuid',
             ],
             'fk' => [
+                'FK_FAB3FC164645CC3E' => 'forwarded_from_message_id -> chat_message',
                 'FK_FAB3FC1659662AC1' => 'pinned_by_id -> test_user',
                 'FK_FAB3FC169AC0396'  => 'conversation_id -> chat_conversation',
+                'FK_FAB3FC16BDD9A572' => 'forwarded_from_conversation_id -> chat_conversation',
                 'FK_FAB3FC16C76F1F52' => 'deleted_by_id -> test_user',
+                'FK_FAB3FC16C8BC80CF' => 'thread_root_id -> chat_message',
                 'FK_FAB3FC16F675F31B' => 'author_id -> test_user',
             ],
         ],
@@ -344,6 +401,16 @@ final class SchemaNamesTest extends TestCase
             'fk' => [
                 'FK_119AF996537A1329' => 'message_id -> chat_message',
                 'FK_119AF996A76ED395' => 'user_id -> test_user',
+            ],
+        ],
+        'chat_message_revision' => [
+            'indexes' => [
+                'IDX_91290510537A1329'      => 'message_id',
+                'idx_chat_revision_message' => 'message_id,id',
+            ],
+            'unique' => [],
+            'fk'     => [
+                'FK_91290510537A1329' => 'message_id -> chat_message',
             ],
         ],
         'chat_participant' => [
@@ -381,7 +448,6 @@ final class SchemaNamesTest extends TestCase
                 'FK_90F5D0C7A76ED395' => 'user_id -> test_user',
             ],
         ],
-        // 1.35: read times (message info) and saved messages.
         'chat_read_mark' => [
             'indexes' => [
                 'IDX_C56D3C339D1C3019'    => 'participant_id',
@@ -407,7 +473,19 @@ final class SchemaNamesTest extends TestCase
                 'FK_A6FDA737A76ED395' => 'user_id -> test_user',
             ],
         ],
-        // 1.30: the ticket number counter (primary key only).
+        'chat_thread_read' => [
+            'indexes' => [
+                'IDX_2394AA71A76ED395' => 'user_id',
+                'IDX_2394AA71F639B458' => 'root_message_id',
+            ],
+            'unique' => [
+                'uniq_chat_thread_read' => 'root_message_id,user_id',
+            ],
+            'fk' => [
+                'FK_2394AA71A76ED395' => 'user_id -> test_user',
+                'FK_2394AA71F639B458' => 'root_message_id -> chat_message',
+            ],
+        ],
         'chat_ticket_counter' => [
             'indexes' => [],
             'unique'  => [],

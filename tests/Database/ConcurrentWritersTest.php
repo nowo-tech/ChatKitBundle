@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Database;
 
+use Doctrine\DBAL\ParameterType;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Database\Support\LoadDatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
@@ -14,6 +15,7 @@ use function json_decode;
 use function microtime;
 use function proc_close;
 use function proc_open;
+use function sort;
 use function stream_get_contents;
 
 use const JSON_THROW_ON_ERROR;
@@ -106,6 +108,54 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
         [$a, $b] = $this->race('optout', 'readonly');
         $this->assertClean($a, $b);
         self::assertSame(0, (int) $this->connection()->fetchOne('SELECT share_read_times FROM nowo_chat_user_settings WHERE user_id = (SELECT id FROM test_user WHERE name = ?)', ['luis']));
+    }
+
+    /**
+     * 1.36 (REQ-RUNTIME-003 rule 7): two workers send the same forward under one `Idempotency-Key`: one copy, and every
+     * call answers (the second one with the first one's copy).
+     */
+    public function testOneForwardUnderOneKey(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('forward', 'forward');
+        $this->assertClean($a, $b);
+        self::assertSame(1, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE forwarded = ?', [true], [ParameterType::BOOLEAN]));
+        self::assertSame(1, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_idempotency'));
+    }
+
+    /**
+     * 1.36: concurrent replies in one thread (and a sender in the conversation): the root counts every reply.
+     */
+    public function testConcurrentRepliesKeepTheCount(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('thread', 'thread');
+        $this->assertClean($a, $b);
+        $root = $this->connection()->fetchAssociative('SELECT id, thread_reply_count FROM nowo_chat_message WHERE thread_root_id IS NULL ORDER BY id LIMIT 1');
+        self::assertIsArray($root);
+        self::assertSame(2 * self::CALLS, (int) $root['thread_reply_count']);
+        self::assertSame(2 * self::CALLS, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE thread_root_id = ?', [$root['id']]));
+    }
+
+    /**
+     * 1.36: concurrent edits of one message: each previous text is kept once, none is lost.
+     */
+    public function testConcurrentEditsKeepEveryPreviousText(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('edit', 'edit');
+        $this->assertClean($a, $b);
+        $texts = $this->connection()->fetchFirstColumn('SELECT body FROM nowo_chat_message_revision ORDER BY id');
+        $final = (string) $this->connection()->fetchOne('SELECT body FROM nowo_chat_message WHERE thread_root_id IS NULL ORDER BY id LIMIT 1');
+        $all   = [...$texts, $final];
+        sort($all);
+        $expected = ['seed'];
+        for ($i = 0; $i < self::CALLS; ++$i) {
+            $expected[] = 'a edit ' . $i;
+            $expected[] = 'b edit ' . $i;
+        }
+        sort($expected);
+        self::assertSame($expected, $all);
     }
 
     /**

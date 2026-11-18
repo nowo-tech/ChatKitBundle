@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Service;
 
+use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatMessageActionsInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -29,12 +30,18 @@ final readonly class ChatMessageMenu implements ChatMessageActionsInterface
      * @param ChatConversationRepository $conversations Conversations by uuid
      * @param ChatMessageRepository $messages Messages by uuid
      * @param ChatVoter $voter The API's authorization rules
+     * @param ChatForwarder|null $forwarder 1.36: forward
+     * @param ChatThreads|null $threads 1.36: threads
+     * @param ChatEditHistory|null $history 1.36: edit history
      */
     public function __construct(
         private ChatMessageActions $actions,
         private ChatConversationRepository $conversations,
         private ChatMessageRepository $messages,
         private ChatVoter $voter,
+        private ?ChatForwarder $forwarder = null,
+        private ?ChatThreads $threads = null,
+        private ?ChatEditHistory $history = null,
     ) {
     }
 
@@ -79,16 +86,79 @@ final readonly class ChatMessageMenu implements ChatMessageActionsInterface
     }
 
     /**
-     * The message the actor may `$attribute`, in a conversation the actor may read; unknown and forbidden are the same.
+     * {@inheritDoc}
      */
-    private function message(ChatUserInterface $actor, string $conversationUuid, string $messageUuid, string $attribute): ChatMessage
+    public function forward(ChatUserInterface $actor, string $conversationUuid, string $messageUuid, array $targets, ?string $comment, string $idempotencyKey): array
+    {
+        $source = $this->message($actor, $conversationUuid, $messageUuid, ChatVoter::FORWARD);
+        if (!$this->forwarder instanceof ChatForwarder) {
+            throw new ChatNotFoundException('message', $messageUuid);
+        }
+        $this->assertKey($idempotencyKey);
+
+        return array_map(ChatMessageView::of(...), $this->forwarder->forward($actor, $source, $targets, $comment, $idempotencyKey)[0]);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function thread(ChatUserInterface $actor, string $conversationUuid, string $messageUuid, ?int $before = null): array
+    {
+        if ($this->threads?->enabled() !== true) {
+            throw new ChatNotFoundException('message', $messageUuid);
+        }
+        $root = ChatThreads::rootOf($this->message($actor, $conversationUuid, $messageUuid, null));
+        $page = $this->threads->page($actor, $root, $before, null);
+
+        return ['root' => ChatMessageView::of($root), 'replies' => array_map(ChatMessageView::of(...), $page['replies']), 'hasMore' => $page['hasMore'], 'readUpTo' => $page['readUpTo']];
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function replyInThread(ChatUserInterface $actor, string $conversationUuid, string $messageUuid, string $body, string $idempotencyKey): ChatMessageView
+    {
+        $root = $this->message($actor, $conversationUuid, $messageUuid, ChatVoter::THREAD);
+        if (!$this->threads instanceof ChatThreads) {
+            throw new ChatNotFoundException('message', $messageUuid);
+        }
+        $this->assertKey($idempotencyKey);
+
+        return ChatMessageView::of($this->threads->reply($actor, $root, $body, $idempotencyKey)[0]);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function revisions(ChatUserInterface $actor, string $conversationUuid, string $messageUuid): array
+    {
+        $message = $this->message($actor, $conversationUuid, $messageUuid, ChatVoter::HISTORY);
+
+        return $this->history?->revisions($actor, $message) ?? [];
+    }
+
+    /**
+     * @throws InvalidArgumentException `idempotency_key_invalid`
+     */
+    private function assertKey(string $key): void
+    {
+        if (!ChatIdempotency::isValidKey($key)) {
+            throw new InvalidArgumentException('idempotency_key_invalid');
+        }
+    }
+
+    /**
+     * The message the actor may `$attribute` (null: read), in a conversation the actor may read; unknown and forbidden
+     * are the same.
+     */
+    private function message(ChatUserInterface $actor, string $conversationUuid, string $messageUuid, ?string $attribute): ChatMessage
     {
         $conversation = $this->conversations->findOneByUuid($conversationUuid);
         if (!$conversation instanceof ChatConversation || $conversation->getUuid() !== $conversationUuid || !$this->voter->decide(ChatVoter::VIEW, $conversation, $actor)) {
             throw new ChatNotFoundException('conversation', $conversationUuid);
         }
         $message = $this->messages->findOneInConversation($conversation, $messageUuid);
-        if (!$message instanceof ChatMessage || $message->getUuid() !== $messageUuid || !$this->voter->decide($attribute, $message, $actor)) {
+        if (!$message instanceof ChatMessage || $message->getUuid() !== $messageUuid || ($attribute !== null && !$this->voter->decide($attribute, $message, $actor))) {
             throw new ChatNotFoundException('message', $messageUuid);
         }
 

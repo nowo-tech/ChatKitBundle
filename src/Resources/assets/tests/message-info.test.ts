@@ -80,3 +80,32 @@ describe('message info (1.35)', () => {
     }
   });
 });
+
+describe('message info: edit history (1.36)', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('lists the edits and, on demand, the previous texts', async () => {
+    const revisions = vi.fn().mockResolvedValue([{ editedAt: '2026-10-15T10:03:00Z', body: 'old', html: '<p>old</p>' }]);
+    const dialog = openMessageInfo(info({ edits: [{ editedAt: '2026-10-15T10:03:00Z' }] }), { ...i18n, info_edits: 'Edits', info_show_history: 'Show', info_replaced_at: 'Replaced %time%' }, 'en', null, revisions);
+    expect(dialog.querySelectorAll('[data-part="info-edit"]')).toHaveLength(1);
+    (dialog.querySelector('[data-part="info-history"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(dialog.querySelector('[data-part="info-revision"]')).not.toBeNull());
+    expect(dialog.querySelector('.nowo-chat-info__revision-text')?.innerHTML).toBe('<p>old</p>');
+    expect(dialog.querySelector('[data-part="info-history"]')).toBeNull();
+  });
+
+  it('says when the previous texts cannot be read, and offers none without the loader', async () => {
+    const failing = vi.fn().mockRejectedValue(new Error('403'));
+    const dialog = openMessageInfo(info({ edits: [{ editedAt: '2026-10-15T10:03:00Z' }] }), { ...i18n, error: 'Error' }, 'en', null, failing);
+    const show = dialog.querySelector('[data-part="info-history"]') as HTMLButtonElement;
+    show.click();
+    await vi.waitFor(() => expect(dialog.querySelector('[data-part="info-history-status"]')?.textContent).toBe('Error'));
+    expect(show.disabled).toBe(false);
+    (dialog.querySelector('[data-part="info-close"]') as HTMLButtonElement).click();
+    const plain = openMessageInfo(info({ edits: [{ editedAt: '2026-10-15T10:03:00Z' }] }), i18n, 'en', null);
+    expect(plain.querySelector('[data-part="info-history"]')).toBeNull();
+    expect(openMessageInfo(info({ edits: [] }), i18n, 'en', null).querySelector('[data-part="info-edits"]')).toBeNull();
+  });
+});

@@ -72,7 +72,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
     /** 1.35: separator group of each message menu item (a separator goes between two groups). */
     public const array MENU_GROUPS = [
         'reply'       => 'compose',
+        'thread'      => 'compose',
         'quote'       => 'compose',
+        'forward'     => 'compose',
         'copy_text'   => 'keep',
         'copy_link'   => 'keep',
         'save'        => 'keep',
@@ -282,6 +284,12 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'save'      => $this->pattern('nowo_chat_api_save', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 'saved'     => $this->urls->generate('nowo_chat_api_saved'),
                 'savedPage' => $this->urls->generate('nowo_chat_page_saved'),
+                // 1.36: forward, threads, edit history.
+                'forwardTargets' => $this->urls->generate('nowo_chat_api_forward_targets'),
+                'forward'        => $this->pattern('nowo_chat_api_forward', ['messageUuid' => self::PLACEHOLDER], '__message__'),
+                'thread'         => $this->pattern('nowo_chat_api_thread', ['messageUuid' => self::PLACEHOLDER], '__message__'),
+                'threadRead'     => $this->pattern('nowo_chat_api_thread_read', ['messageUuid' => self::PLACEHOLDER], '__message__'),
+                'revisions'      => $this->pattern('nowo_chat_api_revisions', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 // 1.26: the session's current CSRF token (asked for once when the page's token is refused).
                 'csrf' => $this->urls->generate('nowo_chat_api_csrf'),
             ] + $this->linkEndpoints(),
@@ -333,7 +341,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
     /**
      * 1.35: the message menu for the client and the template (defaults when the extension is built without it).
      *
-     * @return array{order: list<string>, items: array<string, bool>, quick: list<string>, picker: bool, quoteMaxLength: int, saveDockEntry: bool}
+     * @return array{order: list<string>, items: array<string, bool>, quick: list<string>, picker: bool, quoteMaxLength: int, saveDockEntry: bool, forwardMaxTargets: int, editHistory: bool}
      */
     private function menuConfig(): array
     {
@@ -347,7 +355,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'order' => $order,
             'items' => [
                 'reply'       => true,
+                'thread'      => ($menu['threads']['enabled'] ?? false) === true,
                 'quote'       => ($menu['quote']['enabled'] ?? true) === true,
+                'forward'     => ($menu['forward']['enabled'] ?? false) === true,
                 'copy_text'   => ($menu['copy_text'] ?? true) === true,
                 'copy_link'   => true,
                 'save'        => ($menu['save']['enabled'] ?? false) === true,
@@ -361,6 +371,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'picker'         => ($menu['quick_reactions']['picker'] ?? true) === true,
             'quoteMaxLength' => (int) ($menu['quote']['max_length'] ?? 1000),
             'saveDockEntry'  => ($menu['save']['enabled'] ?? false) === true && ($menu['save']['dock_entry'] ?? true) === true,
+            // 1.36
+            'forwardMaxTargets' => (int) ($menu['forward']['max_targets'] ?? 5),
+            'editHistory'       => ($menu['edit_history']['enabled'] ?? false) === true,
         ];
     }
 

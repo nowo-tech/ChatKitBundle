@@ -11,6 +11,7 @@ use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReadMark;
 
 use function array_map;
+use function is_string;
 
 /**
  * 1.35: read times of participants (message info, `message_info.read_times`).
@@ -76,24 +77,34 @@ class ChatReadMarkRepository extends ServiceEntityRepository
         if ($participantIds === []) {
             return [];
         }
-        /** @var list<ChatReadMark> $rows */
-        $rows = $this->createQueryBuilder('r')
-            ->where('IDENTITY(r.participant) IN (:ids)')
+        // One query, the earliest time per participant in SQL (audit TK-2 R4); a participant with a cutoff only counts
+        // rows started at or after it.
+        $qb = $this->createQueryBuilder('r')
+            ->select('IDENTITY(r.participant) AS p', 'MIN(r.readAt) AS at')
             ->andWhere('r.upToMessageId >= :m')
-            ->setParameter('ids', $participantIds)
             ->setParameter('m', $messageId)
-            ->getQuery()
-            ->getResult();
-        $times = [];
-        foreach ($rows as $row) {
-            $id     = (int) $row->getParticipant()->getId();
+            ->groupBy('r.participant');
+        $plain = [];
+        $or    = $qb->expr()->orX();
+        foreach ($participantIds as $i => $id) {
             $cutoff = $since[$id] ?? null;
-            if ($cutoff instanceof DateTimeImmutable && $row->getStartedAt() < $cutoff) {
+            if (!$cutoff instanceof DateTimeImmutable) {
+                $plain[] = $id;
                 continue;
             }
-            if (!isset($times[$id]) || $row->getReadAt() < $times[$id]) {
-                $times[$id] = $row->getReadAt();
-            }
+            $or->add('IDENTITY(r.participant) = :p' . $i . ' AND r.startedAt >= :c' . $i);
+            $qb->setParameter('p' . $i, $id)->setParameter('c' . $i, $cutoff);
+        }
+        if ($plain !== []) {
+            $or->add('IDENTITY(r.participant) IN (:plain)');
+            $qb->setParameter('plain', $plain);
+        }
+        $qb->andWhere($or);
+        /** @var list<array{p: int|string, at: DateTimeImmutable|string}> $rows */
+        $rows  = $qb->getQuery()->getArrayResult();
+        $times = [];
+        foreach ($rows as $row) {
+            $times[(int) $row['p']] = is_string($row['at']) ? new DateTimeImmutable($row['at']) : $row['at'];
         }
 
         return $times;

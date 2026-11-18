@@ -187,6 +187,43 @@ describe('chat api client', () => {
     expect(fetchMock.mock.lastCall?.[0]).toBe('');
   });
 
+  it('1.36: forward targets, forward, thread, thread replies and reads, revisions', async () => {
+    const fetchMock = respond({ targets: [{ title: 'Acme' }], messages: [{ conversationUuid: 'x' }], root: { uuid: 'r' }, replies: [], message: { uuid: 'm' }, revisions: [{ body: 'old' }] });
+    vi.stubGlobal('fetch', fetchMock);
+    const api = new ChatApi({
+      ...config,
+      endpoints: { ...config.endpoints, forwardTargets: '/ft', forward: '/f/__uuid__/__message__', thread: '/t/__uuid__/__message__', threadRead: '/tr/__uuid__/__message__', revisions: '/r/__uuid__/__message__' },
+    });
+    expect((await api.forwardTargets('  ')).map((row) => row.title)).toEqual(['Acme']);
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/ft');
+    await api.forwardTargets('ac me');
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/ft?q=ac+me');
+    expect(await api.forward('c', 'm', [{ conversationUuid: 'x' }], ' ', 'key-1')).toEqual([{ conversationUuid: 'x' }]);
+    expect(fetchMock).toHaveBeenLastCalledWith('/f/c/m', expect.objectContaining({ method: 'POST', body: JSON.stringify({ targets: [{ conversationUuid: 'x' }] }), headers: expect.objectContaining({ 'Idempotency-Key': 'key-1', 'X-CSRF-TOKEN': 'tok' }) }));
+    await api.forward('c', 'm', [{ contactUuid: 'u' }], 'look', 'key-2');
+    expect(fetchMock.mock.lastCall?.[1]?.body).toBe(JSON.stringify({ targets: [{ contactUuid: 'u' }], comment: 'look' }));
+    expect((await api.thread('c', 'm')).root.uuid).toBe('r');
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/t/c/m');
+    await api.thread('c', 'm', { before: 5, after: 9 });
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/t/c/m?before=5&after=9');
+    expect((await api.threadReply('c', 'm', 'hi', 'key-3')).message.uuid).toBe('m');
+    expect(fetchMock).toHaveBeenLastCalledWith('/t/c/m', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'Idempotency-Key': 'key-3' }) }));
+    await api.threadRead('c', 'm', 7);
+    expect(fetchMock).toHaveBeenLastCalledWith('/tr/c/m', expect.objectContaining({ body: JSON.stringify({ messageId: 7 }) }));
+    expect((await api.revisions('c', 'm'))[0]?.body).toBe('old');
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/r/c/m');
+    // Without the endpoints (older servers) the URL is empty.
+    await new ChatApi(config).forwardTargets('');
+    expect(fetchMock.mock.lastCall?.[0]).toBe('');
+  });
+
+  it('1.36: a refused forward says which target', async () => {
+    vi.stubGlobal('fetch', respond({ error: 'forward_forbidden', target: 2 }, false, 403));
+    await expect(new ChatApi(config).forward('c', 'm', [], '', 'k')).rejects.toMatchObject({ code: 'forward_forbidden', target: 2 });
+    vi.stubGlobal('fetch', respond({ error: 'forward_forbidden', target: 'x' }, false, 403));
+    await expect(new ChatApi(config).forward('c', 'm', [], '', 'k')).rejects.toMatchObject({ target: null });
+  });
+
   it('calls the pinned links and links panel endpoints (1.19)', async () => {
     const fetchMock = respond({ links: [], canManage: true, max: 10 });
     vi.stubGlobal('fetch', fetchMock);

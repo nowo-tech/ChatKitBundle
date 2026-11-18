@@ -14,9 +14,17 @@ use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageLink;
+use Nowo\ChatKitBundle\Entity\ChatMessageRevision;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
+use Nowo\ChatKitBundle\Entity\ChatThreadRead;
+use Nowo\ChatKitBundle\Model\ChatUserInterface;
+
+use function array_reverse;
+use function array_unique;
+use function array_values;
+use function count;
 
 /**
  * Queries for messages: cursor pages, latest message per conversation, unread counts and the retention purge.
@@ -65,7 +73,8 @@ class ChatMessageRepository extends ServiceEntityRepository
     {
         $qb = $this->createQueryBuilder('m');
         $this->refs->join($qb, 'm.author', 'a');
-        $qb->where('m.conversation = :conversation')
+        // 1.36: thread replies are not part of the main timeline.
+        $qb->where('m.conversation = :conversation AND m.threadRoot IS NULL')
             ->setParameter('conversation', $conversation)
             ->setMaxResults($limit);
         if ($afterId !== null) {
@@ -96,7 +105,7 @@ class ChatMessageRepository extends ServiceEntityRepository
     public function findIdBefore(ChatConversation $conversation, int $messageId): ?int
     {
         $id = $this->createQueryBuilder('m')->select('MAX(m.id)')
-            ->where('m.conversation = :conversation AND m.id < :id')
+            ->where('m.conversation = :conversation AND m.id < :id AND m.threadRoot IS NULL')
             ->setParameter('conversation', $conversation)
             ->setParameter('id', $messageId)
             ->getQuery()
@@ -114,7 +123,8 @@ class ChatMessageRepository extends ServiceEntityRepository
      */
     public function findLatest(ChatConversation $conversation): ?ChatMessage
     {
-        return $this->findOneBy(['conversation' => $conversation], ['id' => 'DESC']);
+        // 1.36: of the main timeline (a thread reply is not the conversation's newest message).
+        return $this->findOneBy(['conversation' => $conversation, 'threadRoot' => null], ['id' => 'DESC']);
     }
 
     /**
@@ -145,6 +155,7 @@ class ChatMessageRepository extends ServiceEntityRepository
                FROM ' . $messages . ' m
           LEFT JOIN ' . $participants . ' p ON p.conversation_id = m.conversation_id AND p.user_id = :user' . $sameUser . '
               WHERE m.conversation_id IN (:ids)
+                AND m.thread_root_id IS NULL
                 AND m.deleted_at IS NULL
                 AND (m.author_id IS NULL OR ' . $otherAuthor . ')
                 AND m.id > COALESCE(p.last_read_message_id, 0)
@@ -175,7 +186,7 @@ class ChatMessageRepository extends ServiceEntityRepository
         }
         $latestIds = $this->createQueryBuilder('m2')
             ->select('MAX(m2.id)')
-            ->where('IDENTITY(m2.conversation) IN (:ids)')
+            ->where('IDENTITY(m2.conversation) IN (:ids) AND m2.threadRoot IS NULL')
             ->groupBy('m2.conversation')
             ->setParameter('ids', $conversationIds)
             ->getQuery()
@@ -218,6 +229,35 @@ class ChatMessageRepository extends ServiceEntityRepository
         if ($ids === []) {
             return 0;
         }
+        // 1.36: a purged root takes its thread with it (replies, their rows), and the previous texts go with the messages.
+        $replies = $this->createQueryBuilder('m')
+            ->select('m.id')
+            ->where('IDENTITY(m.threadRoot) IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->getSingleColumnResult();
+        $ids = array_values(array_unique([...$ids, ...$replies]));
+        ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
+            ->delete(ChatMessageRevision::class, 'rv')
+            ->where('IDENTITY(rv.message) IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute());
+        ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
+            ->delete(ChatThreadRead::class, 'tr')
+            ->where('IDENTITY(tr.root) IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute());
+        // Forwards of these messages keep their neutral marker.
+        ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('f')
+            ->update()
+            ->set('f.forwardedFrom', ':none')
+            ->where('IDENTITY(f.forwardedFrom) IN (:ids)')
+            ->setParameter('none', null)
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute());
         ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->delete(ChatReaction::class, 'r')
             ->where('IDENTITY(r.message) IN (:ids)')
@@ -239,12 +279,139 @@ class ChatMessageRepository extends ServiceEntityRepository
             ->getQuery()
             ->execute());
 
+        // Replies before their roots (the self-reference).
+        ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')
+            ->delete()
+            ->where('m.id IN (:ids) AND m.threadRoot IS NOT NULL')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute());
+
         return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')
             ->delete()
             ->where('m.id IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
             ->execute());
+    }
+
+    /**
+     * 1.36: a page of a thread's replies, oldest first (`afterId`: what arrived after it; `beforeId`: the older page).
+     *
+     * @param ChatMessage $root The root
+     * @param int $limit Page size
+     * @param int|null $beforeId Replies older than this id; null for the newest page
+     * @param int|null $afterId Replies newer than this id instead (takes precedence)
+     *
+     * @return list<ChatMessage> The page, oldest first
+     */
+    public function findReplies(ChatMessage $root, int $limit, ?int $beforeId = null, ?int $afterId = null): array
+    {
+        $qb = $this->createQueryBuilder('m');
+        $this->refs->join($qb, 'm.author', 'a');
+        $qb->where('m.threadRoot = :root')->setParameter('root', $root)->setMaxResults($limit);
+        if ($afterId !== null) {
+            /** @var list<ChatMessage> $newer */
+            $newer = $qb->andWhere('m.id > :after')->setParameter('after', $afterId)->orderBy('m.id', 'ASC')->getQuery()->getResult();
+
+            return $newer;
+        }
+        if ($beforeId !== null) {
+            $qb->andWhere('m.id < :before')->setParameter('before', $beforeId);
+        }
+        /** @var list<ChatMessage> $rows */
+        $rows = $qb->orderBy('m.id', 'DESC')->getQuery()->getResult();
+
+        return array_reverse($rows);
+    }
+
+    /**
+     * 1.36: counts a new (or deleted) reply on its root in one statement, under the conversation's lock (the unit of
+     * work of every reply takes it first): concurrent replies never lose a count.
+     *
+     * @param ChatMessage $root The root
+     * @param int $delta +1 for a new reply, -1 for a deleted one
+     * @param DateTimeImmutable|null $at Time of the new reply (moves the last reply time forward only); null keeps it
+     */
+    public function countReply(ChatMessage $root, int $delta, ?DateTimeImmutable $at): void
+    {
+        $qb = $this->createQueryBuilder('m')->update()
+            ->set('m.threadReplyCount', 'm.threadReplyCount + :delta')
+            ->where('m.id = :id')
+            ->setParameter('delta', $delta)
+            ->setParameter('id', $root->getId());
+        if ($delta < 0) {
+            $qb->andWhere('m.threadReplyCount > 0');
+        }
+        ChatKitSavepoint::write($this->getEntityManager(), static fn (): mixed => $qb->getQuery()->execute());
+        if ($at instanceof DateTimeImmutable) {
+            ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')->update()
+                ->set('m.threadLastReplyAt', ':at')
+                ->where('m.id = :id AND (m.threadLastReplyAt IS NULL OR m.threadLastReplyAt < :at)')
+                ->setParameter('at', $at)
+                ->setParameter('id', $root->getId())
+                ->getQuery()
+                ->execute());
+        }
+    }
+
+    /**
+     * 1.36: id of the newest reply (not deleted) of each thread, one query.
+     *
+     * @param non-empty-list<int> $rootIds Root ids
+     *
+     * @return array<int, int> root id => newest reply id (threads without a reply are left out)
+     */
+    public function latestReplyIds(array $rootIds): array
+    {
+        $rows = $this->createQueryBuilder('m')
+            ->select('IDENTITY(m.threadRoot) AS root', 'MAX(m.id) AS latest')
+            ->where('IDENTITY(m.threadRoot) IN (:ids) AND m.deletedAt IS NULL')
+            ->groupBy('m.threadRoot')
+            ->setParameter('ids', $rootIds)
+            ->getQuery()
+            ->getArrayResult();
+        $latest = [];
+        foreach ($rows as $row) {
+            $latest[(int) $row['root']] = (int) $row['latest'];
+        }
+
+        return $latest;
+    }
+
+    /**
+     * 1.36: the newest repliers of threads (up to three per root, newest first), one query for a page of the timeline.
+     *
+     * @param non-empty-list<int> $rootIds Root ids
+     *
+     * @return array<int, list<ChatUserInterface>> root id => repliers
+     */
+    public function recentRepliers(array $rootIds): array
+    {
+        $qb = $this->createQueryBuilder('m');
+        $this->refs->join($qb, 'm.author', 'a');
+        /** @var list<ChatMessage> $rows */
+        $rows = $qb->where('IDENTITY(m.threadRoot) IN (:ids) AND m.deletedAt IS NULL')
+            ->setParameter('ids', $rootIds)
+            ->orderBy('m.id', 'DESC')
+            ->setMaxResults(count($rootIds) * 20)
+            ->getQuery()
+            ->getResult();
+        $byRoot = [];
+        $seen   = [];
+        foreach ($rows as $reply) {
+            $root   = (int) $reply->getThreadRoot()?->getId();
+            $author = $reply->getAuthor();
+            // An author-less reply is a tombstone (erased), which the query leaves out already.
+            $key = $root . ':' . ($author instanceof ChatUserInterface ? ChatUserReferences::key($author) : '');
+            if (!$author instanceof ChatUserInterface || isset($seen[$key]) || count($byRoot[$root] ?? []) >= 3) {
+                continue;
+            }
+            $seen[$key]      = true;
+            $byRoot[$root][] = $author;
+        }
+
+        return $byRoot;
     }
 
     /**

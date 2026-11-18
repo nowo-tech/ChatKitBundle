@@ -6,7 +6,7 @@
  */
 import { h } from './dom';
 import { exactTimeLabel, t } from './format';
-import type { MessageInfo } from './types';
+import type { MessageInfo, MessageRevision } from './types';
 
 /**
  * Builds and opens the dialog.
@@ -17,7 +17,13 @@ import type { MessageInfo } from './types';
  * @param returnTo Element focused again when the dialog closes.
  * @returns The open dialog (removed from the page once closed).
  */
-export function openMessageInfo(info: MessageInfo, i18n: Record<string, string>, locale: string, returnTo: HTMLElement | null): HTMLDialogElement {
+export function openMessageInfo(
+  info: MessageInfo,
+  i18n: Record<string, string>,
+  locale: string,
+  returnTo: HTMLElement | null,
+  revisions: (() => Promise<MessageRevision[]>) | null = null,
+): HTMLDialogElement {
   const title = h('h2', { class: 'nowo-chat-info__title', id: `nowo-chat-info-${Date.now()}`, text: t(i18n, 'info_title') });
   const close = h('button', { type: 'button', class: 'nowo-chat-info__close', 'data-part': 'info-close', text: t(i18n, 'info_close') });
   const body = h('div', { class: 'nowo-chat-info__body' });
@@ -45,8 +51,69 @@ export function openMessageInfo(info: MessageInfo, i18n: Record<string, string>,
   if (info.editedAt !== null) {
     body.append(h('p', { class: 'nowo-chat-info__edited', 'data-part': 'info-edited' }, h('time', { datetime: info.editedAt, text: t(i18n, 'info_edited', { time: exactTimeLabel(info.editedAt, locale) }) })));
   }
+  // 1.36: the edits (edit history), and their previous texts for the author and moderators.
+  const edits = info.edits ?? [];
+  if (edits.length > 0) {
+    body.append(editsSection(edits, i18n, locale, revisions));
+  }
   const dialog = h('dialog', { class: 'nowo-chat-info', 'aria-labelledby': title.id, 'data-part': 'info-dialog' }, title, body, close);
-  close.addEventListener('click', () => closeDialog(dialog));
+  presentDialog(dialog, close, returnTo);
+  return dialog;
+}
+
+/**
+ * 1.36: the "Edits" part of the info dialog: when the message was edited and, on demand, the previous texts.
+ *
+ * @param edits Edit times, newest first.
+ * @param i18n Translated strings.
+ * @param locale Locale of the times.
+ * @param revisions Loads the previous texts (null: the viewer may not read them).
+ * @returns The section.
+ */
+function editsSection(edits: { editedAt: string }[], i18n: Record<string, string>, locale: string, revisions: (() => Promise<MessageRevision[]>) | null): HTMLElement {
+  const heading = h('h3', { class: 'nowo-chat-info__subtitle', text: t(i18n, 'info_edits') });
+  const list = h('ul', { class: 'nowo-chat-info__list', role: 'list', 'data-part': 'info-edits' });
+  for (const edit of edits) {
+    list.append(h('li', { class: 'nowo-chat-info__edit', 'data-part': 'info-edit' }, h('time', { datetime: edit.editedAt, text: exactTimeLabel(edit.editedAt, locale) })));
+  }
+  const section = h('section', { class: 'nowo-chat-info__edits', 'aria-label': t(i18n, 'info_edits') }, heading, list);
+  if (revisions !== null) {
+    const show = h('button', { type: 'button', class: 'nowo-chat-info__history', 'data-part': 'info-history', text: t(i18n, 'info_show_history') });
+    const status = h('p', { class: 'nowo-chat-info__hint', role: 'status', 'data-part': 'info-history-status' });
+    show.addEventListener('click', () => {
+      show.disabled = true;
+      revisions()
+        .then((rows) => {
+          const texts = h('ol', { class: 'nowo-chat-info__revisions', 'data-part': 'info-revisions' });
+          for (const row of rows) {
+            const text = h('div', { class: 'nowo-chat-bubble nowo-chat-info__revision-text' });
+            // Server-sanitised render of the previous text (ChatMarkdownRenderer), as message bubbles.
+            // eslint-disable-next-line no-restricted-syntax -- sanitised on the server, see ChatMarkdownRenderer
+            text.innerHTML = row.html;
+            texts.append(h('li', { class: 'nowo-chat-info__revision', 'data-part': 'info-revision' }, h('time', { datetime: row.editedAt, text: t(i18n, 'info_replaced_at', { time: exactTimeLabel(row.editedAt, locale) }) }), text));
+          }
+          show.replaceWith(texts);
+        })
+        .catch(() => {
+          show.disabled = false;
+          status.textContent = t(i18n, 'error');
+        });
+    });
+    section.append(show, status);
+  }
+  return section;
+}
+
+/**
+ * 1.36: shows a modal dialog of the dock (focus on `focus`, Escape and the backdrop close it, focus goes back to
+ * `returnTo`, the dialog leaves the page once closed).
+ *
+ * @param dialog The dialog.
+ * @param focus Element focused when it opens.
+ * @param returnTo Element focused again when it closes.
+ */
+export function presentDialog(dialog: HTMLDialogElement, focus: HTMLElement, returnTo: HTMLElement | null): void {
+  dialog.querySelectorAll<HTMLElement>('[data-part$="-close"], [data-part="dialog-cancel"]').forEach((button) => button.addEventListener('click', () => closeDialog(dialog)));
   dialog.addEventListener('close', () => {
     dialog.remove();
     returnTo?.focus({ preventScroll: true });
@@ -63,8 +130,7 @@ export function openMessageInfo(info: MessageInfo, i18n: Record<string, string>,
   } else {
     dialog.setAttribute('open', '');
   }
-  close.focus();
-  return dialog;
+  focus.focus();
 }
 
 /**
@@ -72,7 +138,7 @@ export function openMessageInfo(info: MessageInfo, i18n: Record<string, string>,
  *
  * @param dialog The dialog.
  */
-function closeDialog(dialog: HTMLDialogElement): void {
+export function closeDialog(dialog: HTMLDialogElement): void {
   if (typeof dialog.close === 'function') {
     dialog.close();
     return;

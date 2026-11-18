@@ -80,7 +80,7 @@ final class ChatApiExceptionListener
         if (!$exception instanceof ChatApiException) {
             return;
         }
-        $response = new JsonResponse(['ok' => false, 'error' => $exception->getMessage()] + ($exception->reason === '' ? [] : ['message' => mb_scrub($exception->reason, 'UTF-8')]), $exception->getCode());
+        $response = new JsonResponse(['ok' => false, 'error' => $exception->getMessage()] + ($exception->reason === '' ? [] : ['message' => mb_scrub($exception->reason, 'UTF-8')]) + $exception->details, $exception->getCode());
         $response->headers->set('Cache-Control', 'no-store, private');
         $event->setResponse($response);
     }
