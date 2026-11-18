@@ -786,7 +786,7 @@ Target 1.25.1: follow-ups of audit KJ on the 1.25 sidebar. No schema, configurat
 
 ## [1.25.0] - 2026-11-10
 
-Target 1.25.0: the Slack-style sidebar (owner request via Symfony Beacon). Additive; defaults keep 1.24 behaviour (no
+Target 1.25.0: the grouped sidebar (owner request via Symfony Beacon). Additive; defaults keep 1.24 behaviour (no
 provider and both options off: the same dock configuration, markup and list).
 
 ### Added
@@ -1005,7 +1005,7 @@ Dialog rule v2: the link dialog uses the medium width and a content-driven heigh
 
 ### Added
 
-- **Links (1.19, owner request: "attach links, e.g. the Teams link in a channel or in a conversation with a colleague,
+- **Links (1.19, owner request: "attach links, e.g. a video-meeting link in a channel or in a conversation with a colleague,
   and have access to those links").** See [USAGE — Links](USAGE.md#links).
   - **Pinned links per conversation** (like bookmarks): a compact bar under the conversation header with link chips
     (provider icon + title). Members add, edit and remove them in a medium dialog (UiKit 2.29 anatomy: header, body,
@@ -1690,7 +1690,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
   locale), refreshed by one page-wide 30 s ticker; every message time has the **exact date and time** as its tooltip
   (also on the full-page chat). New `format.ts` helpers `relativeTimeLabel`, `exactTimeLabel`, `paintMessageTime`,
   `refreshRelativeTimes`; new strings `chat.just_now`, `chat.edit_hint`, `chat.deleted_message_mine`.
-- Deleted messages read like WhatsApp: a ban icon (new `ban` icon, `tabler:ban` with `icon_set: ux_icon`) and
+- Deleted messages show a placeholder: a ban icon (new `ban` icon, `tabler:ban` with `icon_set: ux_icon`) and
   "You deleted this message" for your own / "This message was deleted" for someone else's.
 
 ### Changed
@@ -1785,7 +1785,7 @@ Chat page on the UiKit 2.2 page contract (REQ-UI-003) and dock tokens from `--no
 
 ### Added
 
-- Floating LinkedIn-style chat dock: direct messages, application channels (`ChatChannelProviderInterface`), shared
+- Floating chat dock: direct messages, application channels (`ChatChannelProviderInterface`), shared
   support inbox with resolve / reopen and agent moderation.
 - Doctrine model (`nowo_chat_*` tables), `ChatUserInterface` mapped to the profile `user_class`, per-user settings.
 - Contracts: `ChatDirectoryInterface`, `ChatAccessPolicyInterface` (required); channel provider, realtime transport

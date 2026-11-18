@@ -7,7 +7,7 @@
 
 ## Summary
 
-A LinkedIn-style floating chat for Symfony applications. Installing the bundle gives integrators:
+A floating chat for Symfony applications. Installing the bundle gives integrators:
 
 - **Configuration** under `nowo_chat_kit` (`default_profile` + `profiles`), with the user entity (`user_class`), retention, realtime, Web Push, email digest, icons, reactions, rate limits and the full-page layout.
 - **A Doctrine model** (`nowo_chat_*` tables) for direct conversations, application channels and support threads, with participants, read cursors, messages (Markdown + sanitised HTML, tombstones, buzz), reactions and per-user settings.

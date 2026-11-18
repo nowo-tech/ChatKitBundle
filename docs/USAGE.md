@@ -592,7 +592,7 @@ or the page stays at that minimum. `--nowo-chat-page-height` does not apply on s
 
 ### Sidebar sections (1.25)
 
-The list becomes one grouped, collapsible sidebar (Slack-style) on the full-page chat as soon as one
+The list becomes one grouped, collapsible sidebar on the full-page chat as soon as one
 `ChatSidebarSectionProviderInterface` service exists, and in the floating dock too with
 `web_ui.dock.sidebar_sections: true` (both without a provider shows the bundle's own sections only):
 
@@ -1528,7 +1528,7 @@ message cannot open another element's menu.
 
 ## Links
 
-1.19. Links such as the Teams meeting of a team, in a channel or in a direct conversation:
+1.19. Links such as a team's video-meeting link, in a channel or in a direct conversation:
 
 - **Pinned links** — a compact bar under the conversation header shows the conversation's links as chips (provider
   icon + title; a click opens the link in a new tab). Members with the right add, edit and remove them through a dialog
