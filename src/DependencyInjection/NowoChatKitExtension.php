@@ -20,6 +20,7 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Model\ChatUserReferenceInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Nowo\ChatKitBundle\RuntimeSetting\RuntimeSettingRetentionPolicyProvider;
+use Nowo\ChatKitBundle\Support\ChatEmojiCatalog;
 use Nowo\ChatKitBundle\Support\ChatRetention;
 use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
@@ -44,6 +45,7 @@ use Symfony\Component\DependencyInjection\Reference;
 
 use function array_key_exists;
 use function class_exists;
+use function in_array;
 use function is_a;
 use function is_array;
 use function is_string;
@@ -192,6 +194,18 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'push_preview', 'cache_pool', 'page_layout', 'web_ui', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'auto_away_minutes', 'status_presets', 'max_pins', 'auto_reply_interval_hours', 'limits', 'digest', 'doctrine', 'support', 'dock', 'links'] as $key) {
             $container->setParameter(Configuration::ALIAS . '.' . $key, $profile[$key]);
         }
+        // 1.35: the message menu; the quick reactions must be ones the server accepts.
+        $accepted = ChatEmojiCatalog::accepted($profile['reactions'], $profile['message_menu']['quick_reactions']['picker']);
+        foreach ($profile['message_menu']['quick_reactions']['emojis'] as $emoji) {
+            if (!in_array($emoji, $accepted, true)) {
+                throw new InvalidConfigurationException(sprintf('nowo_chat_kit: message_menu.quick_reactions.emojis has "%s", which is neither in "reactions" nor (with quick_reactions.picker) in the picker catalog.', $emoji));
+            }
+        }
+        $container->setParameter(Configuration::ALIAS . '.message_menu', $profile['message_menu']);
+        foreach ($profile['message_menu'] as $key => $value) {
+            $container->setParameter(Configuration::ALIAS . '.message_menu.' . $key, $value);
+        }
+        $container->setParameter(Configuration::ALIAS . '.accepted_reactions', $accepted);
 
         // #references: every application service implementing the contract is a provider.
         $container->registerForAutoconfiguration(ChatReferenceProviderInterface::class)->addTag(ChatReferenceProviderInterface::TAG);

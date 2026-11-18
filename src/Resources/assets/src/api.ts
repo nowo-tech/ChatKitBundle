@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, LinkPreview, LinksPage, Member, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SidebarSection, SupportContext, SupportStatus, SupportTicket } from './types';
+import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, LinkPreview, LinksPage, Member, MessageInfo, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SidebarSection, SupportContext, SupportStatus, SupportTicket } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -211,6 +211,40 @@ export class ChatApi {
   }
 
   /**
+   * 1.35: "Mark unread from here": the read marker moves to just before the message.
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid Message uuid.
+   * @returns The read marker now (null: nothing read).
+   */
+  async markUnread(uuid: string, messageUuid: string): Promise<number | null> {
+    return (await this.request<{ readUpTo: number | null }>('POST', this.messageUrl('unread', uuid, messageUuid), {})).readUpTo;
+  }
+
+  /**
+   * 1.35: saves (or unsaves) a message for later.
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid Message uuid.
+   * @param saved True to save, false to unsave.
+   * @returns Whether it is saved now.
+   */
+  async setSaved(uuid: string, messageUuid: string, saved: boolean): Promise<boolean> {
+    return (await this.request<{ saved: boolean }>(saved ? 'PUT' : 'DELETE', this.messageUrl('save', uuid, messageUuid), {})).saved;
+  }
+
+  /**
+   * 1.35: message info (readers, read times, edit time).
+   *
+   * @param uuid Conversation uuid.
+   * @param messageUuid Message uuid.
+   * @returns The info.
+   */
+  async messageInfo(uuid: string, messageUuid: string): Promise<MessageInfo> {
+    return this.get(this.messageUrl('info', uuid, messageUuid));
+  }
+
+  /**
    * Pinned links of a conversation, oldest first, whether the viewer may manage them and the limit (1.19).
    *
    * @param uuid Conversation uuid.
@@ -383,7 +417,7 @@ export class ChatApi {
   async messages(
     uuid: string,
     cursor: { before?: number; after?: number } = {},
-  ): Promise<{ messages: ChatMessage[]; hasMore: boolean; readUpTo: number | null; readers: Reader[] }> {
+  ): Promise<{ messages: ChatMessage[]; hasMore: boolean; readUpTo: number | null; readers: Reader[]; saved?: string[] }> {
     const params = new URLSearchParams();
     if (cursor.before !== undefined) {
       params.set('before', String(cursor.before));
@@ -611,7 +645,7 @@ export class ChatApi {
    * @param messageUuid Message uuid.
    * @returns The URL.
    */
-  private messageUrl(kind: 'message' | 'reactions' | 'pin' | 'messageLink', uuid: string, messageUuid: string): string {
+  private messageUrl(kind: 'message' | 'reactions' | 'pin' | 'messageLink' | 'unread' | 'info' | 'save', uuid: string, messageUuid: string): string {
     return (this.config.endpoints[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid)).replace('__message__', encodeURIComponent(messageUuid));
   }
 
@@ -656,7 +690,7 @@ export class ChatApi {
    * @param body Value sent as JSON.
    * @returns The decoded payload.
    */
-  private async request<T>(method: 'POST' | 'PATCH' | 'DELETE', url: string, body: unknown): Promise<T> {
+  private async request<T>(method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, body: unknown): Promise<T> {
     if (this.csrfRejected) {
       throw new ChatApiError(403, 'invalid_csrf');
     }

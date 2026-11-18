@@ -20,6 +20,7 @@ use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
+use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Security\ChatAccess;
@@ -61,6 +62,7 @@ final class UserReferenceListener implements ResetInterface
         ChatParticipant::class      => ['user' => false],
         ChatQuickReply::class       => ['user' => false],
         ChatReaction::class         => ['user' => false],
+        ChatSavedMessage::class     => ['user' => false],
         ChatUserSettings::class     => ['user' => false],
     ];
 

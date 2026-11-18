@@ -8,7 +8,7 @@ business chat is expected to offer. It is a plan, not a commitment: every item b
 ## Table of contents
 
 - [Ground rules](#ground-rules)
-- [Where we are (1.34.1, 1.35 in review, 1.36 planned)](#where-we-are-1341-135-in-review-136-planned)
+- [Where we are (1.34.1, 1.35 merged, 1.36 planned)](#where-we-are-1341-135-merged-136-planned)
 - [Capability matrix](#capability-matrix)
 - [Next](#next)
 - [Later](#later)
@@ -29,7 +29,7 @@ business chat is expected to offer. It is a plan, not a commitment: every item b
    mode with kernel reset false, standard Symfony and DDD hosts (uuid façade, every user-reference mode), GDPR export
    and erasure for every new table, UiKit tokens, strict CSP, WCAG 2.1 AA, seven locales.
 
-## Where we are (1.34.1, 1.35 in review, 1.36 planned)
+## Where we are (1.34.1, 1.35 merged, 1.36 planned)
 
 - **Conversations:** direct (1:1, access policy), application channels from `ChatChannelProviderInterface` (title,
   subtitle, icon, read-only), support tickets; archive / close in one's own list, archive all read, deep links,
@@ -50,14 +50,14 @@ business chat is expected to offer. It is a plan, not a commitment: every item b
   inbox with filters, continue or start a new ticket, ticket events.
 - **Data and privacy:** retention purge (config or runtime setting), personal-data export and erasure (including former
   accounts and mentions), author badges for service accounts, table prefixes, private entity manager.
-- **1.35 (in review):** richer message menu (quick reactions row and full emoji picker, copy text, multi-line quote,
+- **1.35 (merged, release pending):** richer message menu (quick reactions row and full emoji picker, copy text, multi-line quote,
   mark unread from a message, save for later with a Saved page, message info with read times and a reciprocal per-user
   opt-out).
 - **1.36 (planned):** forward to other conversations, one-level threads with follower unread, edit history.
 
 ## Capability matrix
 
-Status: **Yes** shipped · **1.35** in review · **1.36** planned · **Partial** some of it · **No** missing.
+Status: **Yes** shipped · **1.35** merged, release pending · **1.36** planned · **Partial** some of it · **No** missing.
 
 | Area | Capability | Status |
 |---|---|---|

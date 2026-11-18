@@ -25,14 +25,16 @@ final class ChatConflictResponseFormatterTest extends TestCase
         $response = (new ChatConflictResponseFormatter())->format($this->request('nowo_chat_api_send'), $this->context(false));
         self::assertNotNull($response);
         self::assertSame(409, $response->getStatusCode());
-        self::assertSame('{"ok":false,"error":"unavailable"}', $response->getContent());
+        self::assertSame('{"ok":false,"error":"unavailable","code":"CONFLICT_001"}', $response->getContent());
+        self::assertSame('CONFLICT_001', $response->headers->get('X-Conflict-Code'));
     }
 
     public function testItKeepsThePolicyStatusAndAsksToReloadAfterACommit(): void
     {
         $response = (new ChatConflictResponseFormatter())->format($this->request('nowo_chat_api_send'), $this->context(true, 503));
         self::assertSame(503, $response?->getStatusCode());
-        self::assertSame(['ok' => false, 'error' => 'unavailable', 'message' => ChatApiExceptionListener::PARTIAL_MESSAGE], json_decode((string) $response->getContent(), true));
+        self::assertSame(['ok' => false, 'error' => 'unavailable', 'code' => 'CONFLICT_002', 'message' => ChatApiExceptionListener::PARTIAL_MESSAGE], json_decode((string) $response->getContent(), true));
+        self::assertSame('CONFLICT_002', $response->headers->get('X-Conflict-Code'));
     }
 
     public function testPagesAndHostRoutesFallThrough(): void

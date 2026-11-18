@@ -207,6 +207,38 @@ export interface ChatPrefs {
   pushPreview?: boolean;
   push?: boolean;
   emailDigest?: boolean;
+  /** 1.35: share read times (reciprocal). */
+  shareReadTimes?: boolean;
+}
+
+/** 1.35: what the message menu offers (`message_menu`). */
+export interface MessageMenuSettings {
+  order: string[];
+  items: Record<string, boolean>;
+  quick: string[];
+  picker: boolean;
+  quoteMaxLength: number;
+  saveDockEntry: boolean;
+}
+
+/** 1.35: one person of message info. */
+export interface MessageInfoReader {
+  uuid: string;
+  name: string;
+  initials: string;
+  avatarUrl: string | null;
+  read: boolean;
+  readAt: string | null;
+}
+
+/** 1.35: message info (`GET …/info`). */
+export interface MessageInfo {
+  mode: 'people' | 'counts';
+  memberCount: number;
+  readCount: number;
+  readTimes: boolean;
+  readers: MessageInfoReader[];
+  editedAt: string | null;
 }
 
 /** Another participant's read cursor (✓✓ in DMs, "Seen by N" in channels). */
@@ -228,7 +260,9 @@ export type RealtimeEvent =
   | { type: 'prefs'; prefs: ChatPrefs }
   | { type: 'list' }
   | { type: 'pins'; conversationUuid: string }
-  | { type: 'links'; conversationUuid: string };
+  | { type: 'links'; conversationUuid: string }
+  | { type: 'unread'; conversationUuid: string; readUpTo: number | null }
+  | { type: 'saved'; conversationUuid: string; messageUuid: string; saved: boolean };
 
 /** 1.17: `hide` (invisible and inert), `inert` (painted, inert) or `none` (1.16 behaviour). */
 export type DockOverlayMode = 'hide' | 'inert' | 'none';
@@ -307,7 +341,18 @@ export interface ChatConfig {
     pinnedLink?: string;
     /** 1.19: the links panel of a conversation (`__uuid__`; `?q=&provider=&before=`). */
     links?: string;
+    /** 1.35: "Mark unread from here" (`POST`, `__uuid__`, `__message__`). */
+    unread?: string;
+    /** 1.35: message info (`GET`, `__uuid__`, `__message__`). */
+    info?: string;
+    /** 1.35: save (`PUT`) / unsave (`DELETE`) a message (`__uuid__`, `__message__`). */
+    save?: string;
+    /** 1.35: the Saved list (`GET`, `?before=`) and its page. */
+    saved?: string;
+    savedPage?: string;
   };
+  /** 1.35: the message menu (absent before 1.35: the 1.33 items only). */
+  menu?: MessageMenuSettings;
   prefs: ChatPrefs;
   /** 1.10: the user's own status (absent before 1.10: no status menu). */
   status?: OwnStatus;

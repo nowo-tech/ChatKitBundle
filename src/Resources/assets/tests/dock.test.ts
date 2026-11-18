@@ -1471,6 +1471,25 @@ describe('ChatDock', () => {
       expect(api.pinnedLinks).toHaveBeenCalledTimes(1);
     });
 
+    it('1.35: unread and saved events reach the open window; a window\'s mark unread reloads the list', async () => {
+      const { dock } = mount([summary('a')], { endpoints, i18n: i18nPlus });
+      await dock.start();
+      await dock.open(summary('a'));
+      const window = (dock as unknown as { windows: Map<string, { unreadFrom: (id: number | null) => void; savedChanged: (uuid: string, saved: boolean) => void }> }).windows.get('a');
+      const unreadFrom = vi.spyOn(window as { unreadFrom: (id: number | null) => void }, 'unreadFrom');
+      const savedChanged = vi.spyOn(window as { savedChanged: (uuid: string, saved: boolean) => void }, 'savedChanged');
+      realtimeHandlers?.onEvent({ type: 'unread', conversationUuid: 'a', readUpTo: 3 });
+      realtimeHandlers?.onEvent({ type: 'unread', conversationUuid: 'closed', readUpTo: 3 });
+      realtimeHandlers?.onEvent({ type: 'saved', conversationUuid: 'a', messageUuid: 'm', saved: true });
+      realtimeHandlers?.onEvent({ type: 'saved', conversationUuid: 'closed', messageUuid: 'm', saved: true });
+      expect(unreadFrom).toHaveBeenCalledWith(3);
+      expect(savedChanged).toHaveBeenCalledWith('m', true);
+      api.conversations.mockClear();
+      dock.unreadChanged();
+      await flush();
+      expect(api.conversations).toHaveBeenCalled();
+    });
+
     it('reloads the pinned bar on a pins event, never rings for a pinned line, and previews it in the list', async () => {
       api.pins.mockResolvedValue({ pins: [], canPin: true });
       const { dock, q } = mount([summary('a'), summary('b')], { endpoints, i18n: i18nPlus });

@@ -27,6 +27,7 @@
 - [Closing conversations](#closing-conversations)
 - [Pinned messages](#pinned-messages)
 - [Message menu and context menu](#message-menu-and-context-menu)
+  - [Message menu (1.35)](#message-menu-135)
 - [Links](#links)
 - [Automatic replies](#automatic-replies)
 - [Quick replies](#quick-replies)
@@ -592,7 +593,7 @@ or the page stays at that minimum. `--nowo-chat-page-height` does not apply on s
 
 ### Sidebar sections (1.25)
 
-The list becomes one grouped, collapsible sidebar on the full-page chat as soon as one
+The list becomes one grouped, collapsible sidebar (sections) on the full-page chat as soon as one
 `ChatSidebarSectionProviderInterface` service exists, and in the floating dock too with
 `web_ui.dock.sidebar_sections: true` (both without a provider shows the bundle's own sections only):
 
@@ -1526,6 +1527,62 @@ highlights it (`?chat=<uuid>&message=<uuid>` does the same in the dock). Message
 `data-nowo-ui-context-menu*` / `data-nowo-ui-card` attributes (stripped on the server and again in the browser), so a
 message cannot open another element's menu.
 
+### Message menu (1.35)
+
+*(1.35, Beacon request, owner decision D-20261118-02)* The kebab and its context menu offer the everyday message actions
+(react, quote, copy, save, mark unread, info). They are configured under `message_menu` ([CONFIGURATION](CONFIGURATION.md#reference)), and
+every one is checked again on the server:
+
+| Item | Shown to | Server |
+|------|----------|--------|
+| **Quick reactions** (row) and **More…** | whoever may react | the reaction endpoint; with `quick_reactions.picker` it accepts the picker's curated emoji too (`ChatEmojiCatalog`) |
+| **Quote** | whoever may write | client side: `> **Name** wrote:` and the plain text, with mentions as names (nobody is notified); sending is the usual `POST …/messages` |
+| **Copy text** | whoever sees the message | client side: the text the viewer sees (Markdown stripped, mentions as names, references as shown, links as `text (address)`) |
+| **Save for later** / **Remove from saved** | whoever sees the message (`save.enabled`) | `PUT` / `DELETE …/messages/{m}/save` (idempotent; `422 not_savable`, `422 too_many_saved`) |
+| **Mark unread from here** | whoever sees someone else's message | `POST …/messages/{m}/unread` → `{readUpTo}` |
+| **Message info** | the author; moderators on every message (`message_info.enabled`) | `GET …/messages/{m}/info` |
+
+Separators go between groups. On phones (below 40rem) the kebab and the context menu open as a bottom sheet (UiKit
+2.58). In the row, Left / Right move between the emoji and Up / Down leave it.
+
+**Saved list.** `GET /chat/saved` (route `nowo_chat_page_saved`) lists the viewer's saved messages, newest save first,
+and works without JavaScript: each entry links to its message. With `save.dock_entry` the dock header links to it.
+`GET /chat/api/saved?before=<next>` returns the same list as JSON:
+`{items: [{savedAt, conversation: {uuid, kind, title}, message}], next}`. A saved message of a conversation the viewer
+may no longer read is hidden, not removed: it comes back with the access. Deleted messages are not listed.
+
+**Mark unread.** The viewer's read marker moves to just before the message, and the list shows the unread badge again
+(realtime `unread` to the viewer's tabs, then `list`). Other people keep the receipt they saw, because
+`nowo_chat_participant.receipt_message_id` only moves forward. ✓✓, "Seen by" and message info never go back. The
+window stops marking the conversation read until the viewer scrolls, types or sends again.
+
+**Message info and read times.** `GET …/info` returns:
+
+```json
+{"mode": "people", "memberCount": 3, "readCount": 2, "readTimes": true, "editedAt": null,
+ "readers": [{"uuid": "…", "name": "Ana", "initials": "A", "avatarUrl": null, "read": true, "readAt": "2026-11-18T10:01:00+00:00"}]}
+```
+
+- Above `per_person_max_members` people besides the author it answers `mode: "counts"` with no names, and no read time
+  is stored for that conversation.
+- Read times are recorded when a person's receipt moves (a read, or their own message). They are stored only with
+  `read_times` on and only for people who keep **Share read times**.
+- That preference (`shareReadTimes`, `ChatPreferencesType`, settings endpoint) is **reciprocal**: off, the person's
+  read times are deleted (in the same flush, whatever saves the setting) and no longer stored, and they see nobody's
+  read times. Times stored before sharing is turned back on are never shown. Everybody's read state (✓✓, "Seen by",
+  who read it) stays.
+
+**DDD hosts.** `ChatMessageActionsInterface` (by uuid): `markSaved()`, `savedMessages()`, `markUnreadFrom()` and
+`messageInfo()`. `ChatMessagingInterface::can()` answers `SAVE`, `MARK_UNREAD` and `INFO`. The voter attributes are
+`nowo_chat.message.save`, `nowo_chat.message.mark_unread` and `nowo_chat.message.info`. The events are
+`ChatMessageSavedEvent`, `ChatMessageUnsavedEvent` and `ChatConversationMarkedUnreadEvent`, all dispatched after the
+commit.
+
+**Template.** The items are kebab items with `data-part="menu-<name>"` (`menu-quote`, `menu-copy-text`, `menu-save`,
+`menu-mark-unread`, `menu-info`; the row is `menu-reactions` with `menu-react` items carrying `data-emoji`, and
+`menu-react-more`; the separators are `menu-separator`). A host that overrides `nowo_chat_message_menu` keeps those
+parts for the items it wants.
+
 ## Links
 
 1.19. Links such as a team's video-meeting link, in a channel or in a direct conversation:
@@ -1778,6 +1835,9 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | GET / POST | `/api/quick-replies` · PATCH / DELETE `/api/quick-replies/{id}` | the caller's quick replies (1.11) |
 | GET | `/api/conversations/{uuid}/pins` · POST / DELETE `/api/conversations/{uuid}/messages/{messageUuid}/pin` | pinned messages, pin / unpin (1.10) |
 | POST | `/api/conversations/{uuid}/messages/{messageUuid}/link` | `{path}`, the root-relative address of a message (1.33; CSRF header, same origin) |
+| POST | `/api/conversations/{uuid}/messages/{messageUuid}/unread` | mark unread from here (1.35, `{readUpTo}`) |
+| PUT / DELETE | `/api/conversations/{uuid}/messages/{messageUuid}/save` · GET `/api/saved?before=` | save / unsave, the Saved list (1.35, `message_menu.save`) |
+| GET | `/api/conversations/{uuid}/messages/{messageUuid}/info` | message info (1.35, `message_menu.message_info`) |
 | GET / POST | `/api/conversations/{uuid}/pinned-links` · PATCH / DELETE `/api/conversations/{uuid}/pinned-links/{linkUuid}` | pinned links (1.19, [Links](#links)) |
 | GET | `/api/conversations/{uuid}/links?q=&provider=&before=` | the Links panel (1.19) |
 

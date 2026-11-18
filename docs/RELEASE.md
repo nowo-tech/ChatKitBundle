@@ -42,7 +42,7 @@ GitHub repository **About** is not stored in git. Copy the values from [GITHUB.m
 
 | Field | Value |
 | --- | --- |
-| **Description** | Floating chat for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens. |
+| **Description** | Floating chat dock for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens. |
 | **Website** | https://packagist.org/packages/nowo-tech/chat-kit-bundle |
 | **Topics** | `php`, `symfony`, `symfony-bundle`, `chat`, `mercure`, `realtime`, `web-push`, `frankenphp`, `typescript` |
 

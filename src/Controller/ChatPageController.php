@@ -12,6 +12,7 @@ use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
 use Nowo\ChatKitBundle\Form\ChatPageMessageType;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -22,6 +23,7 @@ use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
+use Nowo\ChatKitBundle\Service\ChatMessageActions;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\View\ChatPage;
@@ -65,6 +67,7 @@ final class ChatPageController extends AbstractController
      * @param bool $assets Whether the page prints the nowo-chat.css and nowo-chat.js tags (`web_ui.assets`, 1.21)
      * @param bool $fullHeight Whether the page fills the host content area (`web_ui.page.full_height`, 1.21)
      * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
+     * @param ChatMessageActions|null $menu 1.35: the Saved list (`message_menu.save`); null: no Saved page
      */
     public function __construct(
         private readonly ChatServiceInterface $chat,
@@ -92,6 +95,7 @@ final class ChatPageController extends AbstractController
         #[Autowire(param: 'nowo_chat_kit.web_ui.page.full_height')]
         private readonly bool $fullHeight = false,
         private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly ?ChatMessageActions $menu = null,
     ) {
     }
 
@@ -106,6 +110,55 @@ final class ChatPageController extends AbstractController
         $user = $this->chatUser();
 
         return $this->render($this->template(), $this->context($user, null, $request->query->getBoolean('archived')));
+    }
+
+    /**
+     * 1.35: the viewer's Saved list (`message_menu.save`), newest save first, `?before=` for the next page: only messages
+     * the viewer may still read (hidden, not removed, while access is lost), never deleted ones. Works without
+     * JavaScript (each entry links to its message); with it, "Remove" unsaves in place. 404 when the item is off.
+     *
+     * @param Request $request The request (query `before`)
+     *
+     * @return Response The rendered page
+     */
+    #[Route('/saved', name: 'nowo_chat_page_saved', methods: ['GET'])]
+    public function saved(Request $request): Response
+    {
+        $user = $this->chatUser();
+        if (!$this->menu instanceof ChatMessageActions || !$this->menu->saveEnabled()) {
+            throw $this->createNotFoundException();
+        }
+        $page     = $this->menu->savedPage($user, $request->query->getInt('before') ?: null);
+        $messages = array_map(static fn (ChatSavedMessage $row): ChatMessage => $row->getMessage(), $page['rows']);
+        $this->references?->prime($user, $messages);
+        $this->presenter->primeAvatars(array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $messages));
+        $this->presenter->primeAuthorBadges($messages);
+        $titles = [];
+        $items  = [];
+        foreach ($page['rows'] as $row) {
+            $message      = $row->getMessage();
+            $conversation = $message->getConversation();
+            $uuid         = $conversation->getUuid();
+            $titles[$uuid] ??= $this->summary($conversation, $user)['title'];
+            $items[] = [
+                'saved_at'     => $row->getSavedAt(),
+                'conversation' => ['uuid' => $uuid, 'title' => $titles[$uuid], 'kind' => $conversation->getKind()->value],
+                'message'      => $this->presenter->message($message, $user),
+                'link'         => $this->generateUrl('nowo_chat_page_conversation', ['uuid' => $uuid, 'message' => $message->getUuid()]),
+                'unsave'       => $this->generateUrl('nowo_chat_api_save', ['uuid' => $uuid, 'messageUuid' => $message->getUuid()]),
+            ];
+        }
+
+        return $this->render('@NowoChatKitBundle/saved.html.twig', [
+            'layout'                => $this->webUiLayout ?? $this->layout,
+            'header'                => ChatPage::savedHeader(),
+            'bundle'                => ChatPage::BUNDLE,
+            'items'                 => $items,
+            'next'                  => $page['next'] === null ? null : $this->generateUrl('nowo_chat_page_saved', ['before' => $page['next']]),
+            'csrf'                  => $this->csrf->getToken(ChatApiController::CSRF_ID)->getValue(),
+            'nowo_chat_assets'      => $this->assets,
+            'nowo_chat_full_height' => $this->fullHeight,
+        ]);
     }
 
     /**

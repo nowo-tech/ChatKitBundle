@@ -19,6 +19,7 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
+use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Http\ChatApiException;
@@ -40,6 +41,7 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatChannelDeniedException;
+use Nowo\ChatKitBundle\Service\ChatMessageActions;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatSupportInbox;
@@ -95,6 +97,7 @@ final class ChatApiController extends AbstractController
      *
      * @param ClockInterface $clock Clock for the realtime token expiry
      * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
+     * @param ChatMessageActions|null $menu 1.35: save for later, mark unread, message info; null offers none
      */
     public function __construct(
         private readonly ChatServiceInterface $chat,
@@ -132,6 +135,7 @@ final class ChatApiController extends AbstractController
         private readonly ClockInterface $clock = new Clock(),
         private readonly ?ChatQuickReplyRepository $quickReplies = null,
         private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly ?ChatMessageActions $menu = null,
     ) {
     }
 
@@ -677,13 +681,13 @@ final class ChatApiController extends AbstractController
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, $reactions[(int) $message->getId()] ?? []), $page),
             'hasMore'  => $hasMore,
             'readUpTo' => $this->participants->findOneFor($conversation, $user)?->getLastReadMessageId(),
-            // Other people's read cursors (✓✓ / "Seen by N").
+            // Other people's read receipts (✓✓ / "Seen by N"; 1.35: never moved back by "Mark unread from here").
             'readers' => array_map(static fn (ChatParticipant $participant): array => [
                 'userUuid'  => $participant->getUser()->getChatPublicId(),
                 'name'      => $participant->getUser()->getChatDisplayName(),
-                'messageId' => $participant->getLastReadMessageId(),
+                'messageId' => $participant->getReceiptMessageId(),
             ], $this->currentReaders($conversation, $user)),
-        ]);
+        ] + ($this->menu?->saveEnabled() === true ? ['saved' => $this->menu->savedUuids($user, $page)] : []));
     }
 
     /**
@@ -866,6 +870,117 @@ final class ChatApiController extends AbstractController
         }
 
         return $this->json(['reactions' => $reactions]);
+    }
+
+    /**
+     * 1.35: "Mark unread from here" — moves the caller's read marker to just before the message (the unread badge comes
+     * back); the receipts other people see do not move. 404 when the item is off, the message is not visible, or it is
+     * the caller's own.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{readUpTo}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/unread', name: 'unread', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST'])]
+    public function unread(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $user = $this->writer($request);
+        $menu = $this->menu();
+        $this->deny(!$menu->markUnreadEnabled(), 'not_found', Response::HTTP_NOT_FOUND);
+
+        return $this->json(['readUpTo' => $menu->markUnreadFrom($user, $this->findMessage($uuid, $messageUuid, ChatVoter::MARK_UNREAD))]);
+    }
+
+    /**
+     * 1.35: "Save for later" (`PUT`, SAVE voter: 404 for a line or a tombstone) and "Remove from saved" (`DELETE`); both
+     * idempotent. 404 when the item is off or the message is not visible; 422 `too_many_saved` (`max_per_user`).
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request The request (CSRF header)
+     *
+     * @return JsonResponse `{saved}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/save', name: 'save', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['PUT', 'DELETE'])]
+    public function save(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $user = $this->writer($request);
+        $menu = $this->menu();
+        $this->deny(!$menu->saveEnabled(), 'not_found', Response::HTTP_NOT_FOUND);
+        $save = $request->isMethod('PUT');
+        if ($save) {
+            // Audit TK I1: the SAVE voter attribute decides (a host voter on it is honoured, as on the DDD path).
+            $message = $this->findMessage($uuid, $messageUuid, ChatVoter::SAVE);
+        } else {
+            // Unsaving needs only the conversation: a message deleted since can still leave the list.
+            $message = $this->messages->findOneInConversation($this->find($uuid, ChatVoter::VIEW), $messageUuid);
+            $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
+            assert($message instanceof ChatMessage);
+        }
+        try {
+            return $this->json(['saved' => $menu->markSaved($user, $message, $save)]);
+        } catch (InvalidArgumentException $exception) {
+            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
+        }
+    }
+
+    /**
+     * 1.35: the caller's Saved list, newest save first (`?before=<next>` for the next page): only messages the caller may
+     * still read, never deleted ones. 404 when the item is off.
+     *
+     * @param Request $request The request (query `before`)
+     *
+     * @return JsonResponse `{items: list<{savedAt, conversation: {uuid, kind, title}, message}>, next}`
+     */
+    #[Route('/saved', name: 'saved', methods: ['GET'])]
+    public function saved(Request $request): JsonResponse
+    {
+        $user = $this->reader();
+        $menu = $this->menu();
+        $this->deny(!$menu->saveEnabled(), 'not_found', Response::HTTP_NOT_FOUND);
+        $page     = $menu->savedPage($user, $request->query->getInt('before') ?: null);
+        $messages = array_map(static fn (ChatSavedMessage $row): ChatMessage => $row->getMessage(), $page['rows']);
+        $this->references->prime($user, $messages);
+        $this->presenter->primeAvatars(array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $messages));
+        $this->presenter->primeAuthorBadges($messages);
+        $titles = [];
+
+        return $this->json([
+            'items' => array_map(function (ChatSavedMessage $row) use ($user, &$titles): array {
+                $message      = $row->getMessage();
+                $conversation = $message->getConversation();
+                $key          = $conversation->getUuid();
+                $titles[$key] ??= $this->presenter->conversation($conversation, $user, $this->access->directPeer($conversation, $user), $conversation->isChannel() ? $this->access->channel((string) $conversation->getChannelKey()) : null, false, 0, null, $this->access->isSupportAgent($user))['title'];
+
+                return [
+                    'savedAt'      => $row->getSavedAt()->format(DATE_ATOM),
+                    'conversation' => ['uuid' => $key, 'kind' => $conversation->getKind()->value, 'title' => $titles[$key]],
+                    'message'      => $this->presenter->message($message, $user, $this->reactionsOf($message)),
+                ];
+            }, $page['rows']),
+            'next' => $page['next'],
+        ]);
+    }
+
+    /**
+     * 1.35: message info — who read the message (and when: reciprocal, with read times on), people up to
+     * `per_person_max_members` participants and counts above. Own messages only (moderators: every message) unless
+     * `own_messages_only` is off; 404 otherwise or when the item is off.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     *
+     * @return JsonResponse `{mode, memberCount, readCount, readTimes, readers, editedAt}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/info', name: 'info', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['GET'])]
+    public function info(string $uuid, string $messageUuid): JsonResponse
+    {
+        $user = $this->reader();
+        $menu = $this->menu();
+
+        return $this->json($menu->info($user, $this->findMessage($uuid, $messageUuid, ChatVoter::INFO)));
     }
 
     /**
@@ -1128,6 +1243,7 @@ final class ChatApiController extends AbstractController
             throw new ChatApiException('invalid_setting', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         $this->settings->save($mine);
+        // 1.35: stopping to share read times deletes the stored ones in the same flush (ChatReadTimesOptOutListener).
         $preferences = $mine->preferences();
         $this->notifier->preferencesChanged($user, $preferences);
 
@@ -1438,6 +1554,15 @@ final class ChatApiController extends AbstractController
         }
 
         return $message;
+    }
+
+    /** 1.35: the message menu's actions (404 when the application built the controller without them). */
+    private function menu(): ChatMessageActions
+    {
+        $this->deny(!$this->menu instanceof ChatMessageActions, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($this->menu instanceof ChatMessageActions);
+
+        return $this->menu;
     }
 
     private function deny(bool $condition, string $error, int $status): void

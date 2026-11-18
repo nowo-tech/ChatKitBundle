@@ -32,7 +32,7 @@
                         <span class="nowo-chat-badge" data-part="launcher-badge" hidden></span>
                         <span class="nowo-chat-launcher__chevron" data-part="launcher-chevron"></span>
                     </button>
-                    {% block nowo_chat_dock_header_actions %}{# 1.24: header actions slot (redefine the block to add your own buttons or links). #}{% endblock %}{{ ui.icon_button('compose', 'chat.new_message'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'compose', 'nowo-chat-panel__compose') }}
+                    {% block nowo_chat_dock_header_actions %}{# 1.24: header actions slot (redefine the block to add your own buttons or links). #}{% endblock %}{% if (nowo_chat_message_menu.saved ?? false) %}{# 1.35: the Saved list (message_menu.save.dock_entry). #}<a class="nowo-chat-icon-btn nowo-chat-panel__saved" data-part="saved" href="{{ path('nowo_chat_page_saved') }}" aria-label="{{ 'chat.saved_title'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" title="{{ 'chat.saved_title'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}"><span data-icon="bookmark"></span></a>{% endif %}{{ ui.icon_button('compose', 'chat.new_message'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'compose', 'nowo-chat-panel__compose') }}
                     {{ ui.icon_button('tuck', 'chat.tuck'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'tuck', 'nowo-chat-panel__tuck') }}
                     {{ ui.icon_button('close', 'chat.close'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'close-panel', 'nowo-chat-panel__close') }}
                 </div>
@@ -334,22 +334,45 @@
                 {{ ui.icon_button('edit', 'chat.edit'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'edit') }}
                 {{ ui.icon_button('trash', 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'delete') }}
                 {% block nowo_chat_message_menu %}
-                    {# 1.33: the UiKit kebab of the message: Reply, Edit, Copy link, Pin / Unpin, Delete. Every item starts hidden;
-                     # the script shows the ones the viewer may use (the server checks each action again). It is the source of
-                     # the message's context menu (right-click, Shift+F10, ContextMenu key, long press) when
+                    {# 1.33: the UiKit kebab of the message. 1.35: the quick reactions row, then the items of message_menu.order
+                     # (Reply, Quote, Copy text, Copy link, Save, Mark unread, Pin, Message info, Edit, Delete) with separators
+                     # between their groups, and `sheet: true` (a bottom sheet on phones, UiKit 2.58). Every item starts
+                     # hidden; the script shows the ones the viewer may use (the server checks each action again). It is the
+                     # source of the message's context menu (right-click, Shift+F10, ContextMenu key, long press) when
                      # web_ui.message_context_menu is true, or null and UiKit's theme.context_menus is on. Keep data-part. #}
+                    {% set _t = 'NowoChatKitBundle' %}
+                    {% set _menu = nowo_chat_message_menu ?? {items: [], quick: [], picker: false} %}
+                    {% set _labels = {
+                        reply: 'chat.reply', quote: 'chat.quote', copy_text: 'chat.copy_text', copy_link: 'chat.copy_link',
+                        save: 'chat.save_message', mark_unread: 'chat.mark_unread', pin: 'chat.pin', info: 'chat.message_info',
+                        edit: 'chat.edit', delete: 'chat.delete',
+                    } %}
+                    {% set _items = [] %}
+                    {% if _menu.quick is not empty or _menu.picker %}
+                        {% set _row = [] %}
+                        {% for emoji in _menu.quick %}
+                            {% set _row = _row|merge([{label: emoji, attr: {'data-part': 'menu-react', 'data-emoji': emoji, 'aria-label': 'chat.react_with'|trans({'%emoji%': emoji}, _t, nowo_chat_locale), hidden: 'hidden'}}]) %}
+                        {% endfor %}
+                        {% if _menu.picker %}
+                            {% set _row = _row|merge([{label: '+', attr: {'data-part': 'menu-react-more', 'aria-label': 'chat.more_reactions'|trans({}, _t, nowo_chat_locale), hidden: 'hidden'}}]) %}
+                        {% endif %}
+                        {% set _items = _items|merge([{row: _row, label: 'chat.quick_reactions'|trans({}, _t, nowo_chat_locale), attr: {'data-part': 'menu-reactions', hidden: 'hidden'}}]) %}
+                    {% endif %}
+                    {% set _group = _items is empty ? null : 'reactions' %}
+                    {% for item in _menu.items %}
+                        {% if _group is not null and item.group != _group %}
+                            {% set _items = _items|merge([{separator: true, attr: {'data-part': 'menu-separator'}}]) %}
+                        {% endif %}
+                        {% set _group = item.group %}
+                        {% set _items = _items|merge([{label: _labels[item.name]|trans({}, _t, nowo_chat_locale), danger: item.name == 'delete', attr: {'data-part': 'menu-' ~ item.name|replace({_: '-'}), hidden: 'hidden'}}]) %}
+                    {% endfor %}
                     <span class="nowo-chat-msg__menu" data-part="menu" hidden>
                         {{ include('@NowoUiKitBundle/partials/_kebab.html.twig', {
-                            label: 'chat.message_actions'|trans({}, 'NowoChatKitBundle', nowo_chat_locale),
+                            label: 'chat.message_actions'|trans({}, _t, nowo_chat_locale),
                             popover: false,
+                            sheet: true,
                             context_menu: (nowo_chat_message_context_menu ?? null),
-                            items: [
-                                {label: 'chat.reply'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), attr: {'data-part': 'menu-reply', hidden: 'hidden'}},
-                                {label: 'chat.edit'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), attr: {'data-part': 'menu-edit', hidden: 'hidden'}},
-                                {label: 'chat.copy_link'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), attr: {'data-part': 'menu-copy-link', hidden: 'hidden'}},
-                                {label: 'chat.pin'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), attr: {'data-part': 'menu-pin', hidden: 'hidden'}},
-                                {label: 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), danger: true, attr: {'data-part': 'menu-delete', hidden: 'hidden'}},
-                            ],
+                            items: _items,
                         }, with_context: false) }}
                     </span>
                 {% endblock %}

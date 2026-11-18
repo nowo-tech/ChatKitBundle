@@ -48,8 +48,17 @@ final class ConfigurationTest extends TestCase
             'auto_away_minutes'         => 10,
             'dock'                      => ['overlay' => 'hide', 'watch_aria_modal' => false],
             'links'                     => ['enabled' => true, 'max_pinned' => 20, 'allow_http' => false, 'channel_managers' => 'members', 'providers' => Configuration::DEFAULT_LINK_PROVIDERS],
-            'status_presets'            => Configuration::DEFAULT_STATUS_PRESETS,
-            'support'                   => [
+            'message_menu'              => [
+                'quick_reactions' => ['emojis' => Configuration::DEFAULT_QUICK_REACTIONS, 'picker' => true],
+                'copy_text'       => true,
+                'quote'           => ['enabled' => true, 'max_length' => 1000],
+                'mark_unread'     => true,
+                'save'            => ['enabled' => false, 'max_per_user' => 500, 'dock_entry' => true],
+                'message_info'    => ['enabled' => false, 'read_times' => true, 'per_person_max_members' => 20, 'own_messages_only' => true],
+                'order'           => Configuration::MESSAGE_MENU_ITEMS,
+            ],
+            'status_presets' => Configuration::DEFAULT_STATUS_PRESETS,
+            'support'        => [
                 'ticket_prefix'      => 'SUP-',
                 'ticket_digits'      => 6,
                 'resume_after_days'  => 7,
@@ -214,6 +223,21 @@ final class ConfigurationTest extends TestCase
             'default_profile' => 'missing',
             'profiles'        => ['default' => []],
         ]]);
+    }
+
+    public function testMessageMenuValidation(): void
+    {
+        $config = $this->process([['profiles' => ['default' => ['message_menu' => ['order' => ['delete', 'reply'], 'quick_reactions' => ['emojis' => []]]]]]]);
+        self::assertSame(['delete', 'reply'], $config['profiles']['default']['message_menu']['order']);
+        self::assertSame([], $config['profiles']['default']['message_menu']['quick_reactions']['emojis']);
+        foreach ([['order' => ['reply', 'reply']], ['order' => ['forward']], ['quick_reactions' => ['emojis' => ['']]], ['quick_reactions' => ['emojis' => [str_repeat('x', 33)]]]] as $menu) {
+            try {
+                $this->process([['profiles' => ['default' => ['message_menu' => $menu]]]]);
+                self::fail('Invalid message_menu accepted: ' . json_encode($menu));
+            } catch (InvalidConfigurationException $exception) {
+                self::assertStringContainsString('message_menu', $exception->getMessage());
+            }
+        }
     }
 
     /**

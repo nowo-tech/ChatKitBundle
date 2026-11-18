@@ -79,7 +79,9 @@ final readonly class ChatMentions
      */
     public static function parseGroup(string $body): ?string
     {
-        $text = (string) preg_replace(['/```.*?```/s', '/`[^`\n]+`/', self::TOKEN], ' ', $body);
+        // 1.35 (audit TK-5): never inside a quote either (`> …` lines: Quote and Reply copy someone else's words), so
+        // quoting a message that said @channel notifies nobody.
+        $text = (string) preg_replace(['/```.*?```/s', '/`[^`\n]+`/', self::TOKEN, '/^[ \t]{0,3}>.*$/m'], ' ', $body);
         if (preg_match_all(self::GROUP_TOKEN, $text, $matches) < 1) {
             return null;
         }

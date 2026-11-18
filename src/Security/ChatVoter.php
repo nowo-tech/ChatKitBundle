@@ -8,6 +8,7 @@ use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Service\ChatMessageActions;
 use Nowo\ChatKitBundle\Support\ChatSupportPolicy;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
@@ -34,8 +35,17 @@ final class ChatVoter extends Voter
     public const string DELETE   = 'nowo_chat.message.delete';
     public const string REACT    = 'nowo_chat.message.react';
 
+    /** 1.35: save the message for later (`message_menu.save`). */
+    public const string SAVE = 'nowo_chat.message.save';
+
+    /** 1.35: mark the conversation unread from the message (`message_menu.mark_unread`; not on one's own message). */
+    public const string MARK_UNREAD = 'nowo_chat.message.mark_unread';
+
+    /** 1.35: open the message's read info (`message_menu.message_info`). */
+    public const string INFO = 'nowo_chat.message.info';
+
     private const array CONVERSATION_ATTRIBUTES = [self::VIEW, self::SEND, self::MODERATE, self::RESOLVE];
-    private const array MESSAGE_ATTRIBUTES      = [self::EDIT, self::DELETE, self::REACT];
+    private const array MESSAGE_ATTRIBUTES      = [self::EDIT, self::DELETE, self::REACT, self::SAVE, self::MARK_UNREAD, self::INFO];
 
     /**
      * Builds the voter from the access checks and a clock (edit window).
@@ -44,12 +54,14 @@ final class ChatVoter extends Voter
      * @param ClockInterface $clock Clock used for the edit / delete window
      * @param ChatSupportPolicy|null $support Read-only rule of support tickets; null: tickets never turn read-only
      * @param CurrentChatUserResolverInterface|null $currentUser 1.24: maps the token's user to the chat participant; null: the user itself when it implements ChatUserInterface
+     * @param ChatMessageActions|null $menu 1.35: which message menu items are offered; null: SAVE, MARK_UNREAD and INFO are never granted
      */
     public function __construct(
         private readonly ChatAccess $access,
         private readonly ClockInterface $clock = new Clock(),
         private readonly ?ChatSupportPolicy $support = null,
         private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly ?ChatMessageActions $menu = null,
     ) {
     }
 
@@ -108,6 +120,10 @@ final class ChatVoter extends Voter
             self::EDIT => $ownInWindow && !$message->isBuzz() && $this->canSend($conversation, $user),
             // Only the author, within the edit window: nobody deletes someone else's message.
             self::DELETE => $ownInWindow && $this->canView($conversation, $user),
+            // 1.35: the message menu's own items (each only when offered).
+            self::SAVE        => $this->menu?->saveEnabled() === true && $message->isPinnable() && $this->canView($conversation, $user),
+            self::MARK_UNREAD => $this->menu?->markUnreadEnabled() === true && !$message->isAuthoredBy($user) && $this->canView($conversation, $user),
+            self::INFO        => $this->menu?->infoEnabled() === true && $this->canView($conversation, $user) && $this->menu->mayReadInfo($user, $message),
             // 1.24: system lines take no reactions either.
             default => !$message->isBuzz() && !$message->isSystem() && $this->canSend($conversation, $user), // REACT
         };

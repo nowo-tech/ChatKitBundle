@@ -12,6 +12,7 @@
 - Covers the 1.2 "hide the dock to the side" feature (`FR-TS-007`, `FR-TWIG-003`, `FR-THEME-003`): no new file, existing units extended.
 - Covers 1.3: dock Form types (`FR-TWIG-004`), page mark-read script `page.ts` (`FR-TS-008`), page layout global and asset blocks (`FR-TWIG-002`).
 - Covers 1.33 (message menu and context menu, `FR-MENU-001`): one new unit `message-menu.ts`; `ChatApiController`, `ChatMarkdownRenderer`, `ChatPresenter`, `ChatDockExtension`, `Configuration`, `_templates.html.twig`, `thread.ts`, `dock.ts`, `api.ts`, `types.ts`, `nowo-chat.css` and the translations extended.
+- Covers 1.35 (richer message menu, `FR-MENU-002`): new units `ChatEmojiCatalog`, `ChatSavedMessage`, `ChatReadMark`, their repositories, `ChatMessageActions`, `ChatReadTimes`, `ChatMessageMenu` / `ChatMessageActionsInterface`, three events, `saved.html.twig`, `message-info.ts`, `saved-page.ts`; `ChatParticipant`, `ChatUserSettings`, `ChatService`, `ChatVoter`, the controllers, `ChatPersonalData`, `ChatPurgeCommand`, `ChatApiExceptionListener`, `ChatConflictResponseFormatter`, the templates, `thread.ts`, `message-menu.ts` and the translations extended.
 - `src/Resources/assets/README.md` is documentation; `demo/` and `.symfony/` (Flex recipe, see `docs/INSTALLATION.md`) are out of inventory scope.
 
 ## Coverage summary
@@ -62,6 +63,8 @@
 | `src/Entity/ChatMessage.php` | US-02 | FR-MODEL-001 |
 | `src/Entity/ChatParticipant.php` | US-02, US-05 | FR-MODEL-002 |
 | `src/Entity/ChatReaction.php` | US-02 | FR-MODEL-002 |
+| `src/Entity/ChatSavedMessage.php` | US-02 | FR-MENU-002 |
+| `src/Entity/ChatReadMark.php` | US-02 | FR-MENU-002 |
 | `src/Entity/ChatUserSettings.php` | US-05, US-06 | FR-MODEL-002 |
 | `src/Entity/PublicIdTrait.php` | US-02 | FR-MODEL-001 |
 | `src/Enum/ConversationKind.php` | US-02, US-03, US-04 | FR-MODEL-001 |
@@ -70,6 +73,8 @@
 | `src/Repository/ChatMessageRepository.php` | US-02, US-09 | FR-MODEL-003 |
 | `src/Repository/ChatParticipantRepository.php` | US-02, US-05 | FR-MODEL-003 |
 | `src/Repository/ChatReactionRepository.php` | US-02 | FR-MODEL-003 |
+| `src/Repository/ChatSavedMessageRepository.php` | US-02 | FR-MENU-002 |
+| `src/Repository/ChatReadMarkRepository.php` | US-02 | FR-MENU-002 |
 | `src/Repository/ChatUserSettingsRepository.php` | US-05, US-06 | FR-MODEL-003 |
 
 ## Contracts & value objects
@@ -102,11 +107,17 @@
 | Source path | Spec section | Requirement ID(s) |
 | --- | --- | --- |
 | `src/Event/ChatMessageDeletedEvent.php` | US-02, US-04 | FR-EVT-001 |
+| `src/Event/ChatMessageSavedEvent.php` | US-02 | FR-MENU-002, FR-EVT-001 |
+| `src/Event/ChatMessageUnsavedEvent.php` | US-02 | FR-MENU-002, FR-EVT-001 |
+| `src/Event/ChatConversationMarkedUnreadEvent.php` | US-02 | FR-MENU-002, FR-EVT-001 |
 | `src/Event/ChatMessageSentEvent.php` | US-02 | FR-EVT-001 |
 | `src/Event/ChatSupportStatusChangedEvent.php` | US-04 | FR-EVT-001 |
 | `src/Service/ChatMarkdownRenderer.php` | US-02 | FR-MSG-002, FR-MENU-001 |
 | `src/Service/ChatPresenter.php` | US-02, US-07 | FR-MSG-003 |
 | `src/Service/ChatService.php` | US-02, US-03, US-04 | FR-MSG-001 |
+| `src/Service/ChatMessageActions.php` | US-02 | FR-MENU-002 |
+| `src/Service/ChatReadTimes.php` | US-02 | FR-MENU-002 |
+| `src/Service/ChatMessageMenu.php` | US-02 | FR-MENU-002, FR-PORT-003 |
 | `src/Service/ChatSupportInbox.php` | US-04 | FR-SUPPORT-001 |
 
 ## HTTP
@@ -158,6 +169,7 @@
 | `src/Resources/views/_templates.html.twig` | US-08 | FR-TWIG-002, FR-TWIG-003 |
 | `src/Resources/views/dock.html.twig` | US-01 | FR-TWIG-002 |
 | `src/Resources/views/page.html.twig` | US-07 | FR-TWIG-002, FR-PAGE-001 |
+| `src/Resources/views/saved.html.twig` | US-07 | FR-MENU-002 |
 | `src/Resources/views/page_layout.html.twig` | US-07 | FR-TWIG-002 |
 | `src/Resources/views/page_legacy.html.twig` | US-07 | FR-TWIG-002, FR-PAGE-001 |
 | `src/Twig/ChatDockExtension.php` | US-01, US-08 | FR-TWIG-001, FR-TWIG-004 |
@@ -174,6 +186,8 @@
 | `src/Resources/assets/src/iife.ts` | US-01 | FR-TS-001, FR-BUILD-001 |
 | `src/Resources/assets/src/index.ts` | US-01 | FR-TS-001, FR-BUILD-001 |
 | `src/Resources/assets/src/page.ts` | US-07 | FR-TS-008 |
+| `src/Resources/assets/src/message-info.ts` | US-02 | FR-MENU-002 |
+| `src/Resources/assets/src/saved-page.ts` | US-07 | FR-MENU-002 |
 | `src/Resources/assets/src/realtime.ts` | US-05 | FR-TS-004 |
 | `src/Resources/assets/src/sounds.ts` | US-05 | FR-TS-005 |
 | `src/Resources/assets/src/state.ts` | US-05, US-08 | FR-TS-005, FR-TS-007 |
@@ -301,6 +315,7 @@
 | `src/Model/ChatSecurityUser.php` | US-01 | FR-PORT-002 |
 | `src/DependencyInjection/Compiler/ChatKitPortsPass.php` | US-01 | FR-PORT-002 |
 | `src/Contract/ChatMessagingInterface.php` | US-02 | FR-PORT-003 |
+| `src/Contract/ChatMessageActionsInterface.php` | US-02 | FR-MENU-002, FR-PORT-003 |
 | `src/Service/ChatMessaging.php` | US-02 | FR-PORT-003 |
 | `src/Service/ChatNotFoundException.php` | US-02 | FR-PORT-003 |
 | `src/Model/ChatConversationView.php` | US-02 | FR-PORT-003, FR-EVT-002 |
@@ -348,6 +363,7 @@
 | `src/Contract/RetentionPolicyProviderInterface.php` | US-09 | FR-RET-002 |
 | `src/Support/NullRetentionPolicyProvider.php` | US-09 | FR-RET-002 |
 | `src/Support/ChatRetention.php` | US-09 | FR-RET-002 |
+| `src/Support/ChatEmojiCatalog.php` | US-02 | FR-MENU-002 |
 | `src/Support/InvalidRetentionConfigurationException.php` | US-09 | FR-RET-002 |
 | `src/Support/RetentionUnavailableException.php` | US-09 | FR-RET-002 |
 | `src/RuntimeSetting/RuntimeSettingRetentionPolicyProvider.php` | US-09 | FR-RET-002 |

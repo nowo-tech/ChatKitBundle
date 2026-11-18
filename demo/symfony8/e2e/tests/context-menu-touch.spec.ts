@@ -55,7 +55,13 @@ test('a long press on a message opens its items; a tap runs one', async ({ page,
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await page.waitForTimeout(200);
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem')).toHaveText(['Reply', 'Copy link', /^(Pin|Unpin)$/]);
+  await expect(menu.getByRole('menuitem')).toHaveText(['👍', '❤️', '😂', '😮', '😢', '🙏', '+', 'Reply', 'Quote', 'Copy text', 'Copy link', /^(Save for later|Remove from saved)$/, 'Mark unread from here', /^(Pin|Unpin)$/]);
+  // 1.35 (UiKit 2.58): on a phone the menu is a bottom sheet, full width at the bottom of the screen.
+  await expect(menu).toHaveClass(/nowo-ui-context-menu--sheet/);
+  const sheet = (await menu.boundingBox())!;
+  const viewport = page.viewportSize()!;
+  expect(Math.round(sheet.width)).toBe(viewport.width);
+  expect(Math.abs(sheet.y + sheet.height - viewport.height)).toBeLessThan(2);
   const reply = menu.getByRole('menuitem', { name: 'Reply' });
   expect((await reply.boundingBox())!.height).toBeGreaterThanOrEqual(43);
   await reply.tap();

@@ -34,10 +34,16 @@ export interface MessageMenuRules {
   pinned: boolean;
   /** The server gives message links (`endpoints.messageLink`). */
   canLink: boolean;
+  /** 1.35: the items the configuration offers (`menu.items`; absent: none of the 1.35 items). */
+  offered?: Record<string, boolean>;
+  /** 1.35: the viewer may react (quick reactions row). */
+  canReact?: boolean;
+  /** 1.35: the message is in the viewer's Saved list (the item says "Remove from saved"). */
+  saved?: boolean;
 }
 
 /** The items of the menu, by `data-part`. */
-export type MessageMenuItem = 'reply' | 'edit' | 'copy-link' | 'pin' | 'delete';
+export type MessageMenuItem = 'reply' | 'edit' | 'copy-link' | 'pin' | 'delete' | 'quote' | 'copy-text' | 'save' | 'mark-unread' | 'info';
 
 /**
  * Which items the viewer sees: Reply to whoever may write; Edit for the author within the window (who may still
@@ -48,13 +54,133 @@ export type MessageMenuItem = 'reply' | 'edit' | 'copy-link' | 'pin' | 'delete';
  */
 export function visibleItems(rules: MessageMenuRules): Record<MessageMenuItem, boolean> {
   const own = rules.usable && rules.mine && rules.inWindow;
+  const offered = (name: string): boolean => rules.usable && rules.offered?.[name] === true;
   return {
     reply: rules.usable && rules.canSend,
     edit: own && rules.canSend,
     'copy-link': rules.usable && rules.canLink,
     pin: rules.usable && rules.canPin,
     delete: own,
+    // 1.35: Quote needs the composer; Mark unread is never offered on one's own message; Info (the server decides
+    // again whose messages) only on one's own unless the server says otherwise when asked.
+    quote: offered('quote') && rules.canSend,
+    'copy-text': offered('copy_text'),
+    save: offered('save'),
+    'mark-unread': offered('mark_unread') && !rules.mine,
+    info: offered('info'),
   };
+}
+
+/** 1.35: blocks whose text starts a new line in the copied text. */
+const BLOCKS = new Set(['P', 'DIV', 'LI', 'BLOCKQUOTE', 'PRE', 'UL', 'OL', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE', 'TR']);
+
+/**
+ * 1.35 "Copy text": the plain text the viewer sees in a rendered bubble — mentions as their names and references as
+ * their titles (or the neutral placeholder), as shown; list items start with "- ", quote lines with "> ", a link whose
+ * text is not its address is "text (address)", an image is its alt text; spaces inside a line are collapsed.
+ *
+ * @param root The rendered bubble.
+ * @returns The text.
+ */
+export function plainText(root: Element): string {
+  const lines: string[] = [];
+  let line = '';
+  const flush = (): void => {
+    lines.push(line.replace(/[ \t]+/g, ' ').trim());
+    line = '';
+  };
+  const walk = (node: Node, quote: number): void => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      line += node.textContent ?? '';
+      return;
+    }
+    if (!(node instanceof Element) || node.matches('[hidden], [aria-hidden="true"], script, style, template')) {
+      return;
+    }
+    if (node.tagName === 'BR') {
+      flush();
+      line = '> '.repeat(quote);
+      return;
+    }
+    if (node.tagName === 'IMG') {
+      line += node.getAttribute('alt') ?? '';
+      return;
+    }
+    const block = BLOCKS.has(node.tagName);
+    const depth = node.tagName === 'BLOCKQUOTE' ? quote + 1 : quote;
+    if (block && line.trim() !== '') {
+      flush();
+    }
+    if (block && !['UL', 'OL', 'TABLE', 'TR', 'BLOCKQUOTE'].includes(node.tagName)) {
+      line = '> '.repeat(depth) + (node.tagName === 'LI' ? '- ' : '');
+    }
+    const before = line.length;
+    node.childNodes.forEach((child) => walk(child, depth));
+    if (node.tagName === 'A') {
+      const href = node.getAttribute('href') ?? '';
+      const shown = line.slice(before).trim();
+      if (/^(?:https?:|mailto:)/i.test(href) && shown !== href && shown !== href.replace(/^mailto:/i, '')) {
+        line += ` (${href})`;
+      }
+    }
+    if (block) {
+      flush();
+    }
+  };
+  root.childNodes.forEach((child) => walk(child, 0));
+  flush();
+  // Lines that only kept their quote / list prefix, and empty lines between blocks, are left out.
+  return lines
+    .filter((text) => /[^>\s-]/.test(text))
+    .join('\n');
+}
+
+/**
+ * 1.35 "Quote": the message as a Markdown quote block for the composer — `> **Name** wrote:` and every line of its
+ * plain text (mentions are names, not tokens: quoting never notifies anyone), at most `max` characters.
+ *
+ * @param author Name of the author.
+ * @param text Plain text of the message ({@link plainText}).
+ * @param wrote The translated "%name% wrote:" pattern.
+ * @param max Longest quoted text (characters).
+ * @returns The quote and an empty line after it, or '' when there is no text.
+ */
+export function quoteBlock(author: string, text: string, wrote: string, max: number): string {
+  const trimmed = text.trim();
+  if (trimmed === '') {
+    return '';
+  }
+  const cut = trimmed.length > max ? `${trimmed.slice(0, max - 1).trimEnd()}…` : trimmed;
+  const name = author.replace(/\s+/g, ' ').trim().replace(/[*_`\\]/g, '\\$&');
+  const head = name === '' ? '' : `> ${wrote.replace('%name%', `**${name}**`)}\n`;
+  return `${head}${cut.split('\n').map((row) => `> ${row}`.trimEnd()).join('\n')}\n\n`;
+}
+
+/**
+ * 1.35: hides the separators of a kebab menu that no longer separate two visible items (a group whose items are all
+ * hidden), so the kebab never shows two separators in a row, nor one at an end.
+ *
+ * @param menu The kebab panel.
+ */
+export function tidySeparators(menu: Element): void {
+  let pending: HTMLElement | null = null;
+  let seen = false;
+  for (const child of [...menu.children] as HTMLElement[]) {
+    if (child.matches('[data-part="menu-separator"]')) {
+      child.hidden = true;
+      if (seen && pending === null) {
+        pending = child;
+      }
+      continue;
+    }
+    if (!child.hidden) {
+      if (pending !== null) {
+        pending.hidden = false;
+        pending = null;
+      }
+      seen = true;
+    }
+  }
 }
 
 /**

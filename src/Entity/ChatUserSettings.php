@@ -87,6 +87,7 @@ class ChatUserSettings
         'pushPreview'         => 'bool',
         'presenceVisible'     => 'bool',
         'emailDigest'         => 'bool',
+        'shareReadTimes'      => 'bool',
     ];
 
     #[ORM\Id]
@@ -170,6 +171,17 @@ class ChatUserSettings
     /** When the status (and its text) go back to available; null = never. */
     #[ORM\Column(name: 'status_expires_at', type: Types::DATETIME_IMMUTABLE, nullable: true)]
     private ?DateTimeImmutable $statusExpiresAt = null;
+
+    /**
+     * 1.35: share the times this user read messages (message info). Reciprocal: off, the user's read times are neither
+     * stored nor shown, and the user sees nobody's read times. The read state itself (✓✓, "Seen by") is not affected.
+     */
+    #[ORM\Column(name: 'share_read_times', options: ['default' => true])]
+    private bool $shareReadTimes = true;
+
+    /** 1.35 (audit TK-2 / TK-4): when sharing was last turned back on; read times stored before it are never shown. */
+    #[ORM\Column(name: 'read_times_shared_since', type: Types::DATETIME_IMMUTABLE, nullable: true)]
+    private ?DateTimeImmutable $readTimesSharedSince = null;
 
     /** Email listing the conversations still unread a while after a message (when the application sends it). */
     #[ORM\Column(name: 'email_digest', options: ['default' => true])]
@@ -293,6 +305,41 @@ class ChatUserSettings
         }
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->sound = $sound;
+    }
+
+    /**
+     * 1.35: whether the user shares their read times (and sees other people's).
+     *
+     * @return bool True when shared (the default)
+     */
+    public function isShareReadTimes(): bool
+    {
+        return $this->shareReadTimes;
+    }
+
+    /**
+     * 1.35: shares or stops sharing the user's read times (reciprocal).
+     *
+     * @param bool $share True to share
+     */
+    public function setShareReadTimes(bool $share): void
+    {
+        if ($share && !$this->shareReadTimes) {
+            // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+            $this->readTimesSharedSince = new DateTimeImmutable();
+        }
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->shareReadTimes = $share;
+    }
+
+    /**
+     * 1.35 (audit TK-2 / TK-4): when the user last turned sharing back on (read times stored before it are ignored).
+     *
+     * @return DateTimeImmutable|null The moment, or null when sharing was never turned off and on again
+     */
+    public function getReadTimesSharedSince(): ?DateTimeImmutable
+    {
+        return $this->readTimesSharedSince;
     }
 
     /**
@@ -547,6 +594,7 @@ class ChatUserSettings
                 'openOnMessage'       => $this->setOpenOnMessage($value),
                 'pushPreview'         => $this->setPushPreview($value),
                 'presenceVisible'     => $this->setPresenceVisible($value),
+                'shareReadTimes'      => $this->setShareReadTimes($value),
                 default               => $this->setEmailDigest($value),
             };
 
@@ -575,7 +623,7 @@ class ChatUserSettings
     /**
      * The preferences the browser needs (dock configuration, settings endpoint answer).
      *
-     * @return array{sound: string, sounds: array<string, string>, volume: int, backgroundOnly: bool, buzz: bool, buzzOpenWindow: bool, openOnMessage: bool, sendKey: string, pushPreview: bool, presence: bool, push: bool, emailDigest: bool}
+     * @return array{sound: string, sounds: array<string, string>, volume: int, backgroundOnly: bool, buzz: bool, buzzOpenWindow: bool, openOnMessage: bool, sendKey: string, pushPreview: bool, presence: bool, push: bool, emailDigest: bool, shareReadTimes: bool}
      */
     public function preferences(): array
     {
@@ -592,6 +640,7 @@ class ChatUserSettings
             'presence'       => $this->presenceVisible,
             'push'           => $this->pushEnabled,
             'emailDigest'    => $this->emailDigest,
+            'shareReadTimes' => $this->shareReadTimes,
         ];
     }
 

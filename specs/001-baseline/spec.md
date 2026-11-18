@@ -7,7 +7,7 @@
 
 ## Summary
 
-A floating chat for Symfony applications. Installing the bundle gives integrators:
+A floating chat dock for Symfony applications. Installing the bundle gives integrators:
 
 - **Configuration** under `nowo_chat_kit` (`default_profile` + `profiles`), with the user entity (`user_class`), retention, realtime, Web Push, email digest, icons, reactions, rate limits and the full-page layout.
 - **A Doctrine model** (`nowo_chat_*` tables) for direct conversations, application channels and support threads, with participants, read cursors, messages (Markdown + sanitised HTML, tombstones, buzz), reactions and per-user settings.
@@ -210,6 +210,7 @@ A floating chat for Symfony applications. Installing the bundle gives integrator
 - **FR-TS-009** — Feature modules `avatar.ts`, `badges.ts`, `composer-tools.ts`, `mention.ts`, `reference.ts`, `sidebar.ts`, `status.ts`, `support.ts`, `prefs.ts`, `public.ts` extend the dock and thread; everything is built with DOM nodes and `textContent`, never HTML from user text.
 - **FR-TS-010** — `motion.ts` closes dialogs with an effect (a fade plus a timer fallback) and `overlay.ts` makes the dock step aside through `nowo:overlay-open` / `nowo:overlay-close` and `data-nowo-overlay`.
 - **FR-MENU-001** — Message menu and context menu (1.33): each message of the dock carries a UiKit kebab ("More actions", template block `nowo_chat_message_menu`) with Reply, Edit, Copy link, Pin / Unpin and Delete; `message-menu.ts` shows only the items the viewer may use (Reply / Edit need write access, Edit / Delete only the author within the 15-minute window, Pin the bundle's pin rights, Copy link any shown message) and the server checks each action again on its endpoint (send, edit, delete, pin, and `POST …/messages/{messageUuid}/link` with the CSRF header, same origin and the VIEW voter). The message is focusable and the scope of the kebab's UiKit 2.54 context menu (right-click, Shift+F10, ContextMenu key, long press), on with `web_ui.message_context_menu: true` or with null and UiKit's `theme.context_menus`, off with false. `ChatMarkdownRenderer::stripAttributes()` (server) and `stripReservedAttributes()` (browser) keep `data-nowo-ui-context-menu*` and `data-nowo-ui-card` out of message bodies. A `?message=<uuid>` link scrolls the conversation to that message.
+- **FR-MENU-002** — Richer message menu (1.35, Beacon D-20261118-02): `message_menu` adds quick reactions (configured row + "More…" picker; the server accepts `reactions` ∪ `ChatEmojiCatalog`), Quote (mentions as names), Copy text (plain text the viewer sees), Mark unread from here (`POST …/unread`; the forward-only `receipt_message_id` keeps other people's receipts), Save for later (`PUT`/`DELETE …/save`, `GET /chat/api/saved`, page `/chat/saved`, dock entry; rows of a lost conversation hidden) and Message info (`GET …/info`: people up to `per_person_max_members`, counts above; read times in `nowo_chat_read_mark` only with `read_times` and the reciprocal `shareReadTimes` preference). Voter attributes SAVE / MARK_UNREAD / INFO, `ChatMessageActionsInterface` by uuid, events after commit, GDPR export / erasure and purge of the new rows, UiKit 2.58 kebab rows, separators and phone bottom sheet. Every conflict answer carries `code` and `X-Conflict-Code` (REQ-RUNTIME-003 rule 6).
 
 ## Key entities
 

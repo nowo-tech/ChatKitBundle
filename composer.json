@@ -1,6 +1,6 @@
 {
     "name": "nowo-tech/chat-kit-bundle",
-    "description": "Floating chat for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens.",
+    "description": "Floating chat dock for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens.",
     "type": "symfony-bundle",
     "keywords": [
         "symfony",
@@ -42,8 +42,8 @@
         "doctrine/orm": "^3.3",
         "nowo-tech/form-kit-bundle": "^2.17",
         "nowo-tech/transaction-contract": "^1.0",
-        "nowo-tech/transaction-doctrine": "^1.3",
-        "nowo-tech/ui-kit-bundle": "^2.54",
+        "nowo-tech/transaction-doctrine": "^1.6",
+        "nowo-tech/ui-kit-bundle": "^2.58.1",
         "psr/cache": "^3.0",
         "psr/log": "^3.0",
         "symfony/asset": "^7.4 || ^8.0",
