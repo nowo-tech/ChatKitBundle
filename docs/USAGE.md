@@ -220,7 +220,7 @@ ignored (warning, configured value applies); an exception stops the run before a
 message included: never put secrets in an exception message). A configured `retention_days` of 0 or less (for example
 an `%env(int:…)%` that coerced garbage to 0) makes the purge fail closed: error log, `FAILURE`, nothing deleted.
 The provider is global: it overrides `retention_days` for every profile. Validate the value you return (the example
-refuses anything that is not an integer of at least 1). Beacon-style example, reading an administration setting:
+refuses anything that is not an integer of at least 1). Example, reading an administration setting:
 
 ```php
 final class InstanceSettingsRetention implements RetentionPolicyProviderInterface
@@ -626,7 +626,7 @@ use Symfony\Component\DependencyInjection\Attribute\AsTaggedItem;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
-/** Beacon-like: the room channels the viewer belongs to (spec 184), "Browse channels" and "Create channel". */
+/** Example: the room channels the viewer belongs to, "Browse channels" and "Create channel". */
 #[AsTaggedItem(priority: 10)]
 final class RoomChannelsSidebar implements ChatSidebarSectionProviderInterface
 {
@@ -1649,7 +1649,7 @@ value objects.
 
 ## Links
 
-1.19. Links such as the Teams meeting of a team, in a channel or in a direct conversation:
+1.19. Links such as a team's video-meeting link, in a channel or in a direct conversation:
 
 - **Pinned links** — a compact bar under the conversation header shows the conversation's links as chips (provider
   icon + title; a click opens the link in a new tab). Members with the right add, edit and remove them through a dialog

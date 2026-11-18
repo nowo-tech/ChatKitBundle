@@ -130,6 +130,7 @@ and `make -C demo/symfony8 demo-screenshots` (see [docs/CONTRIBUTING.md](docs/CO
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Changelog](docs/CHANGELOG.md)
 - [Upgrading](docs/UPGRADING.md)
+- [Roadmap](docs/ROADMAP.md)
 - [Release](docs/RELEASE.md)
 - [Security](docs/SECURITY.md)
 - [Engram](docs/ENGRAM.md)

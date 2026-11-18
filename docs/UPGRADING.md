@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.35.0](#to-1350)
 - [To 1.34.0](#to-1340)
 - [To 1.33.0](#to-1330)
 - [To 1.32.0](#to-1320)
@@ -136,7 +137,15 @@ nowo_chat_kit:
 - **Privacy:** previous texts and thread read state are personal data. Document them in your privacy notice;
   `ChatPersonalData` exports and erases them.
 
-**1.35.** From **1.34.1**:
+## To 1.35.0
+
+From **1.34.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+From **1.34.1**:
 
 ```bash
 composer update nowo-tech/chat-kit-bundle nowo-tech/ui-kit-bundle nowo-tech/transaction-doctrine   # ui-kit ^2.58.1, transaction-doctrine ^1.6
