@@ -696,7 +696,7 @@ From **1.24.x**: `composer update nowo-tech/chat-kit-bundle`. Additive; no schem
   keys.
 - **Deliberate layout change once a section provider exists:** the full-page chat (page mode) shows the grouped,
   collapsible sidebar instead of the flat list under **All** without a search: **Recent** (toggle **Unread**), your
-  sections, **Direct messages and groups** (every listed conversation none of your sections shows), compact one-line
+  sections, **Direct messages and groups** (every listed conversation none of your sections shows), compact Slack-style
   rows (icon or avatar, name, muted, `@`, unread count) instead of the two-line rows with preview and time, and a wider
   list column (`minmax(280px, 380px)` instead of `minmax(260px, 340px)`). The other filters (Unread, Projects, Support,
   Closed) and the search still list flat, exactly as before. The floating dock keeps the 1.24 list unless you set
