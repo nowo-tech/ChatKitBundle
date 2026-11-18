@@ -18,6 +18,8 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
+use function array_map;
+use function array_values;
 use function is_int;
 
 /**
@@ -46,17 +48,19 @@ class ChatParticipantRepository extends ServiceEntityRepository
      * @param ChatUserInterface $except The viewer, left out
      * @param int $limit Maximum number of rows
      *
-     * @return list<ChatParticipant> Participants with a read cursor, furthest read first
+     * @return list<ChatParticipant> Participants with a read cursor, furthest receipt first
      */
     public function findReaders(ChatConversation $conversation, ChatUserInterface $except, int $limit = 50): array
     {
         $qb = $this->createQueryBuilder('p');
         $this->refs->join($qb, 'p.user', 'u', true);
 
-        return $qb->where('p.conversation = :conversation AND ' . $this->refs->field('p', 'user') . ' <> :except AND p.lastReadMessageId IS NOT NULL')
+        // 1.35: the receipt cursor (what other people see), never the reader's own read marker.
+        return $qb->where('p.conversation = :conversation AND ' . $this->refs->field('p', 'user') . ' <> :except AND (p.lastReadMessageId IS NOT NULL OR p.receiptMessageId IS NOT NULL)')
             ->setParameter('conversation', $conversation)
             ->setParameter('except', $this->refs->value($except))
-            ->orderBy('p.lastReadMessageId', 'DESC')
+            ->addSelect('COALESCE(p.receiptMessageId, p.lastReadMessageId) AS HIDDEN receipt')
+            ->orderBy('receipt', 'DESC')
             ->setMaxResults($limit)
             ->getQuery()
             ->getResult();

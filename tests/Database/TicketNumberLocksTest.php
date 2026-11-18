@@ -36,7 +36,10 @@ final class TicketNumberLocksTest extends LoadDatabaseTestCase
         // another draft's row. The 1.29 statement read MAX(ticket_number) over the whole table.
         $peer = $this->otherSession();
         self::assertSame('OK', $peer->execute('BEGIN'));
-        self::assertSame('OK', $peer->execute("INSERT INTO nowo_chat_conversation (uuid, kind, ticket_number, last_message_at, created_at) VALUES ('00000000-0000-7000-8000-00000000c0de', 'support', 99, '2026-11-15 10:00:00', '2026-11-15 10:00:00')"));
+        // 1.35 (audit TK I2): its number sits below the one this opening takes. Above it (99), the unique-key check of the
+        // new number on InnoDB locks the next index record, which is the peer's uncommitted row: on MariaDB that waited
+        // now and then (a flake since 1.30, unrelated to what this test proves).
+        self::assertSame('OK', $peer->execute("INSERT INTO nowo_chat_conversation (uuid, kind, ticket_number, last_message_at, created_at) VALUES ('00000000-0000-7000-8000-00000000c0de', 'support', 0, '2026-11-15 10:00:00', '2026-11-15 10:00:00')"));
         self::assertSame('OK', $peer->execute('UPDATE nowo_chat_conversation SET last_message_at = last_message_at WHERE id = ' . $other->getId()));
 
         $tickets->chooseTopic($this->userNamed('bea'), $this->draft($draft), 'billing');

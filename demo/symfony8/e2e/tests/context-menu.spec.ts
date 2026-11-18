@@ -63,7 +63,8 @@ test.describe('message context menu (1.33)', () => {
     const message = await sendOwn(window, text);
 
     await rightClick(page, message);
-    await expect(menu(page).getByRole('menuitem')).toHaveText(['Reply', 'Edit', 'Copy link', /^(Pin|Unpin)$/, 'Delete']);
+    // 1.35: the quick reactions row first, then the groups.
+    await expect(menu(page).getByRole('menuitem')).toHaveText(['👍', '❤️', '😂', '😮', '😢', '🙏', '+', 'Reply', 'Quote', 'Copy text', 'Copy link', /^(Save for later|Remove from saved)$/, /^(Pin|Unpin)$/, 'Message info', 'Edit', 'Delete']);
     await expect(message).toHaveAttribute('data-nowo-ui-context-menu-open', '');
 
     await menu(page).getByRole('menuitem', { name: 'Reply' }).click();
@@ -82,7 +83,7 @@ test.describe('message context menu (1.33)', () => {
     await expect(theirs).toBeVisible();
 
     await rightClick(page, theirs);
-    await expect(menu(page).getByRole('menuitem')).toHaveText(['Reply', 'Copy link', /^(Pin|Unpin)$/]);
+    await expect(menu(page).getByRole('menuitem')).toHaveText(['👍', '❤️', '😂', '😮', '😢', '🙏', '+', 'Reply', 'Quote', 'Copy text', 'Copy link', /^(Save for later|Remove from saved)$/, 'Mark unread from here', /^(Pin|Unpin)$/]);
     await menu(page).getByRole('menuitem', { name: 'Copy link' }).click();
     await expect(window.locator('[data-part="notice"]')).toHaveText('Link to the message copied');
     const copied = await page.evaluate(() => navigator.clipboard.readText());

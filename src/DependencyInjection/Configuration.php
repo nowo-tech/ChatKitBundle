@@ -11,11 +11,16 @@ use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
+use function array_diff;
+use function array_filter;
 use function array_key_exists;
+use function array_unique;
 use function count;
+use function implode;
 use function is_array;
 use function is_string;
 use function preg_match;
+use function strlen;
 
 /**
  * Configuration tree for `nowo_chat_kit` (REQ-CFG-001: `default_profile` + `profiles`).
@@ -44,6 +49,12 @@ final class Configuration implements ConfigurationInterface
     /** 1.17: dock reactions to a modal overlay (`dock.overlay`). */
     public const array DOCK_OVERLAY_MODES = ['hide', 'inert', 'none'];
 
+    /** 1.35: items of the message menu, in their default order (`message_menu.order`). */
+    public const array MESSAGE_MENU_ITEMS = ['reply', 'quote', 'copy_text', 'copy_link', 'save', 'mark_unread', 'pin', 'info', 'edit', 'delete'];
+
+    /** 1.35: default quick reactions of the message menu. */
+    public const array DEFAULT_QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
     /** Dock icon → Symfony UX Icons name (Tabler set), used with `icon_set: ux_icon`. */
     public const array DEFAULT_ICONS = [
         'chat'        => 'tabler:message-circle',
@@ -61,6 +72,7 @@ final class Configuration implements ConfigurationInterface
         'retry'       => 'tabler:refresh',
         'buzz'        => 'tabler:bolt',
         'smile'       => 'tabler:mood-smile',
+        'bookmark'    => 'tabler:bookmark',
         'check'       => 'tabler:check',
         'edit'        => 'tabler:pencil',
         'trash'       => 'tabler:trash',
@@ -439,6 +451,7 @@ final class Configuration implements ConfigurationInterface
                                 ->end()
                             ->end()
                             ->append($this->linksNode())
+                            ->append($this->messageMenuNode())
                             ->append($this->statusPresetsNode())
                             ->append($this->supportNode())
                             ->arrayNode('limits')
@@ -523,6 +536,113 @@ final class Configuration implements ConfigurationInterface
     /**
      * `links` (1.19): pinned links per conversation, link cards in messages and the Links panel.
      */
+    /**
+     * 1.35 (Beacon, owner decision D-20261118-02): the richer message menu. Items that add stored data (save, message
+     * info) are off by default; the others only use what the viewer already sees.
+     */
+    private function messageMenuNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('message_menu'))->getRootNode();
+        $node
+            ->info('1.35: the message menu (kebab and context menu): quick reactions, copy text, quote, mark unread, save for later, message info. Every item is checked again on the server.')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->arrayNode('quick_reactions')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->arrayNode('emojis')
+                            ->info('Row of emoji at the top of the menu; [] hides the row. Each must be one of `reactions`, or of the picker catalog when `picker` is on.')
+                            ->scalarPrototype()->end()
+                            ->defaultValue(self::DEFAULT_QUICK_REACTIONS)
+                        ->end()
+                        ->booleanNode('picker')
+                            ->info('"More…" opens the emoji picker; the server then accepts `reactions` plus the picker catalog (ChatEmojiCatalog), nothing else.')
+                            ->defaultTrue()
+                        ->end()
+                    ->end()
+                ->end()
+                ->booleanNode('copy_text')
+                    ->info('"Copy text": the plain text the viewer sees (Markdown stripped, mentions as names). Client side.')
+                    ->defaultTrue()
+                ->end()
+                ->arrayNode('quote')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('enabled')
+                            ->info('"Quote": the message as a multi-line quote in the composer (mentions as plain names: nobody is notified).')
+                            ->defaultTrue()
+                        ->end()
+                        ->integerNode('max_length')
+                            ->info('Characters of the quoted text, cut with "…".')
+                            ->defaultValue(1000)
+                            ->min(20)
+                            ->max(4000)
+                        ->end()
+                    ->end()
+                ->end()
+                ->booleanNode('mark_unread')
+                    ->info('"Mark unread from here": moves the viewer\'s read marker to just before the message (other people\'s read receipts never go back).')
+                    ->defaultTrue()
+                ->end()
+                ->arrayNode('save')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('enabled')
+                            ->info('"Save for later": per-user saved messages, the "Saved" list (GET /chat/saved and the dock). Stores data: off by default.')
+                            ->defaultFalse()
+                        ->end()
+                        ->integerNode('max_per_user')
+                            ->info('Saved messages per user; 0 = unlimited.')
+                            ->defaultValue(500)
+                            ->min(0)
+                        ->end()
+                        ->booleanNode('dock_entry')
+                            ->info('A "Saved" button in the dock header (when save is enabled).')
+                            ->defaultTrue()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('message_info')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('enabled')
+                            ->info('"Message info": who read the message (and when, with read_times). Stores read times: off by default.')
+                            ->defaultFalse()
+                        ->end()
+                        ->booleanNode('read_times')
+                            ->info('Store and show read times (only of users who share them: the reciprocal "Share read times" preference).')
+                            ->defaultTrue()
+                        ->end()
+                        ->integerNode('per_person_max_members')
+                            ->info('Up to this many participants the info lists people; above it, counts only.')
+                            ->defaultValue(20)
+                            ->min(2)
+                            ->max(500)
+                        ->end()
+                        ->booleanNode('own_messages_only')
+                            ->info('Read info on the viewer\'s own messages only; moderators (support agents) see it on every message.')
+                            ->defaultTrue()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('order')
+                    ->info('Order of the menu items (a subset hides the others). Known: ' . implode(', ', self::MESSAGE_MENU_ITEMS) . '.')
+                    ->scalarPrototype()->end()
+                    ->defaultValue(self::MESSAGE_MENU_ITEMS)
+                    ->validate()
+                        ->ifTrue(static fn (array $order): bool => array_diff($order, self::MESSAGE_MENU_ITEMS) !== [] || count(array_unique($order)) !== count($order))
+                        ->thenInvalid('message_menu.order takes each of ' . implode(', ', self::MESSAGE_MENU_ITEMS) . ' at most once, got %s.')
+                    ->end()
+                ->end()
+            ->end()
+            ->validate()
+                ->ifTrue(static fn (array $menu): bool => array_filter($menu['quick_reactions']['emojis'], static fn (mixed $emoji): bool => !is_string($emoji) || $emoji === '' || strlen($emoji) > 32) !== [])
+                ->thenInvalid('message_menu.quick_reactions.emojis takes non-empty emoji of at most 32 bytes, got %s.')
+            ->end();
+
+        return $node;
+    }
+
     private function linksNode(): ArrayNodeDefinition
     {
         $node = (new TreeBuilder('links'))->getRootNode();

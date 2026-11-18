@@ -12,7 +12,8 @@ import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from 
 import { decodeMentions, markOwnMentions, MentionAutocomplete, mentionsViewer } from './mention';
 import { decodeReferences, ReferenceAutocomplete } from './reference';
 import { ConversationLinks, copyText, decodeLinkTokens, linksSettings, linkToken } from './links';
-import { quoteOf, stripReservedAttributes, visibleItems, type MessageMenuItem } from './message-menu';
+import { plainText, quoteBlock, quoteOf, stripReservedAttributes, tidySeparators, visibleItems, type MessageMenuItem } from './message-menu';
+import { openMessageInfo } from './message-info';
 import { SupportPanel } from './support';
 import { customStatus, statusLabel } from './status';
 import { part, text, type Templates } from './templates';
@@ -67,6 +68,12 @@ export interface ThreadHost {
    */
   read(uuid: string, messageId: number): void;
   /**
+   * 1.35: the read marker of a conversation moved back ("Mark unread from here"): the list shows its unread badge again.
+   *
+   * @param uuid Conversation uuid.
+   */
+  unreadChanged?(uuid: string): void;
+  /**
    * Whether the phone layout applies.
    *
    * @returns True on phones.
@@ -96,6 +103,8 @@ export interface ThreadHost {
 
 const TYPING_SEND_EVERY_MS = 3_000;
 const TYPING_SHOW_MS = 5_000;
+/** How long an action's notice shows (ms). */
+const FLASH_MS = 3000;
 const NEAR_BOTTOM_PX = 48;
 
 /** localStorage key: the formatting toolbar stays open (1.11). */
@@ -185,6 +194,12 @@ export class ThreadView {
   /** Outside-click listener of the open popover (emoji or reactions), removed on every close. */
   private popoverOutside: ((event: MouseEvent) => void) | null = null;
   private reactionPanel: HTMLElement | null = null;
+  /** 1.35: until when a flashed notice (an action's feedback) is kept by applySummary() (epoch ms). */
+  private flashUntil = 0;
+  /** 1.35: uuids of the messages the viewer saved for later (from the pages and the `saved` events). */
+  private readonly savedUuids = new Set<string>();
+  /** 1.35: "Mark unread from here" holds the automatic read until the viewer scrolls, types or sends again. */
+  private unreadHold: AbortController | null = null;
   /** Message being edited (its bubble shows the inline editor). */
   private editing: number | null = null;
   /** Newest message id painted so far: only lines newer than it get an entry animation. */
@@ -618,9 +633,12 @@ export class ThreadView {
     this.resolveBtn.hidden = !(this.host.config.isAgent && summary.kind === 'support' && (summary.supportStatus === 'open' || summary.supportStatus === 'waiting'));
     this.setUnread(this.minimised ? summary.unread : 0);
     this.input.disabled = !summary.canSend;
-    this.notice.hidden = summary.canSend;
-    // 1.24: a read-only channel says so (hosts that override the strings without the new key keep the old text).
-    this.notice.textContent = summary.canSend ? '' : t(i18n, summary.kind === 'channel' && i18n.channel_read_only !== undefined ? 'channel_read_only' : 'read_only');
+    // 1.35: a notice flashing right now (an action's feedback) stays until its own timer resets it.
+    if (Date.now() >= this.flashUntil) {
+      this.notice.hidden = summary.canSend;
+      // 1.24: a read-only channel says so (hosts that override the strings without the new key keep the old text).
+      this.notice.textContent = summary.canSend ? '' : t(i18n, summary.kind === 'channel' && i18n.channel_read_only !== undefined ? 'channel_read_only' : 'read_only');
+    }
     this.applyMute();
     this.composer.hidden = !summary.canSend;
     this.updateComposerState();
@@ -861,6 +879,7 @@ export class ThreadView {
       this.syncedUpTo = this.lastId();
       this.readUpTo = page.readUpTo ?? 0;
       this.setReaders(page.readers);
+      this.noteSaved(page.saved);
       this.loaded = true;
       this.render();
       this.scrollToBottom(false);
@@ -895,6 +914,7 @@ export class ThreadView {
       this.readUpTo = Math.max(this.readUpTo, page.readUpTo);
     }
     this.setReaders(page.readers);
+    this.noteSaved(page.saved);
     this.syncedUpTo = Math.max(this.syncedUpTo, page.messages.at(-1)?.id ?? 0);
     this.merge(page.messages, true);
     if (page.messages.length === 0) {
@@ -1035,6 +1055,7 @@ export class ThreadView {
           this.readUpTo = Math.max(this.readUpTo, page.readUpTo);
         }
         this.setReaders(page.readers);
+        this.noteSaved(page.saved);
         // Everything after the cursor up to this page's newest message is now held (pages are contiguous).
         const newest = page.messages.at(-1)?.id ?? 0;
         this.syncedUpTo = Math.max(this.syncedUpTo, newest);
@@ -1378,12 +1399,13 @@ export class ThreadView {
    * @param message Text to show.
    */
   private flashNotice(message: string): void {
+    this.flashUntil = Date.now() + FLASH_MS;
     this.notice.hidden = false;
     this.notice.textContent = message;
     window.setTimeout(() => {
       this.notice.hidden = this.summary.canSend;
       this.notice.textContent = this.summary.canSend ? '' : t(this.host.config.i18n, 'read_only');
-    }, 3000);
+    }, FLASH_MS);
   }
 
   /** One popover at a time (emoji picker or reaction bar); an outside click closes it. */
@@ -1919,7 +1941,7 @@ export class ThreadView {
 
     const bubble = part(article, 'bubble');
     if (message.deleted) {
-      // WhatsApp-style tombstone: a ban icon and "You deleted this message" / "This message was deleted".
+      // Tombstone: a ban icon and "You deleted this message" / "This message was deleted".
       bubble.classList.add('nowo-chat-bubble--deleted');
       const key = message.moderated ? 'moderated_message' : message.mine ? 'deleted_message_mine' : 'deleted_message';
       bubble.replaceChildren(this.host.templates.icon('ban', 14), h('span', { text: t(i18n, key) }));
@@ -2084,20 +2106,43 @@ export class ThreadView {
       return null;
     }
     const config = this.host.config;
+    const endpoints = config.endpoints;
+    const offered = config.menu?.items ?? {};
+    const saved = this.savedUuids.has(message.uuid);
     const shown = visibleItems({
       ...state,
       canSend: this.summary.canSend,
       canPin: this.canPin,
       pinned: message.pinned === true,
-      canLink: (config.endpoints.messageLink ?? '') !== '',
+      canLink: (endpoints.messageLink ?? '') !== '',
+      // 1.35: an item is offered only when the configuration says so and its endpoint exists.
+      offered: {
+        quote: offered.quote === true,
+        copy_text: offered.copy_text === true,
+        save: offered.save === true && (endpoints.save ?? '') !== '',
+        mark_unread: offered.mark_unread === true && (endpoints.unread ?? '') !== '',
+        // Own messages; moderators (support agents) outside direct conversations (the server decides again).
+        info: offered.info === true && (endpoints.info ?? '') !== '' && (message.mine || (config.isAgent && this.summary.kind !== 'direct')),
+      },
+      saved,
     });
     const details = menu.querySelector('details');
+    const closeKebab = (): void => {
+      if (details !== null) {
+        details.open = false;
+      }
+    };
     const actions: Record<MessageMenuItem, () => void> = {
       reply: () => this.replyTo(message, article),
       edit: () => this.startEdit(message, article),
       'copy-link': () => void this.copyLink(message),
       pin: () => void this.setPinned(message, message.pinned !== true),
       delete: () => this.confirmDelete(message, article),
+      quote: () => this.quote(message, article),
+      'copy-text': () => void this.copyPlainText(article),
+      save: () => void this.toggleSaved(message),
+      'mark-unread': () => void this.markUnreadFrom(message),
+      info: () => void this.showInfo(message, article),
     };
     let any = false;
     for (const [name, run] of Object.entries(actions) as [MessageMenuItem, () => void][]) {
@@ -2110,13 +2155,19 @@ export class ThreadView {
       if (name === 'pin') {
         item.textContent = t(config.i18n, message.pinned === true ? 'unpin' : 'pin');
       }
+      if (name === 'save') {
+        item.textContent = t(config.i18n, saved ? 'unsave_message' : 'save_message');
+      }
       item.addEventListener('click', (event) => {
         event.preventDefault();
-        if (details !== null) {
-          details.open = false;
-        }
+        closeKebab();
         run();
       });
+    }
+    any = this.wireQuickReactions(menu, message, state.usable, closeKebab) || any;
+    const panel = menu.querySelector('.nowo-ui-kebab__menu');
+    if (panel !== null) {
+      tidySeparators(panel);
     }
     menu.hidden = !any;
     // Escape closes the open kebab and gives focus back to its toggle.
@@ -2128,6 +2179,209 @@ export class ThreadView {
       }
     });
     return menu;
+  }
+
+  /**
+   * 1.35: the quick reactions row of the menu (each configured emoji toggles the viewer's reaction through the usual
+   * endpoint; "More…" opens the emoji picker). Shown to whoever may react.
+   *
+   * @param menu The menu holder of the message.
+   * @param message The message.
+   * @param usable Whether the message takes menu actions (a shown text message).
+   * @param closeKebab Closes the kebab before running an item.
+   * @returns Whether the row shows anything.
+   */
+  private wireQuickReactions(menu: HTMLElement, message: ChatMessage, usable: boolean, closeKebab: () => void): boolean {
+    const row = menu.querySelector<HTMLElement>('[data-part="menu-reactions"]');
+    if (row === null) {
+      return false;
+    }
+    const config = this.host.config;
+    const canReact = usable && this.summary.canSend;
+    const mine = config.userUuid;
+    let any = false;
+    row.querySelectorAll<HTMLElement>('[data-part="menu-react"]').forEach((item) => {
+      const emoji = item.dataset.emoji ?? '';
+      item.hidden = !canReact || emoji === '';
+      any ||= !item.hidden;
+      const reacted = (message.reactions?.[emoji] ?? []).includes(mine);
+      item.classList.toggle('is-current', reacted);
+      item.addEventListener('click', (event) => {
+        event.preventDefault();
+        closeKebab();
+        void this.toggleReaction(message, emoji);
+      });
+    });
+    const more = row.querySelector<HTMLElement>('[data-part="menu-react-more"]');
+    if (more !== null) {
+      more.hidden = !canReact || config.menu?.picker !== true;
+      any ||= !more.hidden;
+      more.addEventListener('click', (event) => {
+        event.preventDefault();
+        closeKebab();
+        this.openReactionPicker(message, menu);
+      });
+    }
+    row.hidden = !any;
+    return any;
+  }
+
+  /**
+   * 1.35: "More…" of the quick reactions: the emoji picker next to the message; the pick toggles that reaction.
+   *
+   * @param message The message.
+   * @param anchor Element the picker opens after (the message's menu holder).
+   */
+  private openReactionPicker(message: ChatMessage, anchor: HTMLElement): void {
+    this.closePopovers();
+    const panel = emojiPicker(
+      this.host.config.i18n,
+      (emoji) => {
+        this.closePopovers();
+        void this.toggleReaction(message, emoji);
+      },
+      () => {
+        this.closePopovers();
+        anchor.querySelector<HTMLElement>('summary')?.focus();
+      },
+    );
+    panel.classList.add('nowo-chat-emoji--reactions');
+    this.reactionPanel = panel;
+    anchor.after(panel);
+    panel.querySelector<HTMLButtonElement>('.nowo-chat-emoji__item')?.focus();
+    this.watchOutside(panel, anchor);
+  }
+
+  /**
+   * 1.35: Quote — the message as a multi-line quote at the start of the composer (mentions as names: nobody is notified).
+   *
+   * @param message The message quoted.
+   * @param article Its rendered line.
+   */
+  private quote(message: ChatMessage, article: HTMLElement): void {
+    const config = this.host.config;
+    const block = quoteBlock(message.authorName, plainText(part(article, 'bubble')), t(config.i18n, 'quote_wrote'), config.menu?.quoteMaxLength ?? 1000);
+    if (block === '' || this.input.disabled) {
+      return;
+    }
+    this.input.value = `${block}${this.input.value.replace(/^\n+/, '')}`;
+    this.input.dispatchEvent(new Event('input', { bubbles: true }));
+    this.input.focus({ preventScroll: true });
+    this.input.setSelectionRange(this.input.value.length, this.input.value.length);
+  }
+
+  /**
+   * 1.35: Copy text — the plain text the viewer sees (Markdown stripped, mentions as names).
+   *
+   * @param article The rendered line of the message.
+   */
+  private async copyPlainText(article: HTMLElement): Promise<void> {
+    const i18n = this.host.config.i18n;
+    this.flashNotice(t(i18n, (await copyText(plainText(part(article, 'bubble')))) ? 'text_copied' : 'error'));
+  }
+
+  /**
+   * 1.35: Save for later / Remove from saved (the server checks the viewer may read the message).
+   *
+   * @param message The message.
+   */
+  private async toggleSaved(message: ChatMessage): Promise<void> {
+    const i18n = this.host.config.i18n;
+    try {
+      const saved = await this.host.api.setSaved(this.summary.uuid, message.uuid, !this.savedUuids.has(message.uuid));
+      this.savedChanged(message.uuid, saved);
+      this.flashNotice(t(i18n, saved ? 'saved_done' : 'unsaved_done'));
+    } catch (error) {
+      this.flashNotice(t(i18n, error instanceof ChatApiError && (error.code === 'too_many_saved' || error.code === 'not_savable') ? error.code : 'error'));
+    }
+  }
+
+  /**
+   * 1.35: a message was saved or unsaved (here, in another tab or on another device): its menu follows.
+   *
+   * @param messageUuid The message.
+   * @param saved Whether it is saved now.
+   */
+  savedChanged(messageUuid: string, saved: boolean): void {
+    if (saved === this.savedUuids.has(messageUuid)) {
+      return;
+    }
+    if (saved) {
+      this.savedUuids.add(messageUuid);
+    } else {
+      this.savedUuids.delete(messageUuid);
+    }
+    const message = this.messages.find((candidate) => candidate.uuid === messageUuid);
+    if (message !== undefined) {
+      this.update(message);
+    }
+  }
+
+  /**
+   * 1.35: the saved messages of a page the server sent (`saved`; absent while the item is off).
+   *
+   * @param uuids Uuids of the saved messages of that page.
+   */
+  private noteSaved(uuids: string[] | undefined): void {
+    for (const uuid of uuids ?? []) {
+      this.savedUuids.add(uuid);
+    }
+  }
+
+  /**
+   * 1.35: Mark unread from here — the read marker moves to just before the message; the window stops marking the
+   * conversation read until the viewer scrolls, types or sends again.
+   *
+   * @param message The first message unread again.
+   */
+  private async markUnreadFrom(message: ChatMessage): Promise<void> {
+    const i18n = this.host.config.i18n;
+    try {
+      const readUpTo = await this.host.api.markUnread(this.summary.uuid, message.uuid);
+      this.unreadFrom(readUpTo);
+      this.host.unreadChanged?.(this.summary.uuid);
+      this.flashNotice(t(i18n, 'marked_unread'));
+    } catch {
+      this.flashNotice(t(i18n, 'error'));
+    }
+  }
+
+  /**
+   * 1.35: the read marker moved back (here or in another tab): no automatic read until the viewer acts again.
+   *
+   * @param readUpTo The read marker now (null: nothing read).
+   */
+  unreadFrom(readUpTo: number | null): void {
+    this.readUpTo = readUpTo ?? 0;
+    this.unreadHold?.abort();
+    const hold = new AbortController();
+    this.unreadHold = hold;
+    const release = (): void => {
+      if (this.unreadHold === hold) {
+        hold.abort();
+        this.unreadHold = null;
+        this.maybeMarkRead();
+      }
+    };
+    for (const type of ['wheel', 'touchmove', 'keydown']) {
+      this.body.addEventListener(type, release, { signal: hold.signal, passive: true });
+    }
+    this.input.addEventListener('input', release, { signal: hold.signal });
+  }
+
+  /**
+   * 1.35: Message info — readers and read times (reciprocal) in a dialog.
+   *
+   * @param message The message.
+   * @param article Its rendered line (focused again when the dialog closes).
+   */
+  private async showInfo(message: ChatMessage, article: HTMLElement): Promise<void> {
+    const config = this.host.config;
+    try {
+      openMessageInfo(await this.host.api.messageInfo(this.summary.uuid, message.uuid), config.i18n, config.locale, article);
+    } catch {
+      this.flashNotice(t(config.i18n, 'error'));
+    }
   }
 
   /**
@@ -2258,7 +2512,7 @@ export class ThreadView {
   /** Marks the thread read when the user can see its newest message (expanded, visible tab, scrolled to the bottom). */
   private maybeMarkRead(): void {
     const last = this.messages.at(-1);
-    if (last === undefined || this.readHeld || this.minimised || document.visibilityState !== 'visible' || !this.isNearBottom() || last.id <= this.readUpTo) {
+    if (last === undefined || this.readHeld || this.unreadHold !== null || this.minimised || document.visibilityState !== 'visible' || !this.isNearBottom() || last.id <= this.readUpTo) {
       return;
     }
     this.readUpTo = last.id;

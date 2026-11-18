@@ -1,5 +1,5 @@
 /**
- * The floating chat dock (LinkedIn-style), built from the Twig <template> markup. The "Messaging" panel
+ * The floating chat dock (docked conversation windows along the bottom edge), built from the Twig <template> markup. The "Messaging" panel
  * bottom-right is the launcher and the conversation list; open conversations dock to its left as windows that
  * survive every navigation (DockStore) and stay in step across browser tabs (BroadcastChannel). On phones the
  * launcher opens a full-screen sheet. Everything happens in place: no request reloads or navigates the page.
@@ -882,6 +882,13 @@ export class ChatDock implements ThreadHost {
    * @param uuid Conversation uuid.
    * @param messageId Newest message id seen.
    */
+  /**
+   * 1.35: "Mark unread from here" in a window: the list reloads (its unread badge is back).
+   */
+  unreadChanged(): void {
+    void this.refreshList(true);
+  }
+
   read(uuid: string, messageId: number): void {
     const summary = this.conversations.get(uuid);
     this.sidebar?.markRead(uuid);
@@ -1363,6 +1370,15 @@ export class ChatDock implements ThreadHost {
       } else {
         this.windows.get(event.conversationUuid)?.readBy(event.userUuid, event.userName, event.messageId);
       }
+      return;
+    }
+    if (event.type === 'unread') {
+      // 1.35: "Mark unread from here" in another tab or on another device.
+      this.windows.get(event.conversationUuid)?.unreadFrom(event.readUpTo);
+      return;
+    }
+    if (event.type === 'saved') {
+      this.windows.get(event.conversationUuid)?.savedChanged(event.messageUuid, event.saved);
       return;
     }
     if (event.type === 'typing') {

@@ -28,7 +28,7 @@ final class ChatMessageContextMenuThemeTest extends DatabaseTestCase
     public function testTheKebabFollowsTheThemeFlag(): void
     {
         $html = $this->renderDockTemplates();
-        self::assertMatchesRegularExpression('~<div class="nowo-ui-kebab" data-nowo-ui-kebab data-nowo-ui-context-menu-source data-nowo-ui-context-menu-label="[^"]+">~', $html);
+        self::assertMatchesRegularExpression('~<div class="nowo-ui-kebab" data-nowo-ui-kebab data-nowo-ui-sheet data-nowo-ui-context-menu-source data-nowo-ui-context-menu-label="[^"]+">~', $html);
         self::assertStringNotContainsString('data-nowo-ui-context-menu="off"', $html);
 
         $client = $this->kernel->getContainer()->get('test.client');

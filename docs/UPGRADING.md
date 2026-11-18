@@ -80,6 +80,58 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+From **1.34.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle nowo-tech/ui-kit-bundle nowo-tech/transaction-doctrine   # ui-kit ^2.58.1, transaction-doctrine ^1.6
+php bin/console doctrine:migrations:diff   # then review and run the migration
+```
+
+**Schema (additive).** The richer message menu adds:
+
+- two tables: `nowo_chat_saved_message` and `nowo_chat_read_mark`;
+- three columns with defaults, so there is no data migration: `nowo_chat_participant.receipt_message_id` (nullable;
+  null means "same as `last_read_message_id`"), `nowo_chat_user_settings.share_read_times` (default true) and
+  `nowo_chat_user_settings.read_times_shared_since` (nullable).
+
+The names follow `doctrine.table_name_prefix` / `table_prefix`, and the user columns follow `doctrine.user_reference`,
+as every other chat table. On MySQL / MariaDB (default names, `relation` mode) the migration is equivalent to:
+
+```sql
+ALTER TABLE nowo_chat_participant ADD receipt_message_id INT DEFAULT NULL;
+ALTER TABLE nowo_chat_user_settings ADD share_read_times TINYINT(1) DEFAULT 1 NOT NULL, ADD read_times_shared_since DATETIME DEFAULT NULL;
+CREATE TABLE nowo_chat_saved_message (id INT AUTO_INCREMENT NOT NULL, saved_at DATETIME NOT NULL, message_id INT NOT NULL,
+  user_id INT NOT NULL, INDEX idx_nowo_chat_saved_message_list (user_id, saved_at, id),
+  UNIQUE INDEX uniq_nowo_chat_saved_message (user_id, message_id), PRIMARY KEY (id));
+CREATE TABLE nowo_chat_read_mark (id INT AUTO_INCREMENT NOT NULL, started_at DATETIME NOT NULL, up_to_message_id INT NOT NULL, read_at DATETIME NOT NULL,
+  participant_id INT NOT NULL, INDEX idx_nowo_chat_read_mark_upto (participant_id, up_to_message_id),
+  INDEX idx_nowo_chat_read_mark_at (read_at), PRIMARY KEY (id));
+-- plus the foreign keys (ON DELETE CASCADE) Doctrine generates
+```
+
+**What appears without configuration.** The message menu now shows the quick reactions row (with **More…**), Quote,
+Copy text and Mark unread from here, with separators between groups. Save for later and Message info stay off until
+you enable them:
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            message_menu:
+                save: { enabled: true }          # Saved list: GET /chat/saved, dock entry
+                message_info: { enabled: true }  # who read it (and when: reciprocal preference)
+```
+
+- With `quick_reactions.picker` (default on), the reaction endpoint also accepts the picker's emoji. Set it to `false`
+  to keep only `reactions`. A `quick_reactions.emojis` entry outside the accepted set fails the container build.
+- **Conflict answers** carry `code` (`CONFLICT_001` | `CONFLICT_002`) in the JSON body and the `X-Conflict-Code`
+  header. Retry on `CONFLICT_001` (with `Retry-After`), read again on `CONFLICT_002`.
+- **Privacy:** read times are personal data. Message info stores them only with `message_info.read_times` (default
+  true once `message_info` is enabled), and only for people who keep **Share read times** on. Document the purpose in
+  your privacy notice. Your GDPR export and erasure through `ChatPersonalData` cover the new rows.
+- A host that overrides the `nowo_chat_message_menu` block keeps its markup. To get the new items, render them with
+  their `data-part="menu-<name>"` (see [USAGE](USAGE.md#message-menu-135)).
+
 ## To 1.34.0
 
 From **1.33.0**:

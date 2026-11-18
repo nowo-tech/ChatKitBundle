@@ -74,6 +74,7 @@ const ICONS: Record<string, string> = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16v4Z" />',
   trash: '<path d="M5 7h14M10 11v6M14 11v6M6 7l1 12h10l1-12M9 7V4h6v3" />',
   ban: '<circle cx="12" cy="12" r="8.5" /><path d="m6 6 12 12" />',
+  bookmark: '<path d="M7 4h10a1 1 0 0 1 1 1v15l-6-4-6 4V5a1 1 0 0 1 1-1z" />',
   external: '<path d="M14 4h6v6" /><path d="M20 4 11 13" /><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />',
   // #reference cards and `/` commands.

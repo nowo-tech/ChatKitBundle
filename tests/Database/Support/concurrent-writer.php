@@ -7,7 +7,11 @@ declare(strict_types=1);
  * one request of a FrankenPHP worker with kernel reset off; after it, what the next request would find is recorded (a
  * transaction left open, a closed manager), then the request boundary runs.
  *
- *   concurrent-writer.php <send|mixed> <calls> <tag> <start timestamp>
+ *   concurrent-writer.php <send|mixed|menu> <calls> <tag> <start timestamp>
+ *
+ * 1.35: `menu` saves, unsaves, marks unread from and reads the newest message (message info on: read times too);
+ * `savecap` saves the first message under `max_per_user: 1`; `unread` marks unread and reads in turn; `readonly` reads;
+ * `optout` turns "Share read times" off and on (ending off).
  *
  * Prints one JSON line: {ok, failures, poisoned, closed}.
  */
@@ -16,6 +20,8 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+use Nowo\ChatKitBundle\Service\ChatMessageActions;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
@@ -24,13 +30,18 @@ use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 require dirname(__DIR__, 3) . '/vendor/autoload.php';
 
 [, $mode, $calls, $tag, $start] = $argv + [null, 'send', '50', 'a', '0'];
-$kernel                         = new TestKernel();
+$menuModes                      = ['menu', 'savecap', 'unread', 'readonly', 'optout'];
+$kernel                         = new TestKernel(in_array($mode, $menuModes, true) ? ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true, 'max_per_user' => $mode === 'savecap' ? 1 : 500], 'message_info' => ['enabled' => true]]]]] : []);
 $kernel->boot();
 $container = $kernel->getContainer();
 $registry  = $container->get('doctrine');
 assert($registry instanceof ManagerRegistry);
 $chat = $container->get(ChatService::class);
 assert($chat instanceof ChatService);
+$menu = $container->get(ChatMessageActions::class);
+assert($menu instanceof ChatMessageActions);
+$settings = $container->get(ChatUserSettingsRepository::class);
+assert($settings instanceof ChatUserSettingsRepository);
 $boundary = $container->get(ChatRequestBoundaryListener::class);
 assert($boundary instanceof ChatRequestBoundaryListener);
 $em = static function () use ($registry): EntityManagerInterface {
@@ -48,7 +59,16 @@ $failures = [];
 $poisoned = 0;
 $closed   = 0;
 for ($i = 0; $i < (int) $calls; ++$i) {
-    $op = $mode === 'mixed' ? ['send', 'react', 'read', 'archive'][$i % 4] : 'send';
+    $op = match ($mode) {
+        'mixed' => ['send', 'react', 'read', 'archive'][$i % 4],
+        'menu'  => ['save', 'unread', 'read', 'unsave'][$i % 4],
+        // 1.35 (audit TK I3): saves at the cap, unread against read (TK-7), opt-out against read (TK-4).
+        'savecap'  => 'savecap',
+        'unread'   => $i % 2 === 0 ? 'unread' : 'read',
+        'readonly' => 'read',
+        'optout'   => 'optout',
+        default    => 'send',
+    };
     try {
         $ana  = $em()->getRepository(TestUser::class)->findOneBy(['name' => 'ana']) ?? throw new RuntimeException('ana');
         $luis = $em()->getRepository(TestUser::class)->findOneBy(['name' => 'luis']) ?? throw new RuntimeException('luis');
@@ -59,8 +79,21 @@ for ($i = 0; $i < (int) $calls; ++$i) {
             'react'   => $chat->toggleReaction($luis, $last(), '👍'),
             'read'    => $chat->markRead($luis, $dm, (int) $last()->getId()),
             'archive' => $chat->archive($luis, [$dm], $i % 8 < 4),
+            'save'    => $menu->markSaved($luis, $last(), true),
+            'unsave'  => $menu->markSaved($luis, $last(), false),
+            'unread'  => $menu->markUnreadFrom($luis, $last()),
+            // Each call another of the first messages; over the cap the service refuses (a soft cap, docs/CONCURRENCY.md).
+            'savecap' => $menu->markSaved($luis, $em()->getRepository(ChatMessage::class)->findOneBy(['conversation' => $dm], ['id' => 'ASC']) ?? throw new RuntimeException('first'), true),
+            'optout'  => (static function () use ($settings, $luis, $i): void {
+                $mine = $settings->forUser($luis);
+                $mine->setShareReadTimes($i % 2 === 0);
+                $settings->save($mine);
+            })(),
         };
         ++$ok;
+    } catch (InvalidArgumentException $refused) {
+        // `too_many_saved`: the cap answered, as it should.
+        $refused->getMessage() === 'too_many_saved' ? ++$ok : $failures[$op . ': ' . $refused->getMessage()] = ($failures[$op . ': ' . $refused->getMessage()] ?? 0) + 1;
     } catch (Throwable $failure) {
         $failures[$op . ': ' . $failure::class] = ($failures[$op . ': ' . $failure::class] ?? 0) + 1;
     }

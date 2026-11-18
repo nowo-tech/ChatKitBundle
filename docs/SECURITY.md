@@ -131,6 +131,18 @@ dependencies current. Security fixes are released as patch versions of the suppo
 - **Browser:** a Content-Security-Policy on pages with the dock is recommended (the bundle needs no inline script; its
   assets load from the `nowo_chat_kit` package).
 - **Retention:** schedule `nowo:chat:purge` (cron / Scheduler).
+- **Read times (1.35, personal data):** message info stores when a person's read receipt reached a message
+  (`nowo_chat_read_mark`). It does so only with `message_menu.message_info.enabled` and `read_times`, only for people
+  who keep the reciprocal **Share read times** preference on, and only in conversations up to `per_person_max_members`
+  people.
+  - Document the purpose and the legal basis in your privacy notice.
+  - Turning the preference off deletes the person's stored read times.
+  - `nowo:chat:purge` removes read times older than the retention.
+  - `ChatPersonalData::export()` / `erase()` cover them, together with the saved messages.
+  - Read info is shown on one's own messages only (moderators: every message) unless you turn `own_messages_only`
+    off.
+- **Saved messages (1.35):** a saved row never reveals a message the user may no longer read. The Saved list checks
+  access on every read, and rows of a lost conversation are hidden, not served.
 - **No state change on GET:** `GET /chat/{uuid}` only renders the conversation. The read cursor moves through the
   CSRF-protected `POST /api/conversations/{uuid}/read` (`X-CSRF-TOKEN` header) that the page script sends on load, or
   through the page's CSRF-protected message POST when JavaScript is off.

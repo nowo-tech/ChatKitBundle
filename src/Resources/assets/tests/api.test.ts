@@ -169,6 +169,24 @@ describe('chat api client', () => {
     }
   });
 
+  it('1.35: mark unread, save / unsave and message info', async () => {
+    const fetchMock = respond({ readUpTo: 4, saved: true, mode: 'people' });
+    vi.stubGlobal('fetch', fetchMock);
+    const api = new ChatApi({ ...config, endpoints: { ...config.endpoints, unread: '/u/__uuid__/__message__', save: '/s/__uuid__/__message__', info: '/i/__uuid__/__message__' } });
+    expect(await api.markUnread('c', 'm')).toBe(4);
+    expect(fetchMock).toHaveBeenLastCalledWith('/u/c/m', expect.objectContaining({ method: 'POST' }));
+    expect(await api.setSaved('c', 'm', true)).toBe(true);
+    expect(fetchMock).toHaveBeenLastCalledWith('/s/c/m', expect.objectContaining({ method: 'PUT' }));
+    await api.setSaved('c', 'm', false);
+    expect(fetchMock).toHaveBeenLastCalledWith('/s/c/m', expect.objectContaining({ method: 'DELETE' }));
+    expect((await api.messageInfo('c', 'm')).mode).toBe('people');
+    expect(fetchMock.mock.lastCall?.[0]).toBe('/i/c/m');
+    // Without the endpoints (older servers) the URL is empty.
+    const old = new ChatApi(config);
+    await old.markUnread('c', 'm');
+    expect(fetchMock.mock.lastCall?.[0]).toBe('');
+  });
+
   it('calls the pinned links and links panel endpoints (1.19)', async () => {
     const fetchMock = respond({ links: [], canManage: true, max: 10 });
     vi.stubGlobal('fetch', fetchMock);

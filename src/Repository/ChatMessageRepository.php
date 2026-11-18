@@ -16,6 +16,7 @@ use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageLink;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
+use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
 
 /**
  * Queries for messages: cursor pages, latest message per conversation, unread counts and the retention purge.
@@ -82,6 +83,26 @@ class ChatMessageRepository extends ServiceEntityRepository
         $rows = $qb->orderBy('m.id', 'DESC')->getQuery()->getResult();
 
         return array_reverse($rows);
+    }
+
+    /**
+     * 1.35: id of the newest message of the conversation before a message ("Mark unread from here").
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param int $messageId The message
+     *
+     * @return int|null The id, or null when the message is the first one
+     */
+    public function findIdBefore(ChatConversation $conversation, int $messageId): ?int
+    {
+        $id = $this->createQueryBuilder('m')->select('MAX(m.id)')
+            ->where('m.conversation = :conversation AND m.id < :id')
+            ->setParameter('conversation', $conversation)
+            ->setParameter('id', $messageId)
+            ->getQuery()
+            ->getSingleScalarResult();
+
+        return $id === null ? null : (int) $id;
     }
 
     /**
@@ -200,6 +221,13 @@ class ChatMessageRepository extends ServiceEntityRepository
         ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->delete(ChatReaction::class, 'r')
             ->where('IDENTITY(r.message) IN (:ids)')
+            ->setParameter('ids', $ids)
+            ->getQuery()
+            ->execute());
+        // 1.35: and the Saved lists.
+        ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
+            ->delete(ChatSavedMessage::class, 'sv')
+            ->where('IDENTITY(sv.message) IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
             ->execute());

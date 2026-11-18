@@ -1,0 +1,73 @@
+{#
+ # 1.35: the Saved list (`message_menu.save`, GET /chat/saved). Works without JavaScript: each entry links to its message
+ # in the full-page chat (`?message=<uuid>`); with nowo-chat.js, "Remove" unsaves the entry in place (DELETE …/save with
+ # the CSRF header). Only messages the viewer may still read are listed. Classes: nowo-chat-saved__*.
+ #}
+{% extends layout ?? nowo_ui_layout.admin %}
+{% trans_default_domain 'NowoChatKitBundle' %}
+{% set nowo_ui_bundle = bundle|default('NowoChatKitBundle') %}
+{% set nowo_chat_page_assets = true %}
+
+{% block nowo_ui_document_title %}{{ 'chat.saved_title'|trans }}{% endblock %}
+
+{% block nowo_ui_styles %}
+    {{ parent() }}
+{% if nowo_chat_assets ?? true %}
+    <link rel="stylesheet" href="{{ asset('css/nowo-chat.css', 'nowo_chat_kit') }}">
+{% endif %}
+{% endblock %}
+
+{% block nowo_ui_scripts %}
+    {{ parent() }}
+    {% block nowo_chat_saved_script %}
+{% if nowo_chat_assets ?? true %}
+        <script src="{{ asset('js/nowo-chat.js', 'nowo_chat_kit') }}" defer></script>
+{% endif %}
+    {% endblock %}
+{% endblock %}
+
+{% block nowo_ui_page_header %}
+    {{ include(nowo_ui_partial('page_header', nowo_ui_bundle), {
+        header: header,
+        actions: header.actions,
+        title: header.title|nowo_ui_trans,
+        intro: header.intro is null ? null : header.intro|nowo_ui_trans,
+        toolbar: null,
+        header_actions_rendered: true,
+        region: 'header',
+        bundle: nowo_ui_bundle,
+    }, false) }}
+{% endblock %}
+
+{% block nowo_ui_content %}
+    {% set _b = nowo_ui_bundle %}
+    <section class="{{ nowo_ui_class('section', _b) }} nowo-chat-saved{{ (nowo_chat_full_height ?? false) ? ' nowo-chat-page--fill' }}" data-testid="chat-saved" data-nowo-chat-saved-page data-nowo-chat-csrf="{{ csrf }}" data-nowo-chat-removed="{{ 'chat.saved_removed'|trans }}" aria-label="{{ 'chat.saved_title'|trans }}"{{ nowo_ui_attrs('section', _b) }}>
+        {% block nowo_chat_saved_list %}
+            {% if items is empty %}
+                <p class="{{ nowo_ui_class('empty', _b) }} nowo-chat-saved__empty" data-testid="chat-saved-empty">{{ 'chat.saved_empty'|trans }}</p>
+            {% else %}
+                <ul class="nowo-chat-saved__list" role="list">
+                    {% for item in items %}
+                        <li class="nowo-chat-saved__item" data-nowo-chat-saved-item data-testid="chat-saved-item">
+                            <p class="nowo-chat-saved__where">
+                                <span class="nowo-chat-saved__conversation">{{ item.conversation.title }}</span>
+                                <span class="nowo-chat-saved__author">{{ item.message.authorName }}</span>
+                                <time datetime="{{ item.message.createdAt }}">{{ item.message.createdAt|date('Y-m-d H:i') }}</time>
+                            </p>
+                            {# Server-sanitised Markdown render (ChatMarkdownRenderer), the same HTML the conversation shows. #}
+                            <div class="nowo-chat-bubble nowo-chat-saved__bubble">{{ item.message.html|raw }}</div>
+                            <p class="nowo-chat-saved__actions">
+                                <a class="{{ nowo_ui_class('btn_link', _b) }}" href="{{ item.link }}" data-testid="chat-saved-open">{{ 'chat.saved_open'|trans }}</a>
+                                <button type="button" class="{{ nowo_ui_class('btn_link', _b) }} nowo-chat-saved__remove" data-nowo-chat-unsave="{{ item.unsave }}" data-testid="chat-saved-remove" hidden>{{ 'chat.saved_remove'|trans }}</button>
+                            </p>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            {% if next %}
+                <a class="{{ nowo_ui_class('btn_link', _b) }} nowo-chat-saved__more" href="{{ next }}" data-testid="chat-saved-more">{{ 'chat.saved_more'|trans }}</a>
+            {% endif %}
+            <p class="nowo-chat-sr-only" aria-live="polite" data-nowo-chat-saved-live></p>
+        {% endblock %}
+    </section>
+{% endblock %}

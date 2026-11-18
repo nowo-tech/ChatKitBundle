@@ -67,7 +67,8 @@ final class ChatLoadReadinessWorkerTest extends DatabaseTestCase
         $failed = $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', $session, ['body' => 'one']);
         self::assertSame(409, $failed->getStatusCode(), (string) $failed->getContent());
         self::assertSame('1', $failed->headers->get('Retry-After'));
-        self::assertSame(['ok' => false, 'error' => 'unavailable'], $this->json($failed));
+        self::assertSame(['ok' => false, 'error' => 'unavailable', 'code' => 'CONFLICT_001'], $this->json($failed));
+        self::assertSame('CONFLICT_001', $failed->headers->get('X-Conflict-Code'));
         $this->assertHealthy();
 
         $sent = $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $uuid . '/messages', $session, ['body' => 'two']);
@@ -127,7 +128,7 @@ final class ChatLoadReadinessWorkerTest extends DatabaseTestCase
 
         $failed = $this->raw(Request::METHOD_POST, '/chat/api/quick-replies', $session, ['title' => 'Hi', 'body' => 'Hello']);
         self::assertSame(409, $failed->getStatusCode(), (string) $failed->getContent());
-        self::assertSame(['ok' => false, 'error' => 'conflict'], $this->json($failed));
+        self::assertSame(['ok' => false, 'error' => 'conflict', 'code' => 'CONFLICT_001'], $this->json($failed));
         $this->assertHealthy();
 
         $saved = $this->raw(Request::METHOD_POST, '/chat/api/quick-replies', $session, ['title' => 'Hi', 'body' => 'Hello']);

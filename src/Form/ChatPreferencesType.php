@@ -20,7 +20,7 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  * event (`soundMessage`, `soundMention`, `soundBuzz`, `soundSupport`; each select carries
  * `data-nowo-chat-sound-select` so a ▶ button can preview it with `playSound()`), `volume` (0 – 100),
  * `soundBackgroundOnly`, `buzzEnabled`, `buzzOpenWindow`, `openOnMessage`, `sendKey`, `pushPreview`, `pushEnabled`,
- * `presenceVisible` and `emailDigest`. The application persists the entity after a valid submit; for one control at a
+ * `presenceVisible`, `emailDigest` and (1.35) `shareReadTimes`. The application persists the entity after a valid submit; for one control at a
  * time use the JSON endpoint instead (`saveChatPreference()`). The chat status is not here: users set it from the chat.
  *
  * @extends AbstractType<ChatUserSettings>
@@ -71,6 +71,8 @@ final class ChatPreferencesType extends AbstractType
         $this->addWithDefaults($builder, 'pushPreview', CheckboxType::class, ['label' => 'chat.settings_push_preview', 'help' => 'chat.settings_push_preview_help', 'required' => false]);
         $this->addWithDefaults($builder, 'presenceVisible', CheckboxType::class, ['label' => 'chat.settings_presence', 'help' => 'chat.settings_presence_help', 'required' => false]);
         $this->addWithDefaults($builder, 'emailDigest', CheckboxType::class, ['label' => 'chat.settings_email_digest', 'help' => 'chat.settings_email_digest_help', 'required' => false]);
+        // 1.35: reciprocal read times (message info).
+        $this->addWithDefaults($builder, 'shareReadTimes', CheckboxType::class, ['label' => 'chat.settings_share_read_times', 'help' => 'chat.settings_share_read_times_help', 'required' => false]);
     }
 
     /**

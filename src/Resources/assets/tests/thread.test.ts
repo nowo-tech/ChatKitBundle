@@ -1087,6 +1087,190 @@ describe('ThreadView', () => {
       expect(direct.action(theirs.id + 100, 'react').hidden).toBe(true);
     });
 
+    describe('1.35: the richer message menu', () => {
+      const menuConfig = {
+        order: ['reply', 'quote', 'copy_text', 'copy_link', 'save', 'mark_unread', 'pin', 'info', 'edit', 'delete'],
+        items: { reply: true, quote: true, copy_text: true, copy_link: true, save: true, mark_unread: true, pin: true, info: true, edit: true, delete: true },
+        quick: ['👍', '❤️', '😂', '😮', '😢', '🙏'],
+        picker: true,
+        quoteMaxLength: 40,
+        saveDockEntry: true,
+      };
+      const strings = { ...i18n, pin: 'Pin', unpin: 'Unpin', save_message: 'Save for later', unsave_message: 'Remove from saved', quote_wrote: '%name% wrote:', text_copied: 'Text copied', saved_done: 'Saved', unsaved_done: 'Unsaved', marked_unread: 'Marked unread', too_many_saved: 'Too many', not_savable: 'Not savable', info_title: 'Info', info_close: 'Close', info_read_count: '%read% of %total%', info_not_read: 'Not read', info_read: 'Read', info_read_at: 'Read %time%', info_edited: 'Edited %time%', info_times_hidden: 'Hidden times' };
+      const endpoints = {
+        page: '/chat/__uuid__',
+        messageLink: '/l/__uuid__/__message__',
+        save: '/s/__uuid__/__message__',
+        unread: '/u/__uuid__/__message__',
+        info: '/i/__uuid__/__message__',
+      };
+      const full = { i18n: strings, endpoints, menu: menuConfig } as unknown as Partial<ChatConfig>;
+      const item = (article: HTMLElement, name: string) => article.querySelector<HTMLAnchorElement>(`[data-part="menu-${name}"]`) as HTMLAnchorElement;
+      const names = ['reply', 'quote', 'copy-text', 'copy-link', 'save', 'mark-unread', 'pin', 'info', 'edit', 'delete'];
+      const shown = (article: HTMLElement) => names.filter((name) => item(article, name) !== null && !item(article, name).hidden);
+      const separators = (article: HTMLElement) => [...article.querySelectorAll<HTMLElement>('[data-part="menu-separator"]')].filter((sep) => !sep.hidden).length;
+
+      it('offers the 1.35 items by configuration, endpoint and the viewer, with tidy separators', async () => {
+        const mine = msg({ mine: true, authorUuid: 'me', uuid: 'mine' });
+        const theirs = msg({ uuid: 'theirs' });
+        const ctx = await loaded([mine, theirs], { canPin: true }, full);
+        expect(shown(ctx.article(theirs.id))).toEqual(['reply', 'quote', 'copy-text', 'copy-link', 'save', 'mark-unread', 'pin']);
+        // Own message: no "Mark unread", but info (own messages only) and edit / delete.
+        expect(shown(ctx.article(mine.id))).toEqual(['reply', 'quote', 'copy-text', 'copy-link', 'save', 'pin', 'info', 'edit', 'delete']);
+        expect(separators(ctx.article(mine.id))).toBe(4);
+        expect(separators(ctx.article(theirs.id))).toBe(2);
+        // Quick reactions: every configured emoji and "More…".
+        const row = ctx.article(theirs.id).querySelector<HTMLElement>('[data-part="menu-reactions"]') as HTMLElement;
+        expect(row.hidden).toBe(false);
+        expect([...row.querySelectorAll<HTMLElement>('[data-part="menu-react"]')].filter((el) => !el.hidden)).toHaveLength(6);
+        document.body.replaceChildren();
+        // Read-only: no quote, no reactions; an agent sees the info of someone else's message.
+        const ro = await loaded([msg({ uuid: 'ro' })], { canSend: false, kind: 'channel' }, { ...full, isAgent: true });
+        const article = ro.view.element.querySelector<HTMLElement>('[data-part="menu"]')?.closest('article') as HTMLElement;
+        expect(shown(article)).toEqual(['copy-text', 'copy-link', 'save', 'mark-unread', 'info']);
+        expect((article.querySelector('[data-part="menu-reactions"]') as HTMLElement).hidden).toBe(true);
+        document.body.replaceChildren();
+        // Without the configuration or the endpoints, only the 1.33 items.
+        const old = await loaded([msg({ uuid: 'old' })], {}, { i18n: strings, endpoints: { page: '/chat/__uuid__', messageLink: '/l' } } as unknown as Partial<ChatConfig>);
+        const oldArticle = old.view.element.querySelector<HTMLElement>('article.nowo-chat-msg') as HTMLElement;
+        expect(shown(oldArticle)).toEqual(['reply', 'copy-link']);
+        expect((oldArticle.querySelector('[data-part="menu-react-more"]') as HTMLElement).hidden).toBe(true);
+        document.body.replaceChildren();
+        const noEndpoints = await loaded([msg({ uuid: 'ne' })], {}, { ...full, endpoints: { page: '/chat/__uuid__' } } as unknown as Partial<ChatConfig>);
+        expect(shown(noEndpoints.view.element.querySelector<HTMLElement>('article.nowo-chat-msg') as HTMLElement)).toEqual(['reply', 'quote', 'copy-text']);
+      });
+
+      it('quick reactions toggle through the reaction endpoint; "More…" opens the picker', async () => {
+        const theirs = msg({ uuid: 'theirs', reactions: { '👍': ['me'] } });
+        const ctx = await loaded([theirs], {}, full);
+        ctx.api.react.mockResolvedValue({ '❤️': ['me'] });
+        const article = ctx.article(theirs.id);
+        const up = article.querySelector<HTMLElement>('[data-part="menu-react"][data-emoji="👍"]') as HTMLElement;
+        expect(up.classList.contains('is-current')).toBe(true);
+        (article.querySelector('[data-part="menu-react"][data-emoji="❤️"]') as HTMLElement).click();
+        await vi.waitFor(() => expect(ctx.api.react).toHaveBeenCalledWith('c1', 'theirs', '❤️'));
+        (ctx.article(theirs.id).querySelector('[data-part="menu-react-more"]') as HTMLElement).click();
+        const picker = ctx.view.element.querySelector<HTMLElement>('.nowo-chat-emoji--reactions') as HTMLElement;
+        expect(picker).not.toBeNull();
+        (picker.querySelector('.nowo-chat-emoji__item') as HTMLButtonElement).click();
+        await vi.waitFor(() => expect(ctx.api.react).toHaveBeenCalledTimes(2));
+        expect(ctx.view.element.querySelector('.nowo-chat-emoji--reactions')).toBeNull();
+        // Escape in the picker closes it and focuses the kebab toggle.
+        (ctx.article(theirs.id).querySelector('[data-part="menu-react-more"]') as HTMLElement).click();
+        const again = ctx.view.element.querySelector<HTMLElement>('.nowo-chat-emoji--reactions') as HTMLElement;
+        again.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        expect(ctx.view.element.querySelector('.nowo-chat-emoji--reactions')).toBeNull();
+      });
+
+      it('quotes the whole text, copies the plain text', async () => {
+        const writeText = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('denied'));
+        vi.stubGlobal('navigator', { clipboard: { writeText } });
+        const theirs = msg({ uuid: 'theirs', html: '<p>hola <a class="nowo-chat-mention">@Ana</a></p><ul><li>uno</li></ul>' });
+        const empty = msg({ uuid: 'empty', html: '<p> </p>' });
+        const ctx = await loaded([theirs, empty], {}, full);
+        item(ctx.article(theirs.id), 'quote').click();
+        expect(ctx.q<HTMLTextAreaElement>('textarea').value).toBe('> **Luis** wrote:\n> hola @Ana\n> - uno\n\nborrador');
+        item(ctx.article(empty.id), 'quote').click();
+        expect(ctx.q<HTMLTextAreaElement>('textarea').value.startsWith('> **Luis** wrote:')).toBe(true);
+        item(ctx.article(theirs.id), 'copy-text').click();
+        await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('hola @Ana\n- uno'));
+        await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe('Text copied'));
+      });
+
+      it('saves and unsaves; the label follows, also from another tab; errors show a notice', async () => {
+        const theirs = msg({ uuid: 'theirs' });
+        const ctx = await loaded([theirs], {}, full);
+        const setSaved = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false).mockRejectedValueOnce(new ChatApiError(422, 'too_many_saved')).mockRejectedValueOnce(new Error('x'));
+        Object.assign(ctx.host.api, { setSaved });
+        expect(item(ctx.article(theirs.id), 'save').textContent).toBe('Save for later');
+        item(ctx.article(theirs.id), 'save').click();
+        await vi.waitFor(() => expect(item(ctx.article(theirs.id), 'save').textContent).toBe('Remove from saved'));
+        expect(setSaved).toHaveBeenCalledWith('c1', 'theirs', true);
+        item(ctx.article(theirs.id), 'save').click();
+        await vi.waitFor(() => expect(item(ctx.article(theirs.id), 'save').textContent).toBe('Save for later'));
+        item(ctx.article(theirs.id), 'save').click();
+        await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe('Too many'));
+        item(ctx.article(theirs.id), 'save').click();
+        await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe('Error'));
+        ctx.view.savedChanged('theirs', true);
+        expect(item(ctx.article(theirs.id), 'save').textContent).toBe('Remove from saved');
+        ctx.view.savedChanged('theirs', true);
+        ctx.view.savedChanged('unknown', true);
+        ctx.view.savedChanged('theirs', false);
+        expect(item(ctx.article(theirs.id), 'save').textContent).toBe('Save for later');
+      });
+
+      it('knows the saved messages of a loaded page', async () => {
+        vi.setSystemTime(now);
+        const theirs = msg({ uuid: 'saved-one' });
+        const ctx = setup({}, { messages: vi.fn().mockResolvedValue({ messages: [theirs], hasMore: false, readUpTo: null, readers: [], saved: ['saved-one'] }) }, full);
+        await ctx.view.load();
+        const article = ctx.view.element.querySelector<HTMLElement>(`[data-id="${theirs.id}"]`) as HTMLElement;
+        expect(item(article, 'save').textContent).toBe('Remove from saved');
+      });
+
+      it('marks unread from here and holds the automatic read until the viewer acts', async () => {
+        const theirs = msg({ uuid: 'theirs' });
+        const later = msg({ uuid: 'later' });
+        const ctx = await loaded([theirs, later], {}, full);
+        const markUnread = vi.fn().mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('x'));
+        Object.assign(ctx.host.api, { markUnread });
+        const unreadChanged = vi.fn();
+        Object.assign(ctx.host, { unreadChanged });
+        (ctx.host.read as Mock).mockClear();
+        item(ctx.article(theirs.id), 'mark-unread').click();
+        await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe('Marked unread'));
+        expect(markUnread).toHaveBeenCalledWith('c1', 'theirs');
+        // The list refresh that follows keeps the action's notice until its own timer resets it.
+        ctx.view.applySummary(summary());
+        expect(ctx.q('[data-part="notice"]').textContent).toBe('Marked unread');
+        expect(unreadChanged).toHaveBeenCalledWith('c1');
+        // A scroll by itself does not read it again; the viewer's wheel does.
+        const body = scrolled(ctx.view, 700);
+        body.dispatchEvent(new Event('scroll'));
+        expect(ctx.host.read).not.toHaveBeenCalled();
+        body.dispatchEvent(new Event('wheel'));
+        expect(ctx.host.read).toHaveBeenCalledWith('c1', later.id);
+        // From another tab: the hold again; typing releases it. A failure shows a notice.
+        (ctx.host.read as Mock).mockClear();
+        ctx.view.unreadFrom(theirs.id);
+        ctx.view.unreadFrom(theirs.id);
+        ctx.q<HTMLTextAreaElement>('textarea').dispatchEvent(new Event('input'));
+        expect(ctx.host.read).toHaveBeenCalledTimes(1);
+        item(ctx.article(theirs.id), 'mark-unread').click();
+        await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe('Error'));
+      });
+
+      it('opens message info in a dialog; a failure shows a notice', async () => {
+        const mine = msg({ mine: true, authorUuid: 'me', uuid: 'mine' });
+        const ctx = await loaded([mine], {}, full);
+        const messageInfo = vi
+          .fn()
+          .mockResolvedValueOnce({ mode: 'people', memberCount: 1, readCount: 1, readTimes: true, readers: [{ uuid: 'p', name: 'Luis', initials: 'LU', avatarUrl: null, read: true, readAt: '2026-10-15T10:01:00Z' }], editedAt: null })
+          .mockRejectedValueOnce(new Error('x'));
+        Object.assign(ctx.host.api, { messageInfo });
+        item(ctx.article(mine.id), 'info').click();
+        await vi.waitFor(() => expect(document.querySelector('dialog.nowo-chat-info')).not.toBeNull());
+        (document.querySelector('[data-part="info-close"]') as HTMLButtonElement).click();
+        expect(document.querySelector('dialog.nowo-chat-info')).toBeNull();
+        item(ctx.article(mine.id), 'info').click();
+        await vi.waitFor(() => expect(ctx.q('[data-part="notice"]').textContent).toBe('Error'));
+      });
+
+      it('a template without the quick reactions row still works', async () => {
+        vi.setSystemTime(now);
+        const root = templatesRoot();
+        root.querySelector<HTMLTemplateElement>('template[data-nowo-chat-template="message"]')?.content.querySelector('[data-part="menu-reactions"]')?.remove();
+        const theirs = msg({ uuid: 'theirs' });
+        const ctx = setup({}, { messages: vi.fn().mockResolvedValue({ messages: [theirs], hasMore: false, readUpTo: null, readers: [] }) }, full);
+        (ctx.host as { templates: Templates }).templates = new Templates(root);
+        await ctx.view.load();
+        const article = ctx.q(`[data-id="${theirs.id}"]`);
+        expect(article.querySelector('[data-part="menu-react"]')).toBeNull();
+        expect(item(article, 'reply').hidden).toBe(false);
+      });
+    });
+
     describe('1.33: the "More actions" kebab and its context menu', () => {
       const names = ['reply', 'edit', 'copy-link', 'pin', 'delete'] as const;
       const withMenu = { i18n: { ...i18n, pin: 'Pin', unpin: 'Unpin', link_copied: 'Link copied' }, endpoints: { page: '/chat/__uuid__', messageLink: '/chat/api/conversations/__uuid__/messages/__message__/link' } } as unknown as Partial<ChatConfig>;

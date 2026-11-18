@@ -13,7 +13,7 @@
                         <span class="nowo-chat-badge" data-part="launcher-badge" hidden></span>
                         <span class="nowo-chat-launcher__chevron" data-part="launcher-chevron"></span>
                     </button>
-                        <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__compose" data-part="compose" aria-label="New message" title="New message"><span data-icon="compose"></span></button>
+                    <a class="nowo-chat-icon-btn nowo-chat-panel__saved" data-part="saved" href="/chat/saved" aria-label="Saved" title="Saved"><span data-icon="bookmark"></span></a>    <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__compose" data-part="compose" aria-label="New message" title="New message"><span data-icon="compose"></span></button>
 
                         <button type="button" class="nowo-chat-icon-btn nowo-chat-panel__tuck" data-part="tuck" aria-label="Hide to the side" title="Hide to the side"><span data-icon="tuck"></span></button>
 
@@ -304,14 +304,52 @@
 
                     <button type="button" class="nowo-chat-icon-btn " data-part="delete" aria-label="Delete" title="Delete"><span data-icon="trash"></span></button>
 
-                                                        <span class="nowo-chat-msg__menu" data-part="menu" hidden>
-                        <div class="nowo-ui-kebab" data-nowo-ui-kebab>
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            <span class="nowo-chat-msg__menu" data-part="menu" hidden>
+                        <div class="nowo-ui-kebab" data-nowo-ui-kebab data-nowo-ui-sheet>
     <details class="nowo-ui-kebab__details">
         <summary class="nowo-ui-kebab__summary" aria-label="More actions">
             <span class="nowo-ui-kebab__dots" aria-hidden="true">⋮</span>
         </summary>
         <div class="nowo-ui-kebab__menu" role="menu">
-                                                        <a
+                                        <div class="nowo-ui-kebab__row" role="group" data-nowo-ui-menu-row aria-label="Quick reactions" data-part="menu-reactions" hidden="hidden">
+                                                    <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-react" data-emoji="👍" aria-label="React with 👍" hidden="hidden"                                     >👍</a>
+                                <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-react" data-emoji="❤️" aria-label="React with ❤️" hidden="hidden"                                     >❤️</a>
+                                <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-react" data-emoji="😂" aria-label="React with 😂" hidden="hidden"                                     >😂</a>
+                                <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-react" data-emoji="😮" aria-label="React with 😮" hidden="hidden"                                     >😮</a>
+                                <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-react" data-emoji="😢" aria-label="React with 😢" hidden="hidden"                                     >😢</a>
+                                <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-react" data-emoji="🙏" aria-label="React with 🙏" hidden="hidden"                                     >🙏</a>
+                                <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-react-more" aria-label="More reactions" hidden="hidden"                                     >+</a>
+                </div>
+                            <hr class="nowo-ui-kebab__separator" role="separator" data-part="menu-separator">
+                                            <a
                     class="nowo-ui-kebab__item"
                     href="#"
                     role="menuitem"
@@ -320,7 +358,13 @@
                     class="nowo-ui-kebab__item"
                     href="#"
                     role="menuitem"
-                                                                data-part="menu-edit" hidden="hidden"                                     >Edit</a>
+                                                                data-part="menu-quote" hidden="hidden"                                     >Quote</a>
+                            <hr class="nowo-ui-kebab__separator" role="separator" data-part="menu-separator">
+                                            <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-copy-text" hidden="hidden"                                     >Copy text</a>
                                             <a
                     class="nowo-ui-kebab__item"
                     href="#"
@@ -330,7 +374,29 @@
                     class="nowo-ui-kebab__item"
                     href="#"
                     role="menuitem"
+                                                                data-part="menu-save" hidden="hidden"                                     >Save for later</a>
+                                            <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-mark-unread" hidden="hidden"                                     >Mark unread from here</a>
+                                            <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
                                                                 data-part="menu-pin" hidden="hidden"                                     >Pin</a>
+                            <hr class="nowo-ui-kebab__separator" role="separator" data-part="menu-separator">
+                                            <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-info" hidden="hidden"                                     >Message info</a>
+                                            <a
+                    class="nowo-ui-kebab__item"
+                    href="#"
+                    role="menuitem"
+                                                                data-part="menu-edit" hidden="hidden"                                     >Edit</a>
+                            <hr class="nowo-ui-kebab__separator" role="separator" data-part="menu-separator">
                                             <a
                     class="nowo-ui-kebab__item nowo-ui-kebab__item--danger"
                     href="#"

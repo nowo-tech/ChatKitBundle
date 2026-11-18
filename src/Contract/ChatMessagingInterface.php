@@ -54,14 +54,23 @@ interface ChatMessagingInterface
     /** The actor may react to the message. */
     public const string REACT = 'react';
 
+    /** 1.35: the actor may save the message for later. */
+    public const string SAVE = 'save';
+
+    /** 1.35: the actor may mark the conversation unread from the message. */
+    public const string MARK_UNREAD = 'mark_unread';
+
+    /** 1.35: the actor may open the message's read info. */
+    public const string INFO = 'info';
+
     /**
-     * Whether the actor may do `$action` on the conversation (or, for EDIT, DELETE and REACT, on its message), by uuid:
+     * Whether the actor may do `$action` on the conversation (or, for EDIT, DELETE, REACT and, 1.35, SAVE, MARK_UNREAD and INFO, on its message), by uuid:
      * the authorization of a DDD host that keeps the bundle's entities out of its code. False for an unknown uuid too.
      *
      * @param ChatUserInterface $actor The user
      * @param string $conversationUuid Public uuid of the conversation
      * @param string $action One of the constants of this interface
-     * @param string|null $messageUuid Public uuid of the message (EDIT, DELETE, REACT)
+     * @param string|null $messageUuid Public uuid of the message (EDIT, DELETE, REACT, SAVE, MARK_UNREAD, INFO)
      *
      * @return bool True when allowed
      */
