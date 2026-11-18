@@ -37,7 +37,6 @@ use function array_keys;
 use function array_map;
 use function array_slice;
 use function array_values;
-use function assert;
 use function count;
 use function usort;
 
@@ -120,7 +119,7 @@ final readonly class ChatMessageActions
      *
      * @return bool Whether the message is saved now
      */
-    public function setSaved(ChatUserInterface $user, ChatMessage $message, bool $saved): bool
+    public function markSaved(ChatUserInterface $user, ChatMessage $message, bool $saved): bool
     {
         $existing = $this->saved->findOneFor($message, $user);
         if ($saved) {

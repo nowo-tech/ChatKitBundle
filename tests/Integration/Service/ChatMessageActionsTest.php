@@ -52,7 +52,7 @@ final class ChatMessageActionsTest extends DatabaseTestCase
         $saved   = [];
         for ($i = 0; $i < ChatMessageActions::SAVED_PAGE + 5; ++$i) {
             $message = $chat->send($luis, $dm, 'm' . $i);
-            self::assertTrue($actions->setSaved($ana, $message, true));
+            self::assertTrue($actions->markSaved($ana, $message, true));
             $saved[] = $message;
         }
         // Deleted messages are hidden: the first page still fills up from older rows.
@@ -72,10 +72,10 @@ final class ChatMessageActionsTest extends DatabaseTestCase
         self::assertSame([], $this->get(ChatSavedMessageRepository::class)->savedAmong($ana, []));
         // Unsaving a message that is not saved changes nothing.
         $other = $chat->send($luis, $dm, 'not saved');
-        self::assertFalse($actions->setSaved($ana, $other, false));
+        self::assertFalse($actions->markSaved($ana, $other, false));
         // Lines and bot messages are never saved.
         $this->expectExceptionMessage('not_savable');
-        $actions->setSaved($ana, ChatMessage::system($dm, 'x'), true);
+        $actions->markSaved($ana, ChatMessage::system($dm, 'x'), true);
     }
 
     public function testMarkUnreadCreatesTheRowAndInfoLimits(): void
@@ -154,7 +154,7 @@ final class ChatMessageActionsTest extends DatabaseTestCase
         $voter  = new ChatVoter($this->get(ChatAccess::class));
         $menuOn = $this->get(ChatVoter::class);
 
-        self::assertTrue($menu->setSaved($ana, $dm->getUuid(), $his->getUuid(), true));
+        self::assertTrue($menu->markSaved($ana, $dm->getUuid(), $his->getUuid(), true));
         $list = $menu->savedMessages($ana);
         self::assertSame([$his->getUuid()], array_column(array_column($list['items'], 'message'), 'uuid'));
         self::assertNull($list['next']);
@@ -193,12 +193,12 @@ final class ChatMessageActionsTest extends DatabaseTestCase
         $data    = $this->get(ChatPersonalData::class);
         $dm      = $chat->openDirect($ana, $luis);
         $his     = $chat->send($luis, $dm, 'his');
-        $actions->setSaved($ana, $his, true);
+        $actions->markSaved($ana, $his, true);
         $chat->markRead($ana, $dm, (int) $his->getId());
         // Ana's own ticket: the agent saved one of its messages and read it.
         $ticket = $this->get(ChatSupportTickets::class)->open($ana);
         $asked  = $chat->send($ana, $ticket, 'help');
-        $actions->setSaved($agent, $asked, true);
+        $actions->markSaved($agent, $asked, true);
         $chat->markRead($agent, $ticket, (int) $asked->getId());
 
         $export = $data->export($ana);

@@ -114,9 +114,7 @@ final class ChatApiExceptionListener
             } elseif ($committed) {
                 $event->setThrowable(new HttpException($this->policy->status, self::PARTIAL_MESSAGE, $error, $headers));
             } else {
-                $transient = $this->policy->httpException(TransientStorageFailure::DEFAULT_MESSAGE, $error, $retryAfter);
-                $transient->setHeaders($transient->getHeaders() + $headers);
-                $event->setThrowable($transient);
+                $event->setThrowable(new HttpException($this->policy->status, TransientStorageFailure::DEFAULT_MESSAGE, $error, $this->policy->headers($retryAfter) + $headers));
             }
 
             return;

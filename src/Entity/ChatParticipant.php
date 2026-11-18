@@ -148,6 +148,7 @@ class ChatParticipant
         $this->lastReadMessageId = $messageId;
         if ($this->receiptMessageId !== null && $this->receiptMessageId <= $messageId) {
             // Caught up with what others already saw: the two cursors are one again.
+            // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
             $this->receiptMessageId = null;
         }
 
@@ -179,7 +180,8 @@ class ChatParticipant
             return false;
         }
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
-        $this->receiptMessageId  = max($this->receiptMessageId ?? $current, $current);
+        $this->receiptMessageId = max($this->receiptMessageId ?? $current, $current);
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->lastReadMessageId = $beforeMessageId;
 
         return true;

@@ -225,9 +225,6 @@ final class ConfigurationTest extends TestCase
         ]]);
     }
 
-    /**
-     * @return array{default_profile: string, profiles: array<string, array<string, mixed>>}
-     */
     public function testMessageMenuValidation(): void
     {
         $config = $this->process([['profiles' => ['default' => ['message_menu' => ['order' => ['delete', 'reply'], 'quick_reactions' => ['emojis' => []]]]]]]);
@@ -243,6 +240,11 @@ final class ConfigurationTest extends TestCase
         }
     }
 
+    /**
+     * @param array<array<string, mixed>> $configs
+     *
+     * @return array{default_profile: string, profiles: array<string, array<string, mixed>>}
+     */
     private function process(array $configs): array
     {
         /** @var array{default_profile: string, profiles: array<string, array<string, mixed>>} $processed */

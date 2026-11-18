@@ -96,6 +96,7 @@ class ChatReadMark
         }
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->upToMessageId = $upToMessageId;
-        $this->readAt        = $readAt;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->readAt = $readAt;
     }
 }

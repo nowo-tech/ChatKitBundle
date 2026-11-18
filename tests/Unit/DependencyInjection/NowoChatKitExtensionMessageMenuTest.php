@@ -21,9 +21,15 @@ final class NowoChatKitExtensionMessageMenuTest extends TestCase
     public function testParametersAndAcceptedReactions(): void
     {
         $container = $this->load([]);
-        self::assertSame(['👍', '❤️', '😂', '😮', '😢', '🙏'], $container->getParameter('nowo_chat_kit.message_menu.quick_reactions')['emojis']);
-        self::assertFalse($container->getParameter('nowo_chat_kit.message_menu.save')['enabled']);
-        self::assertCount(count(ChatEmojiCatalog::accepted(['👍', '❤️', '😂', '😮', '😢', '🎉'], true)), $container->getParameter('nowo_chat_kit.accepted_reactions'));
+        $quick     = $container->getParameter('nowo_chat_kit.message_menu.quick_reactions');
+        $save      = $container->getParameter('nowo_chat_kit.message_menu.save');
+        $accepted  = $container->getParameter('nowo_chat_kit.accepted_reactions');
+        self::assertIsArray($quick);
+        self::assertIsArray($save);
+        self::assertIsArray($accepted);
+        self::assertSame(['👍', '❤️', '😂', '😮', '😢', '🙏'], $quick['emojis']);
+        self::assertFalse($save['enabled']);
+        self::assertCount(count(ChatEmojiCatalog::accepted(['👍', '❤️', '😂', '😮', '😢', '🎉'], true)), $accepted);
 
         $strict = $this->load(['quick_reactions' => ['picker' => false, 'emojis' => ['👍']]]);
         self::assertSame(['👍', '❤️', '😂', '😮', '😢', '🎉'], $strict->getParameter('nowo_chat_kit.accepted_reactions'));

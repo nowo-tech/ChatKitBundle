@@ -68,8 +68,8 @@ for ($i = 0; $i < (int) $calls; ++$i) {
             'react'   => $chat->toggleReaction($luis, $last(), '👍'),
             'read'    => $chat->markRead($luis, $dm, (int) $last()->getId()),
             'archive' => $chat->archive($luis, [$dm], $i % 8 < 4),
-            'save'    => $menu->setSaved($luis, $last(), true),
-            'unsave'  => $menu->setSaved($luis, $last(), false),
+            'save'    => $menu->markSaved($luis, $last(), true),
+            'unsave'  => $menu->markSaved($luis, $last(), false),
             'unread'  => $menu->markUnreadFrom($luis, $last()),
         };
         ++$ok;

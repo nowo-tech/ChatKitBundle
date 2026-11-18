@@ -2113,7 +2113,8 @@ export class ThreadView {
         copy_text: offered.copy_text === true,
         save: offered.save === true && (endpoints.save ?? '') !== '',
         mark_unread: offered.mark_unread === true && (endpoints.unread ?? '') !== '',
-        info: offered.info === true && (endpoints.info ?? '') !== '' && (message.mine || config.isAgent),
+        // Own messages; moderators (support agents) outside direct conversations (the server decides again).
+        info: offered.info === true && (endpoints.info ?? '') !== '' && (message.mine || (config.isAgent && this.summary.kind !== 'direct')),
       },
       saved,
     });

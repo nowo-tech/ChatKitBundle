@@ -914,7 +914,7 @@ final class ChatApiController extends AbstractController
         $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
         assert($message instanceof ChatMessage);
         try {
-            return $this->json(['saved' => $menu->setSaved($user, $message, $save)]);
+            return $this->json(['saved' => $menu->markSaved($user, $message, $save)]);
         } catch (InvalidArgumentException $exception) {
             throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
         }

@@ -27,7 +27,7 @@ interface ChatMessageActionsInterface
      *
      * @return bool Whether the message is saved now
      */
-    public function setSaved(ChatUserInterface $actor, string $conversationUuid, string $messageUuid, bool $saved): bool;
+    public function markSaved(ChatUserInterface $actor, string $conversationUuid, string $messageUuid, bool $saved): bool;
 
     /**
      * A page of the actor's Saved list, newest save first (messages the actor may still read, never deleted ones).

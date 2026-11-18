@@ -1571,7 +1571,7 @@ window stops marking the conversation read until the viewer scrolls, types or se
   read times are deleted and no longer stored, and they see nobody's read times. Everybody's read state (✓✓, "Seen by",
   who read it) stays.
 
-**DDD hosts.** `ChatMessageActionsInterface` (by uuid): `setSaved()`, `savedMessages()`, `markUnreadFrom()` and
+**DDD hosts.** `ChatMessageActionsInterface` (by uuid): `markSaved()`, `savedMessages()`, `markUnreadFrom()` and
 `messageInfo()`. `ChatMessagingInterface::can()` answers `SAVE`, `MARK_UNREAD` and `INFO`. The voter attributes are
 `nowo_chat.message.save`, `nowo_chat.message.mark_unread` and `nowo_chat.message.info`. The events are
 `ChatMessageSavedEvent`, `ChatMessageUnsavedEvent` and `ChatConversationMarkedUnreadEvent`, all dispatched after the

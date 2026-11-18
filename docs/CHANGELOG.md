@@ -121,7 +121,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     and long press all work as in 1.33.
   - New voter attributes `nowo_chat.message.save`, `nowo_chat.message.mark_unread` and `nowo_chat.message.info`, and
     the matching `ChatMessagingInterface::SAVE` / `MARK_UNREAD` / `INFO` actions.
-  - New `ChatMessageActionsInterface` (by uuid, for DDD hosts): `setSaved()`, `savedMessages()`,
+  - New `ChatMessageActionsInterface` (by uuid, for DDD hosts): `markSaved()`, `savedMessages()`,
     `markUnreadFrom()`, `messageInfo()`.
   - New events `ChatMessageSavedEvent`, `ChatMessageUnsavedEvent` and `ChatConversationMarkedUnreadEvent`, all
     dispatched after the commit.

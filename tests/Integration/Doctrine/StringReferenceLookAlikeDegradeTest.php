@@ -78,7 +78,7 @@ final class StringReferenceLookAlikeDegradeTest extends TestCase
         $chat->toggleReaction($bob, $message, '👍');
         // 1.35: and a saved message.
         $actions = $this->get(ChatMessageActions::class);
-        $actions->setSaved($bob, $message, true);
+        $actions->markSaved($bob, $message, true);
         $settings = $this->get(ChatUserSettingsRepository::class);
         $settings->save($settings->forUser($bob));
         $this->get(StringReferenceSchemaGuard::class)->assertReady();
@@ -109,7 +109,7 @@ final class StringReferenceLookAlikeDegradeTest extends TestCase
         foreach ([
             'participant' => static fn () => $chat->participant($withBob, $bigB),
             'reaction'    => static fn () => $chat->toggleReaction($bigB, $message, '👍'),
-            'saved'       => static fn () => $actions->setSaved($bigB, $message, true),
+            'saved'       => static fn () => $actions->markSaved($bigB, $message, true),
             'settings'    => static fn () => $settings->save($defaults),
         ] as $what => $write) {
             try {

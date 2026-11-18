@@ -63,7 +63,8 @@ final class ChatMessageMenuEntitiesTest extends TestCase
         $message      = new ChatMessage($conversation, $ana, 'hi', '<p>hi</p>');
         $saved        = new ChatSavedMessage($message, $ana, new DateTimeImmutable('2026-11-18 10:00'));
         self::assertSame([null, $message, $ana, '3', '2026-11-18 10:00'], [$saved->getId(), $saved->getMessage(), $saved->getUser(), $saved->getUserReference(), $saved->getSavedAt()->format('Y-m-d H:i')]);
-        self::assertLessThanOrEqual(new DateTimeImmutable(), (new ChatSavedMessage($message, $ana))->getSavedAt());
+        $before = new DateTimeImmutable();
+        self::assertGreaterThanOrEqual($before, (new ChatSavedMessage($message, $ana))->getSavedAt());
         (new ReflectionProperty(ChatSavedMessage::class, 'userRef'))->setValue($saved, null);
         self::assertSame('3', $saved->getUserReference());
 

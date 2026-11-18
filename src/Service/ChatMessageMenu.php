@@ -41,9 +41,9 @@ final readonly class ChatMessageMenu implements ChatMessageActionsInterface
     /**
      * {@inheritDoc}
      */
-    public function setSaved(ChatUserInterface $actor, string $conversationUuid, string $messageUuid, bool $saved): bool
+    public function markSaved(ChatUserInterface $actor, string $conversationUuid, string $messageUuid, bool $saved): bool
     {
-        return $this->actions->setSaved($actor, $this->message($actor, $conversationUuid, $messageUuid, ChatVoter::SAVE), $saved);
+        return $this->actions->markSaved($actor, $this->message($actor, $conversationUuid, $messageUuid, ChatVoter::SAVE), $saved);
     }
 
     /**
