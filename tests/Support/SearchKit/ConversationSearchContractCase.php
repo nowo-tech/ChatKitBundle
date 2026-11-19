@@ -29,7 +29,11 @@ use Nowo\SearchKitBundle\Model\SearchReference;
 use Nowo\SearchKitBundle\Provider\Entity\SearchItemContext;
 use Nowo\SearchKitBundle\Test\EntitySearchProviderTestCase;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
+use Symfony\Component\RateLimiter\Storage\InMemoryStorage;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
@@ -260,6 +264,57 @@ abstract class ConversationSearchContractCase extends EntitySearchProviderTestCa
         self::assertLessThanOrEqual($this->queryBudget(), $counts[1]);
     }
 
+    /**
+     * Audit VO-1: a full direct scan marks the total as not exact (older direct conversations were not looked at); the
+     * note belongs to that one search.
+     */
+    public function testAFullDirectScanIsNotAnExactTotal(): void
+    {
+        [$a]    = $this->tenants();
+        $marker = $this->marker();
+        for ($row = 0; $row < 3; ++$row) {
+            $this->seed($a, $marker . 'p' . $row);
+        }
+        $this->actAs($a, self::VIEWER_A);
+        $cut   = new ChatConversationSearchProvider($this->definitionWith(20, 2));
+        $group = $cut->search($this->query($marker));
+        self::assertInstanceOf(SearchGroup::class, $group);
+        self::assertCount(2, $group->items);
+        self::assertSame(2, $group->total);
+        self::assertFalse($group->exactTotal, 'two of three direct conversations scanned: the total is a lower bound');
+        $whole = new ChatConversationSearchProvider($this->definitionWith(20, 10));
+        self::assertTrue($whole->search($this->query($marker))?->exactTotal);
+        // Nothing is left on the request once read; a search with no match leaves no note either.
+        self::assertNull($cut->searchPage($this->query($marker . 'none'), 1, 5));
+        self::assertFalse($this->definitionWith(20, 2)->takeScanCut($this->query($marker)));
+        // Without a request there is nothing to note: the total stays SearchKit's.
+        $stack = $this->service(RequestStack::class);
+        while ($stack->pop() instanceof Request) {
+        }
+        self::assertCount(2, $cut->search($this->query($marker))->items ?? []);
+        $this->freshRequest();
+    }
+
+    /**
+     * Audit VO-2: the group's own bucket of `limits.searches_per_minute`, one token per search; recents spend nothing.
+     */
+    public function testTheGroupHasItsOwnBudget(): void
+    {
+        [$a]    = $this->tenants();
+        $marker = $this->marker();
+        $id     = $this->seed($a, $marker);
+        $this->actAs($a, self::VIEWER_A);
+        $limiter  = new RateLimiterFactory(['id' => 'chat_kit_test', 'policy' => 'fixed_window', 'limit' => 2, 'interval' => '1 minute'], new InMemoryStorage());
+        $provider = new ChatConversationSearchProvider($this->definitionWith(20, 10, $limiter));
+        self::assertNotNull($provider->search($this->query($marker)));
+        self::assertNotNull($provider->searchPage($this->query($marker), 1, 5));
+        self::assertNull($provider->search($this->query($marker)), 'over the budget: no rows');
+        self::assertNotNull($provider->resolve($this->reference($id), self::VIEWER_A, null), 'recents are not searches');
+        self::assertTrue($limiter->create(ChatConversationSearchDefinition::LIMITER_KEY . 'other')->consume()->isAccepted(), 'per viewer');
+        self::assertStringStartsNotWith('nowo_chat_search_page_', ChatConversationSearchDefinition::LIMITER_KEY);
+        self::assertStringStartsNotWith('nowo_chat_search_palette_', ChatConversationSearchDefinition::LIMITER_KEY);
+    }
+
     public function testEveryRowIsCheckedAgain(): void
     {
         [$a, $b] = $this->tenants();
@@ -325,8 +380,10 @@ abstract class ConversationSearchContractCase extends EntitySearchProviderTestCa
         self::assertSame('1 = 0', (string) $qb->getDQLPart('where'));
     }
 
-    private function definitionWith(int $maxCandidates, int $directScan): ChatConversationSearchDefinition
+    private function definitionWith(int $maxCandidates, int $directScan, ?RateLimiterFactoryInterface $limiter = null): ChatConversationSearchDefinition
     {
+        $limiter ??= $this->kernel->getContainer()->get('limiter.nowo_chat_search');
+        self::assertInstanceOf(RateLimiterFactoryInterface::class, $limiter);
         $access = new ChatAccess(
             $this->service(TestAccessPolicy::class),
             $this->channels,
@@ -345,6 +402,8 @@ abstract class ConversationSearchContractCase extends EntitySearchProviderTestCa
             $this->service(ChatSupportPolicy::class),
             $this->service(UrlGeneratorInterface::class),
             $this->service(TranslatorInterface::class),
+            $limiter,
+            $this->service(RequestStack::class),
             $maxCandidates,
             $directScan,
         );

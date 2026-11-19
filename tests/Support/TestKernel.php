@@ -287,8 +287,9 @@ final class TestKernel extends Kernel
         $services->set(QueryCounter::class);
         $services->set(QueryCountingMiddleware::class)->tag('doctrine.middleware');
         // 1.38: SearchKit's test-kit counter (EntitySearchProviderTestCase's query budget), only for kernels with the
-        // SearchKit groups on (it records every statement: the memory tests' kernels must not carry it).
-        if (class_exists(SearchKitQueryCountingMiddleware::class) && ($this->chatKitConfig['profiles']['default']['search_kit']['enabled'] ?? false) === true) {
+        // SearchKit groups on (it records every statement: the memory tests' kernels must not carry it), and on DBAL 4
+        // only (the kit's middleware does not implement DBAL 3's driver interfaces: audit VO-5).
+        if (class_exists(SearchKitQueryCountingMiddleware::class) && !self::dbal3() && ($this->chatKitConfig['profiles']['default']['search_kit']['enabled'] ?? false) === true) {
             $services->set(SearchKitQueryCounter::class);
             $services->set(SearchKitQueryCountingMiddleware::class)->tag('doctrine.middleware');
         }

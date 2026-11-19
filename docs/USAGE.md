@@ -1814,8 +1814,9 @@ above:
   total within the window. "See all" opens `/chat/search?q=…`.
 - Filter `from:` (`from:me`, `from:<public id>`). A negated or repeated `from:`, any other filter key, and a scoped
   search answer no rows (deny by default).
-- Window: `search_kit.messages.max_candidates` (100) messages are read and checked per search; the results page goes as
-  deep as that window.
+- Window: `search_kit.messages.max_candidates` (100) messages are read and checked per search; the palette and
+  SearchKit's results page go as deep as that window. Older matches are on ChatKit's own search page ("See all",
+  `/chat/search`, keyset paging over every readable message).
 - The palette has **its own budget**: the same limiter as the page (`nowo_chat_search`, `limits.searches_per_minute`),
   with a separate key per user (`nowo_chat_search_palette_<public id>`), so typing in the palette never uses up the
   page and API budget. Since 1.38 every call costs one token (one query, whatever the results page). Over the budget the
@@ -1837,9 +1838,14 @@ conversations the viewer can open on ChatKit's own pages, found by their name, t
   topic labels from the configuration), so they are matched in PHP, ignoring case and accents, as plain substrings
   (`%`, `_`, `!` and `\` are literal); only the matching ids, channel keys, topic keys and ticket numbers reach SQL, as
   bound parameters. A topic that is no longer configured is matched on its stored key with SearchKit's escaped LIKE.
-  Ticket numbers match as whole numbers (`123`, `000123`, `SUP-000123`); a word of the prefix (`sup`) matches every
-  ticket the viewer may open.
-- Direct conversations are matched within the viewer's newest `search_kit.channels.direct_scan` (500) ones.
+  A word of the prefix (`sup`) matches every ticket the viewer may open.
+- Direct conversations are matched within the viewer's newest `search_kit.channels.direct_scan` (200) ones: an older
+  direct conversation is not found by name (it is still in the list and on the conversation page). When the scan is
+  full, the group's total is marked not exact (a lower bound), so the palette never claims it found everything.
+- Ticket numbers: search by the whole number (`123`, `000123`, `SUP-000123`) or by the full label; a part of a number
+  (`12` for ticket 123) does not match.
+- The group has **its own budget** of `limits.searches_per_minute` (key `nowo_chat_search_conversations_<public id>`,
+  one token per call); over it the group is left out.
 - Conversations the viewer **closed** in their list are found (they still open, from the list's closed view as from a
   link); resolved and closed tickets are found too (they open read-only). Intake drafts (support conversations without a
   ticket number) are not. A channel the provider no longer lists for the viewer (left, removed), or one it never lists

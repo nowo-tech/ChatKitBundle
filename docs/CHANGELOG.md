@@ -218,7 +218,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   resolved / closed tickets are found; intake drafts and channels the provider no longer lists are not. Names are
   matched in PHP (they are not in ChatKit's tables) and only matching ids, keys and numbers reach SQL; every row is
   checked again, then the host's `ITEM_VISIBILITY` votes apply; visible total only, constant query count, recents
-  revalidated by uuid. New options `search_kit.channels.{enabled,priority,max_candidates,direct_scan}`; translations
+  revalidated by uuid. Direct conversations are matched within the newest `direct_scan` (200); a full scan marks the
+  total as not exact. Its own bucket of `limits.searches_per_minute` (`nowo_chat_search_conversations_<public id>`).
+  New options `search_kit.channels.{enabled,priority,max_candidates,direct_scan}`; translations
   in all 7 locales.
 - `search_kit.messages.{enabled,max_candidates}`.
 - `ChatPresenter::heading()` and `ChatPresenter::ticketLabel()`: the title rules of the conversation list, shared with

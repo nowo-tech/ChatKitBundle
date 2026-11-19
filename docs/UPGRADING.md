@@ -114,7 +114,7 @@ nowo_chat_kit:
                     enabled: true        # 1.38: the Conversations group (key `chat_channels`)
                     priority: 35
                     max_candidates: 100
-                    direct_scan: 500     # newest direct conversations matched by the other person's name
+                    direct_scan: 200     # newest direct conversations matched by the other person's name
 ```
 
 **Messages group: what changes for viewers.** The rows a viewer may see are the same (same permission filter, same
@@ -122,7 +122,8 @@ per-row checks, same excerpts). What follows SearchKit's shared flow now:
 
 - The group shows the **visible total** within its candidate window (it showed none), and SearchKit's own "see all"
   label (`search.see_all`) instead of ChatKit's `chat_search.see_all` (the link is unchanged: `/chat/search?q=…`).
-- The results page goes as deep as `search_kit.messages.max_candidates` (100) messages instead of 3 pages.
+- The palette and SearchKit's results page go as deep as `search_kit.messages.max_candidates` (100) messages instead of
+  3 pages; older matches are on ChatKit's own search page (`/chat/search`, "See all").
 - One limiter token per palette call, whatever the results page (it cost one per page replayed).
 - Host listeners of `SearchKitEvents::ITEM_VISIBILITY` now receive the group's candidates (subject type
   `chat_message`, id = the message id) and can deny them; a deny wins.

@@ -28,17 +28,23 @@ use Nowo\SearchKitBundle\Provider\Entity\EntitySearchDefinition;
 use Nowo\SearchKitBundle\Provider\Entity\SearchItemContext;
 use Nowo\SearchKitBundle\Search\Query\LikePattern;
 use Nowo\SearchKitBundle\Search\Query\SearchWindow;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 use function array_keys;
 use function array_values;
+use function count;
 use function implode;
 use function is_array;
 use function is_string;
 use function max;
 use function min;
 use function preg_match;
+use function spl_object_id;
 use function strlen;
 
 /**
@@ -60,8 +66,11 @@ use function strlen;
  * ({@see ChatSearchText::containsAll()}, a plain substring test: `%`, `_`, `!` and `\` are literal), and only the
  * matching ids, keys, topics and ticket numbers reach SQL, as bound parameters (a topic that is no longer configured
  * is matched on its stored key with SearchKit's escaped LIKE). Direct conversations are matched within the viewer's
- * newest `search_kit.channels.direct_scan` ones. Every candidate is then checked again per row — access, and the name
- * the viewer sees — before SearchKit applies the host's SearchKitEvents::ITEM_VISIBILITY votes (deny wins) and counts
+ * newest `search_kit.channels.direct_scan` ones; when that scan is full the group's total is marked not exact
+ * ({@see ChatConversationSearchProvider}, audit VO-1). Ticket numbers match as a whole number (`123`, `000123`,
+ * `SUP-000123`) or through the full label. The group has its own bucket of `limits.searches_per_minute` (key
+ * `nowo_chat_search_conversations_<public id>`, one token per search; audit VO-2). Every candidate is then checked
+ * again per row — access, and the name the viewer sees — before SearchKit applies the host's SearchKitEvents::ITEM_VISIBILITY votes (deny wins) and counts
  * what is left (no count oracle). Only names the viewer already sees in their list are ever matched or shown (never a
  * channel's members, never message text, never a ticket's owner for anyone but agents, who see it in their inbox).
  *
@@ -89,7 +98,7 @@ final class ChatConversationSearchDefinition extends EntitySearchDefinition
     public const string ROUTE = 'nowo_chat_page_conversation';
 
     /** Default of `search_kit.channels.direct_scan`. */
-    public const int DEFAULT_DIRECT_SCAN = 500;
+    public const int DEFAULT_DIRECT_SCAN = 200;
 
     /** Largest `search_kit.channels.direct_scan`. */
     public const int MAX_DIRECT_SCAN = 5000;
@@ -102,6 +111,12 @@ final class ChatConversationSearchDefinition extends EntitySearchDefinition
     private const string CHANNELS = 'chat_channels';
 
     private const string AGENT = 'chat_agent';
+
+    /** Limiter key prefix of the group's own search budget (audit VO-2; no other chat bucket's prefix starts it). */
+    public const string LIMITER_KEY = 'nowo_chat_search_conversations_';
+
+    /** Request attribute where a search notes that its direct scan was cut (search object id => true). */
+    private const string SCAN_CUT = '_nowo_chat_conversation_scan_cut';
 
     /** Longest digit run read as a ticket number. */
     private const int MAX_NUMBER_DIGITS = 9;
@@ -116,6 +131,8 @@ final class ChatConversationSearchDefinition extends EntitySearchDefinition
      * @param ChatSupportPolicy $policy Readable ticket numbers
      * @param UrlGeneratorInterface $urls Links to the conversations
      * @param TranslatorInterface $translator The group label
+     * @param RateLimiterFactoryInterface $searchLimiter `limits.searches_per_minute`: the group's own bucket of it (audit VO-2)
+     * @param RequestStack $requests The current request (where a search notes that its direct scan was cut: audit VO-1)
      * @param int $maxCandidates `search_kit.channels.max_candidates`
      * @param int $directScan `search_kit.channels.direct_scan`
      */
@@ -129,6 +146,9 @@ final class ChatConversationSearchDefinition extends EntitySearchDefinition
         private readonly ChatSupportPolicy $policy,
         private readonly UrlGeneratorInterface $urls,
         private readonly TranslatorInterface $translator,
+        #[Autowire(service: 'limiter.nowo_chat_search')]
+        private readonly RateLimiterFactoryInterface $searchLimiter,
+        private readonly RequestStack $requests,
         private readonly int $maxCandidates = self::DEFAULT_MAX_CANDIDATES,
         private readonly int $directScan = self::DEFAULT_DIRECT_SCAN,
     ) {
@@ -183,14 +203,15 @@ final class ChatConversationSearchDefinition extends EntitySearchDefinition
     {
         $viewer = $this->viewers->viewer($query->userIdentifier);
         $words  = ChatSearchText::words($query->text);
-        if (!$queryBuilder instanceof OrmQueryBuilder || !$viewer instanceof ChatUserInterface || $words === []) {
+        if (!$queryBuilder instanceof OrmQueryBuilder || !$viewer instanceof ChatUserInterface || $words === []
+            || !$this->searchLimiter->create(self::LIMITER_KEY . $viewer->getChatPublicId())->consume()->isAccepted()) {
             $queryBuilder->andWhere('1 = 0');
 
             return true;
         }
         $branches = ['(c.kind = :chat_support AND ' . $this->ticketCondition($queryBuilder, $words) . ')'];
         $queryBuilder->setParameter('chat_support', ConversationKind::Support);
-        $direct = $this->matchingDirect($viewer, $words);
+        $direct = $this->matchingDirect($viewer, $words, $query);
         if ($direct !== []) {
             $branches[] = '(c.kind = :chat_direct AND c.id IN (:chat_match_ids))';
             $queryBuilder->setParameter('chat_direct', ConversationKind::Direct)->setParameter('chat_match_ids', $direct);
@@ -357,6 +378,39 @@ final class ChatConversationSearchDefinition extends EntitySearchDefinition
     }
 
     /**
+     * Whether this search's direct scan stopped at `direct_scan` (older direct conversations not looked at), read once:
+     * the note is removed. Kept on the current request for this search object only, never in a property; without a
+     * request there is no note (false).
+     *
+     * @param SearchQuery $query The search (the object the hooks received)
+     */
+    public function takeScanCut(SearchQuery $query): bool
+    {
+        $request = $this->requests->getMainRequest();
+        $notes   = $request?->attributes->get(self::SCAN_CUT);
+        if (!$request instanceof Request || !is_array($notes) || !isset($notes[spl_object_id($query)])) {
+            return false;
+        }
+        unset($notes[spl_object_id($query)]);
+        // @igor-ignore - attributes of the current main request (request-scoped, gone with it), not service state.
+        $request->attributes->set(self::SCAN_CUT, $notes);
+
+        return true;
+    }
+
+    private function noteScanCut(SearchQuery $query): void
+    {
+        $request = $this->requests->getMainRequest();
+        if ($request instanceof Request) {
+            $notes                        = $request->attributes->get(self::SCAN_CUT);
+            $notes                        = is_array($notes) ? $notes : [];
+            $notes[spl_object_id($query)] = true;
+            // @igor-ignore - attributes of the current main request (request-scoped, gone with it), not service state.
+            $request->attributes->set(self::SCAN_CUT, $notes);
+        }
+    }
+
+    /**
      * The channels the viewer may use now: `channelsFor()` ∩ `canUse()`, valid keys, the first of a repeated key; key =>
      * the channel as ChatAccess knows it (the label the viewer's list shows).
      *
@@ -378,17 +432,23 @@ final class ChatConversationSearchDefinition extends EntitySearchDefinition
 
     /**
      * Ids of the viewer's direct conversations (within the newest `direct_scan`) whose other person's name, as the
-     * viewer's list shows it, holds every word.
+     * viewer's list shows it, holds every word. A full scan is noted for takeScanCut().
      *
      * @param list<string> $words
      *
      * @return list<int>
      */
-    private function matchingDirect(ChatUserInterface $viewer, array $words): array
+    private function matchingDirect(ChatUserInterface $viewer, array $words, SearchQuery $query): array
     {
-        $rows  = [];
-        $peers = [];
-        foreach ($this->conversations->findDirectForSearch($viewer, max(1, min(self::MAX_DIRECT_SCAN, $this->directScan))) as $conversation) {
+        $rows    = [];
+        $peers   = [];
+        $limit   = max(1, min(self::MAX_DIRECT_SCAN, $this->directScan));
+        $scanned = $this->conversations->findDirectForSearch($viewer, $limit);
+        if (count($scanned) >= $limit) {
+            // Older direct conversations were not looked at: the total of this search is a lower bound (audit VO-1).
+            $this->noteScanCut($query);
+        }
+        foreach ($scanned as $conversation) {
             $peer = $conversation->peerKeyOf($viewer);
             if ($peer !== null) {
                 $rows[]  = [$conversation, $peer];

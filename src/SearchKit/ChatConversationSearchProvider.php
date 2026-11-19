@@ -25,7 +25,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  * ChatKit registers it itself (instead of tagging the definition for SearchKit's EntitySearchPass) so that
  * {@see SearchKitRecentsPass} can remove it, like the message group,
  * while SearchKit keeps recents in the browser without revalidation. It takes no filter: a query with a filter never
- * reaches it (SearchKit's deny by default for providers that do not list the filter).
+ * reaches it (SearchKit's deny by default for providers that do not list the filter). When the definition's direct
+ * scan (`search_kit.channels.direct_scan`) was full, the group's total is marked not exact.
  *
  * Stateless (FrankenPHP worker mode).
  *
@@ -38,6 +39,8 @@ final readonly class ChatConversationSearchProvider implements PaginatedSearchPr
     public const string GROUP = ChatConversationSearchDefinition::GROUP;
 
     private EntitySearchProvider $provider;
+
+    private ChatConversationSearchDefinition $definition;
 
     /**
      * @param ChatConversationSearchDefinition $definition The hooks of the group
@@ -55,7 +58,8 @@ final readonly class ChatConversationSearchProvider implements PaginatedSearchPr
         ?SensitiveGroupNotice $notice = null,
         bool $recentsSafe = true,
     ) {
-        $this->provider = new EntitySearchProvider($definition, $dispatcher, $translator, $groups ?? new SearchGroupSettings(), $recentsSafe, $notice);
+        $this->definition = $definition;
+        $this->provider   = new EntitySearchProvider($definition, $dispatcher, $translator, $groups ?? new SearchGroupSettings(), $recentsSafe, $notice);
     }
 
     public function groupKey(): string
@@ -65,12 +69,23 @@ final readonly class ChatConversationSearchProvider implements PaginatedSearchPr
 
     public function search(SearchQuery $query): ?SearchGroup
     {
-        return $this->provider->search($query);
+        return $this->searchPage($query, 1, $query->limit);
     }
 
+    /**
+     * SearchKit's page, with the total marked not exact when the direct-conversation scan of this search was full
+     * (older direct conversations were not looked at: audit VO-1). The note is read from the current request for this
+     * search object only.
+     */
     public function searchPage(SearchQuery $query, int $page, int $perPage): ?SearchGroup
     {
-        return $this->provider->searchPage($query, $page, $perPage);
+        $group = $this->provider->searchPage($query, $page, $perPage);
+        $cut   = $this->definition->takeScanCut($query);
+        if (!$group instanceof SearchGroup || !$cut || !$group->exactTotal) {
+            return $group;
+        }
+
+        return new SearchGroup($group->key, $group->label, $group->items, $group->total, $group->moreUrl, $group->moreLabel, false);
     }
 
     public function resolve(SearchReference $reference, string $userIdentifier, ?string $locale): ?SearchItem
