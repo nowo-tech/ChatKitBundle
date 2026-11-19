@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.37.0](#to-1370)
 - [To 1.36.1](#to-1361)
 - [To 1.36.0](#to-1360)
 - [To 1.35.0](#to-1350)
@@ -82,6 +83,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.37.0
+
+From **1.36.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 **Target 1.37.0 (message search, opt-in).** From **1.36.1**:
 

@@ -1723,7 +1723,7 @@ author: {uuid, name}|null, createdAt}`. The dock configuration carries `links` (
 
 ## Message search (1.37)
 
-Off by default (`search.enabled: false`). Build the full-text index first ([UPGRADING.md](UPGRADING.md#unreleased),
+Off by default (`search.enabled: false`). Build the full-text index first ([UPGRADING.md](UPGRADING.md#to-1370),
 `nowo:chat:search-index`), then turn it on. It adds:
 
 - the page **`GET /chat/search`** (route `nowo_chat_page_search`): a FormKit form (UiKit form theme) with the words,
