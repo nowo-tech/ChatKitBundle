@@ -1747,8 +1747,9 @@ too. GDPR erasure turns a person's messages into tombstones, so they are never f
 **What the database searches.** Not the stored Markdown, but a viewer-neutral search text kept next to it
 (`nowo_chat_message.search_text`, written with the message, its edits, its deletion and GDPR erasure in the same unit
 of work): the plain text with every `#reference` token as a neutral `#…` (no title), mentions as `@Name` (no public
-id), links as their text (no URL), code spans as written and no Markdown markers. Every word of it is in the text any
-reader of the message sees, so a message is never found through text a viewer cannot see. **Accepted loss:** the
+id), links as their text (no URL), code as text (a token inside it is a `#…` too) and no Markdown markers. It holds no
+hidden text — no reference title, link URL or mention id — so a message is **never found through hidden text**; `…` in
+a query is ignored. **Accepted loss:** the
 titles of `#references` are not searchable, even for readers who may open them. Rows written before 1.37 have no search
 text until `nowo:chat:search-backfill` fills it and are never found until then (fail closed; see UPGRADING).
 
@@ -1776,9 +1777,8 @@ that never enabled search never gets one. To remove it, run `nowo:chat:search-in
 read when the schema is generated, so `%env()%` values work.
 
 **Paging.** A full page always has a "More results" link (the next page may turn out empty) and a page that is not full
-has none: the database only finds rows whose search text the viewer also sees, so the answer never depends on a message
-the viewer cannot read. (A page may stop early only after five reads of rows that the per-row access check drops, a
-case the SQL filter already prevents; it then goes on from the last readable row read.)
+has none, so hidden text never changes the answer. A page that is not full has one only when the search stopped
+reading early (five reads of candidates the per-row checks dropped); it then goes on from the last readable row read.
 
 **Excerpts.** Plain text: the JSON carries text, the page escapes every segment and wraps the words in `<mark>`
 elements itself, the palette gets text that SearchKit escapes. No message HTML is ever reused in a result.

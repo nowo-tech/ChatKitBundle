@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Service;
 
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Link\ChatLinkUrls;
 
 use function count;
@@ -63,7 +64,8 @@ final class ChatMarkdownRenderer
      */
     public function render(string $markdown): string
     {
-        $text = str_replace(["\r\n", "\r"], "\n", trim(self::clean($markdown)));
+        // 1.37 (audit VA3-7): a backtick in a #reference title never opens a code span.
+        $text = str_replace(["\r\n", "\r"], "\n", trim(self::clean(ChatReferences::safeTitles($markdown))));
         if ($text === '') {
             return '';
         }
@@ -252,6 +254,19 @@ final class ChatMarkdownRenderer
     public function plainText(string $markdown, int $maxLength = 120): string
     {
         return self::plain($markdown, $maxLength);
+    }
+
+    /**
+     * 1.37 (audit VA3-7): the HTML of a stored message: its stored render, or a new one when its body holds a
+     * `#reference` token whose title has a backtick (stored by 1.13–1.36: that render shows the title to every reader).
+     *
+     * @param ChatMessage $message The message
+     *
+     * @return string The sanitized HTML
+     */
+    public function htmlOf(ChatMessage $message): string
+    {
+        return ChatReferences::hasUnsafeTitles($message->getBody()) ? $this->render($message->getBody()) : $message->getBodyHtml();
     }
 
     /**

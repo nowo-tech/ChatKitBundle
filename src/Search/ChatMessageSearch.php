@@ -173,11 +173,12 @@ final readonly class ChatMessageSearch
     /**
      * Reads candidates round by round until the page is full, the candidates end, or {@see self::MAX_ROUNDS} reads.
      *
-     * The database matches the viewer-neutral search text (audit VA2-1): every word of it is in the text any reader of
-     * the row sees, so the text check below drops nothing a reader could tell apart (it guards rows whose search text
-     * is out of step, and keeps the viewer's own words authoritative). A full page always carries the last hit as its
-     * cursor and a list whose candidates end first has none (audit VA-1); reads that stop at {@see self::MAX_ROUNDS}
-     * (only reachable through rows the per-row access check drops) go on from the last readable row read.
+     * The database matches the viewer-neutral search text (audit VA2-1), which holds no hidden text (no reference title,
+     * link URL or mention id), so no row is ever found through hidden text; the text check below also keeps the
+     * viewer's own visible words authoritative (and drops rows whose search text is out of step). A full page always
+     * carries the last hit as its cursor and a list whose candidates end first has none (audit VA-1); reads that stop
+     * at {@see self::MAX_ROUNDS} (five reads of candidates the per-row checks dropped) go on from the last readable row
+     * read.
      */
     private function collect(ChatUserInterface $viewer, ChatSearchScope $scope, ChatMessageSearchQuery $query, int|string|null $author, DateTimeImmutable $cutoff, ?int $cursor, int $limit): ChatMessageSearchPage
     {

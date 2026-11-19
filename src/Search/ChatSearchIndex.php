@@ -34,6 +34,13 @@ final readonly class ChatSearchIndex
     /** The index name as mapped (`TablePrefixListener` rules give the physical name). */
     public const string MAPPED_NAME = 'idx_nowo_chat_message_search_fts';
 
+    /**
+     * The name of the index of pre-release 1.37 builds (on `body`, audit VA3-5): dropped by `nowo:chat:search-index
+     * --force` / `--drop` on PostgreSQL, where no schema diff sees it (on MySQL / MariaDB it is not mapped any more, so
+     * the next diff drops it).
+     */
+    public const string LEGACY_MAPPED_NAME = 'idx_nowo_chat_message_body_fts';
+
     /** Default PostgreSQL text search configuration: no stemming, no stop words, any language. */
     public const string DEFAULT_POSTGRES_CONFIG = 'simple';
 
@@ -149,6 +156,34 @@ final readonly class ChatSearchIndex
         }
 
         return self::UNSUPPORTED;
+    }
+
+    /**
+     * PostgreSQL only: whether the index of pre-release builds ({@see self::LEGACY_MAPPED_NAME}) is still there.
+     *
+     * @return bool True when it exists (false on other platforms)
+     */
+    public function legacyIndexExists(): bool
+    {
+        $connection = $this->entityManager->getConnection();
+        if (!$connection->getDatabasePlatform() instanceof PostgreSQLPlatform) {
+            return false;
+        }
+
+        return $connection->fetchOne(
+            "SELECT 1 FROM pg_class x WHERE x.relname = :name AND x.relkind = 'i' AND pg_table_is_visible(x.oid)",
+            ['name' => TablePrefixListener::physicalName(self::LEGACY_MAPPED_NAME, $this->tablePrefix, $this->tableNamePrefix)],
+        ) !== false;
+    }
+
+    /**
+     * The statement that drops the index of pre-release builds (PostgreSQL, `CONCURRENTLY`).
+     *
+     * @return string The SQL
+     */
+    public function dropLegacySql(): string
+    {
+        return sprintf('DROP INDEX CONCURRENTLY IF EXISTS %s', TablePrefixListener::physicalName(self::LEGACY_MAPPED_NAME, $this->tablePrefix, $this->tableNamePrefix));
     }
 
     /**

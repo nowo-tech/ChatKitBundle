@@ -19,6 +19,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 use function array_slice;
 use function sprintf;
+use function str_contains;
+use function str_replace;
+use function trim;
 
 use const ENT_HTML5;
 use const ENT_QUOTES;
@@ -224,7 +227,44 @@ final class ChatReferences implements ResetInterface
     }
 
     /**
-     * The token of an item: `#[Title](type:id)` (brackets and line breaks in the title become spaces).
+     * 1.37 (audit VA3-7): the body with every `#reference` token outside code whose stored title holds a backtick made
+     * safe (its backticks become spaces), the grammar of {@see self::parse()}: messages stored by 1.13–1.36 may hold such
+     * a token, and rendered as is its backtick opens a code span that shows the title to every reader.
+     *
+     * @param string $body Stored Markdown
+     *
+     * @return string The body to render
+     */
+    public static function safeTitles(string $body): string
+    {
+        if (!str_contains($body, '`')) {
+            return $body;
+        }
+
+        return (string) preg_replace_callback(self::CODE_OR_TOKEN, static function (array $match): string {
+            if ($match[1] !== '' || !str_contains($match[2], '`')) {
+                return $match[0];
+            }
+
+            return '#[' . trim(str_replace('`', ' ', $match[2])) . '](' . $match[3] . ':' . $match[4] . ')';
+        }, $body);
+    }
+
+    /**
+     * 1.37 (audit VA3-7): whether {@see self::safeTitles()} changes the body (its stored HTML must be rendered again).
+     *
+     * @param string $body Stored Markdown
+     *
+     * @return bool True when a token title outside code holds a backtick
+     */
+    public static function hasUnsafeTitles(string $body): bool
+    {
+        return self::safeTitles($body) !== $body;
+    }
+
+    /**
+     * The token of an item: `#[Title](type:id)` (brackets, backticks and line breaks in the title become spaces; 1.37,
+     * audit VA3-7: a backtick in a stored title opened a code span that cut the token open and showed the title raw).
      *
      * @param ChatReference $reference The item
      *
@@ -232,7 +272,7 @@ final class ChatReferences implements ResetInterface
      */
     public static function token(ChatReference $reference): string
     {
-        $title = trim((string) preg_replace('/[\[\]\s]+/u', ' ', $reference->title));
+        $title = trim((string) preg_replace('/[\[\]\s`]+/u', ' ', $reference->title));
 
         return '#[' . mb_substr($title === '' ? '?' : $title, 0, 120) . '](' . $reference->type . ':' . $reference->id . ')';
     }

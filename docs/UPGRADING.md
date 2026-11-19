@@ -107,9 +107,14 @@ ALTER TABLE nowo_chat_message ADD search_text LONGTEXT DEFAULT NULL;
 ALTER TABLE nowo_chat_message ADD search_text TEXT DEFAULT NULL;
 ```
 
-Adding a nullable column without a default value is instant on PostgreSQL 16 and on MySQL 8.4 / MariaDB 11.4 (InnoDB
-`ALGORITHM=INSTANT`), so it is safe on big tables. Nothing else changes until you set `search.enabled: true`: no route
-is added and no index is built.
+Adding a nullable column without a default value is a metadata change on PostgreSQL 16, and `ALGORITHM=INSTANT` on
+MySQL 8.4 / MariaDB 11.4 **as long as the table has no FULLTEXT index**. With one (a pre-release 1.37 build), MySQL
+rebuilds the table (`ALGORITHM=COPY`, writes blocked for the whole copy) and MariaDB takes `LOCK=SHARED`: drop that
+index first (`nowo:chat:search-index --drop --force` on such a build, or plan a window). Every server still needs a
+short exclusive lock on the table for the change, which waits behind long transactions and blocks the writes queued
+behind it: run the migration with a lock wait limit (`SET SESSION lock_wait_timeout = 5;` on MySQL / MariaDB,
+`SET lock_timeout = '5s';` on PostgreSQL) and retry if it gives up. Nothing else changes until you set
+`search.enabled: true`: no route is added and no index is built.
 
 **1. Fill the search text of the existing messages.**
 
@@ -118,8 +123,10 @@ php bin/console nowo:chat:search-backfill            # --batch=500 (at most 2000
 ```
 
 It walks the rows with a NULL search text by id; each batch is one short transaction (DBAL only: it never flushes,
-clears or resets an entity manager) and writes a row only while its search text is still NULL, so a send or an edit
-made meanwhile wins. Safe while the chat is in use and safe to run again. A lock conflict stops it with `CONFLICT_001`
+clears or resets an entity manager) that reads its rows with a row lock (`SELECT … FOR UPDATE`) and writes a row only
+while its search text is still NULL, so a send or an edit made meanwhile wins. **Run it once every node runs 1.37**,
+and **run it again after the last old node has stopped**: a node still on 1.36 writes messages without a search text
+(never found until filled). Safe while the chat is in use and safe to run again. A lock conflict stops it with `CONFLICT_001`
 and exit code 75: the batches before it are kept, and the message says which `--after-id` resumes it
 (REQ-RUNTIME-003 rule 6). Expect roughly the time of reading and updating every message once; on a busy table use a
 smaller `--batch`.
@@ -168,6 +175,10 @@ by row during the backfill).
   (PostgreSQL search still answers, through slower plans; MySQL / MariaDB search needs the index: keep `search.enabled` off until it is built). Run it again when the table is quieter.
 - `search.postgresql_config` (default `simple`: no stemming, no stop words, any language) is part of the index
   expression: changing it means dropping and building the index again.
+
+**Pre-release builds on PostgreSQL.** A 1.37 development build created `idx_nowo_chat_message_body_fts` (on `body`),
+which no schema diff sees. `nowo:chat:search-index --force` (or `--drop --force`) drops it (`CONCURRENTLY`) when it is
+there. On MySQL / MariaDB it is no longer mapped, so the next diff drops it.
 
 **3. Turn it on.**
 

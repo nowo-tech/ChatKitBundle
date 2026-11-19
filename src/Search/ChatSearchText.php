@@ -22,6 +22,7 @@ use function preg_quote;
 use function preg_replace;
 use function preg_split;
 use function str_contains;
+use function str_replace;
 use function trim;
 
 use const PREG_SPLIT_DELIM_CAPTURE;
@@ -76,7 +77,11 @@ final class ChatSearchText
     {
         $words = [];
         foreach (preg_split('/\s+/u', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $word) {
-            $words[] = mb_strtolower($word);
+            // Audit VA3-6: `…` is the neutral marker of the search text (a #reference), never a word to look for.
+            $word = str_replace('…', '', mb_strtolower($word));
+            if ($word !== '') {
+                $words[] = $word;
+            }
         }
 
         return array_slice(array_values(array_unique($words)), 0, self::MAX_WORDS);

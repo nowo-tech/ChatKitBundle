@@ -168,6 +168,24 @@ final class ChatSearchPlatformsTest extends TestCase
         (new CommandTester(new ChatSearchIndexCommand(new ChatSearchIndex($entityManager))))->execute(['--force' => true]);
     }
 
+    public function testPreReleaseIndexDropAnswersConflict001(): void
+    {
+        // PostgreSQL, index ready, the pre-release index still there; its drop meets a lock conflict.
+        [$entityManager, $connection] = $this->entityManager(new PostgreSQLPlatform());
+        $connection->method('fetchOne')->willReturnOnConsecutiveCalls('ready', 1, 'ready', 1);
+        $connection->method('executeStatement')->willThrowException(new DeadlockException($this->driverException(7, '40P01'), null));
+        $tester = new CommandTester(new ChatSearchIndexCommand(new ChatSearchIndex($entityManager)));
+        self::assertSame(ChatSearchIndexCommand::CONFLICT, $tester->execute(['--force' => true]));
+        self::assertStringContainsString('CONFLICT_001', $tester->getDisplay());
+        self::assertSame('DROP INDEX CONCURRENTLY IF EXISTS idx_nowo_chat_message_body_fts', (new ChatSearchIndex($entityManager))->dropLegacySql());
+
+        [$entityManager, $connection] = $this->entityManager(new PostgreSQLPlatform());
+        $connection->method('fetchOne')->willReturnOnConsecutiveCalls('ready', 1);
+        $connection->method('executeStatement')->willThrowException(new SyntaxErrorException($this->driverException(7, '42601'), null));
+        $this->expectException(SyntaxErrorException::class);
+        (new CommandTester(new ChatSearchIndexCommand(new ChatSearchIndex($entityManager))))->execute(['--force' => true]);
+    }
+
     public function testBackfillConflictAndOtherErrors(): void
     {
         foreach ([[new DeadlockException($this->driverException(1213, '40001'), null), true], [new SyntaxErrorException($this->driverException(1064, '42000'), null), false]] as [$failure, $transient]) {

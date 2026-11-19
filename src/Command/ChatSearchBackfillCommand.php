@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Command;
 
 use Doctrine\DBAL\ParameterType;
+use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
+use Doctrine\DBAL\Platforms\PostgreSQLPlatform;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Search\ChatSearchText;
@@ -29,8 +31,8 @@ use function sprintf;
 /**
  * 1.37 (audit VA2-1): fills `nowo_chat_message.search_text` for the messages written before 1.37 (rows with a NULL
  * search text are never found by message search). Walks those rows by id in batches; each batch is one short
- * transaction on ChatKit's connection (DBAL only: no entity manager is flushed, cleared or reset), and a row is written
- * only while its search text is still NULL, so a send or an edit that filled it meanwhile always wins. Safe to run again
+ * transaction on ChatKit's connection (DBAL only: no entity manager is flushed, cleared or reset) that reads its rows
+ * with a row lock and writes a row only while its search text is still NULL, so a send or an edit always wins. Safe to run again
  * and while the chat is in use; `--after-id` resumes. A lock wait, deadlock or lock timeout stops it with
  * `CONFLICT_001` and exit code 75 (the batches before it are kept: REQ-RUNTIME-003 rule 6); other errors are rethrown.
  */
@@ -70,29 +72,29 @@ final class ChatSearchBackfillCommand extends Command
         $body       = $metadata->getColumnName('body');
         $search     = $metadata->getColumnName('searchText');
         $filled     = 0;
+        // Audit VA3-1: the rows are read inside the batch's transaction with a row lock (FOR UPDATE on MySQL / MariaDB /
+        // PostgreSQL), so an edit cannot commit between the read of a body and the write of its search text: it either
+        // waits for the batch, or committed first (its search text is set and the row is no longer selected).
+        $lock  = $connection->getDatabasePlatform() instanceof AbstractMySQLPlatform || $connection->getDatabasePlatform() instanceof PostgreSQLPlatform ? ' FOR UPDATE' : '';
+        $read  = sprintf('SELECT %1$s AS id, %2$s AS body FROM %3$s WHERE %4$s IS NULL AND %1$s > ? ORDER BY %1$s LIMIT %5$d%6$s', $id, $body, $table, $search, $batch, $lock);
+        $write = sprintf('UPDATE %1$s SET %2$s = ? WHERE %3$s = ? AND %2$s IS NULL', $table, $search, $id);
         do {
-            $rows = $connection->fetchAllAssociative(
-                sprintf('SELECT %1$s AS id, %2$s AS body FROM %3$s WHERE %4$s IS NULL AND %1$s > ? ORDER BY %1$s LIMIT %5$d', $id, $body, $table, $search, $batch),
-                [$afterId],
-                [ParameterType::INTEGER],
-            );
-            if ($rows === []) {
-                break;
-            }
-
             try {
                 // @igor-ignore - The runner calls the closure once, now, and keeps nothing (stateless, per call).
-                $filled += (int) ChatKitTransactionRunner::forConnection($connection, null)->run(static function () use ($connection, $rows, $table, $id, $search): int {
+                [$count, $written, $last] = ChatKitTransactionRunner::forConnection($connection, null)->run(static function () use ($connection, $read, $write, $afterId): array {
+                    $rows    = $connection->fetchAllAssociative($read, [$afterId], [ParameterType::INTEGER]);
                     $written = 0;
+                    $last    = $afterId;
                     foreach ($rows as $row) {
                         $written += (int) $connection->executeStatement(
-                            sprintf('UPDATE %1$s SET %2$s = ? WHERE %3$s = ? AND %2$s IS NULL', $table, $search, $id),
+                            $write,
                             [ChatSearchText::indexable(is_string($row['body']) ? $row['body'] : ''), $row['id']],
                             [ParameterType::STRING, ParameterType::INTEGER],
                         );
+                        $last = is_numeric($row['id']) ? (int) $row['id'] : $last;
                     }
 
-                    return $written;
+                    return [count($rows), $written, $last];
                 });
             } catch (Throwable $exception) {
                 if (!(new TransientFailureClassifier())->isTransient($exception)) {
@@ -102,9 +104,9 @@ final class ChatSearchBackfillCommand extends Command
 
                 return self::CONFLICT;
             }
-            $last    = $rows[count($rows) - 1]['id'];
-            $afterId = is_numeric($last) ? (int) $last : $afterId;
-        } while (count($rows) === $batch);
+            $filled += $written;
+            $afterId = $last;
+        } while ($count === $batch);
 
         $io->success(sprintf('Filled the search text of %d chat message(s).', $filled));
 

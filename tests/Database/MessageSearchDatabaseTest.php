@@ -248,6 +248,27 @@ final class MessageSearchDatabaseTest extends TestCase
         self::assertSame($this->sortedIds($ids), $this->sortedIds(array_map(intval(...), $this->connection()->fetchFirstColumn("SELECT id FROM nowo_chat_message WHERE search_text LIKE 'legacy line %'"))));
     }
 
+    /**
+     * Audit VA3-5: on PostgreSQL the index of pre-release builds (on `body`) is dropped by `--force` and `--drop`.
+     */
+    public function testThePreReleaseIndexIsDroppedOnPostgres(): void
+    {
+        if ($this->mysql()) {
+            self::assertFalse($this->index()->legacyIndexExists());
+
+            return;
+        }
+        $legacy = "CREATE INDEX IF NOT EXISTS idx_nowo_chat_message_body_fts ON nowo_chat_message USING GIN (to_tsvector('simple'::regconfig, body))";
+        $this->connection()->executeStatement($legacy);
+        self::assertTrue($this->index()->legacyIndexExists());
+        self::assertStringContainsString('pre-release', $this->command(['--force' => true])->getDisplay());
+        self::assertFalse($this->index()->legacyIndexExists());
+        $this->connection()->executeStatement($legacy);
+        self::assertSame(0, $this->command(['--force' => true, '--drop' => true])->getStatusCode());
+        self::assertFalse($this->index()->legacyIndexExists());
+        self::assertSame(0, $this->command(['--force' => true])->getStatusCode());
+    }
+
     public function testABuildBlockedByAnotherSessionAnswersConflict001(): void
     {
         $index = $this->index();

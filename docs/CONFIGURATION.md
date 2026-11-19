@@ -245,7 +245,7 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 | `limits.references_per_minute` | `nowo_chat_reference` (`/` command menu and `#` search) | 120 |
 | `limits.buzz_interval_seconds` | `nowo_chat_buzz` (per conversation) | 15 |
 | `limits.buzz_per_minute` | `nowo_chat_buzz_global` | 10 |
-| `limits.searches_per_minute` | `nowo_chat_search` (1.37: message searches of the page and the API; the SearchKit palette has its own bucket of the same size, key `nowo_chat_search_palette_<public id>`, one token per search a call runs) | 30 |
+| `limits.searches_per_minute` | `nowo_chat_search` (1.37, at least 3: message searches of the page and the API, key `nowo_chat_search_page_<public id>`; the SearchKit palette has its own bucket of the same size, key `nowo_chat_search_palette_<public id>`, one token per search a call runs, up to 3) | 30 |
 | `limits.mention_all_per_hour` | `nowo_chat_mention_all` (1.24: `@channel` / `@here` per writer, when the channel provider allows them; over it the message is sent without the group mention) | 6 |
 
 ## Table names

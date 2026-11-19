@@ -66,7 +66,7 @@ final class ChatSearchIndexCommand extends Command
         if ($drop ? $state === ChatSearchIndex::MISSING : $state === ChatSearchIndex::READY) {
             $io->success($drop ? 'Nothing to drop.' : 'The index is already there.');
 
-            return Command::SUCCESS;
+            return $this->dropLegacy($io);
         }
 
         try {
@@ -84,6 +84,30 @@ final class ChatSearchIndexCommand extends Command
             return self::CONFLICT;
         }
         $io->success($drop ? 'Index dropped.' : 'Index built.');
+
+        return $this->dropLegacy($io);
+    }
+
+    /**
+     * Audit VA3-5: drops the index of pre-release builds on PostgreSQL when it is still there (no diff ever sees it).
+     */
+    private function dropLegacy(SymfonyStyle $io): int
+    {
+        if (!$this->index->legacyIndexExists()) {
+            return Command::SUCCESS;
+        }
+
+        try {
+            $this->index->execute($this->index->dropLegacySql());
+        } catch (Throwable $exception) {
+            if (!(new TransientFailureClassifier())->isTransient($exception)) {
+                throw $exception;
+            }
+            $io->error(sprintf('%s: a lock wait, deadlock or lock timeout stopped the drop of the pre-release index. Run the command again.', ConflictCode::RETRY_SAFE));
+
+            return self::CONFLICT;
+        }
+        $io->writeln('Dropped the index of a pre-release build.');
 
         return Command::SUCCESS;
     }

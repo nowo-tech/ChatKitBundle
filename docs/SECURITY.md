@@ -125,11 +125,12 @@ dependencies current. Security fixes are released as patch versions of the suppo
 - **1.37 message search: support agents search every ticket** (owner decision 2026-11-19), the same rule as the
   conversation page and the agent inbox (`ChatAccessPolicyInterface::isSupportAgent()`), not only the tickets assigned
   to them. Keep the agent list as small as the support work needs.
-- **1.37 message search: no oracle on hidden text.** The database matches a viewer-neutral search text
+- **1.37 message search: never found through hidden text.** The database matches a viewer-neutral search text
   (`search_text`: `#reference` tokens as a neutral `#…`, no link URLs, no mention ids), never the stored Markdown, so
-  a row is found only through words every reader of it sees (audits VA-1, VA2-1). The answer (rows and `next`) is the
-  same whether or not a conversation holds a hidden `#reference` title, including against padding with code spans or
-  link URLs (byte-compared tests on MySQL, MariaDB and PostgreSQL). Accepted loss: reference titles are not searchable.
+  no row is found through a reference title, a link URL or a mention id (audits VA-1, VA2-1, VA3-6). The answer (rows
+  and `next`) is the same whether or not a conversation holds a hidden `#reference` title, including against padding
+  with code spans or link URLs (byte-compared tests on MySQL, MariaDB and PostgreSQL). A page that is not full carries
+  a cursor only when the search stopped after five reads of candidates the per-row checks dropped. Accepted loss: reference titles are not searchable.
   Rows written before 1.37 are never found until `nowo:chat:search-backfill` has filled them.
 - **SearchKit palette.** ChatKit registers its provider only with revalidated recents
   (`nowo_search_kit.recent.revalidate: true`, or recents off), so no message excerpt stays in the browser (audit VA-3);

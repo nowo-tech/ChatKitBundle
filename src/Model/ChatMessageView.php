@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Model;
 
 use DateTimeImmutable;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Service\ChatMentions;
 
 /**
@@ -75,7 +76,8 @@ final readonly class ChatMessageView
             $message->getKind(),
             $message->getAuthor()?->getChatPublicId(),
             $message->getBody(),
-            $message->getBodyHtml(),
+            // 1.37 (audit VA3-7): never a stored render that shows a #reference title.
+            (new ChatMarkdownRenderer())->htmlOf($message),
             array_values(array_map(strval(...), $tokens)),
             $message->getMentionAll(),
             $message->isDeleted(),

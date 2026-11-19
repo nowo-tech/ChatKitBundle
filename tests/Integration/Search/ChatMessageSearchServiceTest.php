@@ -8,6 +8,8 @@ use DateTimeImmutable;
 use Nowo\ChatKitBundle\Command\ChatSearchBackfillCommand;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
+use Nowo\ChatKitBundle\Controller\ChatSearchController;
+use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
@@ -32,6 +34,8 @@ use Nowo\SearchKitBundle\Model\SearchItem;
 use Nowo\SearchKitBundle\Model\SearchQuery;
 use Nowo\SearchKitBundle\Model\SearchReference;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
+use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
@@ -42,6 +46,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 
 use function array_map;
 use function implode;
+use function str_starts_with;
 
 /**
  * 1.37 (spec 002): the edges of message search the HTTP tests do not reach — the per-row re-check, hidden-text runs
@@ -54,7 +59,7 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
     {
         return match ($this->name()) {
             'testOffAnswersNothing'       => [],
-            'testProviderSharesTheBudget' => ['profiles' => ['default' => ['search' => ['enabled' => true], 'search_kit' => ['enabled' => true], 'limits' => ['searches_per_minute' => 2]]]],
+            'testProviderSharesTheBudget' => ['profiles' => ['default' => ['search' => ['enabled' => true], 'search_kit' => ['enabled' => true], 'limits' => ['searches_per_minute' => 3]]]],
             default                       => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 1], 'search_kit' => ['enabled' => true]]]],
         };
     }
@@ -348,12 +353,28 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
         $chat->send($luis, $chat->openDirect($ana, $luis), 'budget line');
         $provider = $this->provider($this->get(ChatMessageSearch::class));
         $this->signIn($ana);
-        // Two searches a minute here, for the page, the API and the palette together (audit VA-2).
-        self::assertNotNull($provider->search($this->searchQuery($ana, 'budget')));
+        // Three searches a minute here (the lowest allowed: a results-page call costs up to 3, audit VA3-3).
         $search = $this->get(ChatMessageSearch::class);
         self::assertCount(1, $search->search($this->fresh($ana), $search->query('budget'))->hits, 'the service itself is not limited');
-        self::assertNotNull($provider->searchPage($this->searchQuery($ana, 'budget'), 1, 5));
+        // Results page 3 costs 3 tokens (it replays three searches) and fits a budget of 3 without throwing.
+        self::assertNull($provider->searchPage($this->searchQuery($ana, 'budget'), 3, 5), 'page 3 of one row: empty, budget spent');
         self::assertNull($provider->search($this->searchQuery($ana, 'budget')), 'over the budget: no rows');
+        // The page and API budget is a different key (audit VA3-2): the palette spent nothing of it.
+        $page = $this->limiter()->create(ChatSearchController::LIMITER_KEY . $ana->getChatPublicId());
+        self::assertTrue($page->consume(3)->isAccepted());
+        // No public id can make the two keys equal: neither prefix starts with the other.
+        self::assertFalse(str_starts_with(ChatSearchController::LIMITER_KEY, ChatMessageSearchProvider::LIMITER_KEY));
+        self::assertFalse(str_starts_with(ChatMessageSearchProvider::LIMITER_KEY, ChatSearchController::LIMITER_KEY));
+        // The audit's case: a user whose public id is `palette_alice` and one whose id is `alice` get separate buckets.
+        $this->limiter()->create(ChatSearchController::LIMITER_KEY . 'palette_alice')->consume(3);
+        self::assertTrue($this->limiter()->create(ChatMessageSearchProvider::LIMITER_KEY . 'alice')->consume(3)->isAccepted());
+    }
+
+    public function testBudgetBelowThreeIsRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('searches_per_minute');
+        (new Processor())->processConfiguration(new Configuration(), [['profiles' => ['default' => ['limits' => ['searches_per_minute' => 2]]]]]);
     }
 
     private function provider(ChatMessageSearch $search): ChatMessageSearchProvider

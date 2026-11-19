@@ -36,6 +36,9 @@ use function preg_match;
  */
 final class ChatSearchController extends AbstractController
 {
+    /** Limiter key prefix of the page and API search budget (the palette has its own, audit VA3-2). */
+    public const string LIMITER_KEY = 'nowo_chat_search_page_';
+
     /**
      * @param ChatMessageSearch $search Message search
      * @param ChatAccess $access Reachability of the signed-in participant
@@ -203,6 +206,7 @@ final class ChatSearchController extends AbstractController
 
     private function withinBudget(ChatUserInterface $user): bool
     {
-        return $this->searchLimiter->create('nowo_chat_search_' . $user->getChatPublicId())->consume()->isAccepted();
+        // Audit VA3-2: `…_page_<id>` and the palette's `…_palette_<id>` can never be the same key.
+        return $this->searchLimiter->create(self::LIMITER_KEY . $user->getChatPublicId())->consume()->isAccepted();
     }
 }

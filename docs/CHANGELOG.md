@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - [[Unreleased]](#unreleased)
   - [Added](#added)
+  - [Security](#security)
   - [Changed](#changed)
 - [[1.36.1] - 2026-11-19](#1361---2026-11-19)
   - [Fixed](#fixed)
@@ -24,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - [Added](#added-3)
 - [[1.33.0] - 2026-11-17](#1330---2026-11-17)
   - [Added](#added-4)
-  - [Security](#security)
+  - [Security](#security-1)
   - [Changed](#changed-4)
   - [Documentation](#documentation)
   - [Demo](#demo)
@@ -46,7 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.28.0] - 2026-11-14](#1280---2026-11-14)
   - [Added](#added-9)
   - [Changed](#changed-7)
-  - [Security](#security-1)
+  - [Security](#security-2)
 - [[1.27.1] - 2026-11-13](#1271---2026-11-13)
   - [Fixed](#fixed-5)
 - [[1.27.0] - 2026-11-13](#1270---2026-11-13)
@@ -54,9 +55,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - [Deprecated](#deprecated)
   - [Tests](#tests)
 - [[1.26.4] - 2026-11-13](#1264---2026-11-13)
-  - [Security](#security-2)
-- [[1.26.3] - 2026-11-11](#1263---2026-11-11)
   - [Security](#security-3)
+- [[1.26.3] - 2026-11-11](#1263---2026-11-11)
+  - [Security](#security-4)
 - [[1.26.2] - 2026-11-11](#1262---2026-11-11)
   - [Fixed](#fixed-6)
   - [Tests](#tests-1)
@@ -110,7 +111,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.15.3] - 2026-11-04](#1153---2026-11-04)
   - [Fixed](#fixed-14)
 - [[1.15.2] - 2026-11-03](#1152---2026-11-03)
-  - [Security](#security-4)
+  - [Security](#security-5)
 - [[1.15.1] - 2026-11-03](#1151---2026-11-03)
   - [Fixed](#fixed-15)
   - [Changed](#changed-15)
@@ -232,8 +233,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     (`limits.searches_per_minute`, 30).
   - Escaped excerpts: plain text only; the page escapes every segment and marks the words with `<mark>` itself.
 - `nowo:chat:search-backfill` fills `search_text` for older messages in batches (`--batch`, `--after-id`), one short
-  DBAL transaction each, never over a value a send or edit wrote; a lock conflict answers `CONFLICT_001` (exit 75) and
+  DBAL transaction each that reads its rows with `SELECT … FOR UPDATE`, never over a value a send or edit wrote (run it
+  once every node runs 1.37, and again after the last old node stopped); a lock conflict answers `CONFLICT_001` (exit 75) and
   keeps the batches before it.
+- `nowo:chat:search-index --force` / `--drop` also drop, on PostgreSQL, the index of pre-release 1.37 builds
+  (`idx_nowo_chat_message_body_fts`, `CONCURRENTLY`), which no schema diff sees.
 - `nowo:chat:search-index` prints the index state and SQL, `--force` builds it (`CREATE INDEX CONCURRENTLY` on
   PostgreSQL; an INVALID index of a failed build is dropped first), `--drop` removes it; a lock conflict stops it with
   `CONFLICT_001` (exit 75): no usable index was built (on PostgreSQL an INVALID index may remain until `--force` runs
@@ -247,8 +251,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   results-page paging (pages 1 to 3) and recents re-checked on every display. Registered only when SearchKit's recents
   are revalidated (`nowo_search_kit.recent.revalidate: true`) or off: with SearchKit's default a picked message excerpt
   would stay in the browser's localStorage after a delete, an erasure or a lost access (`SearchKitRecentsPass`, fail
-  closed). The palette has its own bucket of `limits.searches_per_minute` (key `nowo_chat_search_palette_<public id>`, one token per
-  search a call runs) and relies on SearchKit's input debounce; the page and the API share theirs. Deny
+  closed). The palette has its own bucket of `limits.searches_per_minute` (key `nowo_chat_search_palette_<public id>`, the page and
+  API key `nowo_chat_search_page_<public id>`, one token per search a call runs; `limits.searches_per_minute` is at
+  least 3) and relies on SearchKit's input debounce; the page and the API share theirs. Deny
   by default for scopes, other filters and searches made by identifier for another user. `nowo-tech/search-kit-bundle` is suggested (and a dev requirement).
 - `ChatMessageSearch` (`query()`, `search()`, `find()`) for hosts that search from PHP; stateless (FrankenPHP worker
   mode).
@@ -257,6 +262,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   several viewers in turn), escaping, bounds, the rate limit and paging; real-database tests on MySQL 8.4, MariaDB 11.4
   and PostgreSQL 16 (index build, planner use, schema diff stability, engines, operator characters, a build blocked by
   another session answering `CONFLICT_001`).
+
+### Security
+
+- **A `#reference` title holding a backtick was shown to every reader** (audit VA3-7; affects 1.9.0 to 1.36.1). The
+  stored token kept the backtick (`` #[Fix `foo](task:7) ``), and the renderer cut inline code first, so the backtick opened
+  a code span that showed the stored title as text in the message's HTML, for every reader, including those who may
+  not open the item. New tokens never hold a backtick (`ChatReferences::token()` turns it into a space), every render
+  makes such a stored token safe first (`ChatReferences::safeTitles()`), and messages whose stored HTML already shows
+  the title are rendered again when shown (`ChatMarkdownRenderer::htmlOf()`: the API, the pages, realtime payloads and
+  `ChatMessageView`). Plain-text previews were not affected.
 
 ### Changed
 

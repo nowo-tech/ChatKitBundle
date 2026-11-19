@@ -46,7 +46,7 @@ final class ChatMessageSearchTest extends DatabaseTestCase
             'testPagingByCursor'                   => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 2]]]],
             'testHiddenTitlesNeverChangeTheAnswer' => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 2]]]],
             'testPaddingCannotProbeHiddenTitles'   => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 2]]]],
-            'testRateLimit'                        => ['profiles' => ['default' => ['search' => ['enabled' => true], 'limits' => ['searches_per_minute' => 2]]]],
+            'testRateLimit'                        => ['profiles' => ['default' => ['search' => ['enabled' => true], 'limits' => ['searches_per_minute' => 3]]]],
             'testDockLinkCanBeHidden'              => ['profiles' => ['default' => ['search' => ['enabled' => true, 'dock_entry' => false]]]],
             default                                => ['profiles' => ['default' => ['search' => ['enabled' => true]]]],
         };
@@ -342,6 +342,8 @@ final class ChatMessageSearchTest extends DatabaseTestCase
         $this->client->request(Request::METHOD_GET, '/chat/api/search?q=hello');
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
         $this->client->request(Request::METHOD_GET, '/chat/search?q=hello');
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+        $this->client->request(Request::METHOD_GET, '/chat/api/search?q=hello');
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
         $this->client->request(Request::METHOD_GET, '/chat/api/search?q=hello');
         self::assertSame(429, $this->client->getResponse()->getStatusCode());
