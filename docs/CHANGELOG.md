@@ -215,17 +215,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     digits ever reach a full-text operator.
   - Visibility in the same SQL statement, evaluated on every search: direct conversations of the viewer, the viewer's
     own tickets (every ticket for a support agent), the channels the provider lists for the viewer now; each row is
-    then checked again with `ChatAccess::canView()` and against the text the viewer sees (a hidden `#reference` title
-    never matches). Deleted messages, erased authors' tombstones, system / bot / buzz / pin lines and messages outside
+    then checked again with `ChatAccess::canView()` and against the text the viewer sees.
+  - **Viewer-neutral search text** (audit VA2-1): a new nullable column `nowo_chat_message.search_text`, the plain text
+    with `#reference` tokens as a neutral `#…`, links as their text and mentions as `@Name`, written with every send,
+    edit, deletion and GDPR erasure in the same unit of work. The full-text index and every match (`MATCH`,
+    `to_tsvector`, `LIKE`) use it, never the stored Markdown, so no message is found through text a viewer cannot see
+    (a hidden reference title, a link URL, a mention id). Accepted loss: reference titles are not searchable. Rows
+    written before 1.37 stay NULL (never found) until `nowo:chat:search-backfill` fills them. Deleted messages, erased authors' tombstones, system / bot / buzz / pin lines and messages outside
     the purge's retention window (or replies to roots outside it) are never found; an unreadable retention answers no
     rows.
   - Oracle-free: no counts; a forbidden and an unknown conversation, author or cursor give the same empty answer; a
-    full page always carries `next`, so a message that matches only through text the viewer cannot see (a hidden
-    `#reference` title) never changes the answer.
+    full page always carries `next` and a short page none; the answer is byte-identical with and without a hidden
+    `#reference` title, also against padding with code spans or link URLs (tests on the three databases).
     Keyset paging (newest first, `next` = the last row's uuid), `search.min_query_length` / `max_query_length` (400
     `query_too_short` / `query_too_long`), at most 8 words, `search.page_size`, rate limiter `nowo_chat_search`
     (`limits.searches_per_minute`, 30).
   - Escaped excerpts: plain text only; the page escapes every segment and marks the words with `<mark>` itself.
+- `nowo:chat:search-backfill` fills `search_text` for older messages in batches (`--batch`, `--after-id`), one short
+  DBAL transaction each, never over a value a send or edit wrote; a lock conflict answers `CONFLICT_001` (exit 75) and
+  keeps the batches before it.
 - `nowo:chat:search-index` prints the index state and SQL, `--force` builds it (`CREATE INDEX CONCURRENTLY` on
   PostgreSQL; an INVALID index of a failed build is dropped first), `--drop` removes it; a lock conflict stops it with
   `CONFLICT_001` (exit 75): no usable index was built (on PostgreSQL an INVALID index may remain until `--force` runs
@@ -239,7 +247,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   results-page paging (pages 1 to 3) and recents re-checked on every display. Registered only when SearchKit's recents
   are revalidated (`nowo_search_kit.recent.revalidate: true`) or off: with SearchKit's default a picked message excerpt
   would stay in the browser's localStorage after a delete, an erasure or a lost access (`SearchKitRecentsPass`, fail
-  closed). Each palette call spends one search of `limits.searches_per_minute`, shared with the page and the API. Deny
+  closed). The palette has its own bucket of `limits.searches_per_minute` (key `nowo_chat_search_palette_<public id>`, one token per
+  search a call runs) and relies on SearchKit's input debounce; the page and the API share theirs. Deny
   by default for scopes, other filters and searches made by identifier for another user. `nowo-tech/search-kit-bundle` is suggested (and a dev requirement).
 - `ChatMessageSearch` (`query()`, `search()`, `find()`) for hosts that search from PHP; stateless (FrankenPHP worker
   mode).
@@ -251,6 +260,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- `ChatReferences::plainText()` (previews, push bodies, digests, search) leaves a `#reference` token inside a code span
+  or block as written instead of resolving it, as `validate()` and `neutralizeFor()` already do (audit VA2-2).
+- Schema: `nowo_chat_message.search_text` (nullable `TEXT`); generate the migration (UPGRADING).
 - Docs: USAGE (message search, SearchKit palette, JSON API row), CONFIGURATION (`search`, `search_kit`,
   `limits.searches_per_minute`), UPGRADING (index build time and locks on big tables), CONCURRENCY (search write paths),
   ROADMAP (full-text message search and the palette provider shipped) and the Spec Kit feature `specs/002-message-search/`.

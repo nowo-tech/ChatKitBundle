@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Search;
 
+use Doctrine\DBAL\Exception as DbalException;
 use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
 use Doctrine\ORM\Tools\Event\GenerateSchemaEventArgs;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -59,8 +60,21 @@ final readonly class ChatSearchSchemaListener
             return;
         }
         $table = $schema->getTable($index->table());
-        if (!$table->hasIndex($index->name()) && (($this->enabled && $this->fulltext) || $index->state() === ChatSearchIndex::READY)) {
+        if (!$table->hasIndex($index->name()) && (($this->enabled && $this->fulltext) || $this->exists($index))) {
             $table->addIndex([$index->column()], $index->name(), ['fulltext']);
+        }
+    }
+
+    /**
+     * Whether the index exists in the database; false when the database cannot be asked (audit VA2-3: an offline
+     * `--dump-sql` or a schema export without a server keeps working, and search off adds nothing then).
+     */
+    private function exists(ChatSearchIndex $index): bool
+    {
+        try {
+            return $index->state() === ChatSearchIndex::READY;
+        } catch (DbalException) {
+            return false;
         }
     }
 }

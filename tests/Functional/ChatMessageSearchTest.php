@@ -9,6 +9,7 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
+use Nowo\ChatKitBundle\Search\ChatSearchText;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
@@ -44,6 +45,7 @@ final class ChatMessageSearchTest extends DatabaseTestCase
             'testOffByDefault'                     => [],
             'testPagingByCursor'                   => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 2]]]],
             'testHiddenTitlesNeverChangeTheAnswer' => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 2]]]],
+            'testPaddingCannotProbeHiddenTitles'   => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 2]]]],
             'testRateLimit'                        => ['profiles' => ['default' => ['search' => ['enabled' => true], 'limits' => ['searches_per_minute' => 2]]]],
             'testDockLinkCanBeHidden'              => ['profiles' => ['default' => ['search' => ['enabled' => true, 'dock_entry' => false]]]],
             default                                => ['profiles' => ['default' => ['search' => ['enabled' => true]]]],
@@ -187,13 +189,13 @@ final class ChatMessageSearchTest extends DatabaseTestCase
         $this->em->createQueryBuilder()->update(ChatMessage::class, 'm')->set('m.createdAt', ':old')->where('m.id = :id')
             ->setParameter('old', new DateTimeImmutable('-400 days'))->setParameter('id', $old->getId())->getQuery()->execute();
         // A stored #reference token only Ana may open (written while Luis could open it too, say, then revoked).
-        $this->em->createQueryBuilder()->update(ChatMessage::class, 'm')->set('m.body', ':body')->where('m.id = :id')
-            ->setParameter('body', 'see #[Secret plan](task:2) today')->setParameter('id', $plan->getId())->getQuery()->execute();
+        $this->storeBody($plan, 'see #[Secret plan](task:2) today');
         // Outside the retention window (365 days by default): due for the purge, never found.
         self::assertSame([$kept->getUuid()], $this->uuids($this->search($ana, 'archive')));
 
-        // A #reference only Ana may open: its title matches for Ana, never for Luis (he sees "Content not visible").
-        self::assertSame([$plan->getUuid()], $this->uuids($this->search($ana, 'secret')));
+        // A #reference title is never searchable (audit VA2-1, the accepted loss): not for Luis, who sees "Content not
+        // visible", and not for Ana either, who may open it; the rest of the text is.
+        self::assertSame([], $this->uuids($this->search($ana, 'secret')));
         self::assertSame([], $this->uuids($this->search($luis, 'secret')));
         self::assertSame([$plan->getUuid()], $this->uuids($this->search($luis, 'today')));
 
@@ -253,10 +255,7 @@ final class ChatMessageSearchTest extends DatabaseTestCase
         $hidden = $chat->send($ana, $dm, 'placeholder without the word');
         $chat->send($ana, $dm, 'a secret recipe');
         $chat->send($ana, $dm, 'another secret plan');
-        $set = function (string $body) use ($hidden): void {
-            $this->em->createQueryBuilder()->update(ChatMessage::class, 'm')->set('m.body', ':body')->where('m.id = :id')
-                ->setParameter('body', $body)->setParameter('id', $hidden->getId())->getQuery()->execute();
-        };
+        $set = fn (string $body) => $this->storeBody($hidden, $body);
 
         // A full page (two rows): `next` is there whether or not an older row matches only through the hidden title.
         $absent = $this->raw($luis, 'secret');
@@ -276,9 +275,40 @@ final class ChatMessageSearchTest extends DatabaseTestCase
         $set('placeholder without the word');
         self::assertSame($short, $this->raw($luis, 'recipe secret'));
         self::assertNull($this->search($luis, 'recipe secret')['next']);
-        // Ana may open the reference: the row is hers to find.
+        // Reference titles are not searchable, even for Ana, who may open it (audit VA2-1).
         $set('see #[Secret plan](task:2)');
         self::assertCount(2, $this->search($ana, 'secret')['items']);
+        self::assertSame([], $this->search($ana, 'plan see')['items']);
+    }
+
+    /**
+     * Audit VA2 PoC: the searcher pads with their own messages whose raw text holds the word but whose visible text does
+     * not (a token in a code span, a link URL), then probes another conversation's hidden `#reference` title. The
+     * database searches the viewer-neutral text, so the answer is byte-identical with and without the hidden title.
+     */
+    public function testPaddingCannotProbeHiddenTitles(): void
+    {
+        $ana    = $this->user('Ana');
+        $luis   = $this->user('Luis');
+        $mia    = $this->user('Mia');
+        $chat   = $this->get(ChatService::class);
+        $dm     = $chat->openDirect($ana, $luis);
+        $target = $chat->send($ana, $dm, 'placeholder without the word');
+        $pad    = $chat->openDirect($luis, $mia);
+        for ($i = 0; $i < 4; ++$i) {
+            $chat->send($luis, $pad, 'note `#[falcon](task:999)`');
+        }
+        for ($i = 0; $i < 5; ++$i) {
+            $chat->send($luis, $pad, 'see [here](https://falcon.example/)');
+        }
+        $absent = $this->raw($luis, 'falcon');
+        $this->storeBody($target, 'see #[Falcon acquisition](task:2)');
+        $present = $this->raw($luis, 'falcon');
+        self::assertSame('{"items":[],"next":null}', $absent);
+        self::assertSame($absent, $present, 'the hidden title changes nothing');
+        // The padding is visible text only through its words: a code span reads as written, the link as its text.
+        $first = $this->search($luis, 'note');
+        self::assertCount(4, [...$first['items'], ...$this->search($luis, 'note', ['cursor' => (string) $first['next']])['items']]);
     }
 
     public function testBounds(): void
@@ -395,6 +425,15 @@ final class ChatMessageSearchTest extends DatabaseTestCase
         sort($uuids);
 
         return $uuids;
+    }
+
+    /**
+     * Stores a body as the bundle would (text and its search text, one statement), without the send-time checks.
+     */
+    private function storeBody(ChatMessage $message, string $body): void
+    {
+        $this->em->createQueryBuilder()->update(ChatMessage::class, 'm')->set('m.body', ':body')->set('m.searchText', ':search')->where('m.id = :id')
+            ->setParameter('body', $body)->setParameter('search', ChatSearchText::indexable($body))->setParameter('id', $message->getId())->getQuery()->execute();
     }
 
     private function conversationOf(ChatMessage $message): ChatConversation

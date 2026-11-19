@@ -7,12 +7,15 @@ namespace Nowo\ChatKitBundle\Tests\Database;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
+use Nowo\ChatKitBundle\Command\ChatSearchBackfillCommand;
 use Nowo\ChatKitBundle\Command\ChatSearchIndexCommand;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Search\ChatMessageSearch;
+use Nowo\ChatKitBundle\Search\ChatMessageSearchHit;
 use Nowo\ChatKitBundle\Search\ChatSearchIndex;
+use Nowo\ChatKitBundle\Search\ChatSearchText;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Database\Support\SecondConnection;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
@@ -27,6 +30,8 @@ use function array_map;
 use function array_values;
 use function assert;
 use function implode;
+use function intval;
+use function json_encode;
 use function ltrim;
 use function parse_url;
 use function preg_match;
@@ -124,11 +129,11 @@ final class MessageSearchDatabaseTest extends TestCase
         // The planner uses it for a full-text match.
         $table = $index->table();
         if ($this->mysql()) {
-            $plan = $this->connection()->fetchAllAssociative("EXPLAIN SELECT id FROM {$table} WHERE MATCH (body) AGAINST ('+invoice*' IN BOOLEAN MODE)");
+            $plan = $this->connection()->fetchAllAssociative("EXPLAIN SELECT id FROM {$table} WHERE MATCH (search_text) AGAINST ('+invoice*' IN BOOLEAN MODE)");
             self::assertSame($index->name(), $plan[0]['key'] ?? null);
         } else {
             $this->connection()->executeStatement('SET enable_seqscan = off');
-            $plan = implode("\n", $this->connection()->fetchFirstColumn("EXPLAIN SELECT id FROM {$table} WHERE to_tsvector('simple'::regconfig, body) @@ to_tsquery('simple'::regconfig, 'invoice:*')"));
+            $plan = implode("\n", $this->connection()->fetchFirstColumn("EXPLAIN SELECT id FROM {$table} WHERE to_tsvector('simple'::regconfig, search_text) @@ to_tsquery('simple'::regconfig, 'invoice:*')"));
             $this->connection()->executeStatement('SET enable_seqscan = on');
             self::assertStringContainsString($index->name(), $plan);
         }
@@ -153,6 +158,9 @@ final class MessageSearchDatabaseTest extends TestCase
         self::assertSame($this->uuids([$a]), $this->find($ana, 'invoice march'), 'every word');
         self::assertSame($this->uuids([$a]), $this->find($ana, 'order C-12'), 'punctuation through LIKE, next to an indexed word');
         self::assertSame([], $this->find($ana, 'C-12'), 'audit VA-7: no indexable word, no table scan: no rows');
+        // Audit VA2-6: that answer is the empty answer, byte for byte.
+        self::assertSame($this->answer($ana, 'zzzznothing'), $this->answer($ana, 'C-12'));
+        self::assertSame('{"items":[],"next":null}', $this->answer($ana, 'C-12'));
         self::assertSame($this->uuids([$b]), $this->find($ana, 'ok invoices'), 'a short word through LIKE on MySQL');
         self::assertSame($this->uuids([$c]), $this->find($ana, '2026'), 'digits');
         // Boolean-mode and tsquery operators are plain text: no error, no widening.
@@ -161,6 +169,83 @@ final class MessageSearchDatabaseTest extends TestCase
         }
         self::assertSame([], $this->find($ana, 'invoice -march'), '"-march" is a word that is not there');
         self::assertSame([], $this->find($ana, 'hidden'));
+    }
+
+    /**
+     * Audit VA2 PoC on the real servers: padding rows whose raw text holds the word only in a code span or a link URL,
+     * then a hidden `#reference` title elsewhere: the answer is byte-identical with and without it.
+     */
+    public function testPaddingCannotProbeHiddenTitles(): void
+    {
+        $ana    = $this->user('Ana');
+        $luis   = $this->user('Luis');
+        $mia    = $this->user('Mia');
+        $chat   = $this->get(ChatService::class);
+        $target = $chat->send($ana, $chat->openDirect($ana, $luis), 'placeholder without the word');
+        $pad    = $chat->openDirect($luis, $mia);
+        for ($i = 0; $i < 4; ++$i) {
+            $chat->send($luis, $pad, 'note `#[falcon](task:999)`');
+        }
+        for ($i = 0; $i < 5; ++$i) {
+            $chat->send($luis, $pad, 'see [here](https://falcon.example/)');
+        }
+        $absent = $this->answer($luis, 'falcon', 2);
+        $body   = 'see #[Falcon acquisition](task:2)';
+        $this->connection()->executeStatement('UPDATE nowo_chat_message SET body = ?, search_text = ? WHERE id = ?', [$body, ChatSearchText::indexable($body), $target->getId()]);
+        self::assertSame('{"items":[],"next":null}', $absent);
+        self::assertSame($absent, $this->answer($luis, 'falcon', 2));
+        self::assertSame($absent, $this->answer($luis, 'falc', 2));
+    }
+
+    /**
+     * Audit VA2-6: a host that never enabled search gets no index from a diff (MySQL / MariaDB: the listener maps it
+     * only while it exists; PostgreSQL: never in a diff).
+     */
+    public function testAHostThatNeverEnabledSearchGetsNoIndex(): void
+    {
+        self::assertSame(0, $this->command(['--force' => true, '--drop' => true])->getStatusCode());
+        $off = new TestKernel(['profiles' => ['default' => ['search' => ['enabled' => false]]]]);
+        $off->boot();
+        $manager = $off->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
+        assert($manager instanceof EntityManagerInterface);
+        $diff = (new SchemaTool($manager))->getUpdateSchemaSql($manager->getMetadataFactory()->getAllMetadata());
+        $off->shutdown();
+        $name = $this->index()->name();
+        self::assertSame([], array_values(array_filter($diff, static fn (string $sql): bool => str_contains($sql, $name))), implode("\n", $diff));
+        self::assertSame(ChatSearchIndex::MISSING, $this->index()->state());
+        self::assertSame(0, $this->command(['--force' => true])->getStatusCode());
+    }
+
+    /**
+     * The backfill on a real server: a second session holds a write lock on one row of the batch; the batch gives up
+     * after a second with CONFLICT_001 (exit 75), keeps the batches before it, and the next run finishes.
+     */
+    public function testABackfillBlockedByAnotherSessionAnswersConflict001(): void
+    {
+        $ana  = $this->user('Ana');
+        $luis = $this->user('Luis');
+        $chat = $this->get(ChatService::class);
+        $dm   = $chat->openDirect($ana, $luis);
+        $ids  = [];
+        for ($i = 0; $i < 4; ++$i) {
+            $ids[] = (int) $chat->send($luis, $dm, 'legacy line ' . $i)->getId();
+        }
+        $this->connection()->executeStatement('UPDATE nowo_chat_message SET search_text = NULL');
+        $other = $this->other = new SecondConnection((string) TestKernel::databaseUrl());
+        self::assertSame('OK', $other->execute($this->mysql() ? 'START TRANSACTION' : 'BEGIN'));
+        self::assertSame('OK', $other->execute('UPDATE nowo_chat_message SET body = body WHERE id = ' . $ids[3]));
+        $this->connection()->executeStatement($this->mysql() ? 'SET SESSION innodb_lock_wait_timeout = 1' : "SET lock_timeout = '1s'");
+
+        $tester = new CommandTester($this->get(ChatSearchBackfillCommand::class));
+        self::assertSame(ChatSearchBackfillCommand::CONFLICT, $tester->execute(['--batch' => '2']), $tester->getDisplay());
+        self::assertStringContainsString('CONFLICT_001', $tester->getDisplay());
+        self::assertStringContainsString('--after-id=' . $ids[1], $tester->getDisplay());
+        self::assertSame(2, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE search_text IS NOT NULL'), 'the first batch is kept');
+
+        $other->execute('ROLLBACK');
+        self::assertSame(0, $tester->execute(['--after-id' => (string) $ids[1]]));
+        self::assertSame(0, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE search_text IS NULL'));
+        self::assertSame($this->sortedIds($ids), $this->sortedIds(array_map(intval(...), $this->connection()->fetchFirstColumn("SELECT id FROM nowo_chat_message WHERE search_text LIKE 'legacy line %'"))));
     }
 
     public function testABuildBlockedByAnotherSessionAnswersConflict001(): void
@@ -187,6 +272,29 @@ final class MessageSearchDatabaseTest extends TestCase
         self::assertSame(0, $again->getStatusCode(), 'connection still usable, index built');
         self::assertStringContainsString($this->mysql() ? 'missing' : 'invalid', $again->getDisplay(), $again->getDisplay());
         self::assertSame(ChatSearchIndex::READY, $index->state());
+    }
+
+    /**
+     * The JSON the endpoint would send for a search (items and next), for byte comparisons.
+     */
+    private function answer(ChatUserInterface $user, string $text, ?int $limit = null): string
+    {
+        $search = $this->get(ChatMessageSearch::class);
+        $page   = $search->search($user, $search->query($text), $limit);
+
+        return (string) json_encode(['items' => array_map(static fn (ChatMessageSearchHit $hit): array => $hit->toArray(), $page->hits), 'next' => $page->next]);
+    }
+
+    /**
+     * @param list<int> $ids
+     *
+     * @return list<int>
+     */
+    private function sortedIds(array $ids): array
+    {
+        sort($ids);
+
+        return $ids;
     }
 
     /**

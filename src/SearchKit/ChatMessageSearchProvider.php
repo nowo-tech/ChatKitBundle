@@ -58,6 +58,9 @@ final readonly class ChatMessageSearchProvider implements FilterableSearchProvid
     /** Row kind (icon template, recents). */
     public const string KIND = 'chat_message';
 
+    /** Limiter key prefix of the palette's own search budget (audit VA2-5). */
+    public const string LIMITER_KEY = 'nowo_chat_search_palette_';
+
     /** The author filter (`from:me`, `from:<public id>`). */
     public const string FILTER_FROM = 'from';
 
@@ -72,7 +75,7 @@ final readonly class ChatMessageSearchProvider implements FilterableSearchProvid
      * @param Security $security The signed-in user
      * @param UrlGeneratorInterface $urls Links to the messages and to the search page
      * @param TranslatorInterface $translator The group label
-     * @param RateLimiterFactoryInterface $searchLimiter `limits.searches_per_minute`, the budget of the search page and API
+     * @param RateLimiterFactoryInterface $searchLimiter `limits.searches_per_minute`: the palette's own bucket of it
      * @param CurrentChatUserResolverInterface|null $currentUser The participant of the signed-in user (null: the security user itself)
      */
     public function __construct(
@@ -111,8 +114,10 @@ final readonly class ChatMessageSearchProvider implements FilterableSearchProvid
         if (count($from) > 1 || ($from !== [] && $from[0]->negated) || count($query->filters) !== count($from)) {
             return null;
         }
-        // Audit VA-2: one token of the shared search budget per call (page, API and palette together); over it, no rows.
-        if (!$this->searchLimiter->create('nowo_chat_search_' . $viewer->getChatPublicId())->consume()->isAccepted()) {
+        // Audits VA-2 / VA2-5: the palette has its own bucket of the same limiter (`limits.searches_per_minute`, key
+        // `nowo_chat_search_palette_<public id>`), so typing in the palette never eats the page and API budget; a call
+        // costs one token per search it runs (results page N replays N searches). Over it, no rows.
+        if (!$this->searchLimiter->create(self::LIMITER_KEY . $viewer->getChatPublicId())->consume($page)->isAccepted()) {
             return null;
         }
         try {

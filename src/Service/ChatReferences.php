@@ -312,8 +312,13 @@ final class ChatReferences implements ResetInterface
     {
         if (preg_match(self::TOKEN, $body) === 1) {
             $cards = $this->resolveFor($viewer, self::parse($body));
-            $body  = (string) preg_replace_callback(self::TOKEN, function (array $match) use ($cards, $locale): string {
-                $reference = $cards[$match[2] . ':' . $match[3]] ?? null;
+            // 1.37 (audit VA2-2): a token inside a code span or block is text as written, never resolved (as validate() and
+            // neutralizeFor() treat it).
+            $body = (string) preg_replace_callback(self::CODE_OR_TOKEN, function (array $match) use ($cards, $locale): string {
+                if ($match[1] !== '') {
+                    return $match[1];
+                }
+                $reference = $cards[$match[3] . ':' . $match[4]] ?? null;
 
                 return $reference instanceof ChatReference ? '#' . $reference->title : '[' . $this->restricted($locale) . ']';
             }, $body);

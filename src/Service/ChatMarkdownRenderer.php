@@ -251,6 +251,19 @@ final class ChatMarkdownRenderer
      */
     public function plainText(string $markdown, int $maxLength = 120): string
     {
+        return self::plain($markdown, $maxLength);
+    }
+
+    /**
+     * 1.37: {@see self::plainText()} as a pure function (the entity's search text is built with it, audit VA2-1).
+     *
+     * @param string $markdown The raw message text
+     * @param int $maxLength Maximum length in characters; longer text is cut and ends with an ellipsis
+     *
+     * @return string The plain text
+     */
+    public static function plain(string $markdown, int $maxLength = 120): string
+    {
         $text = (string) preg_replace([ChatMentions::TOKEN, ChatReferences::TOKEN, ChatLinkUrls::CARD_TOKEN, '~\[([^\]\n]{1,200})\]\(((?:https?://|mailto:)[^\s)]+)\)~i', '/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)]|>)[ \t]*/m', '/\s+/'], ['@$1', '#…', '$1', '$1', '', '', '', ' '], self::clean($markdown));
         $text = trim($text);
 

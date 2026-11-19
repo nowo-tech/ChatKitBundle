@@ -9,6 +9,7 @@ use Doctrine\ORM\Mapping as ORM;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Search\ChatSearchText;
 
 use function is_string;
 
@@ -78,6 +79,14 @@ class ChatMessage
 
     #[ORM\Column(name: 'edited_at', nullable: true)]
     private ?DateTimeImmutable $editedAt = null;
+
+    /**
+     * 1.37 (audit VA2-1): what message search matches — the viewer-neutral plain text of `body`
+     * ({@see ChatSearchText::indexable()}), written with every change of the text in the same unit of work. Null for a
+     * row written before 1.37 and not yet filled by `nowo:chat:search-backfill`: such a row is never found.
+     */
+    #[ORM\Column(name: 'search_text', type: 'text', nullable: true)]
+    private ?string $searchText;
 
     #[ORM\Column(name: 'deleted_at', nullable: true)]
     private ?DateTimeImmutable $deletedAt = null;
@@ -154,8 +163,9 @@ class ChatMessage
         ?DateTimeImmutable $createdAt = null,
     ) {
         $this->initUuid();
-        $this->createdAt = $createdAt ?? new DateTimeImmutable();
-        $this->authorRef = ChatUserReferences::reference($author);
+        $this->searchText = ChatSearchText::indexable($body);
+        $this->createdAt  = $createdAt ?? new DateTimeImmutable();
+        $this->authorRef  = ChatUserReferences::reference($author);
     }
 
     /**
@@ -562,6 +572,16 @@ class ChatMessage
     }
 
     /**
+     * 1.37: the text message search matches (null: not filled yet by the backfill).
+     *
+     * @return string|null The search text
+     */
+    public function getSearchText(): ?string
+    {
+        return $this->searchText;
+    }
+
+    /**
      * The author's Markdown (empty for a buzz or a deleted message).
      *
      * @return string The raw text
@@ -623,6 +643,8 @@ class ChatMessage
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->body = $body;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->searchText = ChatSearchText::indexable($body);
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->bodyHtml = $bodyHtml;
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->editedAt = $at ?? new DateTimeImmutable();
@@ -639,6 +661,8 @@ class ChatMessage
     {
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->body = $body;
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->searchText = ChatSearchText::indexable($body);
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->bodyHtml = $bodyHtml;
     }
@@ -706,6 +730,8 @@ class ChatMessage
     {
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->body = '';
+        // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
+        $this->searchText = '';
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.
         $this->bodyHtml = '';
         // @igor-ignore - Doctrine entity state (one row), not a shared worker service.

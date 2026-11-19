@@ -4,16 +4,17 @@
 
 ## Design
 
-- **No new table.** The search reads `nowo_chat_message`; the database maintains the full-text index inside the existing
-  message writes, so there is no derived data to keep in sync, replay or erase (REQ-RUNTIME-003: no new write unit; the
-  only new write path is the operator's index DDL).
+- **No new table; one derived column** (audit VA2-1): `nowo_chat_message.search_text`, the viewer-neutral plain text,
+  written by the entity with the body in the same unit of work; the backfill command fills older rows. The database
+  maintains the full-text index inside those writes.
 - **One statement per read** (`ChatMessageSearchSql`, DBAL with the mapped column names, so table prefixes and the
   `id` / `string` user-reference modes work): `messages JOIN conversations`, the visibility branches (`direct` via the
   viewer's participant row, `support` via the owner column or every ticket for an agent, `channel` via the keys the
   provider lists now), kind, deletion, retention (`created_at` and the thread root's), the filters, the keyset
   (`id < cursor`), the text match, `ORDER BY id DESC LIMIT n + 1`.
 - **Second check in PHP** (`ChatMessageSearch`): `ChatAccess::canView()` per row and the words against the viewer's
-  plain text (`ChatReferences::plainText()`), so hidden `#reference` titles never match. Pages are refilled for at most
+  plain text (`ChatReferences::plainText()`); since the SQL matches the neutral search text, this check drops nothing a
+  reader could tell apart. Pages are refilled for at most
   five reads; the cursor then continues from the last readable row.
 - **Oracle-free answers**: no count; unknown and forbidden filters / cursors return the same empty page before any
   text query runs; a cursor is a message uuid accepted only when readable.

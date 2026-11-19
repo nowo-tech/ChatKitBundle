@@ -369,7 +369,7 @@ final readonly class ChatPersonalData
             }
             if ($authored !== []) {
                 $qb()->update(ChatMessage::class, 'm')
-                    ->set('m.body', ':empty')->set('m.bodyHtml', ':empty')
+                    ->set('m.body', ':empty')->set('m.bodyHtml', ':empty')->set('m.searchText', ':empty')
                     ->set($this->refs->field('m', 'author'), ':none')->set('m.deletedAt', ':now')
                     ->where('m.id IN (:ids)')
                     ->setParameter('empty', '')->setParameter('none', null)->setParameter('now', $this->clock->now())

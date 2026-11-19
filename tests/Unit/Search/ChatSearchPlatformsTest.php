@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Tests\Unit\Search;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Driver\Exception as DriverException;
+use Doctrine\DBAL\Exception\ConnectionException;
 use Doctrine\DBAL\Exception\DeadlockException;
 use Doctrine\DBAL\Exception\SyntaxErrorException;
 use Doctrine\DBAL\Platforms\AbstractPlatform;
@@ -18,11 +19,13 @@ use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\ClassMetadataFactory;
 use Doctrine\ORM\Tools\Event\GenerateSchemaEventArgs;
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Command\ChatSearchBackfillCommand;
 use Nowo\ChatKitBundle\Command\ChatSearchIndexCommand;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Search\ChatMessageSearchSql;
 use Nowo\ChatKitBundle\Search\ChatSearchIndex;
 use Nowo\ChatKitBundle\Search\ChatSearchSchemaListener;
+use Nowo\ChatKitBundle\Search\ChatSearchText;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -76,16 +79,16 @@ final class ChatSearchPlatformsTest extends TestCase
     public function testIndexPerPlatform(): void
     {
         $mysql = new ChatSearchIndex($this->entityManager(new MySQL80Platform())[0], 'simple', 'app_', 'chat_');
-        self::assertSame('app_idx_chat_message_body_fts', $mysql->name());
+        self::assertSame('app_idx_chat_message_search_fts', $mysql->name());
         self::assertSame('nowo_chat_message', $mysql->table());
-        self::assertSame('body', $mysql->column());
+        self::assertSame('search_text', $mysql->column());
         self::assertTrue($mysql->supported());
-        self::assertSame('CREATE FULLTEXT INDEX app_idx_chat_message_body_fts ON nowo_chat_message (body)', $mysql->createSql());
-        self::assertSame('DROP INDEX app_idx_chat_message_body_fts ON nowo_chat_message', $mysql->dropSql());
+        self::assertSame('CREATE FULLTEXT INDEX app_idx_chat_message_search_fts ON nowo_chat_message (search_text)', $mysql->createSql());
+        self::assertSame('DROP INDEX app_idx_chat_message_search_fts ON nowo_chat_message', $mysql->dropSql());
 
         $postgres = new ChatSearchIndex($this->entityManager(new PostgreSQLPlatform())[0]);
-        self::assertSame("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_nowo_chat_message_body_fts ON nowo_chat_message USING GIN (to_tsvector('simple'::regconfig, body))", $postgres->createSql());
-        self::assertSame('DROP INDEX CONCURRENTLY IF EXISTS idx_nowo_chat_message_body_fts', $postgres->dropSql());
+        self::assertSame("CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_nowo_chat_message_search_fts ON nowo_chat_message USING GIN (to_tsvector('simple'::regconfig, search_text))", $postgres->createSql());
+        self::assertSame('DROP INDEX CONCURRENTLY IF EXISTS idx_nowo_chat_message_search_fts', $postgres->dropSql());
 
         $other = new ChatSearchIndex($this->entityManager(new OraclePlatform())[0]);
         self::assertFalse($other->supported());
@@ -117,9 +120,9 @@ final class ChatSearchPlatformsTest extends TestCase
         $tester = new CommandTester(new ChatSearchIndexCommand(new ChatSearchIndex($entityManager)));
         self::assertSame(0, $tester->execute([]));
         self::assertStringContainsString('missing', $tester->getDisplay());
-        self::assertStringContainsString('CREATE FULLTEXT INDEX idx_nowo_chat_message_body_fts ON nowo_chat_message (body);', $tester->getDisplay());
+        self::assertStringContainsString('CREATE FULLTEXT INDEX idx_nowo_chat_message_search_fts ON nowo_chat_message (search_text);', $tester->getDisplay());
         self::assertSame(0, $tester->execute(['--drop' => true]));
-        self::assertStringContainsString('DROP INDEX idx_nowo_chat_message_body_fts ON nowo_chat_message;', $tester->getDisplay());
+        self::assertStringContainsString('DROP INDEX idx_nowo_chat_message_search_fts ON nowo_chat_message;', $tester->getDisplay());
         self::assertSame(0, $tester->execute(['--drop' => true, '--force' => true]));
         self::assertStringContainsString('Nothing to drop.', $tester->getDisplay());
 
@@ -165,6 +168,29 @@ final class ChatSearchPlatformsTest extends TestCase
         (new CommandTester(new ChatSearchIndexCommand(new ChatSearchIndex($entityManager))))->execute(['--force' => true]);
     }
 
+    public function testBackfillConflictAndOtherErrors(): void
+    {
+        foreach ([[new DeadlockException($this->driverException(1213, '40001'), null), true], [new SyntaxErrorException($this->driverException(1064, '42000'), null), false]] as [$failure, $transient]) {
+            [$entityManager, $connection] = $this->entityManager(new MySQL80Platform());
+            $metadata                     = $entityManager->getClassMetadata(ChatMessage::class);
+            $metadata->mapField(['fieldName' => 'id', 'type' => 'integer', 'id' => true]);
+            $connection->method('fetchAllAssociative')->willReturn([['id' => 7, 'body' => 'hello']]);
+            $connection->method('executeStatement')->willThrowException($failure);
+            $tester = new CommandTester(new ChatSearchBackfillCommand($entityManager));
+            if (!$transient) {
+                $this->expectException(SyntaxErrorException::class);
+            }
+            self::assertSame(ChatSearchBackfillCommand::CONFLICT, $tester->execute(['--after-id' => '3']));
+            self::assertStringContainsString('CONFLICT_001', $tester->getDisplay());
+            self::assertStringContainsString('--after-id=3', $tester->getDisplay());
+        }
+    }
+
+    public function testIndexableText(): void
+    {
+        self::assertSame('see #… ask @Ana in docs code', ChatSearchText::indexable('see #[Secret plan](task:2) **ask** @[Ana](abc123) in [docs](https://falcon.example/x) `code`'));
+    }
+
     public function testSchemaListener(): void
     {
         $listener = new ChatSearchSchemaListener('', 'nowo_chat_', true, true);
@@ -173,17 +199,17 @@ final class ChatSearchPlatformsTest extends TestCase
         [$entityManager] = $this->entityManager(new MySQL80Platform());
         $schema          = new Schema();
         $table           = $schema->createTable('nowo_chat_message');
-        $table->addColumn('body', 'text');
+        $table->addColumn('search_text', 'text');
         $listener->postGenerateSchema(new GenerateSchemaEventArgs($entityManager, $schema));
         $listener->postGenerateSchema(new GenerateSchemaEventArgs($entityManager, $schema));
-        self::assertTrue($table->hasIndex('idx_nowo_chat_message_body_fts'));
-        self::assertTrue($table->getIndex('idx_nowo_chat_message_body_fts')->hasFlag('fulltext'));
+        self::assertTrue($table->hasIndex('idx_nowo_chat_message_search_fts'));
+        self::assertTrue($table->getIndex('idx_nowo_chat_message_search_fts')->hasFlag('fulltext'));
 
         // No message table in this schema, another platform, or a manager without the chat entities: nothing.
         $listener->postGenerateSchema(new GenerateSchemaEventArgs($entityManager, new Schema()));
         foreach ([$this->entityManager(new PostgreSQLPlatform())[0], $this->entityManager(new MySQL80Platform(), true)[0]] as $other) {
             $schema = new Schema();
-            $schema->createTable('nowo_chat_message')->addColumn('body', 'text');
+            $schema->createTable('nowo_chat_message')->addColumn('search_text', 'text');
             $listener->postGenerateSchema(new GenerateSchemaEventArgs($other, $schema));
             self::assertSame([], $schema->getTable('nowo_chat_message')->getIndexes());
         }
@@ -194,10 +220,18 @@ final class ChatSearchPlatformsTest extends TestCase
             [$entityManager, $connection] = $this->entityManager(new MySQL80Platform());
             $connection->method('fetchOne')->willReturn($found);
             $schema = new Schema();
-            $schema->createTable('nowo_chat_message')->addColumn('body', 'text');
+            $schema->createTable('nowo_chat_message')->addColumn('search_text', 'text');
             (new ChatSearchSchemaListener('', 'nowo_chat_', $enabled, $fulltext))->postGenerateSchema(new GenerateSchemaEventArgs($entityManager, $schema));
-            self::assertSame($mapped, $schema->getTable('nowo_chat_message')->hasIndex('idx_nowo_chat_message_body_fts'));
+            self::assertSame($mapped, $schema->getTable('nowo_chat_message')->hasIndex('idx_nowo_chat_message_search_fts'));
         }
+
+        // Audit VA2-3: no server to ask (an offline --dump-sql): nothing added, nothing thrown.
+        [$entityManager, $connection] = $this->entityManager(new MySQL80Platform());
+        $connection->method('fetchOne')->willThrowException(new ConnectionException($this->driverException(2002, 'HY000'), null));
+        $schema = new Schema();
+        $schema->createTable('nowo_chat_message')->addColumn('search_text', 'text');
+        (new ChatSearchSchemaListener())->postGenerateSchema(new GenerateSchemaEventArgs($entityManager, $schema));
+        self::assertFalse($schema->getTable('nowo_chat_message')->hasIndex('idx_nowo_chat_message_search_fts'));
     }
 
     /**
@@ -208,6 +242,7 @@ final class ChatSearchPlatformsTest extends TestCase
         $metadata = new ClassMetadata(ChatMessage::class);
         $metadata->setPrimaryTable(['name' => 'nowo_chat_message']);
         $metadata->mapField(['fieldName' => 'body', 'type' => 'text']);
+        $metadata->mapField(['fieldName' => 'searchText', 'columnName' => 'search_text', 'type' => 'text', 'nullable' => true]);
         $factory = $this->createMock(ClassMetadataFactory::class);
         $factory->method('isTransient')->willReturn($transient);
         $connection = $this->createMock(Connection::class);

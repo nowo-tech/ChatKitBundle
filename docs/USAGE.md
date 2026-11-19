@@ -1744,16 +1744,23 @@ too. GDPR erasure turns a person's messages into tombstones, so they are never f
 | Support ticket | the viewer owns it, or is a support agent (`ChatAccessPolicyInterface::isSupportAgent()`): agents search **every** ticket, assigned or not — the same rule as the conversation page and the inbox (owner decision 2026-11-19) |
 | Channel | your channel provider lists it for the viewer now (`channelsFor()`) and `canUse()` allows it |
 
-Each row is checked again with the same rule as the conversation page (`ChatAccess::canView()`), and the words must also
-appear in the text the viewer sees: a `#reference` the viewer may not open never matches its hidden title. Rows that
-fail are skipped without shortening the page. There is no count anywhere, and a conversation, author or cursor the
+**What the database searches.** Not the stored Markdown, but a viewer-neutral search text kept next to it
+(`nowo_chat_message.search_text`, written with the message, its edits, its deletion and GDPR erasure in the same unit
+of work): the plain text with every `#reference` token as a neutral `#…` (no title), mentions as `@Name` (no public
+id), links as their text (no URL), code spans as written and no Markdown markers. Every word of it is in the text any
+reader of the message sees, so a message is never found through text a viewer cannot see. **Accepted loss:** the
+titles of `#references` are not searchable, even for readers who may open them. Rows written before 1.37 have no search
+text until `nowo:chat:search-backfill` fills it and are never found until then (fail closed; see UPGRADING).
+
+Each row is checked again with the same rule as the conversation page (`ChatAccess::canView()`) and against the text
+the viewer sees; rows that fail are skipped without shortening the page. There is no count anywhere, and a conversation, author or cursor the
 viewer may not read answers exactly like an unknown one: `{"items": [], "next": null}`.
 
 **Bounds.** At least `search.min_query_length` (2) and at most `search.max_query_length` (200) characters, the first 8
 distinct words, `search.page_size` (20) rows per page, `limits.searches_per_minute` (30) searches per user and minute
-(page, API and palette together; 429 above it).
+for the page and the API together (429 above it); the SearchKit palette has its own bucket of the same size (below).
 
-**Engines.** MySQL 8.4 / MariaDB 11.4: `MATCH … AGAINST` in boolean mode on the FULLTEXT index for words of letters and
+**Engines** (on the search text). MySQL 8.4 / MariaDB 11.4: `MATCH … AGAINST` in boolean mode on the FULLTEXT index for words of letters and
 digits at least `search.mysql_min_token_length` (3) long. PostgreSQL 16: `to_tsvector` / `to_tsquery` with
 `search.postgresql_config` (`simple`) on the GIN index. Every other word (shorter, or with punctuation such as `C-12`)
 and every other platform: `LIKE` with escaped wildcards. Only letters and digits reach a full-text operator, so the
@@ -1768,10 +1775,10 @@ mapped schema only while it exists in the database: turning search off never mak
 that never enabled search never gets one. To remove it, run `nowo:chat:search-index --drop --force`. The options are
 read when the schema is generated, so `%env()%` values work.
 
-**Paging.** A full page always has a "More results" link (the next page may turn out empty); a page that is not full has
-one only when the search stopped reading early (five reads of candidates the database matched but the visible text did
-not) and then goes on from the last message read. Whether there is a next page never depends on a single message the
-viewer cannot see.
+**Paging.** A full page always has a "More results" link (the next page may turn out empty) and a page that is not full
+has none: the database only finds rows whose search text the viewer also sees, so the answer never depends on a message
+the viewer cannot read. (A page may stop early only after five reads of rows that the per-row access check drops, a
+case the SQL filter already prevents; it then goes on from the last readable row read.)
 
 **Excerpts.** Plain text: the JSON carries text, the page escapes every segment and wraps the words in `<mark>`
 elements itself, the palette gets text that SearchKit escapes. No message HTML is ever reused in a result.
@@ -1794,8 +1801,11 @@ Ctrl/⌘+K palette and on SearchKit's results page, with the same rules as the s
   and subtitle of a picked row — here a message excerpt — in the browser's localStorage and shows it again later, even
   after the message was deleted or erased or the viewer lost access. The provider is therefore not registered unless
   revalidation is on (or recents are off): fail closed, no chat group in the palette.
-- Each palette search spends one search of `limits.searches_per_minute`, shared with the page and the API; over the
-  budget the group is left out.
+- The palette has **its own budget**: the same limiter as the page (`nowo_chat_search`, `limits.searches_per_minute`),
+  with a separate key per user (`nowo_chat_search_palette_<public id>`), so typing in the palette never uses up the
+  page and API budget. Weight: one token per search a call runs (the dropdown and results page 1 cost 1, results page
+  N costs N). Over the budget the group is left out. ChatKit relies on SearchKit's input debounce (`debounce_ms`) to
+  keep keystrokes from becoming one search each; keep it at its default or above.
 - Paging on the results page (`PaginatedSearchProviderInterface`, pages 1 to 3: each page replays the ones before it)
   and recents
   (`SearchReferenceResolverInterface`): a recent message is checked again on every display and disappears once it is

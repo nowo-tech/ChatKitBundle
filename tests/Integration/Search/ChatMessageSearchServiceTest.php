@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Integration\Search;
 
 use DateTimeImmutable;
+use Nowo\ChatKitBundle\Command\ChatSearchBackfillCommand;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -31,6 +32,7 @@ use Nowo\SearchKitBundle\Model\SearchItem;
 use Nowo\SearchKitBundle\Model\SearchQuery;
 use Nowo\SearchKitBundle\Model\SearchReference;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
@@ -76,7 +78,7 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
         self::assertNull($sql->readableId(new ChatSearchScope(null, false, []), Uuid::v4()->toRfc4122()));
     }
 
-    public function testPerRowRecheckAndHiddenTextRuns(): void
+    public function testPerRowRecheckAndOutOfStepText(): void
     {
         $ana    = $this->user('Ana');
         $luis   = $this->user('Luis');
@@ -86,23 +88,25 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
         $search = $this->get(ChatMessageSearch::class);
         $first  = $chat->send($luis, $dm, 'oldest topic note');
         for ($i = 0; $i < 12; ++$i) {
-            $hidden = $chat->send($ana, $dm, 'placeholder ' . $i);
-            $this->em->createQueryBuilder()->update(ChatMessage::class, 'm')->set('m.body', ':body')->where('m.id = :id')
-                ->setParameter('body', 'topic #[Secret plan](task:2)')->setParameter('id', $hidden->getId())->getQuery()->execute();
+            $stale = $chat->send($ana, $dm, 'placeholder ' . $i);
+            // A search text out of step with the body (a defect, a manual edit): the database matches it, the text the
+            // reader sees does not, so the row is dropped.
+            $this->em->createQueryBuilder()->update(ChatMessage::class, 'm')->set('m.searchText', ':text')->where('m.id = :id')
+                ->setParameter('text', 'stale quokka')->setParameter('id', $stale->getId())->getQuery()->execute();
         }
-        // Luis cannot open the reference: twelve rows match in SQL only. With one row per page and five reads of two
-        // rows, the first page is empty but goes on from the last readable row; the pages after it reach the oldest.
-        $page = $search->search($luis, $search->query('topic secret'));
+        // With one row per page and five reads of one row, the first page is empty and goes on from the last row read;
+        // the pages after it reach the end.
+        $page = $search->search($luis, $search->query('quokka'));
         self::assertSame([], $page->hits);
         self::assertNotNull($page->next);
-        $found  = [];
-        $cursor = null;
-        for ($i = 0; $i < 5; ++$i) {
-            $page   = $search->search($luis, $search->query('topic', null, null, null, null, false, $cursor));
-            $found  = [...$found, ...array_map(static fn (ChatMessageSearchHit $hit): string => $hit->messageUuid, $page->hits)];
+        $cursor = $page->next;
+        for ($i = 0; $i < 5 && $cursor !== null; ++$i) {
+            $page = $search->search($luis, $search->query('quokka', null, null, null, null, false, $cursor));
+            self::assertSame([], $page->hits);
             $cursor = $page->next;
         }
-        self::assertContains($first->getUuid(), $found);
+        self::assertNull($cursor);
+        self::assertSame([$first->getUuid()], array_map(static fn (ChatMessageSearchHit $hit): string => $hit->messageUuid, $search->search($luis, $search->query('topic'))->hits));
 
         // A participant row that does not grant reading (Eve in Ana and Luis's conversation): the SQL lets the rows
         // through, the per-row check (ChatAccess::canView()) drops them.
@@ -292,6 +296,48 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
     private function searchQuery(TestUser $default, string $text, ?string $user = null, array $filters = [], ?string $scope = null): SearchQuery
     {
         return new SearchQuery($text, null, 5, $scope, false, $user ?? $default->getUserIdentifier(), $filters, 'en');
+    }
+
+    public function testBackfillFillsOnlyMissingSearchText(): void
+    {
+        $ana  = $this->user('Ana');
+        $luis = $this->user('Luis');
+        $chat = $this->get(ChatService::class);
+        $dm   = $chat->openDirect($ana, $luis);
+        $old  = [];
+        for ($i = 0; $i < 3; ++$i) {
+            $old[] = $chat->send($luis, $dm, 'legacy **note** ' . $i . ' see #[Secret plan](task:2) and [docs](https://docs.example/x)');
+        }
+        $fresh = $chat->send($luis, $dm, 'legacy current');
+        self::assertSame('legacy current', $fresh->getSearchText(), 'written with the message');
+        $search = $this->get(ChatMessageSearch::class);
+        // Rows written before 1.37: no search text, never found (fail closed).
+        foreach ($old as $i => $message) {
+            $this->em->createQueryBuilder()->update(ChatMessage::class, 'm')->set('m.searchText', ':none')->set('m.body', ':body')->where('m.id = :id')
+                ->setParameter('none', null)->setParameter('body', 'legacy **note** ' . $i . ' see #[Secret plan](task:2) and [docs](https://docs.example/x)')
+                ->setParameter('id', $message->getId())->getQuery()->execute();
+        }
+        self::assertCount(1, $search->search($ana, $search->query('legacy'), 10)->hits);
+
+        $tester = new CommandTester($this->get(ChatSearchBackfillCommand::class));
+        self::assertSame(0, $tester->execute(['--batch' => '2']));
+        self::assertStringContainsString('Filled the search text of 3 chat message(s).', $tester->getDisplay());
+        self::assertCount(4, $search->search($ana, $search->query('legacy'), 10)->hits);
+        $stored = $this->em->getConnection()->fetchOne('SELECT search_text FROM nowo_chat_message WHERE id = ?', [$old[0]->getId()]);
+        self::assertSame('legacy note 0 see #… and docs', $stored, 'neutral: no reference title, no URL, no Markdown');
+        // Again: nothing left; resuming after the last id: nothing either.
+        self::assertSame(0, $tester->execute([]));
+        self::assertStringContainsString('of 0 chat message(s)', $tester->getDisplay());
+        self::assertSame(0, $tester->execute(['--after-id' => (string) $fresh->getId()]));
+    }
+
+    public function testReferenceTokensInCodeAreNotResolved(): void
+    {
+        $ana        = $this->user('Ana');
+        $references = $this->get(ChatReferences::class);
+        $markdown   = $this->get(ChatMarkdownRenderer::class);
+        // Audit VA2-2: a token in a code span is text as written (no title), as validate() and neutralizeFor() treat it.
+        self::assertSame('see #Secret plan and #…', $references->plainText($markdown, 'see #[Secret plan](task:2) and `#[Secret plan](task:2)`', $ana, 500));
     }
 
     public function testProviderSharesTheBudget(): void

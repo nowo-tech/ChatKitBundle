@@ -2,7 +2,7 @@
 
 **Package**: `nowo-tech/chat-kit-bundle`  
 **Last audited**: 2026-11-17  
-**Production units**: **242/242** mapped below (the audit command counts more files: units added since 1.34 without an inventory row are listed in their feature specs)  
+**Production units**: **243/243** mapped below (the audit command counts more files: units added since 1.34 without an inventory row are listed in their feature specs)  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -42,8 +42,8 @@
 | Private entity manager, savepoints & write concurrency | 14 |
 | Retention policy | 7 |
 | Browser (TypeScript) — feature modules | 15 |
-| Message search (1.37) | 15 |
-| **Total** | **242** |
+| Message search (1.37) | 16 |
+| **Total** | **243** |
 
 ## Bundle, configuration & DI
 
@@ -409,6 +409,7 @@ Spec: [`../002-message-search/spec.md`](../002-message-search/spec.md).
 | `src/Search/ChatSearchIndex.php` | 002 US-06 | FR-002 |
 | `src/Search/ChatSearchSchemaListener.php` | 002 US-06 | FR-002 |
 | `src/Command/ChatSearchIndexCommand.php` | 002 US-06 | FR-002 |
+| `src/Command/ChatSearchBackfillCommand.php` | 002 US-06 | FR-012 |
 | `src/Controller/ChatSearchController.php` | 002 US-01, US-04 | FR-001, FR-006, FR-007, FR-008 |
 | `src/Form/ChatMessageSearchType.php` | 002 US-04 | FR-001 |
 | `src/Resources/views/search.html.twig` | 002 US-01 | FR-001, FR-008 |

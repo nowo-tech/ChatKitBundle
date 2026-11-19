@@ -30,8 +30,8 @@ use function strtr;
  * 1.37: the SQL of message search (DBAL, one statement): the permission filter, the retention window and the text
  * match run together, before the limit, so a hidden row is never read, counted or ranked.
  *
- * Text match per platform (FR-002): MySQL / MariaDB `MATCH (body) AGAINST ('+word* …' IN BOOLEAN MODE)` for words of
- * letters and digits at least `$mysqlMinTokenLength` long; PostgreSQL `to_tsvector('<config>', body) @@
+ * Text match per platform (FR-002): MySQL / MariaDB `MATCH (search_text) AGAINST ('+word* …' IN BOOLEAN MODE)` for words of
+ * letters and digits at least `$mysqlMinTokenLength` long; PostgreSQL `to_tsvector('<config>', search_text) @@
  * to_tsquery('<config>', 'word:* & …')` for words of letters and digits; any other word, platform, or `$fulltext: false`
  * a lower-case `LIKE` with `!`-escaped wildcards. Only letters and digits ever reach a full-text operator, so no
  * operator of the user's text reaches the server. Stateless (FrankenPHP worker mode).
@@ -110,7 +110,8 @@ final readonly class ChatMessageSearchSql
         if ($beforeId !== null) {
             $qb->andWhere('m.' . $messages->getSingleIdentifierColumnName() . ' < :beforeId')->setParameter('beforeId', $beforeId);
         }
-        if (!$this->match($qb, 'm.' . $messages->getColumnName('body'), $query->words)) {
+        // Audit VA2-1: the viewer-neutral search text, never the raw body (a NULL, not yet backfilled row never matches).
+        if (!$this->match($qb, 'm.' . $messages->getColumnName('searchText'), $query->words)) {
             // Full-text platforms only (audit VA-7): covered by tests/Database on MySQL, MariaDB and PostgreSQL.
             return []; // @codeCoverageIgnore
         }
@@ -208,7 +209,7 @@ final readonly class ChatMessageSearchSql
      * The text conditions of the words on a platform (FR-002), as SQL fragments and their parameters.
      *
      * @param AbstractPlatform $platform The database platform
-     * @param string $body The qualified body column
+     * @param string $body The qualified search text column
      * @param list<string> $words The query words (lower case)
      *
      * @return array{0: list<string>, 1: array<string, string>}|null The conditions (all must hold) and their parameters;

@@ -18,9 +18,9 @@ use function sprintf;
  * 1.37: the full-text index of message search: its name (following `doctrine.table_prefix` /
  * `doctrine.table_name_prefix`), its state and the SQL that builds or drops it.
  *
- * - MySQL / MariaDB: `CREATE FULLTEXT INDEX … (body)`. {@see ChatSearchSchemaListener} also maps it, so
+ * - MySQL / MariaDB: `CREATE FULLTEXT INDEX … (search_text)`. {@see ChatSearchSchemaListener} also maps it, so
  *   `doctrine:migrations:diff` creates it and never drops it.
- * - PostgreSQL: a GIN expression index on `to_tsvector('<config>'::regconfig, body)`, built `CONCURRENTLY` (writes go on
+ * - PostgreSQL: a GIN expression index on `to_tsvector('<config>'::regconfig, search_text)`, built `CONCURRENTLY` (writes go on
  *   while it builds). Doctrine does not read expression indexes back, so a diff never drops it either.
  * - Other platforms: no index (the search uses `LIKE`).
  *
@@ -32,7 +32,7 @@ use function sprintf;
 final readonly class ChatSearchIndex
 {
     /** The index name as mapped (`TablePrefixListener` rules give the physical name). */
-    public const string MAPPED_NAME = 'idx_nowo_chat_message_body_fts';
+    public const string MAPPED_NAME = 'idx_nowo_chat_message_search_fts';
 
     /** Default PostgreSQL text search configuration: no stemming, no stop words, any language. */
     public const string DEFAULT_POSTGRES_CONFIG = 'simple';
@@ -99,13 +99,13 @@ final readonly class ChatSearchIndex
     }
 
     /**
-     * The indexed column (the message text).
+     * The indexed column: the viewer-neutral search text (audit VA2-1), never the raw body.
      *
      * @return string The column name
      */
     public function column(): string
     {
-        return $this->entityManager->getClassMetadata(ChatMessage::class)->getColumnName('body');
+        return $this->entityManager->getClassMetadata(ChatMessage::class)->getColumnName('searchText');
     }
 
     /**

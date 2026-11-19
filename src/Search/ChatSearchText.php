@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Search;
 
 use Normalizer;
+use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 
 use function array_slice;
 use function array_unique;
@@ -44,6 +45,25 @@ final class ChatSearchText
 
     /** Characters kept before the first match in an excerpt. */
     private const int SNIPPET_LEAD = 60;
+
+    /** Longest search text stored for one message (a message is at most ChatMessage::MAX_LENGTH characters). */
+    public const int INDEXABLE_LENGTH = 100_000;
+
+    /**
+     * 1.37 (audit VA2-1): the viewer-neutral text the database searches (`nowo_chat_message.search_text`): the message's
+     * plain text with every `#reference` token as the neutral `#…` (never its title), mentions as `@Name` (no public id),
+     * links as their text (no URL) and no Markdown markers ({@see ChatMarkdownRenderer::plain()}). Every word of it is
+     * also in the text any reader sees, so a row the database finds never matches only through text a viewer cannot see.
+     * The price: reference titles are not searchable.
+     *
+     * @param string $body The stored Markdown
+     *
+     * @return string The search text
+     */
+    public static function indexable(string $body): string
+    {
+        return ChatMarkdownRenderer::plain($body, self::INDEXABLE_LENGTH);
+    }
 
     /**
      * The words of a text: split on white space, lower case, de-duplicated, at most {@see self::MAX_WORDS}.

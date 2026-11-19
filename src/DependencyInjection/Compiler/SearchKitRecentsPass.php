@@ -33,6 +33,8 @@ final class SearchKitRecentsPass implements CompilerPassInterface
     {
         if ($container->hasDefinition(ChatMessageSearchProvider::class) && !self::safe($container)) {
             $container->removeDefinition(ChatMessageSearchProvider::class);
+            // Audit VA2-4: say why the chat group is missing from the palette (container build log, debug:container).
+            $container->log($this, 'ChatKit: the SearchKit provider of message search was removed: SearchKit is not registered, or its recents are not revalidated (set nowo_search_kit.recent.revalidate: true, or recent.enabled: false).');
         }
     }
 

@@ -13,7 +13,8 @@ now. The search runs in the database (MySQL / MariaDB `FULLTEXT`, PostgreSQL `ts
 and the permission filter is part of the same SQL statement. Results come as a server-rendered page (works without
 JavaScript), as a JSON endpoint, and optionally as a group of the SearchKit palette.
 
-The feature is off by default (`search.enabled: false`) and stores no new data: it reads the existing message table.
+The feature is off by default (`search.enabled: false`). It adds one derived column, `search_text` (FR-012), and no
+table.
 
 ## User scenarios
 
@@ -37,7 +38,9 @@ answer for an unknown and a forbidden conversation filter, author filter or curs
 
 Deleted messages, erased authors' messages (GDPR erasure turns them into tombstones), messages older than the
 retention window (they are due for the purge) and their thread replies, system, bot, buzz and pin lines are never
-found. A `#reference` the viewer may not open never matches its hidden title.
+found. The database searches a viewer-neutral search text (`search_text`: `#reference` tokens as a neutral `#…`, no
+link URLs, no mention ids), so a message is never found through text a viewer cannot see; reference titles are not
+searchable (accepted loss, owner decision 2026-11-19).
 
 ### US-04 — Narrow the search (P2)
 
@@ -61,9 +64,9 @@ option.
 
 - **FR-001** `search.enabled` (default false) turns on the page `GET /chat/search`, the endpoint `GET /chat/api/search`
   and the dock header link (`search.dock_entry`, default true). Off: both routes answer 404 and the dock shows nothing.
-- **FR-002** Engines: MySQL 8.4 and MariaDB 11.4 use `MATCH (body) AGAINST (… IN BOOLEAN MODE)` with `+word*` terms
+- **FR-002** Engines: MySQL 8.4 and MariaDB 11.4 use `MATCH (search_text) AGAINST (… IN BOOLEAN MODE)` with `+word*` terms
   for words of letters and digits at least `search.mysql_min_token_length` long; PostgreSQL 16 uses
-  `to_tsvector('<config>', body) @@ to_tsquery('<config>', 'word:* & …')`; every other word, and every word on other
+  `to_tsvector('<config>', search_text) @@ to_tsquery('<config>', 'word:* & …')`; every other word, and every word on other
   platforms or with `search.fulltext: false`, is a case-insensitive `LIKE` with escaped wildcards. No operator of the
   user's text ever reaches the server. On MySQL / MariaDB / PostgreSQL with `search.fulltext`, a query with no word the
   index can use (only short or punctuated words) answers no rows instead of scanning the table (audit VA-7).
@@ -97,6 +100,10 @@ option.
 - **FR-010** Stateless services (FrankenPHP worker mode with kernel reset off); nothing is memoised outside the current
   request's attributes (ChatAccess memo).
 - **FR-011** No query text is logged.
+- **FR-012** (audit VA2-1) `nowo_chat_message.search_text` holds `ChatSearchText::indexable(body)`, written with every
+  change of the body in the same unit of work (send, edit, redact, delete, GDPR erasure); a NULL value (rows before
+  1.37) never matches; `nowo:chat:search-backfill` fills it in resumable batches, answering lock conflicts with
+  `CONFLICT_001` / exit 75. The index and every match use this column.
 
 ## Non-goals
 
