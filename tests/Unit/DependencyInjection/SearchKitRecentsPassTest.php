@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Unit\DependencyInjection;
 
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\SearchKitRecentsPass;
+use Nowo\ChatKitBundle\SearchKit\ChatConversationSearchProvider;
 use Nowo\ChatKitBundle\SearchKit\ChatMessageSearchProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -28,6 +29,7 @@ final class SearchKitRecentsPassTest extends TestCase
         foreach ($cases as $name => [$revalidate, $settings, $kept]) {
             $container = new ContainerBuilder();
             $container->register(ChatMessageSearchProvider::class, ChatMessageSearchProvider::class);
+            $container->register(ChatConversationSearchProvider::class, ChatConversationSearchProvider::class);
             if ($revalidate !== null) {
                 $container->setParameter(SearchKitRecentsPass::REVALIDATE_PARAMETER, $revalidate);
             }
@@ -36,7 +38,14 @@ final class SearchKitRecentsPassTest extends TestCase
             }
             (new SearchKitRecentsPass())->process($container);
             self::assertSame($kept, $container->hasDefinition(ChatMessageSearchProvider::class), $name);
+            // 1.38: the conversation group follows the same rule.
+            self::assertSame($kept, $container->hasDefinition(ChatConversationSearchProvider::class), $name);
         }
+        // Only the conversation group registered: removed alone.
+        $container = new ContainerBuilder();
+        $container->register(ChatConversationSearchProvider::class, ChatConversationSearchProvider::class);
+        (new SearchKitRecentsPass())->process($container);
+        self::assertFalse($container->hasDefinition(ChatConversationSearchProvider::class));
         // Nothing to do without the provider.
         $container = new ContainerBuilder();
         (new SearchKitRecentsPass())->process($container);

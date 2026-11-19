@@ -421,3 +421,6 @@ chat_search:
   rate_limited: 'Te veel zoekopdrachten. Wacht even en probeer het opnieuw.'
   group: 'Berichten'
   see_all: 'Alle gevonden berichten'
+  conversations:
+    group: 'Gesprekken'
+    direct: 'Direct bericht'

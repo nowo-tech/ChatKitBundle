@@ -21,7 +21,11 @@ use Nowo\ChatKitBundle\Model\ChatUserReferenceInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Nowo\ChatKitBundle\RuntimeSetting\RuntimeSettingRetentionPolicyProvider;
 use Nowo\ChatKitBundle\Search\ChatSearchSchemaListener;
+use Nowo\ChatKitBundle\SearchKit\ChatConversationSearchDefinition;
+use Nowo\ChatKitBundle\SearchKit\ChatConversationSearchProvider;
+use Nowo\ChatKitBundle\SearchKit\ChatMessageSearchDefinition;
 use Nowo\ChatKitBundle\SearchKit\ChatMessageSearchProvider;
+use Nowo\ChatKitBundle\SearchKit\ChatSearchKitViewer;
 use Nowo\ChatKitBundle\Support\ChatEmojiCatalog;
 use Nowo\ChatKitBundle\Support\ChatRetention;
 use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
@@ -35,6 +39,8 @@ use Nowo\RuntimeSettingContract\Contract\RuntimeSettingType;
 use Nowo\RuntimeSettingContract\Contract\Validator\IntRange;
 use Nowo\SearchKitBundle\Contract\SearchProviderInterface;
 use Nowo\SearchKitBundle\Contract\SearchReferenceResolverInterface;
+use Nowo\SearchKitBundle\Provider\Entity\EntitySearchDefinition;
+use Nowo\SearchKitBundle\Provider\Entity\SearchItemContext;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\FileLocator;
@@ -280,11 +286,12 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
 
     /**
      * 1.37: {@see ChatSearchSchemaListener} maps the MySQL / MariaDB FULLTEXT index (with search on, or while the index
-     * exists: audit VA-4); with `search_kit.enabled` and nowo-tech/search-kit-bundle installed,
-     * {@see ChatMessageSearchProvider} is registered as a SearchKit provider and recent resolver (and refuses to run
-     * unless SearchKit revalidates recents: audit VA-3, {@see SearchKitRecentsPass}).
+     * exists: audit VA-4); with `search_kit.enabled` and nowo-tech/search-kit-bundle ^1.10 installed,
+     * {@see ChatMessageSearchProvider} (`search_kit.messages`) and 1.38 {@see ChatConversationSearchProvider}
+     * (`search_kit.channels`) are registered as SearchKit providers and recent resolvers (and only kept while SearchKit
+     * revalidates recents or has them off: audit VA-3, {@see SearchKitRecentsPass}).
      *
-     * @param array{enabled: bool, priority: int} $searchKit The processed `search_kit` options
+     * @param array{enabled: bool, priority: int, messages: array{enabled: bool, max_candidates: int}, channels: array{enabled: bool, priority: int, max_candidates: int, direct_scan: int}} $searchKit The processed `search_kit` options
      */
     private function registerSearch(ContainerBuilder $container, array $searchKit): void
     {
@@ -297,13 +304,32 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 '%' . Configuration::ALIAS . '.search.fulltext%',
             ])
             ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchema', 'method' => 'postGenerateSchema']);
-        if ($searchKit['enabled'] !== true || !interface_exists(SearchProviderInterface::class) || !interface_exists(SearchReferenceResolverInterface::class)) {
+        if ($searchKit['enabled'] !== true || !interface_exists(SearchProviderInterface::class) || !interface_exists(SearchReferenceResolverInterface::class)
+            || !class_exists(EntitySearchDefinition::class) || !class_exists(SearchItemContext::class)) {
             return;
         }
-        $container->register(ChatMessageSearchProvider::class, ChatMessageSearchProvider::class)
-            ->setAutowired(true)
-            ->addTag(SearchProviderInterface::TAG, ['priority' => $searchKit['priority']])
-            ->addTag(SearchReferenceResolverInterface::REFERENCE_RESOLVER_TAG, ['priority' => $searchKit['priority']]);
+        // 1.38: both groups on SearchKit's provider base; ChatKit registers the providers itself (no EntitySearchPass tag)
+        // so that SearchKitRecentsPass can remove them while recents keep titles in the browser.
+        $container->register(ChatSearchKitViewer::class, ChatSearchKitViewer::class)->setAutowired(true);
+        if ($searchKit['messages']['enabled'] === true) {
+            $container->register(ChatMessageSearchDefinition::class, ChatMessageSearchDefinition::class)
+                ->setAutowired(true)
+                ->setArgument('$maxCandidates', $searchKit['messages']['max_candidates']);
+            $container->register(ChatMessageSearchProvider::class, ChatMessageSearchProvider::class)
+                ->setAutowired(true)
+                ->addTag(SearchProviderInterface::TAG, ['priority' => $searchKit['priority']])
+                ->addTag(SearchReferenceResolverInterface::REFERENCE_RESOLVER_TAG, ['priority' => $searchKit['priority']]);
+        }
+        if ($searchKit['channels']['enabled'] === true) {
+            $container->register(ChatConversationSearchDefinition::class, ChatConversationSearchDefinition::class)
+                ->setAutowired(true)
+                ->setArgument('$maxCandidates', $searchKit['channels']['max_candidates'])
+                ->setArgument('$directScan', $searchKit['channels']['direct_scan']);
+            $container->register(ChatConversationSearchProvider::class, ChatConversationSearchProvider::class)
+                ->setAutowired(true)
+                ->addTag(SearchProviderInterface::TAG, ['priority' => $searchKit['channels']['priority']])
+                ->addTag(SearchReferenceResolverInterface::REFERENCE_RESOLVER_TAG, ['priority' => $searchKit['channels']['priority']]);
+        }
     }
 
     /**

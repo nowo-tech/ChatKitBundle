@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
+use DateTimeImmutable;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
+use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatSecurityUser;
 use Nowo\ChatKitBundle\Port\Ports;
 use Nowo\ChatKitBundle\Privacy\ChatPersonalData;
+use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatParticipantRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+use Nowo\ChatKitBundle\Search\ChatMessageSearchSql;
+use Nowo\ChatKitBundle\Search\ChatSearchScope;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
@@ -31,6 +36,7 @@ use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpKernel\TerminableInterface;
 
 use function array_column;
+use function array_map;
 use function assert;
 use function json_decode;
 use function json_encode;
@@ -192,6 +198,37 @@ final class ChatStringReferenceHostTest extends DatabaseTestCase
         self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_conversation'));
         self::assertSame('ok', ChatUserReferences::key(new RefChatUser('ok', 'p', 'X')));
         self::assertSame(str_repeat('é', 64), ChatUserReferences::key(new RefChatUser(str_repeat('é', 64), 'p', 'X')), '64 characters, not bytes');
+    }
+
+    /**
+     * 1.38: search membership in SQL holds the exact pair with string references (`direct_user_low` / `direct_user_high`):
+     * a participant row of someone outside the pair never makes a candidate, for the conversation group and messages.
+     */
+    public function testSearchMembershipHoldsTheExactPair(): void
+    {
+        $bob        = $this->person('bob', 'Bob lower');
+        $bigB       = $this->person('Bob', 'Bob upper');
+        $ana        = $this->person('7c1e-ana', 'Ana');
+        $anaSession = $this->signIn('7c1e-ana');
+        $withBob    = $this->json($this->raw(Request::METHOD_POST, '/chat/api/direct', $anaSession, ['userUuid' => $bob->getChatPublicId()]))['conversation']['uuid'];
+        $this->raw(Request::METHOD_POST, '/chat/api/conversations/' . $withBob . '/messages', $anaSession, ['body' => 'pair line']);
+        $manager      = $this->get(ChatKitEntityManager::class);
+        $conversation = $manager->getRepository(ChatConversation::class)->findOneBy(['uuid' => $withBob]);
+        self::assertInstanceOf(ChatConversation::class, $conversation);
+        // A participant row for Bob (not of the pair): SQL leaves the conversation out for him.
+        $manager->persist(new ChatParticipant($conversation, $bigB));
+        $manager->flush();
+        $repository = $manager->getRepository(ChatConversation::class);
+        self::assertInstanceOf(ChatConversationRepository::class, $repository);
+
+        self::assertSame([$withBob], array_map(static fn (ChatConversation $row): string => $row->getUuid(), $repository->findDirectForSearch($bob, 10)));
+        self::assertSame([], $repository->findDirectForSearch($bigB, 10));
+        self::assertSame([$withBob], array_map(static fn (ChatConversation $row): string => $row->getUuid(), $repository->createSearchQueryBuilder($ana, [], false)->getQuery()->getResult()));
+        self::assertSame([], $repository->createSearchQueryBuilder($bigB, [], false)->getQuery()->getResult());
+        $sql    = $this->get(ChatMessageSearchSql::class);
+        $cutoff = new DateTimeImmutable('-1 day');
+        self::assertCount(1, $sql->readable(new ChatSearchScope('bob', false, []), null, $cutoff)?->executeQuery()->fetchAllAssociative() ?? []);
+        self::assertSame([], $sql->readable(new ChatSearchScope('Bob', false, []), null, $cutoff)?->executeQuery()->fetchAllAssociative());
     }
 
     private function person(string $reference, string $name): RefChatUser

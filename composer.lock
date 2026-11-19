@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "04d26747543e95997756d1f32106e447",
+    "content-hash": "e3281347ef3fb14515b5568e1263b3d6",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -3302,7 +3302,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-18T14:39:27+00:00"
+            "time": "2026-10-18T14:39:27+00:00",
+            "published-time": "2026-10-28T18:19:49+00:00"
         },
         {
             "name": "symfony/password-hasher",
@@ -7320,16 +7321,16 @@
         },
         {
             "name": "nowo-tech/search-kit-bundle",
-            "version": "v1.8.1",
+            "version": "v1.10.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/SearchKitBundle.git",
-                "reference": "44d36218fd348f07fd0f2eaa06b1700ce995c9c5"
+                "reference": "ef620249aca0418395ec7271816b08a9e4166993"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/SearchKitBundle/zipball/44d36218fd348f07fd0f2eaa06b1700ce995c9c5",
-                "reference": "44d36218fd348f07fd0f2eaa06b1700ce995c9c5",
+                "url": "https://api.github.com/repos/nowo-tech/SearchKitBundle/zipball/ef620249aca0418395ec7271816b08a9e4166993",
+                "reference": "ef620249aca0418395ec7271816b08a9e4166993",
                 "shasum": ""
             },
             "require": {
@@ -7340,6 +7341,7 @@
                 "symfony/config": "^7.4 || ^8.0",
                 "symfony/dependency-injection": "^7.4 || ^8.0",
                 "symfony/deprecation-contracts": "^2.5 || ^3.0",
+                "symfony/event-dispatcher-contracts": "^3.5",
                 "symfony/form": "^7.4 || ^8.0",
                 "symfony/framework-bundle": "^7.4 || ^8.0",
                 "symfony/http-foundation": "^7.4 || ^8.0",
@@ -7357,6 +7359,8 @@
                 "twig/twig": "^3.12"
             },
             "require-dev": {
+                "doctrine/dbal": "^4.2",
+                "doctrine/orm": "^3.3",
                 "friendsofphp/php-cs-fixer": "^3.64",
                 "igor-php/igor-php": "^0.9.7 || ^0.10.0",
                 "nowo-tech/phpstan-frankenphp": "^1.1",
@@ -7368,13 +7372,17 @@
                 "rector/rector": "^2.0",
                 "symfony/browser-kit": "^7.4 || ^8.0",
                 "symfony/css-selector": "^7.4 || ^8.0",
+                "symfony/event-dispatcher": "^7.4 || ^8.0",
                 "symfony/ux-icons": "^2.25 || ^3.0",
                 "symfony/yaml": "^7.4 || ^8.0",
                 "vincentlanglet/twig-cs-fixer": "^3.0 || ^4.0"
             },
             "suggest": {
+                "doctrine/dbal": "^4.2 — EntitySearchDefinition / EntitySearchProvider with a DBAL query builder, and the QueryCountingMiddleware of the provider test kit",
+                "doctrine/orm": "^3.3 — EntitySearchDefinition / EntitySearchProvider with an ORM query builder",
                 "nowo-tech/dashboard-menu-bundle": "Built-in Pages group: menu entries the user can see (menu_pages)",
                 "nowo-tech/ui-kit-bundle": "^2.2 — optional UiKit theme integration (REQ-UI-003): host classes / attributes of the theme slots on the widget parts, --nowo-search-* tokens from --nowo-ui-*",
+                "phpunit/phpunit": "^10.5 || ^11.5 — EntitySearchProviderTestCase, the provider contract test kit (Nowo\\SearchKitBundle\\Test)",
                 "symfony/ux-icons": "Kind and item icons from your icon set (icon_set: ux_icon); without it the built-in SVG is used"
             },
             "type": "symfony-bundle",
@@ -7426,8 +7434,8 @@
                 "issues": "https://github.com/nowo-tech/SearchKitBundle/issues",
                 "source": "https://github.com/nowo-tech/SearchKitBundle"
             },
-            "time": "2026-11-17T16:47:57+00:00",
-            "published-time": "2026-11-17T16:52:16+00:00"
+            "time": "2026-11-19T19:14:08+00:00",
+            "published-time": "2026-11-19T19:23:51+00:00"
         },
         {
             "name": "phar-io/manifest",

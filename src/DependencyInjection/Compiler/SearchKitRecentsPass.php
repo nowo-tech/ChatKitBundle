@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\DependencyInjection\Compiler;
 
+use Nowo\ChatKitBundle\SearchKit\ChatConversationSearchProvider;
 use Nowo\ChatKitBundle\SearchKit\ChatMessageSearchProvider;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -17,6 +18,10 @@ use function is_array;
  * and subtitle — a message excerpt — would stay in the viewer's localStorage and show again after the message was
  * deleted or erased, or access was lost. Without SearchKit's parameters (its bundle is not registered) the provider
  * could not run either. Fail closed: the provider is removed in both cases.
+ *
+ * 1.38: the same for the conversation group ({@see ChatConversationSearchProvider}: people's and private channels'
+ * names). SearchKit 1.9 also switches a sensitive group off at run time in that mode; removing the providers keeps the
+ * build log telling why.
  */
 final class SearchKitRecentsPass implements CompilerPassInterface
 {
@@ -31,10 +36,15 @@ final class SearchKitRecentsPass implements CompilerPassInterface
      */
     public function process(ContainerBuilder $container): void
     {
-        if ($container->hasDefinition(ChatMessageSearchProvider::class) && !self::safe($container)) {
-            $container->removeDefinition(ChatMessageSearchProvider::class);
-            // Audit VA2-4: say why the chat group is missing from the palette (container build log, debug:container).
-            $container->log($this, 'ChatKit: the SearchKit provider of message search was removed: SearchKit is not registered, or its recents are not revalidated (set nowo_search_kit.recent.revalidate: true, or recent.enabled: false).');
+        if (self::safe($container)) {
+            return;
+        }
+        foreach ([ChatMessageSearchProvider::class => 'message search', ChatConversationSearchProvider::class => 'conversation search'] as $id => $what) {
+            if ($container->hasDefinition($id)) {
+                $container->removeDefinition($id);
+                // Audit VA2-4: say why the chat group is missing from the palette (container build log, debug:container).
+                $container->log($this, 'ChatKit: the SearchKit provider of ' . $what . ' was removed: SearchKit is not registered, or its recents are not revalidated (set nowo_search_kit.recent.revalidate: true, or recent.enabled: false).');
+            }
         }
     }
 

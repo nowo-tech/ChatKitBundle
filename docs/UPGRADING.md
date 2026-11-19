@@ -84,6 +84,54 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+From **1.37.0**: nothing to change unless you use the SearchKit palette (`search_kit.enabled: true`).
+
+**SearchKit ^1.10.** The chat groups now run on SearchKit's provider base (SearchKit 1.9.0) and its batch display hook `prepareItems()` (1.10.0):
+
+```bash
+composer require nowo-tech/search-kit-bundle:^1.10
+```
+
+ChatKit declares a conflict with SearchKit below 1.10, so Composer will not install this version next to an older
+SearchKit (the palette groups would otherwise silently disappear). SearchKit 1.10 needs PHP 8.3, like ChatKit.
+
+**New group: Conversations (`chat_channels`).** With `search_kit.enabled: true` a second group is registered by
+default: the direct conversations, channels and support tickets the viewer can open, found by their name (the other
+person, `#label`, `SUP-000123 · Topic`). Turn it off with `search_kit.channels.enabled: false` (or SearchKit's
+`nowo_search_kit.groups.chat_channels.enabled: false`). Like the Messages group it is registered only while SearchKit's
+recents are revalidated or off. See [USAGE.md](USAGE.md#searchkit-palette-137).
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            search_kit:
+                enabled: true
+                messages:
+                    enabled: true        # 1.38: the Messages group (key `messages`)
+                    max_candidates: 100  # messages read and checked per search
+                channels:
+                    enabled: true        # 1.38: the Conversations group (key `chat_channels`)
+                    priority: 35
+                    max_candidates: 100
+                    direct_scan: 500     # newest direct conversations matched by the other person's name
+```
+
+**Messages group: what changes for viewers.** The rows a viewer may see are the same (same permission filter, same
+per-row checks, same excerpts). What follows SearchKit's shared flow now:
+
+- The group shows the **visible total** within its candidate window (it showed none), and SearchKit's own "see all"
+  label (`search.see_all`) instead of ChatKit's `chat_search.see_all` (the link is unchanged: `/chat/search?q=…`).
+- The results page goes as deep as `search_kit.messages.max_candidates` (100) messages instead of 3 pages.
+- One limiter token per palette call, whatever the results page (it cost one per page replayed).
+- Host listeners of `SearchKitEvents::ITEM_VISIBILITY` now receive the group's candidates (subject type
+  `chat_message`, id = the message id) and can deny them; a deny wins.
+
+**For integrators calling the provider directly.** `ChatMessageSearchProvider` is now a thin wrapper of SearchKit's
+`EntitySearchProvider` (constructor: a `ChatMessageSearchDefinition` and SearchKit's optional services);
+`ChatMessageSearchProvider::MAX_PAGE` is deprecated and unused. The service ids (the class names) and the group key
+(`messages`) are unchanged.
+
 ## To 1.37.0
 
 From **1.36.1**:

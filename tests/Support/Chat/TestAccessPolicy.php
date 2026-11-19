@@ -12,9 +12,12 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
  */
 final class TestAccessPolicy implements ChatAccessPolicyInterface
 {
+    /** @var array<string, true> 1.38: public ids a test turned unreachable (SearchKit contract kit: the feature off) */
+    public array $unreachable = [];
+
     public function isReachable(ChatUserInterface $user): bool
     {
-        return !str_starts_with($user->getChatDisplayName(), 'Disabled');
+        return !str_starts_with($user->getChatDisplayName(), 'Disabled') && !isset($this->unreachable[$user->getChatPublicId()]);
     }
 
     public function isSupportAgent(ChatUserInterface $user): bool

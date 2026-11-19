@@ -421,3 +421,6 @@ chat_search:
   rate_limited: 'Demasiadas pesquisas. Aguarde um momento e tente de novo.'
   group: 'Mensagens'
   see_all: 'Todas as mensagens encontradas'
+  conversations:
+    group: 'Conversas'
+    direct: 'Mensagem direta'

@@ -20,7 +20,9 @@ use Nowo\ChatKitBundle\Search\ChatMessageSearchHit;
 use Nowo\ChatKitBundle\Search\ChatMessageSearchSql;
 use Nowo\ChatKitBundle\Search\ChatSearchSchemaListener;
 use Nowo\ChatKitBundle\Search\ChatSearchScope;
+use Nowo\ChatKitBundle\SearchKit\ChatMessageSearchDefinition;
 use Nowo\ChatKitBundle\SearchKit\ChatMessageSearchProvider;
+use Nowo\ChatKitBundle\SearchKit\ChatSearchKitViewer;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
@@ -248,9 +250,11 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
         self::assertNotNull($group);
         self::assertSame('messages', $group->key);
         self::assertSame('Messages', $group->label);
-        self::assertNull($group->total);
+        // 1.38 (SearchKit's provider base): the visible total within the candidate window, and SearchKit's "see all" label.
+        self::assertSame(2, $group->total);
+        self::assertTrue($group->exactTotal);
         self::assertSame('/chat/search?q=roadmap', $group->moreUrl);
-        self::assertSame('All matching messages', $group->moreLabel);
+        self::assertSame('See all', $group->moreLabel);
         self::assertCount(2, $group->items, 'the query limit, not page_size');
         $item = $group->items[0];
         self::assertSame('roadmap reply from Ana', $item->title);
@@ -353,12 +357,16 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
         $chat->send($luis, $chat->openDirect($ana, $luis), 'budget line');
         $provider = $this->provider($this->get(ChatMessageSearch::class));
         $this->signIn($ana);
-        // Three searches a minute here (the lowest allowed: a results-page call costs up to 3, audit VA3-3).
+        // Three searches a minute here (the lowest allowed, audit VA3-3).
         $search = $this->get(ChatMessageSearch::class);
         self::assertCount(1, $search->search($this->fresh($ana), $search->query('budget'))->hits, 'the service itself is not limited');
-        // Results page 3 costs 3 tokens (it replays three searches) and fits a budget of 3 without throwing.
-        self::assertNull($provider->searchPage($this->searchQuery($ana, 'budget'), 3, 5), 'page 3 of one row: empty, budget spent');
+        // 1.38: one token per call, whatever the page (SearchKit's window: one query, no replay).
+        self::assertNull($provider->searchPage($this->searchQuery($ana, 'budget'), 3, 5), 'page 3 of one row: empty, one token spent');
+        self::assertNotNull($provider->search($this->searchQuery($ana, 'budget')));
+        self::assertNotNull($provider->search($this->searchQuery($ana, 'budget')));
         self::assertNull($provider->search($this->searchQuery($ana, 'budget')), 'over the budget: no rows');
+        // Recents do not spend the budget.
+        self::assertNull($provider->resolve(new SearchReference('/chat/x', ChatMessageSearchProvider::KIND, 'nowo_chat_page_conversation', []), $ana->getUserIdentifier(), 'en'));
         // The page and API budget is a different key (audit VA3-2): the palette spent nothing of it.
         $page = $this->limiter()->create(ChatSearchController::LIMITER_KEY . $ana->getChatPublicId());
         self::assertTrue($page->consume(3)->isAccepted());
@@ -379,7 +387,7 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
 
     private function provider(ChatMessageSearch $search): ChatMessageSearchProvider
     {
-        return new ChatMessageSearchProvider($search, $this->get(Security::class), $this->get(UrlGeneratorInterface::class), $this->get(TranslatorInterface::class), $this->limiter());
+        return new ChatMessageSearchProvider(new ChatMessageSearchDefinition($search, new ChatSearchKitViewer($this->get(Security::class), $this->get(ChatAccess::class)), $this->get(UrlGeneratorInterface::class), $this->get(TranslatorInterface::class), $this->limiter()));
     }
 
     private function limiter(): RateLimiterFactoryInterface

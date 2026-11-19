@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Search;
 
 use DateTimeImmutable;
+use Doctrine\DBAL\Query\QueryBuilder;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
@@ -195,8 +196,9 @@ final readonly class ChatMessageSearch
                 $cursor       = (int) $message->getId();
                 $conversation = $message->getConversation();
                 if (!$this->access->canView($conversation, $viewer)) {
-                    // Defence in depth (the SQL already filters): never hand out the uuid of a row the viewer cannot read.
-                    continue;
+                    // Defence in depth (the SQL already filters, 1.38 the direct pair too): never hand out the uuid of a
+                    // row the viewer cannot read (a look-alike pair under a folding collation, house rule LQ).
+                    continue; // @codeCoverageIgnore
                 }
                 $lastScanned = $message->getUuid();
                 $text        = $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH);
@@ -253,16 +255,134 @@ final readonly class ChatMessageSearch
     }
 
     /**
+     * 1.38 (SearchKit message group, ChatMessageSearchDefinition): the DBAL query of the messages the viewer may read now
+     * — the same permission filter, kinds, deleted rows and retention window as search() — newest first, without a limit
+     * or a text condition (matchWords() adds it). Null (no rows) when search is off, the viewer is unreachable, the author
+     * filter is unknown or not exact, or the retention cannot be read (a query that matches nothing).
+     *
+     * @param ChatUserInterface $viewer The signed-in participant
+     * @param string|null $author Public id of the author, `me`, or null for any author
+     *
+     * @return QueryBuilder The query (alias `m`, column `id`); one that matches nothing when nothing is readable
+     */
+    public function readableQuery(ChatUserInterface $viewer, ?string $author = null): QueryBuilder
+    {
+        if (!$this->enabled || !$this->access->isReachable($viewer)) {
+            return $this->sql->none();
+        }
+        $value = null;
+        if ($author !== null) {
+            $value = $this->author($viewer, $author);
+            if ($value === null) {
+                return $this->sql->none();
+            }
+        }
+        $cutoff = $this->cutoff();
+
+        return ($cutoff instanceof DateTimeImmutable ? $this->sql->readable($this->scope($viewer), $value, $cutoff) : null) ?? $this->sql->none();
+    }
+
+    /**
+     * 1.38: a query of readableQuery()'s shape that matches nothing (no viewer: no rows, no hint).
+     *
+     * @return QueryBuilder The query
+     */
+    public function noRows(): QueryBuilder
+    {
+        return $this->sql->none();
+    }
+
+    /**
+     * 1.38: adds the text condition of the words to a readableQuery() (the viewer-neutral search text, full text or an
+     * escaped LIKE).
+     *
+     * @param QueryBuilder $qb A query of readableQuery()
+     * @param list<string> $words The query words
+     *
+     * @return bool False when no word can use the full-text index (the caller answers no rows)
+     */
+    public function matchWords(QueryBuilder $qb, array $words): bool
+    {
+        return $this->sql->matchWords($qb, $words);
+    }
+
+    /**
+     * 1.38: the per-row checks of search() on candidate ids, in their order: the messages are loaded in one query (their
+     * `#references` primed for the viewer in one resolve per type), and a row is kept only while the viewer may read its
+     * conversation (`ChatAccess::canView()`) and the text the viewer sees holds every word.
+     *
+     * @param ChatUserInterface $viewer The signed-in participant
+     * @param list<int> $ids Candidate ids (from readableQuery())
+     * @param list<string> $words The query words (empty: no text check, for recents)
+     *
+     * @return list<int> The ids kept
+     */
+    public function visibleIds(ChatUserInterface $viewer, array $ids, array $words): array
+    {
+        $rows = $this->load($ids);
+        $this->references->prime($viewer, $rows);
+        $kept = [];
+        foreach ($rows as $message) {
+            if ($this->access->canView($message->getConversation(), $viewer)
+                && ChatSearchText::containsAll($words, $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH))) {
+                $kept[] = (int) $message->getId();
+            }
+        }
+
+        return $kept;
+    }
+
+    /**
+     * 1.38: the result rows of messages visibleIds() kept in this call (SearchKit's prepareItems(): the shown rows only),
+     * keyed by id: read from ChatKit's entity manager, which already holds them (no query), the other people of their
+     * direct conversations in one directory call, with the plain text, excerpt and conversation title for the viewer.
+     * A message that is not loaded any more or not readable is left out.
+     *
+     * @param ChatUserInterface $viewer The signed-in participant
+     * @param list<int> $ids Message ids visibleIds() kept
+     * @param list<string> $words The query words (marked in the excerpt)
+     *
+     * @return array<int, ChatMessageSearchHit> id => row
+     */
+    public function hitsOf(ChatUserInterface $viewer, array $ids, array $words): array
+    {
+        $messages = [];
+        $peers    = [];
+        foreach ($ids as $id) {
+            $message = $this->messages->find($id);
+            if ($message instanceof ChatMessage && $this->access->canView($message->getConversation(), $viewer)) {
+                $messages[$id] = $message;
+                $peer          = $message->getConversation()->peerKeyOf($viewer);
+                if ($peer !== null) {
+                    $peers[] = $peer;
+                }
+            }
+        }
+        $people = $this->access->usersByIds($peers);
+        $agent  = $this->access->isSupportAgent($viewer);
+        $titles = [];
+        $hits   = [];
+        foreach ($messages as $id => $message) {
+            $hits[$id] = $this->hit($message, $viewer, $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH), $words, $agent, $titles, $people);
+        }
+
+        return $hits;
+    }
+
+    /**
      * A result row from what the viewer may see.
      *
      * @param list<string> $words The query words (marked in the excerpt)
      * @param array<string, string> $titles Conversation titles already built for this page (uuid => title)
+     * @param array<int|string, ChatUserInterface>|null $people 1.38: the other people of direct conversations, already
+     *                                                          loaded (key => user); null: ChatAccess::directPeer()
      */
-    private function hit(ChatMessage $message, ChatUserInterface $viewer, string $text, array $words, bool $agent, array &$titles): ChatMessageSearchHit
+    private function hit(ChatMessage $message, ChatUserInterface $viewer, string $text, array $words, bool $agent, array &$titles, ?array $people = null): ChatMessageSearchHit
     {
         $conversation = $message->getConversation();
         $key          = $conversation->getUuid();
-        $titles[$key] ??= (string) $this->presenter->conversation($conversation, $viewer, $this->access->directPeer($conversation, $viewer), $conversation->isChannel() ? $this->access->channel((string) $conversation->getChannelKey()) : null, false, 0, null, $agent)['title'];
+        $peer         = $people === null ? $this->access->directPeer($conversation, $viewer) : ($people[(string) $conversation->peerKeyOf($viewer)] ?? null);
+        $titles[$key] ??= (string) $this->presenter->conversation($conversation, $viewer, $peer, $conversation->isChannel() ? $this->access->channel((string) $conversation->getChannelKey()) : null, false, 0, null, $agent)['title'];
         $snippet = ChatSearchText::snippet($text, $words);
         $writer  = $message->getAuthor();
 
