@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "49c271c00f4259edaedf0645193d9caf",
+    "content-hash": "04d26747543e95997756d1f32106e447",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -7317,6 +7317,117 @@
                 }
             ],
             "time": "2026-11-15T19:31:57+00:00"
+        },
+        {
+            "name": "nowo-tech/search-kit-bundle",
+            "version": "v1.8.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/nowo-tech/SearchKitBundle.git",
+                "reference": "44d36218fd348f07fd0f2eaa06b1700ce995c9c5"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/nowo-tech/SearchKitBundle/zipball/44d36218fd348f07fd0f2eaa06b1700ce995c9c5",
+                "reference": "44d36218fd348f07fd0f2eaa06b1700ce995c9c5",
+                "shasum": ""
+            },
+            "require": {
+                "nowo-tech/form-kit-bundle": "^2.17",
+                "php": ">=8.3 <8.6",
+                "psr/log": "^3.0",
+                "symfony/asset": "^7.4 || ^8.0",
+                "symfony/config": "^7.4 || ^8.0",
+                "symfony/dependency-injection": "^7.4 || ^8.0",
+                "symfony/deprecation-contracts": "^2.5 || ^3.0",
+                "symfony/form": "^7.4 || ^8.0",
+                "symfony/framework-bundle": "^7.4 || ^8.0",
+                "symfony/http-foundation": "^7.4 || ^8.0",
+                "symfony/http-kernel": "^7.4 || ^8.0",
+                "symfony/options-resolver": "^7.4 || ^8.0",
+                "symfony/rate-limiter": "^7.4 || ^8.0",
+                "symfony/routing": "^7.4 || ^8.0",
+                "symfony/security-bundle": "^7.4 || ^8.0",
+                "symfony/security-csrf": "^7.4 || ^8.0",
+                "symfony/translation": "^7.4 || ^8.0",
+                "symfony/translation-contracts": "^3.5",
+                "symfony/twig-bundle": "^7.4 || ^8.0",
+                "twig/extra-bundle": "^3.12",
+                "twig/string-extra": "^3.12",
+                "twig/twig": "^3.12"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.64",
+                "igor-php/igor-php": "^0.9.7 || ^0.10.0",
+                "nowo-tech/phpstan-frankenphp": "^1.1",
+                "nowo-tech/ui-kit-bundle": "^2.2",
+                "phpstan/phpstan": "^2.1",
+                "phpstan/phpstan-phpunit": "^2.0",
+                "phpstan/phpstan-symfony": "^2.0",
+                "phpunit/phpunit": "^10.5 || ^11.5",
+                "rector/rector": "^2.0",
+                "symfony/browser-kit": "^7.4 || ^8.0",
+                "symfony/css-selector": "^7.4 || ^8.0",
+                "symfony/ux-icons": "^2.25 || ^3.0",
+                "symfony/yaml": "^7.4 || ^8.0",
+                "vincentlanglet/twig-cs-fixer": "^3.0 || ^4.0"
+            },
+            "suggest": {
+                "nowo-tech/dashboard-menu-bundle": "Built-in Pages group: menu entries the user can see (menu_pages)",
+                "nowo-tech/ui-kit-bundle": "^2.2 — optional UiKit theme integration (REQ-UI-003): host classes / attributes of the theme slots on the widget parts, --nowo-search-* tokens from --nowo-ui-*",
+                "symfony/ux-icons": "Kind and item icons from your icon set (icon_set: ux_icon); without it the built-in SVG is used"
+            },
+            "type": "symfony-bundle",
+            "extra": {
+                "branch-alias": {
+                    "dev-main": "1.0.x-dev"
+                },
+                "nowo-package-version": "1.0.0"
+            },
+            "autoload": {
+                "psr-4": {
+                    "Nowo\\SearchKitBundle\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Héctor Franco Aceituno",
+                    "email": "hectorfranco@nowo.tech",
+                    "homepage": "https://github.com/HecFranco",
+                    "role": "Maintainer"
+                },
+                {
+                    "name": "Nowo.tech",
+                    "homepage": "https://nowo.tech"
+                }
+            ],
+            "description": "Global header search (command palette) for Symfony: a magnifier that stretches into a field, grouped permission-aware results from your own providers, Ctrl/⌘K, keyboard navigation, recents, UX Icons and theme tokens.",
+            "homepage": "https://github.com/nowo-tech/SearchKitBundle",
+            "keywords": [
+                "autocomplete",
+                "bundle",
+                "command-palette",
+                "frankenphp",
+                "global-search",
+                "nowo",
+                "search",
+                "symfony",
+                "symfony-bundle",
+                "typeahead",
+                "ux-icons"
+            ],
+            "support": {
+                "changelog": "https://github.com/nowo-tech/SearchKitBundle/blob/main/docs/CHANGELOG.md",
+                "docs": "https://github.com/nowo-tech/SearchKitBundle/tree/main/docs",
+                "issues": "https://github.com/nowo-tech/SearchKitBundle/issues",
+                "source": "https://github.com/nowo-tech/SearchKitBundle"
+            },
+            "time": "2026-11-17T16:47:57+00:00",
+            "published-time": "2026-11-17T16:52:16+00:00"
         },
         {
             "name": "phar-io/manifest",

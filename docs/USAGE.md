@@ -29,6 +29,8 @@
 - [Message menu and context menu](#message-menu-and-context-menu)
   - [Message menu (1.35)](#message-menu-135)
 - [Links](#links)
+- [Message search (1.37)](#message-search-137)
+  - [SearchKit palette (1.37)](#searchkit-palette-137)
 - [Automatic replies](#automatic-replies)
 - [Quick replies](#quick-replies)
 - [Formatting](#formatting)
@@ -859,6 +861,10 @@ subtitle, badge with a tone, link — root-relative or http(s) only) or the neut
 id. `ChatReferences::plainText()` gives the same per-reader text for previews, push bodies and digests; use it (and the
 same string) in your own notifications. A page of messages resolves its references in one `resolve()` per type,
 cached for the request.
+
+**Code formatting (1.37).** Text shaped like a reference token inside an inline code span or a fenced block is shown
+as `#[…](type:id)`, never with its title: a reference title never appears inside code, whatever the backticks around
+it. Token titles never contain a backtick (it becomes a space).
 
 ## Link previews
 
@@ -1715,6 +1721,102 @@ createdAt, updatedAt}`. A shared link: `{id, url, title, label, host, provider, 
 author: {uuid, name}|null, createdAt}`. The dock configuration carries `links` (`enabled`, `allowHttp`, `maxPinned`,
 `titleMaxLength`, `urlMaxLength`, `providers` with their `hosts`) and the endpoints `pinnedLinks`, `pinnedLink`, `links`.
 
+## Message search (1.37)
+
+Off by default (`search.enabled: false`). Build the full-text index first ([UPGRADING.md](UPGRADING.md#unreleased),
+`nowo:chat:search-index`), then turn it on. It adds:
+
+- the page **`GET /chat/search`** (route `nowo_chat_page_search`): a FormKit form (UiKit form theme) with the words,
+  "From" (anyone / me), a date range, "Has a link" and, when it is opened with `?conversation=<uuid>`, that
+  conversation only; then one page of results, newest first, each with the conversation title, the author, the time,
+  a plain-text excerpt with the words marked, and an "Open" link to the message in its conversation
+  (`/chat/{uuid}?message=<uuid>`); "More results" loads the next page. It works without JavaScript.
+- the endpoint **`GET /chat/api/search`** (route `nowo_chat_api_search`), [below](#json-api);
+- a search link in the dock header (`search.dock_entry`, default true; `data-part="message-search"`).
+
+**What is found.** Messages that contain **every** word (case-insensitive; a word also finds longer words that start
+with it: `inv` finds `invoice`), written by people (`text` and automatic replies; never system, bot, buzz or pin lines),
+not deleted, inside the retention window of `nowo:chat:purge` (`retention_days` or your
+`RetentionPolicyProviderInterface`; if the retention cannot be read, nothing is found), with their thread root inside it
+too. GDPR erasure turns a person's messages into tombstones, so they are never found again.
+
+**Who sees what.** The filter is part of the SQL statement, evaluated on every search (nothing is cached):
+
+| Conversation | Readable by the viewer when |
+| --- | --- |
+| Direct | the viewer is one of its two people (their participant row) |
+| Support ticket | the viewer owns it, or is a support agent (`ChatAccessPolicyInterface::isSupportAgent()`): agents search **every** ticket, assigned or not — the same rule as the conversation page and the inbox (owner decision 2026-11-19) |
+| Channel | your channel provider lists it for the viewer now (`channelsFor()`) and `canUse()` allows it |
+
+**What the database searches.** Not the stored Markdown, but a viewer-neutral search text kept next to it
+(`nowo_chat_message.search_text`, written with the message, its edits, its deletion and GDPR erasure in the same unit
+of work): the plain text with every `#reference` token as a neutral `#…` (no title), mentions as `@Name` (no public
+id), links as their text (no URL), code as text (a token inside it is a `#…` too) and no Markdown markers. It holds no
+hidden text — no reference title, link URL or mention id — so a message is **never found through hidden text**; `…` in
+a query is ignored. **Accepted loss:** the
+titles of `#references` are not searchable, even for readers who may open them. Rows written before 1.37 have no search
+text until `nowo:chat:search-backfill` fills it and are never found until then (fail closed; see UPGRADING).
+
+Each row is checked again with the same rule as the conversation page (`ChatAccess::canView()`) and against the text
+the viewer sees; rows that fail are skipped without shortening the page. There is no count anywhere, and a conversation, author or cursor the
+viewer may not read answers exactly like an unknown one: `{"items": [], "next": null}`.
+
+**Bounds.** At least `search.min_query_length` (2) and at most `search.max_query_length` (200) characters, the first 8
+distinct words, `search.page_size` (20) rows per page, `limits.searches_per_minute` (30) searches per user and minute
+for the page and the API together (429 above it); the SearchKit palette has its own bucket of the same size (below).
+
+**Engines** (on the search text). MySQL 8.4 / MariaDB 11.4: `MATCH … AGAINST` in boolean mode on the FULLTEXT index for words of letters and
+digits at least `search.mysql_min_token_length` (3) long. PostgreSQL 16: `to_tsvector` / `to_tsquery` with
+`search.postgresql_config` (`simple`) on the GIN index. Every other word (shorter, or with punctuation such as `C-12`)
+and every other platform: `LIKE` with escaped wildcards. Only letters and digits reach a full-text operator, so the
+characters of the boolean and `tsquery` syntaxes (`+ - " * ( ) : & | !`) are plain text. On those three databases a
+search needs at least one word the index can use: a text made only of short or punctuated words (`ok`, `C-12`) answers
+no rows instead of scanning the whole table. `search.fulltext: false` uses `LIKE` only (no index needed; every search
+scans the table, so keep it to small installations).
+
+**The FULLTEXT index and schema diffs (MySQL / MariaDB).** With `search.enabled` and `search.fulltext` on, the index is
+part of the mapped schema, so `doctrine:migrations:diff` creates it. With either option off, the index stays in the
+mapped schema only while it exists in the database: turning search off never makes the next diff drop it, and a host
+that never enabled search never gets one. To remove it, run `nowo:chat:search-index --drop --force`. The options are
+read when the schema is generated, so `%env()%` values work.
+
+**Paging.** A full page always has a "More results" link (the next page may turn out empty) and a page that is not full
+has none, so hidden text never changes the answer. A page that is not full has one only when the search stopped
+reading early (five reads of candidates the per-row checks dropped); it then goes on from the last readable row read.
+
+**Excerpts.** Plain text: the JSON carries text, the page escapes every segment and wraps the words in `<mark>`
+elements itself, the palette gets text that SearchKit escapes. No message HTML is ever reused in a result.
+
+**From PHP.** `Nowo\ChatKitBundle\Search\ChatMessageSearch` (`query()` then `search($viewer, $query)`) returns a
+`ChatMessageSearchPage` of `ChatMessageSearchHit` (plain values). Stateless; safe in FrankenPHP worker mode.
+
+### SearchKit palette (1.37)
+
+With `nowo-tech/search-kit-bundle` ^1.8 installed, `search_kit.enabled: true` **and SearchKit's recents revalidated**
+(`nowo_search_kit.recent.revalidate: true`, or recents off with `recent.enabled: false`), the bundle registers
+`ChatMessageSearchProvider`: a **Messages** group (key `messages`, tag priority `search_kit.priority`, 30) in the
+Ctrl/⌘+K palette and on SearchKit's results page, with the same rules as the search above.
+
+- Rows: the excerpt as the title, "conversation · author" as the subtitle, the message link, the date; no total
+  (SearchKit shows the rows it got). "See all" opens `/chat/search?q=…`.
+- Filter `from:` (`from:me`, `from:<public id>`). A negated or repeated `from:`, any other filter key, and a scoped
+  search answer no rows (deny by default).
+- **Recents must be revalidated.** With SearchKit's default (`recent.revalidate: false`) the palette stores the title
+  and subtitle of a picked row — here a message excerpt — in the browser's localStorage and shows it again later, even
+  after the message was deleted or erased or the viewer lost access. The provider is therefore not registered unless
+  revalidation is on (or recents are off): fail closed, no chat group in the palette.
+- The palette has **its own budget**: the same limiter as the page (`nowo_chat_search`, `limits.searches_per_minute`),
+  with a separate key per user (`nowo_chat_search_palette_<public id>`), so typing in the palette never uses up the
+  page and API budget. Weight: one token per search a call runs (the dropdown and results page 1 cost 1, results page
+  N costs N). Over the budget the group is left out. ChatKit relies on SearchKit's input debounce (`debounce_ms`) to
+  keep keystrokes from becoming one search each; keep it at its default or above.
+- Paging on the results page (`PaginatedSearchProviderInterface`, pages 1 to 3: each page replays the ones before it)
+  and recents
+  (`SearchReferenceResolverInterface`): a recent message is checked again on every display and disappears once it is
+  deleted, purged or no longer readable.
+- Rows only for the signed-in user whose identifier is the query's. A search run by identifier for someone else
+  (`SearchEngineInterface::searchFor()`) gets no chat rows: the provider is not `IdentifierAwareSearchProviderInterface`.
+
 ## Automatic replies
 
 Set from the chat (1.11): the **Automatic reply** section of the status menu — on / off, a Markdown text (at most 500
@@ -1892,6 +1994,7 @@ Under your route prefix (e.g. `/chat`), `X-CSRF-TOKEN` header (token id `nowo_ch
 | POST | `/api/support/{uuid}/resume` `{draft?}` | requester: continue the ticket (the draft's messages move into it) |
 | POST | `/api/support/{uuid}/status` `{status}` | agents: any status; requester: `open` (Reopen) only |
 | POST | `/api/support/{uuid}/assign` `{assignee}` | agents: an agent's public id, or null |
+| GET | `/api/search?q=&conversation=&from=me\|<public id>&after=Y-m-d&before=Y-m-d&link=1&cursor=` | 1.37, `search.enabled`: messages the caller may read that contain every word, newest first: `{items: [{uuid, threadRootUuid, conversation: {uuid, kind, title}, author: {name, publicId}\|null, createdAt, snippet, link}], next}` (plain text; `before` includes that day; 400 `query_too_short` / `query_too_long`, 429 `rate_limited`) |
 | GET | `/api/link-previews?url[]=…` | previews from your provider, per viewer |
 | GET | `/api/realtime` | hub URL + subscriber token for the caller's topic |
 | GET | `/api/csrf` | the session's current `nowo_chat` CSRF token and the caller's public id (1.26, route `nowo_chat_api_csrf`; the dock asks once after a `403 invalid_csrf`, then retries the write; never cached, `nosniff`). Never enable credentialed CORS on the chat prefix: this answer carries the session's CSRF token |

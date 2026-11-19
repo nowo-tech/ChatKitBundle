@@ -6,6 +6,10 @@ nowo_chat_kit:
             enabled: true
             user_class: App\Entity\User
             # 1.35 / 1.36: every item of the message menu (the items that store data are off by default).
+            # 1.37: message search (the page /chat/search and the dock header link); the MySQL FULLTEXT index comes with
+            # `doctrine:schema:update` (make setup).
+            search:
+                enabled: true
             message_menu:
                 save: { enabled: true }
                 message_info: { enabled: true }

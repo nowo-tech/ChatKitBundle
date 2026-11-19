@@ -7,130 +7,133 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+  - [Added](#added)
+  - [Security](#security)
+  - [Changed](#changed)
 - [[1.36.1] - 2026-11-19](#1361---2026-11-19)
   - [Fixed](#fixed)
 - [[1.36.0] - 2026-11-19](#1360---2026-11-19)
-  - [Added](#added)
-  - [Changed](#changed)
-- [[1.35.0] - 2026-11-18](#1350---2026-11-18)
   - [Added](#added-1)
   - [Changed](#changed-1)
+- [[1.35.0] - 2026-11-18](#1350---2026-11-18)
+  - [Added](#added-2)
+  - [Changed](#changed-2)
 - [[1.34.1] - 2026-11-18](#1341---2026-11-18)
   - [Fixed](#fixed-1)
 - [[1.34.0] - 2026-11-18](#1340---2026-11-18)
-  - [Changed](#changed-2)
-  - [Added](#added-2)
-- [[1.33.0] - 2026-11-17](#1330---2026-11-17)
-  - [Added](#added-3)
-  - [Security](#security)
   - [Changed](#changed-3)
+  - [Added](#added-3)
+- [[1.33.0] - 2026-11-17](#1330---2026-11-17)
+  - [Added](#added-4)
+  - [Security](#security-1)
+  - [Changed](#changed-4)
   - [Documentation](#documentation)
   - [Demo](#demo)
 - [[1.32.0] - 2026-11-16](#1320---2026-11-16)
-  - [Added](#added-4)
-  - [Changed](#changed-4)
+  - [Added](#added-5)
+  - [Changed](#changed-5)
 - [[1.31.1] - 2026-11-15](#1311---2026-11-15)
   - [Fixed](#fixed-2)
   - [Documentation](#documentation-1)
 - [[1.31.0] - 2026-11-15](#1310---2026-11-15)
   - [Fixed](#fixed-3)
-  - [Added](#added-5)
-- [[1.30.0] - 2026-11-15](#1300---2026-11-15)
   - [Added](#added-6)
-  - [Changed](#changed-5)
+- [[1.30.0] - 2026-11-15](#1300---2026-11-15)
+  - [Added](#added-7)
+  - [Changed](#changed-6)
   - [Fixed](#fixed-4)
 - [[1.29.0] - 2026-11-14](#1290---2026-11-14)
-  - [Added](#added-7)
-- [[1.28.0] - 2026-11-14](#1280---2026-11-14)
   - [Added](#added-8)
-  - [Changed](#changed-6)
-  - [Security](#security-1)
+- [[1.28.0] - 2026-11-14](#1280---2026-11-14)
+  - [Added](#added-9)
+  - [Changed](#changed-7)
+  - [Security](#security-2)
 - [[1.27.1] - 2026-11-13](#1271---2026-11-13)
   - [Fixed](#fixed-5)
 - [[1.27.0] - 2026-11-13](#1270---2026-11-13)
-  - [Added](#added-9)
+  - [Added](#added-10)
   - [Deprecated](#deprecated)
   - [Tests](#tests)
 - [[1.26.4] - 2026-11-13](#1264---2026-11-13)
-  - [Security](#security-2)
-- [[1.26.3] - 2026-11-11](#1263---2026-11-11)
   - [Security](#security-3)
+- [[1.26.3] - 2026-11-11](#1263---2026-11-11)
+  - [Security](#security-4)
 - [[1.26.2] - 2026-11-11](#1262---2026-11-11)
   - [Fixed](#fixed-6)
   - [Tests](#tests-1)
   - [CI](#ci)
 - [[1.26.1] - 2026-11-11](#1261---2026-11-11)
   - [Fixed](#fixed-7)
-  - [Added](#added-10)
+  - [Added](#added-11)
   - [Tests](#tests-2)
   - [Documentation](#documentation-2)
 - [[1.26.0] - 2026-11-10](#1260---2026-11-10)
-  - [Added](#added-11)
+  - [Added](#added-12)
   - [Fixed](#fixed-8)
 - [[1.25.1] - 2026-11-10](#1251---2026-11-10)
   - [Fixed](#fixed-9)
-  - [Changed](#changed-7)
+  - [Changed](#changed-8)
   - [Demo](#demo-1)
 - [[1.25.0] - 2026-11-10](#1250---2026-11-10)
-  - [Added](#added-12)
-  - [Changed](#changed-8)
+  - [Added](#added-13)
+  - [Changed](#changed-9)
   - [Security / robustness (audit KJ, before the tag)](#security--robustness-audit-kj-before-the-tag)
 - [[1.24.0] - 2026-11-10](#1240---2026-11-10)
-  - [Added](#added-13)
+  - [Added](#added-14)
   - [Security / privacy (audit KC, before the tag)](#security--privacy-audit-kc-before-the-tag)
   - [Documentation](#documentation-3)
 - [[1.23.0] - 2026-11-09](#1230---2026-11-09)
-  - [Added](#added-14)
+  - [Added](#added-15)
   - [Fixed](#fixed-10)
 - [[1.22.1] - 2026-11-08](#1221---2026-11-08)
   - [Fixed](#fixed-11)
 - [[1.22.0] - 2026-11-07](#1220---2026-11-07)
-  - [Changed](#changed-9)
+  - [Changed](#changed-10)
 - [[1.21.0] - 2026-11-06](#1210---2026-11-06)
-  - [Added](#added-15)
+  - [Added](#added-16)
   - [Fixed](#fixed-12)
 - [[1.20.0] - 2026-11-06](#1200---2026-11-06)
-  - [Changed](#changed-10)
-- [[1.19.0] - 2026-11-05](#1190---2026-11-05)
-  - [Added](#added-16)
   - [Changed](#changed-11)
-- [[1.18.0] - 2026-11-05](#1180---2026-11-05)
+- [[1.19.0] - 2026-11-05](#1190---2026-11-05)
   - [Added](#added-17)
   - [Changed](#changed-12)
-- [[1.17.0] - 2026-11-04](#1170---2026-11-04)
+- [[1.18.0] - 2026-11-05](#1180---2026-11-05)
   - [Added](#added-18)
   - [Changed](#changed-13)
+- [[1.17.0] - 2026-11-04](#1170---2026-11-04)
+  - [Added](#added-19)
+  - [Changed](#changed-14)
   - [Documentation](#documentation-4)
 - [[1.16.1] - 2026-11-04](#1161---2026-11-04)
   - [Fixed](#fixed-13)
 - [[1.16.0] - 2026-11-04](#1160---2026-11-04)
-  - [Added](#added-19)
+  - [Added](#added-20)
 - [[1.15.3] - 2026-11-04](#1153---2026-11-04)
   - [Fixed](#fixed-14)
 - [[1.15.2] - 2026-11-03](#1152---2026-11-03)
-  - [Security](#security-4)
+  - [Security](#security-5)
 - [[1.15.1] - 2026-11-03](#1151---2026-11-03)
   - [Fixed](#fixed-15)
-  - [Changed](#changed-14)
-- [[1.15.0] - 2026-11-03](#1150---2026-11-03)
-  - [Added](#added-20)
   - [Changed](#changed-15)
+- [[1.15.0] - 2026-11-03](#1150---2026-11-03)
+  - [Added](#added-21)
+  - [Changed](#changed-16)
   - [Fixed](#fixed-16)
 - [[1.14.1] - 2026-10-31](#1141---2026-10-31)
-  - [Changed](#changed-16)
-- [[1.14.0] - 2026-10-30](#1140---2026-10-30)
   - [Changed](#changed-17)
+- [[1.14.0] - 2026-10-30](#1140---2026-10-30)
+  - [Changed](#changed-18)
 - [[1.13.2] - 2026-10-30](#1132---2026-10-30)
   - [Fixed](#fixed-17)
 - [[1.13.1] - 2026-10-30](#1131---2026-10-30)
   - [Fixed](#fixed-18)
 - [[1.13.0] - 2026-10-30](#1130---2026-10-30)
-  - [Added](#added-21)
-  - [Changed](#changed-18)
-  - [Tests](#tests-3)
-- [[1.12.0] - 2026-10-30](#1120---2026-10-30)
   - [Added](#added-22)
   - [Changed](#changed-19)
+  - [Tests](#tests-3)
+- [[1.12.0] - 2026-10-30](#1120---2026-10-30)
+  - [Added](#added-23)
+  - [Changed](#changed-20)
 - [[1.11.3] - 2026-10-30](#1113---2026-10-30)
   - [Fixed](#fixed-19)
 - [[1.11.2] - 2026-10-29](#1112---2026-10-29)
@@ -138,68 +141,159 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.11.1] - 2026-10-29](#1111---2026-10-29)
   - [Fixed](#fixed-21)
 - [[1.11.0] - 2026-10-29](#1110---2026-10-29)
-  - [Added](#added-23)
+  - [Added](#added-24)
   - [Fixed](#fixed-22)
 - [[1.10.1] - 2026-10-29](#1101---2026-10-29)
-  - [Added](#added-24)
+  - [Added](#added-25)
   - [Fixed](#fixed-23)
 - [[1.10.0] - 2026-10-29](#1100---2026-10-29)
-  - [Added](#added-25)
-  - [Changed](#changed-20)
+  - [Added](#added-26)
+  - [Changed](#changed-21)
 - [[1.9.2] - 2026-10-29](#192---2026-10-29)
   - [Fixed](#fixed-24)
 - [[1.9.1] - 2026-10-29](#191---2026-10-29)
-  - [Added](#added-26)
+  - [Added](#added-27)
   - [Fixed](#fixed-25)
 - [[1.9.0] - 2026-10-29](#190---2026-10-29)
-  - [Added](#added-27)
+  - [Added](#added-28)
   - [Fixed](#fixed-26)
 - [[1.8.0] - 2026-10-29](#180---2026-10-29)
-  - [Added](#added-28)
-  - [Changed](#changed-21)
-- [[1.7.0] - 2026-10-29](#170---2026-10-29)
   - [Added](#added-29)
   - [Changed](#changed-22)
-- [[1.6.0] - 2026-10-23](#160---2026-10-23)
+- [[1.7.0] - 2026-10-29](#170---2026-10-29)
   - [Added](#added-30)
+  - [Changed](#changed-23)
+- [[1.6.0] - 2026-10-23](#160---2026-10-23)
+  - [Added](#added-31)
 - [[1.5.5] - 2026-10-21](#155---2026-10-21)
   - [Fixed](#fixed-27)
 - [[1.5.4] - 2026-10-20](#154---2026-10-20)
-  - [Changed](#changed-23)
+  - [Changed](#changed-24)
   - [Fixed](#fixed-28)
 - [[1.5.3] - 2026-10-20](#153---2026-10-20)
   - [Fixed](#fixed-29)
-  - [Changed](#changed-24)
+  - [Changed](#changed-25)
 - [[1.5.2] - 2026-10-18](#152---2026-10-18)
   - [Fixed](#fixed-30)
-  - [Added](#added-31)
+  - [Added](#added-32)
 - [[1.5.1] - 2026-10-18](#151---2026-10-18)
   - [Fixed](#fixed-31)
 - [[1.5.0] - 2026-10-18](#150---2026-10-18)
-  - [Added](#added-32)
-  - [Changed](#changed-25)
+  - [Added](#added-33)
+  - [Changed](#changed-26)
   - [Deprecated](#deprecated-1)
 - [[1.4.1] - 2026-10-18](#141---2026-10-18)
   - [Fixed](#fixed-32)
 - [[1.4.0] - 2026-10-16](#140---2026-10-16)
-  - [Added](#added-33)
-  - [Changed](#changed-26)
-  - [Fixed](#fixed-33)
-- [[1.3.0] - 2026-10-16](#130---2026-10-16)
   - [Added](#added-34)
   - [Changed](#changed-27)
-- [[1.2.0] - 2026-10-16](#120---2026-10-16)
+  - [Fixed](#fixed-33)
+- [[1.3.0] - 2026-10-16](#130---2026-10-16)
   - [Added](#added-35)
+  - [Changed](#changed-28)
+- [[1.2.0] - 2026-10-16](#120---2026-10-16)
+  - [Added](#added-36)
   - [Fixed](#fixed-34)
 - [[1.1.1] - 2026-10-16](#111---2026-10-16)
   - [Fixed](#fixed-35)
 - [[1.1.0] - 2026-10-16](#110---2026-10-16)
-  - [Added](#added-36)
+  - [Added](#added-37)
   - [Fixed](#fixed-36)
 - [[1.0.0] - 2026-10-16](#100---2026-10-16)
-  - [Added](#added-37)
+  - [Added](#added-38)
 
 ## [Unreleased]
+
+### Added
+
+- **Message search (spec 002, owner decision 2026-11-18), off by default (`search.enabled`).** A database full-text
+  search over the messages each viewer may read: the page `GET /chat/search` (FormKit form on the UiKit form theme,
+  works without JavaScript: words, from me, date range, has a link, one conversation), the endpoint
+  `GET /chat/api/search` (`{items, next}`, plain text) and a search link in the dock header (`search.dock_entry`).
+  - Engines: MySQL 8.4 / MariaDB 11.4 `MATCH … AGAINST` in boolean mode on a FULLTEXT index, PostgreSQL 16
+    `to_tsvector` / `to_tsquery` (`search.postgresql_config`, default `simple`) on a GIN expression index, `LIKE` for
+    short words, words with punctuation and other platforms (`search.fulltext: false`: `LIKE` only). Only letters and
+    digits ever reach a full-text operator.
+  - Visibility in the same SQL statement, evaluated on every search: direct conversations of the viewer, the viewer's
+    own tickets (every ticket for a support agent), the channels the provider lists for the viewer now; each row is
+    then checked again with `ChatAccess::canView()` and against the text the viewer sees.
+  - **Viewer-neutral search text** (audit VA2-1): a new nullable column `nowo_chat_message.search_text`, the plain text
+    with `#reference` tokens as a neutral `#…`, links as their text and mentions as `@Name`, written with every send,
+    edit, deletion and GDPR erasure in the same unit of work. The full-text index and every match (`MATCH`,
+    `to_tsvector`, `LIKE`) use it, never the stored Markdown, so no message is found through text a viewer cannot see
+    (a hidden reference title, a link URL, a mention id). Accepted loss: reference titles are not searchable. Rows
+    written before 1.37 stay NULL (never found) until `nowo:chat:search-backfill` fills them. Deleted messages, erased authors' tombstones, system / bot / buzz / pin lines and messages outside
+    the purge's retention window (or replies to roots outside it) are never found; an unreadable retention answers no
+    rows.
+  - Oracle-free: no counts; a forbidden and an unknown conversation, author or cursor give the same empty answer; a
+    full page always carries `next` and a short page none; the answer is byte-identical with and without a hidden
+    `#reference` title, also against padding with code spans or link URLs (tests on the three databases).
+    Keyset paging (newest first, `next` = the last row's uuid), `search.min_query_length` / `max_query_length` (400
+    `query_too_short` / `query_too_long`), at most 8 words, `search.page_size`, rate limiter `nowo_chat_search`
+    (`limits.searches_per_minute`, 30).
+  - Escaped excerpts: plain text only; the page escapes every segment and marks the words with `<mark>` itself.
+- `nowo:chat:search-backfill` fills `search_text` for older messages in batches (`--batch`, `--after-id`), one short
+  DBAL transaction each that reads its rows with `SELECT … FOR UPDATE`, never over a value a send or edit wrote (run it
+  once every node runs 1.37, and again after the last old node stopped); a lock conflict answers `CONFLICT_001` (exit 75) and
+  keeps the batches before it.
+- `nowo:chat:search-index --force` / `--drop` also drop, on PostgreSQL, the index of pre-release 1.37 builds
+  (`idx_nowo_chat_message_body_fts`, `CONCURRENTLY`), which no schema diff sees.
+- `nowo:chat:search-index` prints the index state and SQL, `--force` builds it (`CREATE INDEX CONCURRENTLY` on
+  PostgreSQL; an INVALID index of a failed build is dropped first), `--drop` removes it; a lock conflict stops it with
+  `CONFLICT_001` (exit 75): no usable index was built (on PostgreSQL an INVALID index may remain until `--force` runs
+  again; that run drops it first, so a second failure leaves none). On MySQL / MariaDB `ChatSearchSchemaListener` maps
+  the FULLTEXT index with `search.enabled` and `search.fulltext` on, and keeps an existing one mapped when either is off
+  (read at run time, `%env()%` safe), so `doctrine:migrations:diff` creates it and never drops it.
+- On MySQL / MariaDB / PostgreSQL a search with no word the full-text index can use (only short or punctuated words)
+  answers no rows instead of scanning the table.
+- **SearchKit provider** (`search_kit.enabled`, default false; registered only when `nowo-tech/search-kit-bundle` ^1.8
+  is installed): a **Messages** group of the Ctrl/⌘+K palette with the same permission rules, the `from:` filter,
+  results-page paging (pages 1 to 3) and recents re-checked on every display. Registered only when SearchKit's recents
+  are revalidated (`nowo_search_kit.recent.revalidate: true`) or off: with SearchKit's default a picked message excerpt
+  would stay in the browser's localStorage after a delete, an erasure or a lost access (`SearchKitRecentsPass`, fail
+  closed). The palette has its own bucket of `limits.searches_per_minute` (key `nowo_chat_search_palette_<public id>`, the page and
+  API key `nowo_chat_search_page_<public id>`, one token per search a call runs; `limits.searches_per_minute` is at
+  least 3) and relies on SearchKit's input debounce; the page and the API share theirs. Deny
+  by default for scopes, other filters and searches made by identifier for another user. `nowo-tech/search-kit-bundle` is suggested (and a dev requirement).
+- `ChatMessageSearch` (`query()`, `search()`, `find()`) for hosts that search from PHP; stateless (FrankenPHP worker
+  mode).
+- Translations of the search page, the errors and the palette group in the seven locales.
+- Tests: the permission matrix and identical answers for forbidden and unknown filters and cursors (kept-alive kernel,
+  several viewers in turn), escaping, bounds, the rate limit and paging; real-database tests on MySQL 8.4, MariaDB 11.4
+  and PostgreSQL 16 (index build, planner use, schema diff stability, engines, operator characters, a build blocked by
+  another session answering `CONFLICT_001`).
+
+### Security
+
+- **A `#reference` title holding a backtick was shown to every reader** (audit VA3-7; affects 1.9.0 to 1.36.1). The
+  stored token kept the backtick (`` #[Fix `foo](task:7) ``), and the renderer cut inline code first, so the backtick opened
+  a code span that showed the stored title as text in the message's HTML, for every reader, including those who may
+  not open the item. A backtick earlier on the same line (`` Let`s check … ``, an escaped `` \` ``, a quote or a list
+  item) could do the same, and made the writer's typed title be stored as is (audit VA4-1). And a reference that sat
+  inside code formatting — an inline code span or a fenced block, including one formed by a lone backtick or fence
+  earlier in the text, next to the same item outside code — was shown as written, its title with it (audit VA5). Now:
+  - no token title keeps a backtick: `ChatReferences::token()` and the composer (`tokenTitle()`) turn it into a space,
+    and `ChatReferences::safeTitles()` cleans every token-shaped title anywhere in a body before `validate()`, `parse()`,
+    `plainText()`, `neutralizeFor()` and the renderer read it (slots and tokens stay in step);
+  - reference titles are never shown inside code: the renderer shows every token-shaped text in an inline code span
+    or a fenced block as `#[…](type:id)` (accepted loss: such text a writer typed in code reads that way), and
+    `validate()` sets fenced blocks aside first, as `parse()` and the renderer do, so it resolves only the tokens they
+    see;
+  - messages whose stored HTML may show such a title (a token title with a backtick in the body, or a token with a
+    title in the stored HTML) are rendered again when shown (`ChatMarkdownRenderer::htmlOf()`,
+    through the application's configured renderer: the API, the pages, realtime payloads and `ChatMessageView` from the
+    services; a `ChatMessageView` built without one shows the escaped plain text).
+
+  Plain-text previews were not affected.
+
+### Changed
+
+- `ChatReferences::plainText()` (previews, push bodies, digests, search) leaves a `#reference` token inside a code span
+  or block as written instead of resolving it, as `validate()` and `neutralizeFor()` already do (audit VA2-2).
+- Schema: `nowo_chat_message.search_text` (nullable `TEXT`); generate the migration (UPGRADING).
+- Docs: USAGE (message search, SearchKit palette, JSON API row), CONFIGURATION (`search`, `search_kit`,
+  `limits.searches_per_minute`), UPGRADING (index build time and locks on big tables), CONCURRENCY (search write paths),
+  ROADMAP (full-text message search and the palette provider shipped) and the Spec Kit feature `specs/002-message-search/`.
 
 ## [1.36.1] - 2026-11-19
 

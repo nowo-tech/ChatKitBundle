@@ -41,6 +41,18 @@ export function decodeReferences(body: string): { text: string; references: Refe
 }
 
 /**
+ * The title as a token carries it, as the server's `ChatReferences::token()` writes it: brackets, backticks and white
+ * space become one space (1.37, audits VA3-7 / VA4-1: a backtick in a title could open a code span around the token).
+ *
+ * @param title The item title.
+ * @returns The token title (`?` when nothing is left).
+ */
+export function tokenTitle(title: string): string {
+  const cleaned = title.replace(/[[\]\s`]+/gu, ' ').trim();
+  return cleaned === '' ? '?' : cleaned;
+}
+
+/**
  * Turns `#Title` of the picked references back into tokens (longest titles first, whole titles only).
  *
  * @param text Composer text.
@@ -52,7 +64,7 @@ export function encodeReferences(text: string, references: ReferenceRef[]): stri
   let encoded = text;
   for (const reference of sorted) {
     const title = reference.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    encoded = encoded.replace(new RegExp(`(?<![\\p{L}\\p{N}_#\\[])#${title}(?![\\p{L}\\p{N}_\\]])`, 'gu'), `#[${reference.title}](${reference.type}:${reference.id})`);
+    encoded = encoded.replace(new RegExp(`(?<![\\p{L}\\p{N}_#\\[])#${title}(?![\\p{L}\\p{N}_\\]])`, 'gu'), `#[${tokenTitle(reference.title)}](${reference.type}:${reference.id})`);
   }
   return encoded;
 }

@@ -151,6 +151,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly ?ChatAuthorBadges $authorBadges = null,
         private readonly ?bool $messageContextMenu = null,
         private readonly array $messageMenu = [],
+        private readonly bool $searchDockEntry = false,
     ) {
     }
 
@@ -173,7 +174,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * extends; the 1.5 page extends the UiKit layout (`web_ui.layout_template`). 1.29: `nowo_chat_author_badges`, true
      * when the application aliased ChatAuthorBadgeProviderInterface (the dock's `author-badge` template is rendered only
      * then, so the dock markup of a host without badges is unchanged). 1.33: `nowo_chat_message_context_menu`, the
-     * `context_menu` option of each message's kebab (null: UiKit's `theme.context_menus` decides).
+     * `context_menu` option of each message's kebab (null: UiKit's `theme.context_menus` decides). 1.37:
+     * `nowo_chat_search_entry`, true when the dock header links to message search.
      *
      * @return array<string, mixed> The globals
      */
@@ -188,6 +190,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             // 1.35: the items of each message's menu, in order, with their group (separators between groups) and the
             // quick reactions row.
             'nowo_chat_message_menu' => $this->menuTemplate(),
+            // 1.37: the message search link of the dock header (`search.enabled` and `search.dock_entry`).
+            'nowo_chat_search_entry' => $this->searchDockEntry,
         ];
     }
 

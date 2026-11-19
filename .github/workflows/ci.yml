@@ -385,7 +385,8 @@ jobs:
         run: vendor/bin/phpunit --no-coverage --fail-on-skipped --filter 'ChatChannelRaceTest|ChatChannelLookalikeTest|ChatUserReferenceLookalikeTest'
 
   # 1.30 (Beacon spec 239): two-session lock wait and deadlock tests for ticket numbers and new messages on real
-  # servers (tests/Database). None may be skipped.
+  # servers (tests/Database). None may be skipped. 1.37: also message search (MessageSearchDatabaseTest: the full-text
+  # index on MySQL 8.4 / MariaDB 11.4 / PostgreSQL 16, the engines, the permission filter, a blocked index build).
   load:
     name: Load readiness (${{ matrix.name }})
     runs-on: ubuntu-latest
@@ -518,7 +519,7 @@ jobs:
           fail_ci_if_error: false
 
   # Audit LN-I4: the realtime resync Playwright spec (demo/symfony8/e2e/tests/resync.spec.ts; 1.34.1: and
-  # echo-before-post.spec.ts) on every pull request,
+  # echo-before-post.spec.ts; 1.37: and message-search.spec.ts) on every pull request,
   # against the demo booted from this checkout (the committed nowo-chat.js). The full e2e suite stays in demo-smoke.yml.
   resync-e2e:
     name: Realtime resync e2e (demo)

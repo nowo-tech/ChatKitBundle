@@ -54,10 +54,14 @@ business chat is expected to offer. It is a plan, not a commitment: every item b
   mark unread from a message, save for later with a Saved page, message info with read times and a reciprocal per-user
   opt-out).
 - **1.36 (planned):** forward to other conversations, one-level threads with follower unread, edit history.
+- **1.37 (merged, release pending):** message search — a database full-text search (MySQL / MariaDB FULLTEXT, PostgreSQL
+  `tsvector`) filtered in SQL to the messages each viewer may read, with filters (person, conversation, date, has a
+  link), a no-JavaScript page and a JSON endpoint, plus an optional SearchKit provider for the Ctrl/⌘+K palette (spec
+  `specs/002-message-search/`).
 
 ## Capability matrix
 
-Status: **Yes** shipped · **1.35** merged, release pending · **1.36** planned · **Partial** some of it · **No** missing.
+Status: **Yes** shipped · **1.35** merged, release pending · **1.36** planned · **1.37** merged, release pending (message search) · **Partial** some of it · **No** missing.
 
 | Area | Capability | Status |
 |---|---|---|
@@ -87,7 +91,7 @@ Status: **Yes** shipped · **1.35** merged, release pending · **1.36** planned 
 | Notifications | Realtime, Web Push, email digest, mute | Yes |
 | Notifications | Per-conversation level (all, mentions only, none), keyword alerts | No |
 | Search | People, links, support inbox | Yes |
-| Search | Full-text message search | No |
+| Search | Full-text message search, palette provider | 1.37 |
 | Organisation | Pins, archive, pinned links | Yes |
 | Organisation | Saved messages, mark unread | 1.35 |
 | Organisation | Unread-only view, jump to first unread | Partial |
@@ -127,10 +131,11 @@ Highest value for a team or business chat, building on what exists.
 
 ### Search
 
-- **Full-text message search.** A built-in database full-text search, filtered per viewer to the conversations they may
-  read, with filters (person, conversation, date, has link or file); finding past decisions is a core need.
-- **Search palette provider.** A SearchKit provider so messages and conversations show up in the Ctrl/⌘+K palette of
-  the host; one search box for the whole application.
+- **Full-text message search.** Shipped in 1.37 (merged, release pending): a built-in database full-text search,
+  filtered per viewer to the conversations they may read, with filters (person, conversation, date, has a link); the
+  "has a file" filter waits for attachments.
+- **Search palette provider.** Shipped in 1.37 for messages (SearchKit "Messages" group, `search_kit.enabled`);
+  conversations as a palette group are still to come.
 - **Search inside one conversation** with jump-to-result in the timeline.
 
 ### Conversations and membership

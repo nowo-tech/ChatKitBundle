@@ -2,7 +2,7 @@
 
 **Package**: `nowo-tech/chat-kit-bundle`  
 **Last audited**: 2026-11-17  
-**Production units**: **227/227**  
+**Production units**: **243/243** mapped below (the audit command counts more files: units added since 1.34 without an inventory row are listed in their feature specs)  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -14,6 +14,7 @@
 - Covers 1.33 (message menu and context menu, `FR-MENU-001`): one new unit `message-menu.ts`; `ChatApiController`, `ChatMarkdownRenderer`, `ChatPresenter`, `ChatDockExtension`, `Configuration`, `_templates.html.twig`, `thread.ts`, `dock.ts`, `api.ts`, `types.ts`, `nowo-chat.css` and the translations extended.
 - Covers 1.35 (richer message menu, `FR-MENU-002`): new units `ChatEmojiCatalog`, `ChatSavedMessage`, `ChatReadMark`, their repositories, `ChatMessageActions`, `ChatReadTimes`, `ChatMessageMenu` / `ChatMessageActionsInterface`, three events, `saved.html.twig`, `message-info.ts`, `saved-page.ts`; `ChatParticipant`, `ChatUserSettings`, `ChatService`, `ChatVoter`, the controllers, `ChatPersonalData`, `ChatPurgeCommand`, `ChatApiExceptionListener`, `ChatConflictResponseFormatter`, the templates, `thread.ts`, `message-menu.ts` and the translations extended.
 - Covers 1.36 (forward, threads, edit history, `FR-MENU-003`): new units `ChatMessageRevision`, `ChatThreadRead`, `ChatIdempotencyKey` and their repositories, `ChatMenuOptions`, `ChatDraft`, `ChatIdempotency`, `ChatThreads`, `ChatForwarder`, `ChatEditHistory`, `ChatForwardPolicyInterface` / `AllowAllChatForwardPolicy` / `ChatForwardRequest`, `ChatHistoryPolicyInterface` / `NoChatHistoryReaders` / `ChatHistoryRequest`, four events, `forward-dialog.ts`, `thread-panel.ts`; `ChatMessage`, `ChatService` (`post()`), `ChatMessageRepository`, `ChatVoter`, `ChatPresenter`, `ChatNotifier`, `ChatApiController`, `ChatMessageMenu`, `ChatPersonalData`, `ChatPurgeCommand`, the templates, `thread.ts`, `dock.ts`, `message-info.ts` and the translations extended.
+- Covers 1.37 (message search, `specs/002-message-search/`): new units under `src/Search/` and `src/SearchKit/`, `ChatSearchController`, `ChatSearchIndexCommand`, `ChatMessageSearchType`, `search.html.twig`; `Configuration`, `NowoChatKitExtension`, `services.php`, `ChatDockExtension`, `ChatPage`, `_templates.html.twig`, `nowo-chat.css` and the translations extended.
 - `src/Resources/assets/README.md` is documentation; `demo/` and `.symfony/` (Flex recipe, see `docs/INSTALLATION.md`) are out of inventory scope.
 
 ## Coverage summary
@@ -41,7 +42,8 @@
 | Private entity manager, savepoints & write concurrency | 14 |
 | Retention policy | 7 |
 | Browser (TypeScript) — feature modules | 15 |
-| **Total** | **227** |
+| Message search (1.37) | 16 |
+| **Total** | **243** |
 
 ## Bundle, configuration & DI
 
@@ -389,3 +391,27 @@
 | `src/Resources/assets/src/overlay.ts` | US-08 | FR-TS-010 |
 | `src/Resources/assets/src/message-menu.ts` | US-02, US-07 | FR-MENU-001, FR-TS-009 |
 | `src/Resources/views/_author_badges.html.twig` | US-08 | FR-BADGE-001, FR-TWIG-002 |
+
+## Message search (1.37)
+
+Spec: [`../002-message-search/spec.md`](../002-message-search/spec.md).
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/Search/ChatMessageSearch.php` | 002 US-01, US-02, US-03 | FR-001, FR-003, FR-004, FR-005, FR-007, FR-010 |
+| `src/Search/ChatMessageSearchSql.php` | 002 US-01, US-02 | FR-002, FR-003, FR-004 |
+| `src/Search/ChatMessageSearchQuery.php` | 002 US-04 | FR-006 |
+| `src/Search/ChatSearchQueryException.php` | 002 US-01 | FR-006 |
+| `src/Search/ChatMessageSearchHit.php` | 002 US-01 | FR-008 |
+| `src/Search/ChatMessageSearchPage.php` | 002 US-01 | FR-007 |
+| `src/Search/ChatSearchScope.php` | 002 US-02 | FR-003 |
+| `src/Search/ChatSearchText.php` | 002 US-01, US-03 | FR-005, FR-006, FR-008 |
+| `src/Search/ChatSearchIndex.php` | 002 US-06 | FR-002 |
+| `src/Search/ChatSearchSchemaListener.php` | 002 US-06 | FR-002 |
+| `src/Command/ChatSearchIndexCommand.php` | 002 US-06 | FR-002 |
+| `src/Command/ChatSearchBackfillCommand.php` | 002 US-06 | FR-012 |
+| `src/Controller/ChatSearchController.php` | 002 US-01, US-04 | FR-001, FR-006, FR-007, FR-008 |
+| `src/Form/ChatMessageSearchType.php` | 002 US-04 | FR-001 |
+| `src/Resources/views/search.html.twig` | 002 US-01 | FR-001, FR-008 |
+| `src/SearchKit/ChatMessageSearchProvider.php` | 002 US-05 | FR-009 |
+| `src/DependencyInjection/Compiler/SearchKitRecentsPass.php` | 002 US-05 | FR-009 |

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { decodeReferences, encodeReferences, ReferenceAutocomplete } from '../src/reference';
+import { decodeReferences, encodeReferences, ReferenceAutocomplete, tokenTitle } from '../src/reference';
 import type { Reference, ReferenceType } from '../src/types';
 
 const types: ReferenceType[] = [
@@ -27,6 +27,13 @@ describe('reference helpers', () => {
     expect(encodeReferences('#Deploy the API, #Deploy, #Deployment, x#Deploy, #C++ (x)!', refs)).toBe(
       '#[Deploy the API](task:2), #[Deploy](task:1), #Deployment, x#Deploy, #[C++ (x)](issue:3)!',
     );
+  });
+
+  it('never writes a backtick, a bracket or a line break into a token title (audits VA3-7 / VA4-1)', () => {
+    const refs = [{ type: 'task', id: '7', title: 'Fix `foo` crash' }];
+    expect(encodeReferences("Let`s check #Fix `foo` crash", refs)).toBe('Let`s check #[Fix foo crash](task:7)');
+    expect(tokenTitle('a [b]\n`c`')).toBe('a b c');
+    expect(tokenTitle('``')).toBe('?');
   });
 });
 

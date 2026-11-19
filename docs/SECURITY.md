@@ -39,6 +39,8 @@ whom).
 | Messenger messages `DeliverChatPushMessage`, `SendChatDigestMessage` (ids only) | Push / Digest dispatchers | Async workers |
 | Configuration (`nowo_chat_kit`), Flex recipe | DI extension | Deployer |
 | CLI `nowo:chat:purge` | `ChatPurgeCommand` | Operator |
+| 1.37 message search: `q`, `conversation`, `from`, `after`, `before`, `link`, `cursor` (≤ 200 characters of text, rate limited) | `ChatSearchController` (`/chat/search`, `/chat/api/search`), `ChatMessageSearchProvider` (SearchKit) | Signed-in users; rows filtered in SQL to what each may read, re-checked per row; forbidden and unknown values answer the same; plain-text excerpts (escaped on the page, text in JSON and the palette) |
+| CLI `nowo:chat:search-index` (DDL) | `ChatSearchIndexCommand` | Operator |
 | Browser storage (`nowo-chat*` keys), BroadcastChannel | TypeScript dock | Same browser, same origin |
 
 ## Threat model and mitigations
@@ -120,6 +122,19 @@ dependencies current. Security fixes are released as patch versions of the suppo
   `members()` consistent; call `ChatRecipients::forget()` when revoking access to a known conversation for an immediate
   effect.
 - **Link previews:** resolve only your own routes, authorize per viewer, never fetch remote URLs.
+- **1.37 message search: support agents search every ticket** (owner decision 2026-11-19), the same rule as the
+  conversation page and the agent inbox (`ChatAccessPolicyInterface::isSupportAgent()`), not only the tickets assigned
+  to them. Keep the agent list as small as the support work needs.
+- **1.37 message search: never found through hidden text.** The database matches a viewer-neutral search text
+  (`search_text`: `#reference` tokens as a neutral `#…`, no link URLs, no mention ids), never the stored Markdown, so
+  no row is found through a reference title, a link URL or a mention id (audits VA-1, VA2-1, VA3-6). The answer (rows
+  and `next`) is the same whether or not a conversation holds a hidden `#reference` title, including against padding
+  with code spans or link URLs (byte-compared tests on MySQL, MariaDB and PostgreSQL). A page that is not full carries
+  a cursor only when the search stopped after five reads of candidates the per-row checks dropped. Accepted loss: reference titles are not searchable.
+  Rows written before 1.37 are never found until `nowo:chat:search-backfill` has filled them.
+- **SearchKit palette.** ChatKit registers its provider only with revalidated recents
+  (`nowo_search_kit.recent.revalidate: true`, or recents off), so no message excerpt stays in the browser (audit VA-3);
+  the palette has its own search budget per user and relies on SearchKit's input debounce.
 - **Profile pictures (1.16):** `ChatAvatarUrlResolverInterface` must return stable URLs that your application checks when
   the browser fetches them. They travel in Mercure events and stay in the page, so a URL that carries a bearer
   signature (a pre-signed storage link) is unsupported: anyone who sees the payload can use it until it expires, and the

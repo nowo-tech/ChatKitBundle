@@ -219,8 +219,8 @@ final readonly class ChatPresenter
         $badges = $bot || $system ? [] : $this->authorBadges?->of($message) ?? [];
         // #references: cards the viewer may open, the neutral chip for the rest; empty slots without a viewer.
         $filled = $bot || $system || $message->isDeleted() || !$this->references instanceof ChatReferences
-            ? ['html' => $message->getBodyHtml(), 'references' => [], 'pending' => false]
-            : $this->references->fill($message->getBodyHtml(), $message->getBody(), $viewer);
+            ? ['html' => $this->markdown->htmlOf($message), 'references' => [], 'pending' => false]
+            : $this->references->fill($this->markdown->htmlOf($message), $message->getBody(), $viewer);
 
         return [
             'id'              => $message->getId(),

@@ -46,6 +46,10 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | Ticket numbers | a dedicated counter row with an atomic update | — |
 | GDPR erasure | one unit for the whole erasure | — |
 | `nowo:chat:purge` | small batches, each in its own statement or unit | re-run safe |
+| 1.37 message search (page, API, palette) | read-only: no write unit, no lock | — |
+| 1.37 `search_text` (audit VA2-1) | written by the entity with the text it derives from, in the same unit of work as send, edit, delete and GDPR erasure (no extra statement, no extra lock); the full-text index follows inside the database | — |
+| 1.37 `nowo:chat:search-backfill` | batches by id, one short connection-level transaction each (DBAL only: no entity manager flushed, cleared or reset); `UPDATE … WHERE search_text IS NULL`, so a concurrent send or edit always wins; a lock wait timeout, deadlock or `lock_timeout` rolls the batch back and stops with `CONFLICT_001` (exit 75), the batches before it kept | `--after-id` resumes; re-run safe |
+| 1.37 `nowo:chat:search-index --force` | one DDL statement outside any transaction (`CREATE INDEX CONCURRENTLY` cannot run in one; MySQL commits DDL itself); a lock wait timeout, deadlock or `lock_timeout` stops it with `CONFLICT_001` (exit 75): no usable index was built; on PostgreSQL an INVALID index may remain until `--force` runs again, which drops it before building (if that build fails too, no index is left); PostgreSQL search keeps working without it (slower), MySQL / MariaDB search needs it | re-run safe |
 
 ## Conflict answers
 
@@ -84,9 +88,17 @@ request: the request's `CommitMark` (taken at `kernel.request` with `commit_dete
 - `tests/Integration/Service/ChatMessageActionsTest` covers saving the same message twice and repeated mark unread.
 - 1.36: `ConcurrentWritersTest` also sends one forward from two workers under one key (one copy), concurrent replies
   in one thread (the count matches the replies) and concurrent edits of one message (every previous text is kept once).
+- 1.37: `tests/Database/MessageSearchDatabaseTest` also runs the backfill while a second session holds a row of the
+  batch: `CONFLICT_001` after the one-second wait, the first batch kept, the next run completes. It builds the search index while a second session holds a write lock on
+  the message table (MySQL 8.4, MariaDB 11.4, PostgreSQL 16): the command answers `CONFLICT_001` after the one-second
+  lock wait, no usable index is built (PostgreSQL may keep an INVALID one until the next `--force` drops it), and the connection builds
+  the index on the next try.
 
 ## Accepted residual risk
 
+- **1.37: a first MySQL / MariaDB FULLTEXT index blocks message writes while it builds** (InnoDB rebuilds the table).
+  Hosts build it in a maintenance window or with an online schema tool; see UPGRADING.md. PostgreSQL builds it
+  `CONCURRENTLY`.
 - **`message_menu.save.max_per_user` is a soft cap.** Two saves that race at the limit may both pass. No data is lost
   or duplicated: the unique key still holds, and the user is at most a few rows over the cap.
 - **Recipients are cached for 30 s.** Someone who just lost access may still receive realtime events of the

@@ -118,6 +118,15 @@ manager is cleared (audit MC-C-L1). Stock Symfony, including FrankenPHP worker m
 | `RuntimeSettingRetentionPolicyProvider` (`runtime.retention_days`) | ✅ | `final readonly`, no state: asks the contract's `RuntimeSettingResolver` on every call. The resolver's memo holds one value per unit of work and is cleared by the contract's `RuntimeSettingBoundaryListener` (main `kernel.request`, `kernel.terminate`, `console.command` / `console.terminate`, Messenger worker events) and `kernel.reset`. `ChatRuntimeRetentionTest` runs 50 `set` + `nowo:chat:purge` rounds alternating two values in one kept-alive kernel: every purge sees the latest value. |
 | `RetentionUnavailableException` | ✅ | Plain exception (setting id and reason, no stored value). |
 
+## 1.37.0 additions: message search (2026-11-19)
+
+| Unit | Status | Notes |
+| --- | --- | --- |
+| `ChatMessageSearch`, `ChatMessageSearchSql`, `ChatSearchIndex` | ✅ | `final readonly`, configuration and collaborators only. The viewer's scope (channel keys, agent flag) is built per call and passed down; nothing is memoised outside `ChatAccess`'s request attributes. The retention window is asked on every search (`ChatRetention`, as the purge). |
+| `ChatSearchController`, `ChatMessageSearchProvider` (SearchKit) | ✅ | Read the user per call; the provider compares it with the query's identifier every time. |
+| `ChatSearchSchemaListener` | ✅ | `final readonly`, the two table-name prefixes only. |
+| Verified without the services resetter | ✅ | `ChatMessageSearchTest::testPermissionMatrix` serves five viewers in turn from one kernel that is never rebooted (`disableReboot()`): each gets exactly their own rows. |
+
 ## Rules for future code
 
 - Keep presence, typing and counters in storage (database / cache pool / Mercure), never in service properties.

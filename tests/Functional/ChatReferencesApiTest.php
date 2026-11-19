@@ -66,7 +66,7 @@ final class ChatReferencesApiTest extends DatabaseTestCase
         self::assertStringContainsString(', #Forged, #Nope, #Ghost, ', $sent['html'], 'foreign, unknown and unregistered tokens become text');
         self::assertStringContainsString('<span class="nowo-chat-ref" data-ref-type="task" title="', $sent['html'], 'an unsafe URL renders no link');
         self::assertStringContainsString('nowo-chat-ref__badge--neutral', $sent['html'], 'an unknown tone is neutral');
-        self::assertStringContainsString('<code>#[code](task:1)</code>', $sent['html']);
+        self::assertStringContainsString('<code>#[…](task:1)</code>', $sent['html']);
         self::assertSame(['1', '2', '4'], array_column($sent['references'], 'id'));
         self::assertFalse($sent['refsPending']);
 

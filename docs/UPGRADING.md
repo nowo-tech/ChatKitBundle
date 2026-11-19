@@ -83,6 +83,142 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+**Target 1.37.0 (message search, opt-in).** From **1.36.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+**Schema (every host).** One nullable column on `nowo_chat_message`: `search_text`, the viewer-neutral plain text
+message search matches (audit VA2-1: `#reference` titles, link URLs and mention ids are not in it). From 1.37 every
+send, edit, deletion and GDPR erasure writes it in the same unit of work; rows written before stay NULL until the
+backfill fills them, and a NULL row is never found. Generate and run the migration:
+
+```bash
+php bin/console doctrine:migrations:diff   # then review and run the migration
+```
+
+It is equivalent to (default names):
+
+```sql
+-- MySQL 8.4 / MariaDB 11.4
+ALTER TABLE nowo_chat_message ADD search_text LONGTEXT DEFAULT NULL;
+-- PostgreSQL 16
+ALTER TABLE nowo_chat_message ADD search_text TEXT DEFAULT NULL;
+```
+
+Adding a nullable column without a default value is a metadata change on PostgreSQL 16, and `ALGORITHM=INSTANT` on
+MySQL 8.4 / MariaDB 11.4 **as long as the table has no FULLTEXT index**. With one (a pre-release 1.37 build), MySQL
+rebuilds the table (`ALGORITHM=COPY`, writes blocked for the whole copy) and MariaDB takes `LOCK=SHARED`: drop that
+index first (`nowo:chat:search-index --drop --force` on such a build, or plan a window). Every server still needs a
+short exclusive lock on the table for the change, which waits behind long transactions and blocks the writes queued
+behind it: run the migration with a lock wait limit (`SET SESSION lock_wait_timeout = 5;` on MySQL / MariaDB,
+`SET lock_timeout = '5s';` on PostgreSQL) and retry if it gives up. Nothing else changes until you set
+`search.enabled: true`: no route is added and no index is built.
+
+**1. Fill the search text of the existing messages.**
+
+```bash
+php bin/console nowo:chat:search-backfill            # --batch=500 (at most 2000), --after-id=<id> to resume
+```
+
+It walks the rows with a NULL search text by id; each batch is one short transaction (DBAL only: it never flushes,
+clears or resets an entity manager) that reads its rows with a row lock (`SELECT … FOR UPDATE`) and writes a row only
+while its search text is still NULL, so a send or an edit made meanwhile wins. **Run it once every node runs 1.37**,
+and **run it again after the last old node has stopped**: a node still on 1.36 writes messages without a search text
+(never found until filled). Safe while the chat is in use and safe to run again. A lock conflict stops it with `CONFLICT_001`
+and exit code 75: the batches before it are kept, and the message says which `--after-id` resumes it
+(REQ-RUNTIME-003 rule 6). Expect roughly the time of reading and updating every message once; on a busy table use a
+smaller `--batch`.
+
+**2. Build the index.** `php bin/console nowo:chat:search-index` prints the index state and the statement for your
+database (it follows `doctrine.table_prefix` / `doctrine.table_name_prefix`); `--force` runs it, `--drop` removes the
+index. Build it after the backfill (a FULLTEXT index on MySQL / MariaDB is cheaper to build once than to maintain row
+by row during the backfill).
+
+- **MySQL 8.4 / MariaDB 11.4.** With `search.enabled` and `search.fulltext` on, the index is part of the mapping, so
+  `doctrine:migrations:diff` adds it; with either off it stays mapped while it exists, so a diff never drops it:
+
+  ```sql
+  CREATE FULLTEXT INDEX idx_nowo_chat_message_search_fts ON nowo_chat_message (search_text);
+  ```
+
+- **PostgreSQL 16.** Doctrine cannot describe an expression index, so a diff neither creates nor drops it. Put the
+  statement in a migration that is **not transactional** (`public function isTransactional(): bool { return false; }`;
+  `CONCURRENTLY` refuses to run inside a transaction), or run the command:
+
+  ```sql
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_nowo_chat_message_search_fts ON nowo_chat_message
+    USING GIN (to_tsvector('simple'::regconfig, search_text));
+  ```
+
+- **Other platforms** (SQLite …) have no index: the search uses `LIKE` (fine for small tables only).
+
+**Build time and locks on big tables.** Plan it like any index build on the largest chat table:
+
+- **MySQL / MariaDB (InnoDB).** The first FULLTEXT index of a table rebuilds the whole table (InnoDB adds its hidden
+  `FTS_DOC_ID` column): count on roughly the time of a full table copy plus tokenising every message, and on extra disk
+  space of about the table's size while it runs. Writes to `nowo_chat_message` are blocked for the duration (sending a
+  message waits; `ALGORITHM=INPLACE, LOCK=NONE` is not available for a first FULLTEXT index). Run it in a maintenance
+  window, or build it with an online schema-change tool. Measure on a copy first: a
+  table of ten million short messages typically takes tens of minutes. `innodb_ft_min_token_size` (default 3) and the
+  server's stop-word list decide which words the index knows; shorter words are matched with `LIKE` (set
+  `search.mysql_min_token_length` to the server's value).
+- **PostgreSQL.** `CREATE INDEX CONCURRENTLY` keeps the table writable; it scans the table twice and waits for
+  transactions that were writing to it when it started, so it takes longer than a plain build (several minutes per ten
+  million rows is common; a GIN build is CPU-bound — raise `maintenance_work_mem` for the session to speed it up). If it
+  fails or is cancelled, PostgreSQL keeps an **INVALID** index: the command reports `invalid`, and `--force` drops it
+  and builds it again.
+- **A lock conflict** (a lock wait timeout, a deadlock, `lock_timeout`) stops the command with `CONFLICT_001` and exit
+  code 75 (REQ-RUNTIME-003 rule 6): no usable index was built; on PostgreSQL an INVALID index may remain until
+  `--force` runs again. That run drops the INVALID index before building, so if it fails as well no index is left
+  (PostgreSQL search still answers, through slower plans; MySQL / MariaDB search needs the index: keep `search.enabled` off until it is built). Run it again when the table is quieter.
+- `search.postgresql_config` (default `simple`: no stemming, no stop words, any language) is part of the index
+  expression: changing it means dropping and building the index again.
+
+**Pre-release builds on PostgreSQL.** A 1.37 development build created `idx_nowo_chat_message_body_fts` (on `body`),
+which no schema diff sees. `nowo:chat:search-index --force` (or `--drop --force`) drops it (`CONCURRENTLY`) when it is
+there. On MySQL / MariaDB it is no longer mapped, so the next diff drops it.
+
+**3. Turn it on.**
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            search:
+                enabled: true          # page /chat/search, GET /chat/api/search, dock header link
+            # Optional: a "Messages" group in the SearchKit palette (composer require nowo-tech/search-kit-bundle:^1.8)
+            search_kit:
+                enabled: true
+```
+
+**SearchKit palette.** `search_kit.enabled` needs SearchKit's recents revalidated:
+
+```yaml
+nowo_search_kit:
+    recent:
+        revalidate: true   # or enabled: false
+```
+
+Without it the provider is not registered (otherwise message excerpts picked in the palette would stay in the
+browser's localStorage after a delete, an erasure or a lost access). Palette searches share
+`limits.searches_per_minute` with the page and the API.
+
+**Turning search off later (MySQL / MariaDB).** The FULLTEXT index stays in the mapped schema while it exists, so a diff
+made with search off keeps it. Drop it on purpose with `nowo:chat:search-index --drop --force`.
+
+**Accepted loss.** `#reference` titles are not searchable (not even for readers who may open the item): the search text
+holds a neutral `#…` in their place, so a message can never be found through a title a viewer cannot see.
+
+**Words the index can use.** On MySQL / MariaDB / PostgreSQL a search made only of short or punctuated words answers no
+rows (no full table scan).
+
+The search obeys the purge's retention window (`retention_days` / `RetentionPolicyProviderInterface`): messages older
+than it are never found, even before `nowo:chat:purge` deletes them. A new rate limiter `nowo_chat_search`
+(`limits.searches_per_minute`, default 30) is added. See [USAGE.md](USAGE.md#message-search-137) and
+[CONFIGURATION.md](CONFIGURATION.md).
+
 ## To 1.36.1
 
 From **1.36.0**:

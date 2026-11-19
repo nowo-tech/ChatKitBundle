@@ -42,6 +42,7 @@ final readonly class ChatMessageMenu implements ChatMessageActionsInterface
         private ?ChatForwarder $forwarder = null,
         private ?ChatThreads $threads = null,
         private ?ChatEditHistory $history = null,
+        private ?ChatMarkdownRenderer $markdown = null,
     ) {
     }
 
@@ -64,7 +65,7 @@ final readonly class ChatMessageMenu implements ChatMessageActionsInterface
         $page = $this->actions->savedPage($actor, $before);
 
         return [
-            'items' => array_map(static fn (ChatSavedMessage $row): array => ['savedAt' => $row->getSavedAt()->format(DATE_ATOM), 'message' => ChatMessageView::of($row->getMessage())], $page['rows']),
+            'items' => array_map(fn (ChatSavedMessage $row): array => ['savedAt' => $row->getSavedAt()->format(DATE_ATOM), 'message' => ChatMessageView::of($row->getMessage(), $this->markdown)], $page['rows']),
             'next'  => $page['next'],
         ];
     }
@@ -96,7 +97,7 @@ final readonly class ChatMessageMenu implements ChatMessageActionsInterface
         }
         $this->assertKey($idempotencyKey);
 
-        return array_map(ChatMessageView::of(...), $this->forwarder->forward($actor, $source, $targets, $comment, $idempotencyKey)[0]);
+        return array_map(fn (ChatMessage $message): ChatMessageView => ChatMessageView::of($message, $this->markdown), $this->forwarder->forward($actor, $source, $targets, $comment, $idempotencyKey)[0]);
     }
 
     /**
@@ -110,7 +111,7 @@ final readonly class ChatMessageMenu implements ChatMessageActionsInterface
         $root = ChatThreads::rootOf($this->message($actor, $conversationUuid, $messageUuid, null));
         $page = $this->threads->page($actor, $root, $before, null);
 
-        return ['root' => ChatMessageView::of($root), 'replies' => array_map(ChatMessageView::of(...), $page['replies']), 'hasMore' => $page['hasMore'], 'readUpTo' => $page['readUpTo']];
+        return ['root' => ChatMessageView::of($root, $this->markdown), 'replies' => array_map(fn (ChatMessage $message): ChatMessageView => ChatMessageView::of($message, $this->markdown), $page['replies']), 'hasMore' => $page['hasMore'], 'readUpTo' => $page['readUpTo']];
     }
 
     /**
@@ -124,7 +125,7 @@ final readonly class ChatMessageMenu implements ChatMessageActionsInterface
         }
         $this->assertKey($idempotencyKey);
 
-        return ChatMessageView::of($this->threads->reply($actor, $root, $body, $idempotencyKey)[0]);
+        return ChatMessageView::of($this->threads->reply($actor, $root, $body, $idempotencyKey)[0], $this->markdown);
     }
 
     /**

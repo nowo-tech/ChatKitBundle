@@ -36,6 +36,7 @@ This bundle is **FrankenPHP worker mode friendly**, including worker mode with t
 - **Edit and delete** your own messages within 15 minutes ("You deleted this message" tombstone; nobody deletes someone else's), **relative times** today with the exact time on hover, **emoji reactions**, **buzz**, configurable **sounds**, **emoji picker**, light **Markdown** (sanitised on the server)
 - **Support inbox page data**, "report a problem" links with context (`data-nowo-chat-open`), moderation events
 - **Full-page chat** (`/chat/`) that also works without JavaScript; "open in a page" from every window
+- **Message search** (1.37, opt-in): database full-text search (MySQL / MariaDB FULLTEXT, PostgreSQL `tsvector`) filtered in SQL to the messages each viewer may read, a no-JavaScript search page, a JSON endpoint and an optional Ctrl/⌘+K palette group through `nowo-tech/search-kit-bundle` ([usage](docs/USAGE.md#message-search-137))
 - **Link previews** of your own pages (checked per viewer) and an optional **email digest** of unread conversations
 - **Web Push** only when the application is not open in any tab (your push stack, through one interface)
 - **Floating dock**: windows that survive navigation and stay in step across browser tabs; full-screen sheet on phones

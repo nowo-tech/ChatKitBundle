@@ -47,6 +47,9 @@ use Nowo\ChatKitBundle\Realtime\ChatRecipients;
 use Nowo\ChatKitBundle\Realtime\MercureChatRealtime;
 use Nowo\ChatKitBundle\Realtime\NullChatRealtime;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+use Nowo\ChatKitBundle\Search\ChatMessageSearch;
+use Nowo\ChatKitBundle\Search\ChatMessageSearchSql;
+use Nowo\ChatKitBundle\Search\ChatSearchIndex;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Nowo\ChatKitBundle\Service\ChatMentions;
@@ -118,6 +121,10 @@ return static function (ContainerConfigurator $container): void {
             '../../Support/ChatRetention.php',
             // 1.27: registered by the extension only with doctrine.private_entity_manager: true.
             '../../Doctrine/ChatKitRowLock.php',
+            // 1.37: search value objects and pure helpers; the schema listener and the SearchKit provider are registered by
+            // the extension only when their options are on (the provider also needs nowo-tech/search-kit-bundle).
+            '../../Search/{ChatSearchText,ChatMessageSearchQuery,ChatMessageSearchHit,ChatMessageSearchPage,ChatSearchScope,ChatSearchQueryException,ChatSearchSchemaListener}.php',
+            '../../SearchKit',
             '../../Doctrine/{ChatKitEntityManager,ChatKitManagerRegistry,ChatKitSavepoint,PrivateEntityManagerConnection,PrivateEntityManagerDriver,PrivateEntityManagerMiddleware,PrivateManagerRepositoryFactory}.php',
         ]);
     // REQ-SF-004 rule 7: controllers are NOT autoconfigured. On Symfony >= 7.3 autoconfiguration tags every #[Route]
@@ -274,11 +281,29 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$dialogRuntime', param('nowo_chat_kit.web_ui.dock.dialog_runtime'))
         ->arg('$packages', service('assets.packages')->nullOnInvalid())
         ->arg('$messageContextMenu', param('nowo_chat_kit.web_ui.message_context_menu'))
-        ->arg('$messageMenu', param('nowo_chat_kit.message_menu'));
+        ->arg('$messageMenu', param('nowo_chat_kit.message_menu'))
+        ->arg('$searchDockEntry', param('nowo_chat_kit.search.dock_link'));
     // 1.25: the host sections of the sidebar (UX icon names rendered with the dock's icon set).
     $services->get(ChatSidebar::class)
         ->arg('$iconRenderer', service(IconRendererInterface::class)->nullOnInvalid())
         ->arg('$iconSet', param('nowo_chat_kit.icon_set'));
+    // 1.37: message search (`search`); the retention window is the purge's.
+    $services->get(ChatMessageSearchSql::class)
+        ->arg('$fulltext', param('nowo_chat_kit.search.fulltext'))
+        ->arg('$postgresConfig', param('nowo_chat_kit.search.postgresql_config'))
+        ->arg('$mysqlMinTokenLength', param('nowo_chat_kit.search.mysql_min_token_length'));
+    $services->get(ChatSearchIndex::class)
+        ->arg('$postgresConfig', param('nowo_chat_kit.search.postgresql_config'))
+        ->arg('$tablePrefix', param('nowo_chat_kit.doctrine.table_prefix'))
+        ->arg('$tableNamePrefix', param('nowo_chat_kit.doctrine.table_name_prefix'));
+    $services->get(ChatMessageSearch::class)
+        ->arg('$enabled', param('nowo_chat_kit.search.enabled'))
+        ->arg('$minQueryLength', param('nowo_chat_kit.search.min_query_length'))
+        ->arg('$maxQueryLength', param('nowo_chat_kit.search.max_query_length'))
+        ->arg('$pageSize', param('nowo_chat_kit.search.page_size'))
+        ->arg('$retentionDays', param('nowo_chat_kit.retention_days'))
+        ->arg('$retention', service(RetentionPolicyProviderInterface::class))
+        ->arg('$logger', service('logger')->nullOnInvalid());
     $services->get(ChatPurgeCommand::class)
         ->arg('$retentionDays', param('nowo_chat_kit.retention_days'))
         ->arg('$retention', service(RetentionPolicyProviderInterface::class));

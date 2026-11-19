@@ -4764,6 +4764,52 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
   margin: 8px 0 0;
 }
 
+/* 1.37: message search page (same layout as the Saved page; the words are <mark> elements). */
+.nowo-chat-search__form {
+  margin: 0 0 16px;
+}
+.nowo-chat-search__list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nowo-chat-search__item {
+  padding: 12px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-window);
+  background: var(--nowo-chat-surface);
+}
+.nowo-chat-search__where {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 6px;
+  color: var(--nowo-chat-muted);
+  font-size: 0.8125rem;
+}
+.nowo-chat-search__conversation {
+  color: var(--nowo-chat-text);
+  font-weight: 600;
+}
+.nowo-chat-search__snippet {
+  margin: 0;
+  color: var(--nowo-chat-text);
+  overflow-wrap: anywhere;
+}
+.nowo-chat-search__snippet mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--nowo-chat-mention-bg, rgba(255, 213, 79, 0.45));
+  color: inherit;
+}
+.nowo-chat-search__actions {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0 0;
+}
+
 /* 1.36: edit history in message info. */
 .nowo-chat-info__subtitle {
   margin: 12px 0 6px;

@@ -83,6 +83,7 @@ final readonly class ChatMessaging implements ChatMessagingInterface
         ?TransactionRunnerInterface $transactions = null,
         private ?ChatParticipantRepository $participantRows = null,
         private ClockInterface $clock = new Clock(),
+        private ?ChatMarkdownRenderer $markdown = null,
     ) {
         $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
     }
@@ -151,7 +152,7 @@ final readonly class ChatMessaging implements ChatMessagingInterface
      */
     public function send(ChatUserInterface $author, string $conversationUuid, string $body): ChatMessageView
     {
-        return ChatMessageView::of($this->chat->send($author, $this->conversation($author, $conversationUuid, ChatVoter::SEND), $body));
+        return ChatMessageView::of($this->chat->send($author, $this->conversation($author, $conversationUuid, ChatVoter::SEND), $body), $this->markdown);
     }
 
     /**
@@ -159,7 +160,7 @@ final readonly class ChatMessaging implements ChatMessagingInterface
      */
     public function buzz(ChatUserInterface $author, string $conversationUuid): ChatMessageView
     {
-        return ChatMessageView::of($this->chat->buzz($author, $this->conversation($author, $conversationUuid, ChatVoter::SEND)));
+        return ChatMessageView::of($this->chat->buzz($author, $this->conversation($author, $conversationUuid, ChatVoter::SEND)), $this->markdown);
     }
 
     /**
@@ -170,7 +171,7 @@ final readonly class ChatMessaging implements ChatMessagingInterface
         $message = $this->message($actor, $conversationUuid, $messageUuid, ChatVoter::EDIT);
         $this->chat->edit($message, $body);
 
-        return ChatMessageView::of($message);
+        return ChatMessageView::of($message, $this->markdown);
     }
 
     /**
@@ -251,7 +252,7 @@ final readonly class ChatMessaging implements ChatMessagingInterface
     {
         $conversation = $this->find($conversationUuid) ?? throw new ChatNotFoundException('conversation', $conversationUuid);
 
-        return ChatMessageView::of($this->chat->postSystemLine($conversation, $body, $domain, $params));
+        return ChatMessageView::of($this->chat->postSystemLine($conversation, $body, $domain, $params), $this->markdown);
     }
 
     /**

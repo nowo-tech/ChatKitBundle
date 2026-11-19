@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Service;
 
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Link\ChatLinkUrls;
 
 use function count;
@@ -63,7 +64,8 @@ final class ChatMarkdownRenderer
      */
     public function render(string $markdown): string
     {
-        $text = str_replace(["\r\n", "\r"], "\n", trim(self::clean($markdown)));
+        // 1.37 (audit VA3-7): a backtick in a #reference title never opens a code span.
+        $text = str_replace(["\r\n", "\r"], "\n", trim(self::clean(ChatReferences::safeTitles($markdown))));
         if ($text === '') {
             return '';
         }
@@ -71,7 +73,8 @@ final class ChatMarkdownRenderer
         // Fenced code blocks are cut out first so no other rule touches their content.
         $blocks = [];
         $text   = (string) preg_replace_callback('/```(?:[a-z0-9_-]*\n)?(.*?)```/s', static function (array $m) use (&$blocks): string {
-            $blocks[] = '<pre><code>' . self::escape(rtrim($m[1], "\n")) . '</code></pre>';
+            // 1.37 (audit VA5-1/2): code never shows a reference title.
+            $blocks[] = '<pre><code>' . self::escape(ChatReferences::neutralTokens(rtrim($m[1], "\n"))) . '</code></pre>';
 
             return "\u{E000}B" . (count($blocks) - 1) . "\u{E000}";
         }, $text);
@@ -251,6 +254,33 @@ final class ChatMarkdownRenderer
      */
     public function plainText(string $markdown, int $maxLength = 120): string
     {
+        return self::plain($markdown, $maxLength);
+    }
+
+    /**
+     * 1.37 (audits VA3-7, VA5-1/2): the HTML of a stored message: its stored render, or a new one when its body holds a
+     * `#reference` token whose title has a backtick, or its stored render shows a token with a title (inside code: 1.9–1.36
+     * rendered code as written), since either can show the title to every reader.
+     *
+     * @param ChatMessage $message The message
+     *
+     * @return string The sanitized HTML
+     */
+    public function htmlOf(ChatMessage $message): string
+    {
+        return ChatReferences::isUnsafeStored($message->getBody(), $message->getBodyHtml()) ? $this->render($message->getBody()) : $message->getBodyHtml();
+    }
+
+    /**
+     * 1.37: {@see self::plainText()} as a pure function (the entity's search text is built with it, audit VA2-1).
+     *
+     * @param string $markdown The raw message text
+     * @param int $maxLength Maximum length in characters; longer text is cut and ends with an ellipsis
+     *
+     * @return string The plain text
+     */
+    public static function plain(string $markdown, int $maxLength = 120): string
+    {
         $text = (string) preg_replace([ChatMentions::TOKEN, ChatReferences::TOKEN, ChatLinkUrls::CARD_TOKEN, '~\[([^\]\n]{1,200})\]\(((?:https?://|mailto:)[^\s)]+)\)~i', '/```[a-z0-9_-]*\n?/', '/[*_~`]+/', '/^[ \t]*([-*+]|\d+[.)]|>)[ \t]*/m', '/\s+/'], ['@$1', '#…', '$1', '$1', '', '', '', ' '], self::clean($markdown));
         $text = trim($text);
 
@@ -261,7 +291,7 @@ final class ChatMarkdownRenderer
     {
         $codes = [];
         $text  = (string) preg_replace_callback('/`([^`\n]+)`/', static function (array $m) use (&$codes): string {
-            $codes[] = '<code>' . self::escape($m[1]) . '</code>';
+            $codes[] = '<code>' . self::escape(ChatReferences::neutralTokens($m[1])) . '</code>';
 
             return "\u{E000}C" . (count($codes) - 1) . "\u{E000}";
         }, $text);

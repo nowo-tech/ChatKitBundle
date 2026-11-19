@@ -20,6 +20,8 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Model\ChatUserReferenceInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Nowo\ChatKitBundle\RuntimeSetting\RuntimeSettingRetentionPolicyProvider;
+use Nowo\ChatKitBundle\Search\ChatSearchSchemaListener;
+use Nowo\ChatKitBundle\SearchKit\ChatMessageSearchProvider;
 use Nowo\ChatKitBundle\Support\ChatEmojiCatalog;
 use Nowo\ChatKitBundle\Support\ChatRetention;
 use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
@@ -31,6 +33,8 @@ use Nowo\RuntimeSettingContract\Contract\RuntimeSettingId;
 use Nowo\RuntimeSettingContract\Contract\RuntimeSettingResolver;
 use Nowo\RuntimeSettingContract\Contract\RuntimeSettingType;
 use Nowo\RuntimeSettingContract\Contract\Validator\IntRange;
+use Nowo\SearchKitBundle\Contract\SearchProviderInterface;
+use Nowo\SearchKitBundle\Contract\SearchReferenceResolverInterface;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\FileLocator;
@@ -46,6 +50,7 @@ use Symfony\Component\DependencyInjection\Reference;
 use function array_key_exists;
 use function class_exists;
 use function in_array;
+use function interface_exists;
 use function is_a;
 use function is_array;
 use function is_string;
@@ -110,6 +115,8 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 'nowo_chat_buzz'        => $limiter(1, $limits['buzz_interval_seconds'] . ' seconds'),
                 'nowo_chat_buzz_global' => $limiter($limits['buzz_per_minute'], '1 minute'),
                 'nowo_chat_mention_all' => $limiter($limits['mention_all_per_hour'], '1 hour'),
+                // 1.37: message searches (page, API, palette).
+                'nowo_chat_search' => $limiter($limits['searches_per_minute'], '1 minute'),
             ],
         ]);
 
@@ -206,6 +213,12 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
             $container->setParameter(Configuration::ALIAS . '.message_menu.' . $key, $value);
         }
         $container->setParameter(Configuration::ALIAS . '.accepted_reactions', $accepted);
+        // 1.37: message search and its optional SearchKit provider.
+        foreach ($profile['search'] as $key => $value) {
+            $container->setParameter(Configuration::ALIAS . '.search.' . $key, $value);
+        }
+        $container->setParameter(Configuration::ALIAS . '.search_kit.enabled', $profile['search_kit']['enabled']);
+        $container->setParameter(Configuration::ALIAS . '.search.dock_link', $profile['search']['enabled'] === true && $profile['search']['dock_entry'] === true);
 
         // #references: every application service implementing the contract is a provider.
         $container->registerForAutoconfiguration(ChatReferenceProviderInterface::class)->addTag(ChatReferenceProviderInterface::TAG);
@@ -237,6 +250,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         if ($userReference !== ChatUserReferences::STRING) {
             $container->removeDefinition(StringReferenceSchemaGuard::class);
         }
+        $this->registerSearch($container, $profile['search_kit']);
         $this->registerRuntimeRetention($container, $profile['runtime']['retention_days'] ?? null, $profile['retention_days']);
         $this->registerTableNames($container, $configs, $config['default_profile'], $profile['doctrine']);
         $this->registerPrivateEntityManager($container, $profile['doctrine']['private_entity_manager'], $profile['doctrine']['entity_manager']);
@@ -262,6 +276,34 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.web_ui.dock.dialog_runtime', $profile['web_ui']['dock']['dialog_runtime']);
         // 1.33: the message context menu (null = UiKit's theme flag).
         $container->setParameter(Configuration::ALIAS . '.web_ui.message_context_menu', $profile['web_ui']['message_context_menu']);
+    }
+
+    /**
+     * 1.37: {@see ChatSearchSchemaListener} maps the MySQL / MariaDB FULLTEXT index (with search on, or while the index
+     * exists: audit VA-4); with `search_kit.enabled` and nowo-tech/search-kit-bundle installed,
+     * {@see ChatMessageSearchProvider} is registered as a SearchKit provider and recent resolver (and refuses to run
+     * unless SearchKit revalidates recents: audit VA-3, {@see SearchKitRecentsPass}).
+     *
+     * @param array{enabled: bool, priority: int} $searchKit The processed `search_kit` options
+     */
+    private function registerSearch(ContainerBuilder $container, array $searchKit): void
+    {
+        // Audit VA-4: always registered (it keeps an existing index even with search off); the options are read at run time.
+        $container->register(ChatSearchSchemaListener::class, ChatSearchSchemaListener::class)
+            ->setArguments([
+                '%' . Configuration::ALIAS . '.doctrine.table_prefix%',
+                '%' . Configuration::ALIAS . '.doctrine.table_name_prefix%',
+                '%' . Configuration::ALIAS . '.search.enabled%',
+                '%' . Configuration::ALIAS . '.search.fulltext%',
+            ])
+            ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchema', 'method' => 'postGenerateSchema']);
+        if ($searchKit['enabled'] !== true || !interface_exists(SearchProviderInterface::class) || !interface_exists(SearchReferenceResolverInterface::class)) {
+            return;
+        }
+        $container->register(ChatMessageSearchProvider::class, ChatMessageSearchProvider::class)
+            ->setAutowired(true)
+            ->addTag(SearchProviderInterface::TAG, ['priority' => $searchKit['priority']])
+            ->addTag(SearchReferenceResolverInterface::REFERENCE_RESOLVER_TAG, ['priority' => $searchKit['priority']]);
     }
 
     /**
