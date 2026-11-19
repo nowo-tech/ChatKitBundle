@@ -68,7 +68,12 @@ final class MessageSearchDatabaseTest extends TestCase
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
         $this->em = $em;
-        (new SchemaTool($em))->updateSchema($em->getMetadataFactory()->getAllMetadata());
+        // Add what is missing (the FULLTEXT index on MySQL / MariaDB), never drop: the other tests' own tables stay.
+        foreach ((new SchemaTool($em))->getUpdateSchemaSql($em->getMetadataFactory()->getAllMetadata()) as $sql) {
+            if (preg_match('/^DROP (TABLE|SEQUENCE)\b/i', $sql) !== 1) {
+                $em->getConnection()->executeStatement($sql);
+            }
+        }
         foreach (['nowo_chat_message_link', 'nowo_chat_message_mention', 'nowo_chat_reaction', 'nowo_chat_message_revision', 'nowo_chat_saved_message', 'nowo_chat_thread_read', 'nowo_chat_read_mark', 'nowo_chat_message', 'nowo_chat_conversation_link', 'nowo_chat_participant', 'nowo_chat_ticket_counter', 'nowo_chat_conversation', 'nowo_chat_quick_reply', 'nowo_chat_user_settings', 'nowo_chat_idempotency', 'test_user'] as $table) {
             if ($this->connection()->createSchemaManager()->tablesExist([$table])) {
                 $this->connection()->executeStatement('DELETE FROM ' . $table);
