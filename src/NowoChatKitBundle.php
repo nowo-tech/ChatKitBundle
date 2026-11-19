@@ -9,6 +9,7 @@ use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerReferencesPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\RealtimeTransportPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\RuntimeRetentionPass;
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\SearchKitRecentsPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
@@ -51,6 +52,8 @@ final class NowoChatKitBundle extends Bundle
         $container->addCompilerPass(new TwigPathsPass());
         // 1.32: `runtime.retention_days` puts the runtime-setting adapter behind the retention port (resolver required).
         $container->addCompilerPass(new RuntimeRetentionPass());
+        // 1.37 (audit VA-3): the SearchKit provider only when SearchKit keeps no message text in the browser.
+        $container->addCompilerPass(new SearchKitRecentsPass());
     }
 
     /**

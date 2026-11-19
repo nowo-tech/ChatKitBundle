@@ -41,11 +41,12 @@ final class ChatMessageSearchTest extends DatabaseTestCase
     protected function chatKitConfig(): array
     {
         return match ($this->name()) {
-            'testOffByDefault'        => [],
-            'testPagingByCursor'      => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 2]]]],
-            'testRateLimit'           => ['profiles' => ['default' => ['search' => ['enabled' => true], 'limits' => ['searches_per_minute' => 2]]]],
-            'testDockLinkCanBeHidden' => ['profiles' => ['default' => ['search' => ['enabled' => true, 'dock_entry' => false]]]],
-            default                   => ['profiles' => ['default' => ['search' => ['enabled' => true]]]],
+            'testOffByDefault'                     => [],
+            'testPagingByCursor'                   => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 2]]]],
+            'testHiddenTitlesNeverChangeTheAnswer' => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 2]]]],
+            'testRateLimit'                        => ['profiles' => ['default' => ['search' => ['enabled' => true], 'limits' => ['searches_per_minute' => 2]]]],
+            'testDockLinkCanBeHidden'              => ['profiles' => ['default' => ['search' => ['enabled' => true, 'dock_entry' => false]]]],
+            default                                => ['profiles' => ['default' => ['search' => ['enabled' => true]]]],
         };
     }
 
@@ -237,6 +238,47 @@ final class ChatMessageSearchTest extends DatabaseTestCase
         self::assertStringContainsString('cursor=', $more);
         $crawler = $this->client->request(Request::METHOD_GET, $more);
         self::assertCount(2, $crawler->filter('[data-testid="chat-search-item"]'));
+    }
+
+    /**
+     * Audit VA-1: a message that matches only through a `#reference` title the viewer may not open must not change the
+     * answer — not the rows, and not `next` — or prefix searches could spell the title out letter by letter.
+     */
+    public function testHiddenTitlesNeverChangeTheAnswer(): void
+    {
+        $ana    = $this->user('Ana');
+        $luis   = $this->user('Luis');
+        $chat   = $this->get(ChatService::class);
+        $dm     = $chat->openDirect($ana, $luis);
+        $hidden = $chat->send($ana, $dm, 'placeholder without the word');
+        $chat->send($ana, $dm, 'a secret recipe');
+        $chat->send($ana, $dm, 'another secret plan');
+        $set = function (string $body) use ($hidden): void {
+            $this->em->createQueryBuilder()->update(ChatMessage::class, 'm')->set('m.body', ':body')->where('m.id = :id')
+                ->setParameter('body', $body)->setParameter('id', $hidden->getId())->getQuery()->execute();
+        };
+
+        // A full page (two rows): `next` is there whether or not an older row matches only through the hidden title.
+        $absent = $this->raw($luis, 'secret');
+        $set('see #[Secret plan](task:2)');
+        $present = $this->raw($luis, 'secret');
+        self::assertSame($absent, $present);
+        self::assertNotNull($this->search($luis, 'secret')['next']);
+        // Prefix probes of the title: identical answers too.
+        foreach (['sec', 'secr', 'secre'] as $prefix) {
+            $with = $this->raw($luis, $prefix);
+            $set('placeholder without the word');
+            self::assertSame($this->raw($luis, $prefix), $with, $prefix);
+            $set('see #[Secret plan](task:2)');
+        }
+        // A short page (one visible row): no `next`, with or without the hidden match.
+        $short = $this->raw($luis, 'recipe secret');
+        $set('placeholder without the word');
+        self::assertSame($short, $this->raw($luis, 'recipe secret'));
+        self::assertNull($this->search($luis, 'recipe secret')['next']);
+        // Ana may open the reference: the row is hers to find.
+        $set('see #[Secret plan](task:2)');
+        self::assertCount(2, $this->search($ana, 'secret')['items']);
     }
 
     public function testBounds(): void

@@ -65,11 +65,12 @@ option.
   for words of letters and digits at least `search.mysql_min_token_length` long; PostgreSQL 16 uses
   `to_tsvector('<config>', body) @@ to_tsquery('<config>', 'word:* & …')`; every other word, and every word on other
   platforms or with `search.fulltext: false`, is a case-insensitive `LIKE` with escaped wildcards. No operator of the
-  user's text ever reaches the server.
+  user's text ever reaches the server. On MySQL / MariaDB / PostgreSQL with `search.fulltext`, a query with no word the
+  index can use (only short or punctuated words) answers no rows instead of scanning the table (audit VA-7).
 - **FR-003** Visibility in SQL, evaluated at query time: direct conversations where the viewer has a participant row;
   support tickets the viewer owns, or every ticket for a support agent (`ChatAccessPolicyInterface::isSupportAgent()`);
-  channels the provider grants now (`channelsFor()` plus the channels the viewer has a participant row in, each
-  re-checked with `canUse()`). Every row is re-checked with `ChatAccess::canView()` before it is shown.
+  channels the provider lists for the viewer now and still allows: `channelsFor()` ∩ `canUse()` (a channel the provider
+  would let the viewer open but does not list is not searched). Every row is re-checked with `ChatAccess::canView()` before it is shown.
 - **FR-004** Only `text` and `auto` messages that are not deleted, created inside the retention window (the same days
   the purge uses), whose thread root (if any) is inside it too. If the retention cannot be read, the search answers no
   rows (fail closed).
@@ -79,13 +80,17 @@ option.
 - **FR-006** Bounds: the text is trimmed, at least `search.min_query_length` (default 2) and at most
   `search.max_query_length` (default 200) characters, at most 8 distinct words; longer text answers `400
   query_too_long`; a rate limit `limits.searches_per_minute` (default 30) answers 429.
-- **FR-007** Paging by keyset: newest first (`id` descending), `search.page_size` rows (default 20), `next` is the uuid
-  of the last row; a cursor the viewer may not read answers like the end of the list.
+- **FR-007** Paging by keyset: newest first (`id` descending), `search.page_size` rows (default 20). A full page
+  always carries `next` (the uuid of its last row), a list whose candidates end first never does, and reads stopped by
+  the round limit go on from the last readable row read, so `next` never depends on rows the viewer does not see
+  (audit VA-1). A cursor the viewer may not read answers like the end of the list.
 - **FR-008** Snippets are plain text (at most 200 characters around the first match). The page marks the words with
   `<mark>` around Twig-escaped segments; the JSON carries plain text only; the palette receives plain text (SearchKit
   escapes it).
 - **FR-009** The SearchKit provider (`ChatMessageSearchProvider`) is registered only when SearchKit's provider
-  interface exists and `search_kit.enabled` is true. It answers only for the signed-in user whose identifier is the
+  interface exists, `search_kit.enabled` is true and SearchKit keeps no message text in the browser (`recent.revalidate:
+  true`, or recents off; audit VA-3). It spends one token of `limits.searches_per_minute` per call, shared with the page
+  and the API, and serves results pages 1 to 3 (audit VA-2). It answers only for the signed-in user whose identifier is the
   query's identifier (no rows for a search made by identifier), supports the `from:` filter (`me` or a public id),
   pages through `PaginatedSearchProviderInterface`, and re-checks recents (`SearchReferenceResolverInterface`). No total
   is reported (SearchKit shows the number of returned rows).

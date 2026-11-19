@@ -250,7 +250,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         if ($userReference !== ChatUserReferences::STRING) {
             $container->removeDefinition(StringReferenceSchemaGuard::class);
         }
-        $this->registerSearch($container, $profile['search'], $profile['search_kit']);
+        $this->registerSearch($container, $profile['search_kit']);
         $this->registerRuntimeRetention($container, $profile['runtime']['retention_days'] ?? null, $profile['retention_days']);
         $this->registerTableNames($container, $configs, $config['default_profile'], $profile['doctrine']);
         $this->registerPrivateEntityManager($container, $profile['doctrine']['private_entity_manager'], $profile['doctrine']['entity_manager']);
@@ -279,20 +279,24 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     }
 
     /**
-     * 1.37: with `search.enabled` and `search.fulltext`, {@see ChatSearchSchemaListener} maps the MySQL / MariaDB FULLTEXT
-     * index (so a migration diff creates it); with `search_kit.enabled` and nowo-tech/search-kit-bundle installed,
-     * {@see ChatMessageSearchProvider} is registered as a SearchKit provider and recent resolver. Nothing otherwise.
+     * 1.37: {@see ChatSearchSchemaListener} maps the MySQL / MariaDB FULLTEXT index (with search on, or while the index
+     * exists: audit VA-4); with `search_kit.enabled` and nowo-tech/search-kit-bundle installed,
+     * {@see ChatMessageSearchProvider} is registered as a SearchKit provider and recent resolver (and refuses to run
+     * unless SearchKit revalidates recents: audit VA-3, {@see SearchKitRecentsPass}).
      *
-     * @param array{enabled: bool, fulltext: bool} $search The processed `search` options
      * @param array{enabled: bool, priority: int} $searchKit The processed `search_kit` options
      */
-    private function registerSearch(ContainerBuilder $container, array $search, array $searchKit): void
+    private function registerSearch(ContainerBuilder $container, array $searchKit): void
     {
-        if ($search['enabled'] === true && $search['fulltext'] === true) {
-            $container->register(ChatSearchSchemaListener::class, ChatSearchSchemaListener::class)
-                ->setArguments(['%' . Configuration::ALIAS . '.doctrine.table_prefix%', '%' . Configuration::ALIAS . '.doctrine.table_name_prefix%'])
-                ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchema', 'method' => 'postGenerateSchema']);
-        }
+        // Audit VA-4: always registered (it keeps an existing index even with search off); the options are read at run time.
+        $container->register(ChatSearchSchemaListener::class, ChatSearchSchemaListener::class)
+            ->setArguments([
+                '%' . Configuration::ALIAS . '.doctrine.table_prefix%',
+                '%' . Configuration::ALIAS . '.doctrine.table_name_prefix%',
+                '%' . Configuration::ALIAS . '.search.enabled%',
+                '%' . Configuration::ALIAS . '.search.fulltext%',
+            ])
+            ->addTag('doctrine.event_listener', ['event' => 'postGenerateSchema', 'method' => 'postGenerateSchema']);
         if ($searchKit['enabled'] !== true || !interface_exists(SearchProviderInterface::class) || !interface_exists(SearchReferenceResolverInterface::class)) {
             return;
         }

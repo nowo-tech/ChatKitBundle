@@ -110,7 +110,10 @@ final readonly class ChatMessageSearchSql
         if ($beforeId !== null) {
             $qb->andWhere('m.' . $messages->getSingleIdentifierColumnName() . ' < :beforeId')->setParameter('beforeId', $beforeId);
         }
-        $this->match($qb, 'm.' . $messages->getColumnName('body'), $query->words);
+        if (!$this->match($qb, 'm.' . $messages->getColumnName('body'), $query->words)) {
+            // Full-text platforms only (audit VA-7): covered by tests/Database on MySQL, MariaDB and PostgreSQL.
+            return []; // @codeCoverageIgnore
+        }
 
         return array_map(intval(...), $qb->executeQuery()->fetchFirstColumn());
     }
@@ -183,15 +186,22 @@ final readonly class ChatMessageSearchSql
     /**
      * @param list<string> $words
      */
-    private function match(QueryBuilder $qb, string $body, array $words): void
+    private function match(QueryBuilder $qb, string $body, array $words): bool
     {
-        [$conditions, $parameters] = $this->textMatch($this->entityManager->getConnection()->getDatabasePlatform(), $body, $words);
+        $match = $this->textMatch($this->entityManager->getConnection()->getDatabasePlatform(), $body, $words);
+        if ($match === null) {
+            // Full-text platforms only (audit VA-7): covered by tests/Database; textMatch() itself by the unit tests.
+            return false; // @codeCoverageIgnore
+        }
+        [$conditions, $parameters] = $match;
         foreach ($conditions as $condition) {
             $qb->andWhere($condition);
         }
         foreach ($parameters as $name => $value) {
             $qb->setParameter($name, $value);
         }
+
+        return true;
     }
 
     /**
@@ -201,9 +211,13 @@ final readonly class ChatMessageSearchSql
      * @param string $body The qualified body column
      * @param list<string> $words The query words (lower case)
      *
-     * @return array{0: list<string>, 1: array<string, string>} The conditions (all must hold) and their parameters
+     * @return array{0: list<string>, 1: array<string, string>}|null The conditions (all must hold) and their parameters;
+     *                                                               null (audit VA-7) on a full-text platform when no
+     *                                                               word can use the index (only short or punctuated
+     *                                                               words: a LIKE scan of the whole table), which
+     *                                                               answers no rows like any query without a match
      */
-    public function textMatch(AbstractPlatform $platform, string $body, array $words): array
+    public function textMatch(AbstractPlatform $platform, string $body, array $words): ?array
     {
         $mysql    = $this->fulltext && $platform instanceof AbstractMySQLPlatform;
         $postgres = $this->fulltext && $platform instanceof PostgreSQLPlatform;
@@ -218,6 +232,9 @@ final readonly class ChatMessageSearchSql
             } else {
                 $like[] = $word;
             }
+        }
+        if ($terms === [] && ($mysql || $postgres)) {
+            return null;
         }
         $conditions = [];
         $parameters = [];

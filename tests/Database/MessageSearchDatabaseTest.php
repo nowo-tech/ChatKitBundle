@@ -100,6 +100,14 @@ final class MessageSearchDatabaseTest extends TestCase
         // A schema diff of the mapping keeps it (mapped on MySQL / MariaDB, invisible to DBAL on PostgreSQL).
         $diff = (new SchemaTool($this->em))->getUpdateSchemaSql($this->em->getMetadataFactory()->getAllMetadata());
         self::assertSame([], array_values(array_filter($diff, static fn (string $sql): bool => str_contains($sql, $index->name()))), implode("\n", $diff));
+        // Audit VA-4: with search turned off, a diff keeps the index that exists.
+        $off = new TestKernel(['profiles' => ['default' => ['search' => ['enabled' => false]]]]);
+        $off->boot();
+        $offManager = $off->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
+        assert($offManager instanceof EntityManagerInterface);
+        $offDiff = (new SchemaTool($offManager))->getUpdateSchemaSql($offManager->getMetadataFactory()->getAllMetadata());
+        $off->shutdown();
+        self::assertSame([], array_values(array_filter($offDiff, static fn (string $sql): bool => str_contains($sql, $index->name()))), implode("\n", $offDiff));
         // The command: the state and the SQL; --force again is a no-op.
         $output = $this->command([])->getDisplay();
         self::assertStringContainsString($index->name(), $output);
@@ -143,7 +151,8 @@ final class MessageSearchDatabaseTest extends TestCase
         self::assertSame($this->uuids([$a, $b, $c, $e]), $this->find($ana, 'invoice'), 'prefix: invoice also finds Invoices');
         self::assertSame($this->uuids([$a, $b, $c, $d]), $this->find($luis, 'invoice'));
         self::assertSame($this->uuids([$a]), $this->find($ana, 'invoice march'), 'every word');
-        self::assertSame($this->uuids([$a]), $this->find($ana, 'C-12'), 'punctuation through LIKE');
+        self::assertSame($this->uuids([$a]), $this->find($ana, 'order C-12'), 'punctuation through LIKE, next to an indexed word');
+        self::assertSame([], $this->find($ana, 'C-12'), 'audit VA-7: no indexable word, no table scan: no rows');
         self::assertSame($this->uuids([$b]), $this->find($ana, 'ok invoices'), 'a short word through LIKE on MySQL');
         self::assertSame($this->uuids([$c]), $this->find($ana, '2026'), 'digits');
         // Boolean-mode and tsquery operators are plain text: no error, no widening.

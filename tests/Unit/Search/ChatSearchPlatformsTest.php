@@ -49,17 +49,21 @@ final class ChatSearchPlatformsTest extends TestCase
             ['terms' => 'invoice:* & ok:*', 'like0' => '%c-12%', 'like1' => '%50!%!_off!!%'],
         ], $sql->textMatch(new PostgreSQLPlatform(), 'm.body', $words));
 
-        [$conditions] = (new ChatMessageSearchSql($this->createMock(EntityManagerInterface::class), true, 'english'))->textMatch(new PostgreSQLPlatform(), 'b', ['x']);
+        [$conditions] = (new ChatMessageSearchSql($this->createMock(EntityManagerInterface::class), true, 'english'))->textMatch(new PostgreSQLPlatform(), 'b', ['x']) ?? [[], []];
         self::assertSame(["to_tsvector('english'::regconfig, b) @@ to_tsquery('english'::regconfig, :terms)"], $conditions);
 
         // Other platforms and `fulltext: false`: LIKE only.
         foreach ([[new OraclePlatform(), true], [new MySQL80Platform(), false], [new PostgreSQLPlatform(), false]] as [$platform, $fulltext]) {
-            [$conditions, $parameters] = (new ChatMessageSearchSql($this->createMock(EntityManagerInterface::class), $fulltext))->textMatch($platform, 'b', ['invoice']);
+            [$conditions, $parameters] = (new ChatMessageSearchSql($this->createMock(EntityManagerInterface::class), $fulltext))->textMatch($platform, 'b', ['invoice']) ?? [[], []];
             self::assertSame(["LOWER(b) LIKE :like0 ESCAPE '!'"], $conditions);
             self::assertSame(['like0' => '%invoice%'], $parameters);
         }
+        // Audit VA-7: on a full-text platform a query with no indexable word is refused (no table scan).
+        self::assertNull($sql->textMatch(new MySQL80Platform(), 'b', ['ok', 'c-12']));
+        self::assertNull($sql->textMatch(new PostgreSQLPlatform(), 'b', ['c-12']));
+        self::assertNotNull($sql->textMatch(new OraclePlatform(), 'b', ['c-12']));
         // A lower MySQL token size sends short words to the index.
-        self::assertSame('+ok*', (new ChatMessageSearchSql($this->createMock(EntityManagerInterface::class), true, 'simple', 2))->textMatch(new MySQL80Platform(), 'b', ['ok'])[1]['terms']);
+        self::assertSame('+ok*', (new ChatMessageSearchSql($this->createMock(EntityManagerInterface::class), true, 'simple', 2))->textMatch(new MySQL80Platform(), 'b', ['ok'])[1]['terms'] ?? null);
     }
 
     public function testInvalidPostgresConfig(): void
@@ -163,7 +167,7 @@ final class ChatSearchPlatformsTest extends TestCase
 
     public function testSchemaListener(): void
     {
-        $listener = new ChatSearchSchemaListener('', 'nowo_chat_');
+        $listener = new ChatSearchSchemaListener('', 'nowo_chat_', true, true);
 
         // MySQL: the index is added once.
         [$entityManager] = $this->entityManager(new MySQL80Platform());
@@ -182,6 +186,17 @@ final class ChatSearchPlatformsTest extends TestCase
             $schema->createTable('nowo_chat_message')->addColumn('body', 'text');
             $listener->postGenerateSchema(new GenerateSchemaEventArgs($other, $schema));
             self::assertSame([], $schema->getTable('nowo_chat_message')->getIndexes());
+        }
+
+        // Audit VA-4: with search (or full text) off, the index is mapped only while it exists in the database, so a diff
+        // never drops it and a host that never used search never gets one.
+        foreach ([[false, true, 1, true], [false, true, false, false], [true, false, 1, true], [true, false, false, false]] as [$enabled, $fulltext, $found, $mapped]) {
+            [$entityManager, $connection] = $this->entityManager(new MySQL80Platform());
+            $connection->method('fetchOne')->willReturn($found);
+            $schema = new Schema();
+            $schema->createTable('nowo_chat_message')->addColumn('body', 'text');
+            (new ChatSearchSchemaListener('', 'nowo_chat_', $enabled, $fulltext))->postGenerateSchema(new GenerateSchemaEventArgs($entityManager, $schema));
+            self::assertSame($mapped, $schema->getTable('nowo_chat_message')->hasIndex('idx_nowo_chat_message_body_fts'));
         }
     }
 

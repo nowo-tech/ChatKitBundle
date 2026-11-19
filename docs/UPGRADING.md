@@ -131,7 +131,9 @@ index.
   fails or is cancelled, PostgreSQL keeps an **INVALID** index: the command reports `invalid`, and `--force` drops it
   and builds it again.
 - **A lock conflict** (a lock wait timeout, a deadlock, `lock_timeout`) stops the command with `CONFLICT_001` and exit
-  code 75: nothing was built, run it again when the table is quieter (REQ-RUNTIME-003 rule 6).
+  code 75 (REQ-RUNTIME-003 rule 6): no usable index was built; on PostgreSQL an INVALID index may remain until
+  `--force` runs again. That run drops the INVALID index before building, so if it fails as well no index is left
+  (PostgreSQL search still answers, through slower plans; MySQL / MariaDB search needs the index: keep `search.enabled` off until it is built). Run it again when the table is quieter.
 - `search.postgresql_config` (default `simple`: no stemming, no stop words, any language) is part of the index
   expression: changing it means dropping and building the index again.
 
@@ -147,6 +149,24 @@ nowo_chat_kit:
             search_kit:
                 enabled: true
 ```
+
+**SearchKit palette.** `search_kit.enabled` needs SearchKit's recents revalidated:
+
+```yaml
+nowo_search_kit:
+    recent:
+        revalidate: true   # or enabled: false
+```
+
+Without it the provider is not registered (otherwise message excerpts picked in the palette would stay in the
+browser's localStorage after a delete, an erasure or a lost access). Palette searches share
+`limits.searches_per_minute` with the page and the API.
+
+**Turning search off later (MySQL / MariaDB).** The FULLTEXT index stays in the mapped schema while it exists, so a diff
+made with search off keeps it. Drop it on purpose with `nowo:chat:search-index --drop --force`.
+
+**Words the index can use.** On MySQL / MariaDB / PostgreSQL a search made only of short or punctuated words answers no
+rows (no full table scan).
 
 The search obeys the purge's retention window (`retention_days` / `RetentionPolicyProviderInterface`): messages older
 than it are never found, even before `nowo:chat:purge` deletes them. A new rate limiter `nowo_chat_search`

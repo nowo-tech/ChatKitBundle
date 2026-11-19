@@ -19,6 +19,8 @@ use Nowo\SearchKitBundle\Model\SearchItem;
 use Nowo\SearchKitBundle\Model\SearchQuery;
 use Nowo\SearchKitBundle\Model\SearchReference;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -59,14 +61,18 @@ final readonly class ChatMessageSearchProvider implements FilterableSearchProvid
     /** The author filter (`from:me`, `from:<public id>`). */
     public const string FILTER_FROM = 'from';
 
-    /** Deepest results page served (each page reads the pages before it). */
-    public const int MAX_PAGE = 10;
+    /**
+     * Deepest results page served. Each page replays the pages before it (keyset cursors), so the bound keeps one call
+     * to at most MAX_PAGE searches (audit VA-2).
+     */
+    public const int MAX_PAGE = 3;
 
     /**
      * @param ChatMessageSearch $search Message search
      * @param Security $security The signed-in user
      * @param UrlGeneratorInterface $urls Links to the messages and to the search page
      * @param TranslatorInterface $translator The group label
+     * @param RateLimiterFactoryInterface $searchLimiter `limits.searches_per_minute`, the budget of the search page and API
      * @param CurrentChatUserResolverInterface|null $currentUser The participant of the signed-in user (null: the security user itself)
      */
     public function __construct(
@@ -74,6 +80,8 @@ final readonly class ChatMessageSearchProvider implements FilterableSearchProvid
         private Security $security,
         private UrlGeneratorInterface $urls,
         private TranslatorInterface $translator,
+        #[Autowire(service: 'limiter.nowo_chat_search')]
+        private RateLimiterFactoryInterface $searchLimiter,
         private ?CurrentChatUserResolverInterface $currentUser = null,
     ) {
     }
@@ -101,6 +109,10 @@ final readonly class ChatMessageSearchProvider implements FilterableSearchProvid
         }
         $from = $query->filtersOf(self::FILTER_FROM);
         if (count($from) > 1 || ($from !== [] && $from[0]->negated) || count($query->filters) !== count($from)) {
+            return null;
+        }
+        // Audit VA-2: one token of the shared search budget per call (page, API and palette together); over it, no rows.
+        if (!$this->searchLimiter->create('nowo_chat_search_' . $viewer->getChatPublicId())->consume()->isAccepted()) {
             return null;
         }
         try {

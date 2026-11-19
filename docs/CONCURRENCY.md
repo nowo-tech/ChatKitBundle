@@ -47,7 +47,7 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | GDPR erasure | one unit for the whole erasure | — |
 | `nowo:chat:purge` | small batches, each in its own statement or unit | re-run safe |
 | 1.37 message search (page, API, palette) | read-only: no write unit, no lock; the database keeps the full-text index up to date inside the message writes above (no derived table, so nothing to drift or replay) | — |
-| 1.37 `nowo:chat:search-index --force` | one DDL statement outside any transaction (`CREATE INDEX CONCURRENTLY` cannot run in one; MySQL commits DDL itself); a lock wait timeout, deadlock or `lock_timeout` stops it with `CONFLICT_001` (exit 75) and nothing built; an INVALID index left by a failed PostgreSQL build is dropped before the next build | re-run safe |
+| 1.37 `nowo:chat:search-index --force` | one DDL statement outside any transaction (`CREATE INDEX CONCURRENTLY` cannot run in one; MySQL commits DDL itself); a lock wait timeout, deadlock or `lock_timeout` stops it with `CONFLICT_001` (exit 75): no usable index was built; on PostgreSQL an INVALID index may remain until `--force` runs again, which drops it before building (if that build fails too, no index is left); PostgreSQL search keeps working without it (slower), MySQL / MariaDB search needs it | re-run safe |
 
 ## Conflict answers
 
@@ -88,7 +88,7 @@ request: the request's `CommitMark` (taken at `kernel.request` with `commit_dete
   in one thread (the count matches the replies) and concurrent edits of one message (every previous text is kept once).
 - 1.37: `tests/Database/MessageSearchDatabaseTest` builds the search index while a second session holds a write lock on
   the message table (MySQL 8.4, MariaDB 11.4, PostgreSQL 16): the command answers `CONFLICT_001` after the one-second
-  lock wait, nothing is left built (PostgreSQL's INVALID index is dropped by the next run), and the connection builds
+  lock wait, no usable index is built (PostgreSQL may keep an INVALID one until the next `--force` drops it), and the connection builds
   the index on the next try.
 
 ## Accepted residual risk

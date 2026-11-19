@@ -219,19 +219,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
     never matches). Deleted messages, erased authors' tombstones, system / bot / buzz / pin lines and messages outside
     the purge's retention window (or replies to roots outside it) are never found; an unreadable retention answers no
     rows.
-  - Oracle-free: no counts; a forbidden and an unknown conversation, author or cursor give the same empty answer.
+  - Oracle-free: no counts; a forbidden and an unknown conversation, author or cursor give the same empty answer; a
+    full page always carries `next`, so a message that matches only through text the viewer cannot see (a hidden
+    `#reference` title) never changes the answer.
     Keyset paging (newest first, `next` = the last row's uuid), `search.min_query_length` / `max_query_length` (400
     `query_too_short` / `query_too_long`), at most 8 words, `search.page_size`, rate limiter `nowo_chat_search`
     (`limits.searches_per_minute`, 30).
   - Escaped excerpts: plain text only; the page escapes every segment and marks the words with `<mark>` itself.
 - `nowo:chat:search-index` prints the index state and SQL, `--force` builds it (`CREATE INDEX CONCURRENTLY` on
   PostgreSQL; an INVALID index of a failed build is dropped first), `--drop` removes it; a lock conflict stops it with
-  `CONFLICT_001` (exit 75). With a literal `search.enabled: true` the MySQL / MariaDB FULLTEXT index is mapped
-  (`ChatSearchSchemaListener`), so `doctrine:migrations:diff` creates it and never drops it.
+  `CONFLICT_001` (exit 75): no usable index was built (on PostgreSQL an INVALID index may remain until `--force` runs
+  again; that run drops it first, so a second failure leaves none). On MySQL / MariaDB `ChatSearchSchemaListener` maps
+  the FULLTEXT index with `search.enabled` and `search.fulltext` on, and keeps an existing one mapped when either is off
+  (read at run time, `%env()%` safe), so `doctrine:migrations:diff` creates it and never drops it.
+- On MySQL / MariaDB / PostgreSQL a search with no word the full-text index can use (only short or punctuated words)
+  answers no rows instead of scanning the table.
 - **SearchKit provider** (`search_kit.enabled`, default false; registered only when `nowo-tech/search-kit-bundle` ^1.8
   is installed): a **Messages** group of the Ctrl/⌘+K palette with the same permission rules, the `from:` filter,
-  results-page paging and recents re-checked on every display. Deny by default for scopes, other filters and searches
-  made by identifier for another user. `nowo-tech/search-kit-bundle` is suggested (and a dev requirement).
+  results-page paging (pages 1 to 3) and recents re-checked on every display. Registered only when SearchKit's recents
+  are revalidated (`nowo_search_kit.recent.revalidate: true`) or off: with SearchKit's default a picked message excerpt
+  would stay in the browser's localStorage after a delete, an erasure or a lost access (`SearchKitRecentsPass`, fail
+  closed). Each palette call spends one search of `limits.searches_per_minute`, shared with the page and the API. Deny
+  by default for scopes, other filters and searches made by identifier for another user. `nowo-tech/search-kit-bundle` is suggested (and a dev requirement).
 - `ChatMessageSearch` (`query()`, `search()`, `find()`) for hosts that search from PHP; stateless (FrankenPHP worker
   mode).
 - Translations of the search page, the errors and the palette group in the seven locales.

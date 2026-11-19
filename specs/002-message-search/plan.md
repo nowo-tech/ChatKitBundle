@@ -37,5 +37,7 @@
    retention configuration answers no rows.
 4. Newest first, no relevance ranking (keyset paging stays exact); SearchKit synonyms are not expanded in SQL (the typed
    text only).
-5. The palette group answers only in the signed-in user's request (no `IdentifierAwareSearchProviderInterface`), and
+5. Support agents search every ticket, like the conversation page (owner decision 2026-11-19; one seam:
+   `ChatMessageSearch::searchesEveryTicket()`).
+6. The palette group answers only in the signed-in user's request (no `IdentifierAwareSearchProviderInterface`), and
    scoped searches get no chat rows.

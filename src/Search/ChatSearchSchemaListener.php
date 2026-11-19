@@ -9,10 +9,17 @@ use Doctrine\ORM\Tools\Event\GenerateSchemaEventArgs;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 
 /**
- * 1.37 (registered only with `search.enabled` and `search.fulltext`): adds the FULLTEXT index of message search to the
- * schema Doctrine generates on MySQL / MariaDB, so `doctrine:migrations:diff` (or `doctrine:schema:update`) creates it
- * and never drops one a host built with `nowo:chat:search-index`. PostgreSQL's expression index is not in the generated
- * schema (DBAL cannot describe it) and is built with the command; other platforms get nothing. Stateless.
+ * 1.37: adds the FULLTEXT index of message search to the schema Doctrine generates on MySQL / MariaDB, so
+ * `doctrine:migrations:diff` (or `doctrine:schema:update`) creates it and never drops it:
+ *
+ * - with `search.enabled` and `search.fulltext` the index is always part of the schema (a diff creates it);
+ * - otherwise (audit VA-4) it is part of the schema only while it exists in the database, so turning search or the
+ *   full-text option off never makes the next diff drop an index a host built, and a host that never used search never
+ *   gets one.
+ *
+ * Always registered: the two options are read at run time (an `%env()%` value is resolved by then). PostgreSQL's
+ * expression index is not in the generated schema (DBAL cannot describe it, so a diff never drops it either) and is
+ * built with `nowo:chat:search-index`; other platforms get nothing. Stateless.
  *
  * @internal
  *
@@ -24,10 +31,14 @@ final readonly class ChatSearchSchemaListener
     /**
      * @param string $tablePrefix `doctrine.table_prefix`
      * @param string $tableNamePrefix `doctrine.table_name_prefix`
+     * @param bool $enabled `search.enabled`
+     * @param bool $fulltext `search.fulltext`
      */
     public function __construct(
         private string $tablePrefix = '',
         private string $tableNamePrefix = 'nowo_chat_',
+        private bool $enabled = false,
+        private bool $fulltext = true,
     ) {
     }
 
@@ -48,7 +59,7 @@ final readonly class ChatSearchSchemaListener
             return;
         }
         $table = $schema->getTable($index->table());
-        if (!$table->hasIndex($index->name())) {
+        if (!$table->hasIndex($index->name()) && (($this->enabled && $this->fulltext) || $index->state() === ChatSearchIndex::READY)) {
             $table->addIndex([$index->column()], $index->name(), ['fulltext']);
         }
     }

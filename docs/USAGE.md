@@ -1741,7 +1741,7 @@ too. GDPR erasure turns a person's messages into tombstones, so they are never f
 | Conversation | Readable by the viewer when |
 | --- | --- |
 | Direct | the viewer is one of its two people (their participant row) |
-| Support ticket | the viewer owns it, or is a support agent (`ChatAccessPolicyInterface::isSupportAgent()`) |
+| Support ticket | the viewer owns it, or is a support agent (`ChatAccessPolicyInterface::isSupportAgent()`): agents search **every** ticket, assigned or not — the same rule as the conversation page and the inbox (owner decision 2026-11-19) |
 | Channel | your channel provider lists it for the viewer now (`channelsFor()`) and `canUse()` allows it |
 
 Each row is checked again with the same rule as the conversation page (`ChatAccess::canView()`), and the words must also
@@ -1757,8 +1757,21 @@ distinct words, `search.page_size` (20) rows per page, `limits.searches_per_minu
 digits at least `search.mysql_min_token_length` (3) long. PostgreSQL 16: `to_tsvector` / `to_tsquery` with
 `search.postgresql_config` (`simple`) on the GIN index. Every other word (shorter, or with punctuation such as `C-12`)
 and every other platform: `LIKE` with escaped wildcards. Only letters and digits reach a full-text operator, so the
-characters of the boolean and `tsquery` syntaxes (`+ - " * ( ) : & | !`) are plain text. `search.fulltext: false`
-uses `LIKE` only (no index needed; slow on big tables).
+characters of the boolean and `tsquery` syntaxes (`+ - " * ( ) : & | !`) are plain text. On those three databases a
+search needs at least one word the index can use: a text made only of short or punctuated words (`ok`, `C-12`) answers
+no rows instead of scanning the whole table. `search.fulltext: false` uses `LIKE` only (no index needed; every search
+scans the table, so keep it to small installations).
+
+**The FULLTEXT index and schema diffs (MySQL / MariaDB).** With `search.enabled` and `search.fulltext` on, the index is
+part of the mapped schema, so `doctrine:migrations:diff` creates it. With either option off, the index stays in the
+mapped schema only while it exists in the database: turning search off never makes the next diff drop it, and a host
+that never enabled search never gets one. To remove it, run `nowo:chat:search-index --drop --force`. The options are
+read when the schema is generated, so `%env()%` values work.
+
+**Paging.** A full page always has a "More results" link (the next page may turn out empty); a page that is not full has
+one only when the search stopped reading early (five reads of candidates the database matched but the visible text did
+not) and then goes on from the last message read. Whether there is a next page never depends on a single message the
+viewer cannot see.
 
 **Excerpts.** Plain text: the JSON carries text, the page escapes every segment and wraps the words in `<mark>`
 elements itself, the palette gets text that SearchKit escapes. No message HTML is ever reused in a result.
@@ -1768,7 +1781,8 @@ elements itself, the palette gets text that SearchKit escapes. No message HTML i
 
 ### SearchKit palette (1.37)
 
-With `nowo-tech/search-kit-bundle` ^1.8 installed and `search_kit.enabled: true`, the bundle registers
+With `nowo-tech/search-kit-bundle` ^1.8 installed, `search_kit.enabled: true` **and SearchKit's recents revalidated**
+(`nowo_search_kit.recent.revalidate: true`, or recents off with `recent.enabled: false`), the bundle registers
 `ChatMessageSearchProvider`: a **Messages** group (key `messages`, tag priority `search_kit.priority`, 30) in the
 Ctrl/⌘+K palette and on SearchKit's results page, with the same rules as the search above.
 
@@ -1776,7 +1790,14 @@ Ctrl/⌘+K palette and on SearchKit's results page, with the same rules as the s
   (SearchKit shows the rows it got). "See all" opens `/chat/search?q=…`.
 - Filter `from:` (`from:me`, `from:<public id>`). A negated or repeated `from:`, any other filter key, and a scoped
   search answer no rows (deny by default).
-- Paging on the results page (`PaginatedSearchProviderInterface`, up to page 10) and recents
+- **Recents must be revalidated.** With SearchKit's default (`recent.revalidate: false`) the palette stores the title
+  and subtitle of a picked row — here a message excerpt — in the browser's localStorage and shows it again later, even
+  after the message was deleted or erased or the viewer lost access. The provider is therefore not registered unless
+  revalidation is on (or recents are off): fail closed, no chat group in the palette.
+- Each palette search spends one search of `limits.searches_per_minute`, shared with the page and the API; over the
+  budget the group is left out.
+- Paging on the results page (`PaginatedSearchProviderInterface`, pages 1 to 3: each page replays the ones before it)
+  and recents
   (`SearchReferenceResolverInterface`): a recent message is checked again on every display and disappears once it is
   deleted, purged or no longer readable.
 - Rows only for the signed-in user whose identifier is the query's. A search run by identifier for someone else

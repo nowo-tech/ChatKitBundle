@@ -31,6 +31,7 @@ use Nowo\SearchKitBundle\Model\SearchItem;
 use Nowo\SearchKitBundle\Model\SearchQuery;
 use Nowo\SearchKitBundle\Model\SearchReference;
 use Symfony\Bundle\SecurityBundle\Security;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
@@ -50,8 +51,9 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
     protected function chatKitConfig(): array
     {
         return match ($this->name()) {
-            'testOffAnswersNothing' => [],
-            default                 => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 1], 'search_kit' => ['enabled' => true]]]],
+            'testOffAnswersNothing'       => [],
+            'testProviderSharesTheBudget' => ['profiles' => ['default' => ['search' => ['enabled' => true], 'search_kit' => ['enabled' => true], 'limits' => ['searches_per_minute' => 2]]]],
+            default                       => ['profiles' => ['default' => ['search' => ['enabled' => true, 'page_size' => 1], 'search_kit' => ['enabled' => true]]]],
         };
     }
 
@@ -63,9 +65,9 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
         self::assertSame([], $search->search($ana, $search->query('hello'))->hits);
         self::assertNull($search->find($ana, Uuid::v4()->toRfc4122(), Uuid::v4()->toRfc4122()));
         self::assertFalse($this->kernel->getContainer()->has(ChatMessageSearchProvider::class), 'no provider without search_kit.enabled');
-        self::assertFalse($this->kernel->getContainer()->has(ChatSearchSchemaListener::class), 'no schema listener without search.enabled');
+        self::assertTrue($this->kernel->getContainer()->has(ChatSearchSchemaListener::class), 'audit VA-4: always registered (it keeps an existing index)');
         // A provider built by hand while search is off answers nothing.
-        $provider = new ChatMessageSearchProvider($search, $this->get(Security::class), $this->get(UrlGeneratorInterface::class), $this->get(TranslatorInterface::class));
+        $provider = $this->provider($search);
         $this->get(TokenStorageInterface::class)->setToken(new UsernamePasswordToken($ana, 'main', $ana->getRoles()));
         self::assertNull($provider->search(new SearchQuery('hello', null, 5, null, false, $ana->getUserIdentifier())));
         // A scope that may read nothing never queries.
@@ -222,7 +224,9 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
         $his  = $chat->send($luis, $dm, 'roadmap draft from Luis');
         $mine = $chat->send($ana, $dm, 'roadmap reply from Ana');
         self::assertTrue($this->kernel->getContainer()->has(ChatSearchSchemaListener::class), 'registered with search.enabled');
-        $provider = $this->get(ChatMessageSearchProvider::class);
+        // Audit VA-3: this kernel has no SearchKit bundle (no revalidated recents): the provider is not registered.
+        self::assertFalse($this->kernel->getContainer()->has(ChatMessageSearchProvider::class), 'fail closed without revalidated recents');
+        $provider = $this->provider($this->get(ChatMessageSearch::class));
         self::assertSame('messages', $provider->groupKey());
         self::assertSame(['from'], $provider->supportedFilters());
 
@@ -261,6 +265,7 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
         self::assertSame('roadmap draft from Luis', $provider->searchPage($this->searchQuery($ana, 'roadmap'), 2, 1)?->items[0]->title);
         self::assertNull($provider->searchPage($this->searchQuery($ana, 'roadmap'), 3, 1));
         self::assertNull($provider->searchPage($this->searchQuery($ana, 'roadmap'), 0, 1));
+        self::assertNull($provider->searchPage($this->searchQuery($ana, 'roadmap'), 2, 5), 'page 1 was not full: there is no page 2');
         self::assertNull($provider->searchPage($this->searchQuery($ana, 'roadmap'), ChatMessageSearchProvider::MAX_PAGE + 1, 1));
         self::assertCount(2, $provider->searchPage($this->searchQuery($ana, 'roadmap'), 1, 10)->items ?? []);
 
@@ -287,6 +292,35 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
     private function searchQuery(TestUser $default, string $text, ?string $user = null, array $filters = [], ?string $scope = null): SearchQuery
     {
         return new SearchQuery($text, null, 5, $scope, false, $user ?? $default->getUserIdentifier(), $filters, 'en');
+    }
+
+    public function testProviderSharesTheBudget(): void
+    {
+        $ana  = $this->user('Ana');
+        $luis = $this->user('Luis');
+        $chat = $this->get(ChatService::class);
+        $chat->send($luis, $chat->openDirect($ana, $luis), 'budget line');
+        $provider = $this->provider($this->get(ChatMessageSearch::class));
+        $this->signIn($ana);
+        // Two searches a minute here, for the page, the API and the palette together (audit VA-2).
+        self::assertNotNull($provider->search($this->searchQuery($ana, 'budget')));
+        $search = $this->get(ChatMessageSearch::class);
+        self::assertCount(1, $search->search($this->fresh($ana), $search->query('budget'))->hits, 'the service itself is not limited');
+        self::assertNotNull($provider->searchPage($this->searchQuery($ana, 'budget'), 1, 5));
+        self::assertNull($provider->search($this->searchQuery($ana, 'budget')), 'over the budget: no rows');
+    }
+
+    private function provider(ChatMessageSearch $search): ChatMessageSearchProvider
+    {
+        return new ChatMessageSearchProvider($search, $this->get(Security::class), $this->get(UrlGeneratorInterface::class), $this->get(TranslatorInterface::class), $this->limiter());
+    }
+
+    private function limiter(): RateLimiterFactoryInterface
+    {
+        $limiter = $this->kernel->getContainer()->get('limiter.nowo_chat_search');
+        self::assertInstanceOf(RateLimiterFactoryInterface::class, $limiter);
+
+        return $limiter;
     }
 
     private function signIn(TestUser $user): void

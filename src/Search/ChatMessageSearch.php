@@ -172,43 +172,49 @@ final readonly class ChatMessageSearch
 
     /**
      * Reads candidates round by round until the page is full, the candidates end, or {@see self::MAX_ROUNDS} reads.
+     *
+     * Audit VA-1: `next` never depends on rows the viewer does not see. A full page always carries the last hit as its
+     * cursor (whether or not another candidate exists: a candidate that matched only a hidden `#reference` title must
+     * not turn it on), a list whose candidates end before the page is full has none, and reads that stop at
+     * {@see self::MAX_ROUNDS} always go on from the last readable row read (any row of the viewer's scope, whatever its
+     * text). Residual: those reads stop only after MAX_ROUNDS × page size candidates in a row matched in SQL but not in
+     * the visible text (documented in SECURITY.md).
      */
     private function collect(ChatUserInterface $viewer, ChatSearchScope $scope, ChatMessageSearchQuery $query, int|string|null $author, DateTimeImmutable $cutoff, ?int $cursor, int $limit): ChatMessageSearchPage
     {
         $hits        = [];
-        $lastVisible = null;
+        $lastScanned = null;
         $agent       = $this->access->isSupportAgent($viewer);
         /** @var array<string, string> $titles */
         $titles = [];
         for ($round = 0; $round < self::MAX_ROUNDS; ++$round) {
-            $ids  = $this->sql->candidateIds($scope, $query, $author, $cutoff, $cursor, $limit + 1);
+            $ids  = $this->sql->candidateIds($scope, $query, $author, $cutoff, $cursor, $limit);
             $rows = $this->load($ids);
             $this->references->prime($viewer, $rows);
             foreach ($rows as $message) {
-                if (count($hits) === $limit) {
-                    // A further candidate exists: the next page starts after the last row shown.
-                    return new ChatMessageSearchPage($hits, $hits[$limit - 1]->messageUuid);
-                }
                 $cursor       = (int) $message->getId();
                 $conversation = $message->getConversation();
                 if (!$this->access->canView($conversation, $viewer)) {
+                    // Defence in depth (the SQL already filters): never hand out the uuid of a row the viewer cannot read.
                     continue;
                 }
-                $lastVisible = $message->getUuid();
+                $lastScanned = $message->getUuid();
                 $text        = $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH);
                 if (!ChatSearchText::containsAll($query->words, $text)) {
                     continue;
                 }
                 $hits[] = $this->hit($message, $viewer, $text, $query->words, $agent, $titles);
+                if (count($hits) === $limit) {
+                    return new ChatMessageSearchPage($hits, $hits[$limit - 1]->messageUuid);
+                }
             }
-            if (count($ids) <= $limit) {
+            if (count($ids) < $limit) {
                 return new ChatMessageSearchPage($hits, null);
             }
         }
 
-        // The reads stopped before the end (a run of rows that matched only hidden text): the next page goes on from the
-        // last readable row, even when this one shows nothing.
-        return new ChatMessageSearchPage($hits, $lastVisible);
+        // The reads stopped before the end: the next page goes on from the last row read, even when this one shows nothing.
+        return new ChatMessageSearchPage($hits, $lastScanned);
     }
 
     /**
@@ -288,7 +294,16 @@ final readonly class ChatMessageSearch
         }
         $key = ChatUserReferences::key($viewer);
 
-        return new ChatSearchScope($key === null ? null : $this->refs->sqlValue($key), $this->access->isSupportAgent($viewer), $keys);
+        return new ChatSearchScope($key === null ? null : $this->refs->sqlValue($key), $this->searchesEveryTicket($viewer), $keys);
+    }
+
+    /**
+     * Which support tickets a support agent searches: every ticket, as the agent's inbox and the conversation page
+     * allow (ChatAccess::canView()); owner decision 2026-11-19. The one place to change if that rule ever changes.
+     */
+    private function searchesEveryTicket(ChatUserInterface $viewer): bool
+    {
+        return $this->access->isSupportAgent($viewer);
     }
 
     /**

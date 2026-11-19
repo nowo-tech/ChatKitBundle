@@ -122,6 +122,16 @@ dependencies current. Security fixes are released as patch versions of the suppo
   `members()` consistent; call `ChatRecipients::forget()` when revoking access to a known conversation for an immediate
   effect.
 - **Link previews:** resolve only your own routes, authorize per viewer, never fetch remote URLs.
+- **1.37 message search: support agents search every ticket** (owner decision 2026-11-19), the same rule as the
+  conversation page and the agent inbox (`ChatAccessPolicyInterface::isSupportAgent()`), not only the tickets assigned
+  to them. Keep the agent list as small as the support work needs.
+- **1.37 message search, accepted residual risk.** The database matches the stored text, which includes the titles of
+  `#reference` tokens; rows that match only through a title the viewer may not open are dropped in PHP, and the answer
+  (rows and `next`) does not depend on them: a full page always carries `next`, a short page carries none (audit VA-1).
+  The one exception: when five reads in a row (5 × page size candidates) match only hidden text, the page stops early
+  and carries a cursor. Telling that apart needs a long run of other people's messages with the same hidden title, and
+  each probe costs one search of `limits.searches_per_minute`. Keep the SearchKit palette on revalidated recents
+  (`nowo_search_kit.recent.revalidate: true`); ChatKit does not register its provider otherwise (audit VA-3).
 - **Profile pictures (1.16):** `ChatAvatarUrlResolverInterface` must return stable URLs that your application checks when
   the browser fetches them. They travel in Mercure events and stay in the page, so a URL that carries a bearer
   signature (a pre-signed storage link) is unsupported: anyone who sees the payload can use it until it expires, and the

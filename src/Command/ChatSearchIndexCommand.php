@@ -22,7 +22,9 @@ use function sprintf;
  * the SQL (paste it into a migration); `--force` runs it; `--drop` removes the index instead. On PostgreSQL the index is
  * built `CONCURRENTLY` (writes go on; the statement cannot run inside a transaction) and an INVALID index left by a
  * failed build is dropped first with `--force`. A lock wait, deadlock or lock timeout stops the command with
- * `CONFLICT_001` (nothing was built: run it again later, REQ-RUNTIME-003 rule 6); other errors are rethrown.
+ * `CONFLICT_001` (no usable index was built; on PostgreSQL an INVALID index may remain until `--force` runs again; when
+ * the build followed the drop of an INVALID index, no index is left at all: REQ-RUNTIME-003 rule 6); other errors are
+ * rethrown.
  */
 #[AsCommand(name: 'nowo:chat:search-index', description: 'Show, print or build the full-text index of chat message search')]
 final class ChatSearchIndexCommand extends Command
@@ -77,7 +79,7 @@ final class ChatSearchIndexCommand extends Command
             if (!(new TransientFailureClassifier())->isTransient($exception)) {
                 throw $exception;
             }
-            $io->error(sprintf('%s: a lock wait, deadlock or lock timeout stopped the statement; nothing was changed. Run the command again when the table is quieter.', ConflictCode::RETRY_SAFE));
+            $io->error(sprintf('%s: a lock wait, deadlock or lock timeout stopped the statement. No usable index was built; on PostgreSQL an INVALID index may remain until --force runs again (and after dropping an INVALID index first, none is left). Run the command again when the table is quieter.', ConflictCode::RETRY_SAFE));
 
             return self::CONFLICT;
         }
