@@ -1,0 +1,208 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nowo\ChatKitBundle\Controller;
+
+use DateTimeImmutable;
+use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
+use Nowo\ChatKitBundle\Form\ChatMessageSearchType;
+use Nowo\ChatKitBundle\Http\ChatApiException;
+use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Search\ChatMessageSearch;
+use Nowo\ChatKitBundle\Search\ChatMessageSearchHit;
+use Nowo\ChatKitBundle\Search\ChatMessageSearchPage;
+use Nowo\ChatKitBundle\Search\ChatMessageSearchQuery;
+use Nowo\ChatKitBundle\Search\ChatSearchQueryException;
+use Nowo\ChatKitBundle\Security\ChatAccess;
+use Nowo\ChatKitBundle\View\ChatPage;
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
+use Symfony\Component\Routing\Attribute\Route;
+
+use function array_map;
+use function is_string;
+use function preg_match;
+
+/**
+ * 1.37 (spec 002): message search — the page `GET /chat/search` (FormKit form, works without JavaScript) and the JSON
+ * endpoint `GET /chat/api/search`. Both answer 404 while `search.enabled` is off, need a signed-in reachable participant,
+ * share the `limits.searches_per_minute` budget and show only what {@see ChatMessageSearch} returns for the viewer.
+ * Unknown and forbidden filter values give the same answer. Nothing is kept between requests (FrankenPHP worker mode).
+ */
+final class ChatSearchController extends AbstractController
+{
+    /**
+     * @param ChatMessageSearch $search Message search
+     * @param ChatAccess $access Reachability of the signed-in participant
+     * @param RateLimiterFactoryInterface $searchLimiter `limits.searches_per_minute`
+     * @param string|null $webUiLayout Layout of the page (`web_ui.layout_template`); null = nowo_ui_kit.layouts.admin
+     * @param string|null $layout Deprecated 1.x layout (`page_layout`)
+     * @param bool $assets Whether the page prints the nowo-chat.css tag (`web_ui.assets`)
+     * @param bool $fullHeight Whether the page fills the host content area (`web_ui.page.full_height`)
+     * @param int $maxQueryLength `search.max_query_length` (the input's maxlength)
+     * @param CurrentChatUserResolverInterface|null $currentUser The signed-in user's chat participant
+     */
+    public function __construct(
+        private readonly ChatMessageSearch $search,
+        private readonly ChatAccess $access,
+        #[Autowire(service: 'limiter.nowo_chat_search')]
+        private readonly RateLimiterFactoryInterface $searchLimiter,
+        #[Autowire(param: 'nowo_chat_kit.web_ui.layout_template')]
+        private readonly ?string $webUiLayout = null,
+        #[Autowire(param: 'nowo_chat_kit.page_layout')]
+        private readonly ?string $layout = null,
+        #[Autowire(param: 'nowo_chat_kit.web_ui.assets')]
+        private readonly bool $assets = true,
+        #[Autowire(param: 'nowo_chat_kit.web_ui.page.full_height')]
+        private readonly bool $fullHeight = false,
+        #[Autowire(param: 'nowo_chat_kit.search.max_query_length')]
+        private readonly int $maxQueryLength = 200,
+        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+    ) {
+    }
+
+    /**
+     * The search page: the form, then (with a text) one page of results with the words marked and a "More results" link.
+     *
+     * @param Request $request Query `q`, `from`, `after`, `before`, `link`, `conversation`, `cursor`
+     *
+     * @return Response The page (429 over the budget, 404 when search is off)
+     */
+    #[Route('/search', name: 'nowo_chat_page_search', methods: ['GET'])]
+    public function page(Request $request): Response
+    {
+        if (!$this->search->enabled()) {
+            throw $this->createNotFoundException();
+        }
+        $user = $this->participant();
+        if (!$user instanceof ChatUserInterface) {
+            throw $this->createAccessDeniedException();
+        }
+        $form = $this->container->get('form.factory')->createNamed('', ChatMessageSearchType::class, null, ['max_length' => $this->maxQueryLength]);
+        $form->handleRequest($request);
+        // The form only shows the values; the search reads and checks the parameters itself.
+        $status = Response::HTTP_OK;
+        $error  = null;
+        $page   = null;
+        $text   = $request->query->get('q');
+        if (is_string($text) && $text !== '') {
+            if (!$this->withinBudget($user)) {
+                [$status, $error] = [Response::HTTP_TOO_MANY_REQUESTS, 'chat_search.rate_limited'];
+            } else {
+                try {
+                    $page = $this->search->search($user, $this->queryFrom($request, $text));
+                } catch (ChatSearchQueryException $exception) {
+                    [$status, $error] = [Response::HTTP_BAD_REQUEST, $exception->errorCode === ChatSearchQueryException::TOO_LONG ? 'chat_search.too_long' : 'chat_search.too_short'];
+                }
+            }
+        }
+
+        return $this->render('@NowoChatKitBundle/search.html.twig', [
+            'layout'                => $this->webUiLayout ?? $this->layout,
+            'header'                => ChatPage::searchHeader(),
+            'bundle'                => ChatPage::BUNDLE,
+            'form'                  => $form->createView(),
+            'searched'              => $page instanceof ChatMessageSearchPage,
+            'error'                 => $error,
+            'items'                 => $page instanceof ChatMessageSearchPage ? array_map($this->pageItem(...), $page->hits) : [],
+            'next'                  => $page?->next === null ? null : $this->generateUrl('nowo_chat_page_search', ['cursor' => $page->next] + $request->query->all()),
+            'nowo_chat_assets'      => $this->assets,
+            'nowo_chat_full_height' => $this->fullHeight,
+        ], new Response(null, $status));
+    }
+
+    /**
+     * The JSON endpoint: `{items: list<{uuid, threadRootUuid, conversation: {uuid, kind, title}, author: {name, publicId}|null,
+     * createdAt, snippet, link}>, next}`. Plain text only (the client escapes it).
+     *
+     * @param Request $request Query `q`, `conversation`, `from`, `after`, `before`, `link`, `cursor`
+     *
+     * @return JsonResponse The page (400 `query_too_short` / `query_too_long`, 401, 404, 429 `rate_limited`)
+     */
+    #[Route('/api/search', name: 'nowo_chat_api_search', methods: ['GET'])]
+    public function api(Request $request): JsonResponse
+    {
+        if (!$this->search->enabled()) {
+            throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
+        }
+        $user = $this->participant();
+        if (!$user instanceof ChatUserInterface) {
+            throw new ChatApiException('unauthorized', Response::HTTP_UNAUTHORIZED);
+        }
+        if (!$this->withinBudget($user)) {
+            throw new ChatApiException('rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        }
+        $text = $request->query->get('q');
+
+        try {
+            $page = $this->search->search($user, $this->queryFrom($request, is_string($text) ? $text : ''));
+        } catch (ChatSearchQueryException $exception) {
+            throw new ChatApiException($exception->errorCode, Response::HTTP_BAD_REQUEST, $exception);
+        }
+
+        return $this->json([
+            'items' => array_map(fn (ChatMessageSearchHit $hit): array => $hit->toArray() + ['link' => $this->link($hit)], $page->hits),
+            'next'  => $page->next,
+        ]);
+    }
+
+    /**
+     * @return array{hit: ChatMessageSearchHit, link: string}
+     */
+    private function pageItem(ChatMessageSearchHit $hit): array
+    {
+        return ['hit' => $hit, 'link' => $this->link($hit)];
+    }
+
+    private function link(ChatMessageSearchHit $hit): string
+    {
+        return $this->generateUrl('nowo_chat_page_conversation', ['uuid' => $hit->conversationUuid, 'message' => $hit->messageUuid]);
+    }
+
+    /**
+     * The query from the request parameters (the form only reads them for its own view). `after` and `before` are dates
+     * (`Y-m-d`), both days included; any other value is ignored.
+     */
+    private function queryFrom(Request $request, string $text): ChatMessageSearchQuery
+    {
+        $string = static fn (string $key): ?string => is_string($value = $request->query->get($key)) ? $value : null;
+        $date   = static function (?string $value): ?DateTimeImmutable {
+            if ($value === null || preg_match('/^\d{4}-\d{2}-\d{2}$/D', $value) !== 1) {
+                return null;
+            }
+            $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+
+            return $date === false ? null : $date;
+        };
+        $before = $date($string('before'));
+
+        return $this->search->query(
+            $text,
+            $string('conversation'),
+            $string('from'),
+            $date($string('after')),
+            // "Before" is inclusive of that day in the form: the search takes messages before the next day.
+            $before?->modify('+1 day'),
+            $request->query->getBoolean('link'),
+            $string('cursor'),
+        );
+    }
+
+    private function participant(): ?ChatUserInterface
+    {
+        $user = $this->getUser();
+        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
+
+        return $user instanceof ChatUserInterface && $this->access->isReachable($user) ? $user : null;
+    }
+
+    private function withinBudget(ChatUserInterface $user): bool
+    {
+        return $this->searchLimiter->create('nowo_chat_search_' . $user->getChatPublicId())->consume()->isAccepted();
+    }
+}

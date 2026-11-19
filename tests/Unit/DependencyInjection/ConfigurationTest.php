@@ -48,6 +48,8 @@ final class ConfigurationTest extends TestCase
             'auto_away_minutes'         => 10,
             'dock'                      => ['overlay' => 'hide', 'watch_aria_modal' => false],
             'links'                     => ['enabled' => true, 'max_pinned' => 20, 'allow_http' => false, 'channel_managers' => 'members', 'providers' => Configuration::DEFAULT_LINK_PROVIDERS],
+            'search'                    => ['enabled' => false, 'dock_entry' => true, 'fulltext' => true, 'postgresql_config' => 'simple', 'mysql_min_token_length' => 3, 'min_query_length' => 2, 'max_query_length' => 200, 'page_size' => 20],
+            'search_kit'                => ['enabled' => false, 'priority' => 30],
             'message_menu'              => [
                 'quick_reactions' => ['emojis' => Configuration::DEFAULT_QUICK_REACTIONS, 'picker' => true],
                 'copy_text'       => true,
@@ -78,9 +80,31 @@ final class ConfigurationTest extends TestCase
                 'references_per_minute' => 120,
                 'buzz_interval_seconds' => 15,
                 'buzz_per_minute'       => 10,
+                'searches_per_minute'   => 30,
                 'mention_all_per_hour'  => 6,
             ],
         ], $config['profiles']['default']);
+    }
+
+    public function testSearchOptions(): void
+    {
+        $config = $this->process([['profiles' => ['default' => ['search' => ['enabled' => true, 'postgresql_config' => 'english', 'min_query_length' => 3, 'max_query_length' => 50, 'page_size' => 50], 'search_kit' => ['enabled' => true, 'priority' => 5]]]]]);
+        self::assertSame('english', $config['profiles']['default']['search']['postgresql_config']);
+        self::assertSame(['enabled' => true, 'priority' => 5], $config['profiles']['default']['search_kit']);
+    }
+
+    public function testSearchMinAboveMaxIsRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('search.min_query_length cannot be greater than search.max_query_length');
+        $this->process([['profiles' => ['default' => ['search' => ['min_query_length' => 40, 'max_query_length' => 30]]]]]);
+    }
+
+    public function testSearchPostgresConfigMustBeAnIdentifier(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('search.postgresql_config takes the name of a text search configuration');
+        $this->process([['profiles' => ['default' => ['search' => ['postgresql_config' => "simple'); drop table x; --"]]]]]);
     }
 
     public function testDockOverlayModesAndWatcher(): void

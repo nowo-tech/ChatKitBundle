@@ -39,6 +39,8 @@ whom).
 | Messenger messages `DeliverChatPushMessage`, `SendChatDigestMessage` (ids only) | Push / Digest dispatchers | Async workers |
 | Configuration (`nowo_chat_kit`), Flex recipe | DI extension | Deployer |
 | CLI `nowo:chat:purge` | `ChatPurgeCommand` | Operator |
+| 1.37 message search: `q`, `conversation`, `from`, `after`, `before`, `link`, `cursor` (≤ 200 characters of text, rate limited) | `ChatSearchController` (`/chat/search`, `/chat/api/search`), `ChatMessageSearchProvider` (SearchKit) | Signed-in users; rows filtered in SQL to what each may read, re-checked per row; forbidden and unknown values answer the same; plain-text excerpts (escaped on the page, text in JSON and the palette) |
+| CLI `nowo:chat:search-index` (DDL) | `ChatSearchIndexCommand` | Operator |
 | Browser storage (`nowo-chat*` keys), BroadcastChannel | TypeScript dock | Same browser, same origin |
 
 ## Threat model and mitigations

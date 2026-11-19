@@ -46,6 +46,8 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | Ticket numbers | a dedicated counter row with an atomic update | — |
 | GDPR erasure | one unit for the whole erasure | — |
 | `nowo:chat:purge` | small batches, each in its own statement or unit | re-run safe |
+| 1.37 message search (page, API, palette) | read-only: no write unit, no lock; the database keeps the full-text index up to date inside the message writes above (no derived table, so nothing to drift or replay) | — |
+| 1.37 `nowo:chat:search-index --force` | one DDL statement outside any transaction (`CREATE INDEX CONCURRENTLY` cannot run in one; MySQL commits DDL itself); a lock wait timeout, deadlock or `lock_timeout` stops it with `CONFLICT_001` (exit 75) and nothing built; an INVALID index left by a failed PostgreSQL build is dropped before the next build | re-run safe |
 
 ## Conflict answers
 
@@ -84,9 +86,16 @@ request: the request's `CommitMark` (taken at `kernel.request` with `commit_dete
 - `tests/Integration/Service/ChatMessageActionsTest` covers saving the same message twice and repeated mark unread.
 - 1.36: `ConcurrentWritersTest` also sends one forward from two workers under one key (one copy), concurrent replies
   in one thread (the count matches the replies) and concurrent edits of one message (every previous text is kept once).
+- 1.37: `tests/Database/MessageSearchDatabaseTest` builds the search index while a second session holds a write lock on
+  the message table (MySQL 8.4, MariaDB 11.4, PostgreSQL 16): the command answers `CONFLICT_001` after the one-second
+  lock wait, nothing is left built (PostgreSQL's INVALID index is dropped by the next run), and the connection builds
+  the index on the next try.
 
 ## Accepted residual risk
 
+- **1.37: a first MySQL / MariaDB FULLTEXT index blocks message writes while it builds** (InnoDB rebuilds the table).
+  Hosts build it in a maintenance window or with an online schema tool; see UPGRADING.md. PostgreSQL builds it
+  `CONCURRENTLY`.
 - **`message_menu.save.max_per_user` is a soft cap.** Two saves that race at the limit may both pass. No data is lost
   or duplicated: the unique key still holds, and the user is at most a few rows over the cap.
 - **Recipients are cached for 30 s.** Someone who just lost access may still receive realtime events of the

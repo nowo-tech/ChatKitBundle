@@ -83,6 +83,76 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+**Target 1.37.0 (message search, opt-in).** From **1.36.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+Nothing changes until you set `search.enabled: true`: no table, column or route is added, and the default schema is
+the same. Message search reads the existing `nowo_chat_message` table; it needs one full-text index, built **before**
+you turn the option on.
+
+**1. Build the index.** `php bin/console nowo:chat:search-index` prints the index state and the statement for your
+database (it follows `doctrine.table_prefix` / `doctrine.table_name_prefix`); `--force` runs it, `--drop` removes the
+index.
+
+- **MySQL 8.4 / MariaDB 11.4.** With `search.enabled: true` (a literal `true`, not an `%env()%`) the index is part of
+  the mapping, so `doctrine:migrations:diff` adds it and never drops it:
+
+  ```sql
+  CREATE FULLTEXT INDEX idx_nowo_chat_message_body_fts ON nowo_chat_message (body);
+  ```
+
+- **PostgreSQL 16.** Doctrine cannot describe an expression index, so a diff neither creates nor drops it. Put the
+  statement in a migration that is **not transactional** (`public function isTransactional(): bool { return false; }`;
+  `CONCURRENTLY` refuses to run inside a transaction), or run the command:
+
+  ```sql
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_nowo_chat_message_body_fts ON nowo_chat_message
+    USING GIN (to_tsvector('simple'::regconfig, body));
+  ```
+
+- **Other platforms** (SQLite …) have no index: the search uses `LIKE` (fine for small tables only).
+
+**Build time and locks on big tables.** Plan it like any index build on the largest chat table:
+
+- **MySQL / MariaDB (InnoDB).** The first FULLTEXT index of a table rebuilds the whole table (InnoDB adds its hidden
+  `FTS_DOC_ID` column): count on roughly the time of a full table copy plus tokenising every message, and on extra disk
+  space of about the table's size while it runs. Writes to `nowo_chat_message` are blocked for the duration (sending a
+  message waits; `ALGORITHM=INPLACE, LOCK=NONE` is not available for a first FULLTEXT index). Run it in a maintenance
+  window, or build it with an online schema-change tool. Measure on a copy first: a
+  table of ten million short messages typically takes tens of minutes. `innodb_ft_min_token_size` (default 3) and the
+  server's stop-word list decide which words the index knows; shorter words are matched with `LIKE` (set
+  `search.mysql_min_token_length` to the server's value).
+- **PostgreSQL.** `CREATE INDEX CONCURRENTLY` keeps the table writable; it scans the table twice and waits for
+  transactions that were writing to it when it started, so it takes longer than a plain build (several minutes per ten
+  million rows is common; a GIN build is CPU-bound — raise `maintenance_work_mem` for the session to speed it up). If it
+  fails or is cancelled, PostgreSQL keeps an **INVALID** index: the command reports `invalid`, and `--force` drops it
+  and builds it again.
+- **A lock conflict** (a lock wait timeout, a deadlock, `lock_timeout`) stops the command with `CONFLICT_001` and exit
+  code 75: nothing was built, run it again when the table is quieter (REQ-RUNTIME-003 rule 6).
+- `search.postgresql_config` (default `simple`: no stemming, no stop words, any language) is part of the index
+  expression: changing it means dropping and building the index again.
+
+**2. Turn it on.**
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            search:
+                enabled: true          # page /chat/search, GET /chat/api/search, dock header link
+            # Optional: a "Messages" group in the SearchKit palette (composer require nowo-tech/search-kit-bundle:^1.8)
+            search_kit:
+                enabled: true
+```
+
+The search obeys the purge's retention window (`retention_days` / `RetentionPolicyProviderInterface`): messages older
+than it are never found, even before `nowo:chat:purge` deletes them. A new rate limiter `nowo_chat_search`
+(`limits.searches_per_minute`, default 30) is added. See [USAGE.md](USAGE.md#message-search-137) and
+[CONFIGURATION.md](CONFIGURATION.md).
+
 ## To 1.36.1
 
 From **1.36.0**:

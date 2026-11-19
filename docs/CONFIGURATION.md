@@ -135,6 +135,16 @@ nowo_chat_kit:
 | `profiles.<name>.links.allow_http` | bool | `false` | 1.19: also accept `http:` links (pinned links and link cards). `https:` only by default; no other scheme ever. |
 | `profiles.<name>.links.channel_managers` | `members` \| `admins` | `members` | 1.19: who manages the pinned links of a channel: every member, or only whom `ChatLinkPolicyInterface::canManageLinksInChannel()` allows (else `ChatPinPolicyInterface::canPinInChannel()`, else nobody). Both people of a direct conversation always do; in tickets, the agents. |
 | `profiles.<name>.links.providers` | map | teams, meet, zoom, jitsi, webex | 1.19: known providers, `key => {label, hosts, icon, fallback_icon}`: `hosts` are lowercase hostnames (a subdomain matches too; only the hostname is looked at), `icon` the UX Icons name of the dock icon `provider_<key>` (null: the built-in `fallback_icon`, default `video`). Keys: `a-z`, `0-9`, `_` (not `other`). A map you set replaces the default one (`Configuration::DEFAULT_LINK_PROVIDERS`). |
+| `profiles.<name>.search.enabled` | bool | `false` | 1.37: message search — the page `/chat/search`, `GET /chat/api/search` and a dock header link; off, both routes answer 404. Build the full-text index first ([UPGRADING](UPGRADING.md#unreleased), [USAGE](USAGE.md#message-search-137)). A literal `true` also maps the MySQL / MariaDB FULLTEXT index for `doctrine:migrations:diff`. |
+| `profiles.<name>.search.dock_entry` | bool | `true` | 1.37: the search link in the dock header (with `search.enabled`). |
+| `profiles.<name>.search.fulltext` | bool | `true` | 1.37: use the database full-text index (MySQL / MariaDB FULLTEXT, PostgreSQL GIN on `to_tsvector`); `false` = `LIKE` only (no index needed, slow on big tables). |
+| `profiles.<name>.search.postgresql_config` | string | `simple` | 1.37: PostgreSQL text search configuration of the index and the query (lower-case identifier). `simple` = no stemming, no stop words, any language. Changing it needs the index built again. |
+| `profiles.<name>.search.mysql_min_token_length` | int 1–84 | `3` | 1.37: the server's `innodb_ft_min_token_size`; shorter words are matched with `LIKE`. |
+| `profiles.<name>.search.min_query_length` | int 1–50 | `2` | 1.37: shortest search text (characters). |
+| `profiles.<name>.search.max_query_length` | int 10–500 | `200` | 1.37: longest search text (characters); longer text answers 400 `query_too_long`. |
+| `profiles.<name>.search.page_size` | int 1–50 | `20` | 1.37: results per page. |
+| `profiles.<name>.search_kit.enabled` | bool | `false` | 1.37: register the SearchKit provider (a **Messages** group of the Ctrl/⌘+K palette, results page and recents) when `nowo-tech/search-kit-bundle` ^1.8 is installed ([USAGE](USAGE.md#searchkit-palette-137)). Needs `search.enabled`. |
+| `profiles.<name>.search_kit.priority` | int | `30` | 1.37: tag priority of the group (higher groups first). |
 | `profiles.<name>.message_menu.quick_reactions.emojis` | list | `👍 ❤️ 😂 😮 😢 🙏` | 1.35: the row of emoji at the top of the message menu (`[]` hides it). Each must be one of `reactions`, or of the picker catalog (`ChatEmojiCatalog`) with `picker` on; anything else fails the container build. |
 | `profiles.<name>.message_menu.quick_reactions.picker` | bool | `true` | 1.35: **More…** opens the emoji picker; the reaction endpoint then accepts `reactions` plus the picker catalog, nothing else. |
 | `profiles.<name>.message_menu.copy_text` | bool | `true` | 1.35: **Copy text** (client side: the plain text the viewer sees). |
@@ -235,6 +245,7 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 | `limits.references_per_minute` | `nowo_chat_reference` (`/` command menu and `#` search) | 120 |
 | `limits.buzz_interval_seconds` | `nowo_chat_buzz` (per conversation) | 15 |
 | `limits.buzz_per_minute` | `nowo_chat_buzz_global` | 10 |
+| `limits.searches_per_minute` | `nowo_chat_search` (1.37: message searches — page, API and palette) | 30 |
 | `limits.mention_all_per_hour` | `nowo_chat_mention_all` (1.24: `@channel` / `@here` per writer, when the channel provider allows them; over it the message is sent without the group mention) | 6 |
 
 ## Table names

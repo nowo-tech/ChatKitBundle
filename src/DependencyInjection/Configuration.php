@@ -7,6 +7,8 @@ namespace Nowo\ChatKitBundle\DependencyInjection;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
+use Nowo\ChatKitBundle\Search\ChatMessageSearch;
+use Nowo\ChatKitBundle\Search\ChatSearchIndex;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
@@ -451,6 +453,8 @@ final class Configuration implements ConfigurationInterface
                                 ->end()
                             ->end()
                             ->append($this->linksNode())
+                            ->append($this->searchNode())
+                            ->append($this->searchKitNode())
                             ->append($this->messageMenuNode())
                             ->append($this->statusPresetsNode())
                             ->append($this->supportNode())
@@ -470,6 +474,10 @@ final class Configuration implements ConfigurationInterface
                                         ->defaultValue(15)->min(1)
                                     ->end()
                                     ->integerNode('buzz_per_minute')->defaultValue(10)->min(1)->end()
+                                    ->integerNode('searches_per_minute')
+                                        ->info('1.37: message searches (page, API, palette) per user and minute.')
+                                        ->defaultValue(30)->min(1)
+                                    ->end()
                                     ->integerNode('mention_all_per_hour')
                                         ->info('1.24: @channel / @here mentions per writer and hour, when the channel provider allows them (ChatChannelMentionPolicyInterface); over the limit the message is sent without the group mention.')
                                         ->defaultValue(6)->min(1)
@@ -684,6 +692,84 @@ final class Configuration implements ConfigurationInterface
             ->validate()
                 ->ifTrue(static fn (array $menu): bool => array_filter($menu['quick_reactions']['emojis'], static fn (mixed $emoji): bool => !is_string($emoji) || $emoji === '' || strlen($emoji) > 32) !== [])
                 ->thenInvalid('message_menu.quick_reactions.emojis takes non-empty emoji of at most 32 bytes, got %s.')
+            ->end();
+
+        return $node;
+    }
+
+    /**
+     * `search` (1.37): message search, a database full-text search filtered per viewer.
+     */
+    private function searchNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('search'))->getRootNode();
+        $node
+            ->info('1.37: message search (the page /chat/search, GET /chat/api/search and a dock header link), filtered to the messages each viewer may read. Build the full-text index before turning it on (UPGRADING.md, nowo:chat:search-index).')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->booleanNode('enabled')
+                    ->info('Offer message search; off, its routes answer 404 and the dock shows no search link.')
+                    ->defaultFalse()
+                ->end()
+                ->booleanNode('dock_entry')
+                    ->info('A search link in the dock header (with search enabled).')
+                    ->defaultTrue()
+                ->end()
+                ->booleanNode('fulltext')
+                    ->info('Use the database full-text index (MySQL / MariaDB FULLTEXT, PostgreSQL tsvector); false: LIKE only (no index needed, slow on big tables).')
+                    ->defaultTrue()
+                ->end()
+                ->scalarNode('postgresql_config')
+                    ->info('PostgreSQL text search configuration of the index and the query ("simple": no stemming, any language). Changing it needs the index built again.')
+                    ->defaultValue(ChatSearchIndex::DEFAULT_POSTGRES_CONFIG)
+                    ->validate()
+                        ->ifTrue(static fn (mixed $config): bool => !is_string($config) || preg_match('/^[a-z_][a-z0-9_]{0,62}$/D', $config) !== 1)
+                        ->thenInvalid('search.postgresql_config takes the name of a text search configuration (lower-case letters, digits and underscores), got %s.')
+                    ->end()
+                ->end()
+                ->integerNode('mysql_min_token_length')
+                    ->info('innodb_ft_min_token_size of the MySQL / MariaDB server: shorter words are matched with LIKE.')
+                    ->defaultValue(3)->min(1)->max(84)
+                ->end()
+                ->integerNode('min_query_length')
+                    ->info('Shortest search text, in characters.')
+                    ->defaultValue(2)->min(1)->max(50)
+                ->end()
+                ->integerNode('max_query_length')
+                    ->info('Longest search text, in characters (longer text answers 400 query_too_long).')
+                    ->defaultValue(200)->min(10)->max(500)
+                ->end()
+                ->integerNode('page_size')
+                    ->info('Results per page.')
+                    ->defaultValue(20)->min(1)->max(ChatMessageSearch::MAX_PAGE_SIZE)
+                ->end()
+            ->end()
+            ->validate()
+                ->ifTrue(static fn (array $search): bool => $search['min_query_length'] > $search['max_query_length'])
+                ->thenInvalid('search.min_query_length cannot be greater than search.max_query_length, got %s.')
+            ->end();
+
+        return $node;
+    }
+
+    /**
+     * `search_kit` (1.37): the optional SearchKit provider of the Ctrl/⌘+K palette.
+     */
+    private function searchKitNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('search_kit'))->getRootNode();
+        $node
+            ->info('1.37: a "Messages" group in the SearchKit palette (nowo-tech/search-kit-bundle ^1.8), with the same permission rules as message search. Needs search.enabled.')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->booleanNode('enabled')
+                    ->info('Register the provider (only when SearchKit is installed).')
+                    ->defaultFalse()
+                ->end()
+                ->integerNode('priority')
+                    ->info('Tag priority of the group (higher groups first).')
+                    ->defaultValue(30)
+                ->end()
             ->end();
 
         return $node;

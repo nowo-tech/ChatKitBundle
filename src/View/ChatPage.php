@@ -38,4 +38,14 @@ final class ChatPage
     {
         return new PageHeader(new Label('chat.saved_title', self::BUNDLE), new Label('chat.saved_intro', self::BUNDLE));
     }
+
+    /**
+     * 1.37: header of the message search page (`chat_search.title`, intro `chat_search.intro`).
+     *
+     * @return PageHeader The page header view model
+     */
+    public static function searchHeader(): PageHeader
+    {
+        return new PageHeader(new Label('chat_search.title', self::BUNDLE), new Label('chat_search.intro', self::BUNDLE));
+    }
 }

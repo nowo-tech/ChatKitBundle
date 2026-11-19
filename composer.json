@@ -73,6 +73,7 @@
         "igor-php/igor-php": "^0.9.7 || ^0.10.0",
         "nowo-tech/phpstan-frankenphp": "^1.4",
         "nowo-tech/runtime-setting-contract": "^1.0",
+        "nowo-tech/search-kit-bundle": "^1.8.1",
         "phpstan/phpstan": "^2.1",
         "phpstan/phpstan-doctrine": "^2.0",
         "phpstan/phpstan-phpunit": "^2.0",
@@ -90,7 +91,8 @@
         "symfony/mercure-bundle": "Realtime delivery of messages, presence, typing and read receipts (default ChatRealtimeInterface)",
         "minishlink/web-push": "Web Push notifications when the app is not open (implement ChatPushSenderInterface)",
         "symfony/messenger": "Asynchronous push fan-out",
-        "nowo-tech/runtime-setting-contract": "^1.0 — for runtime.retention_days (1.32): the retention read from a runtime setting (.env or database, changed live with nowo:runtime-setting:set)"
+        "nowo-tech/runtime-setting-contract": "^1.0 — for runtime.retention_days (1.32): the retention read from a runtime setting (.env or database, changed live with nowo:runtime-setting:set)",
+        "nowo-tech/search-kit-bundle": "^1.8 — for search_kit.enabled (1.37): chat messages as a group of the Ctrl/⌘+K palette and its results page"
     },
     "conflict": {
         "nowo-tech/runtime-setting-contract": "<1.0 || >=2.0"
