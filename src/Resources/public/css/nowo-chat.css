@@ -4046,6 +4046,8 @@ a.nowo-chat-linkcard:focus-visible {
   height: fit-content;
   max-height: min(var(--nowo-chat-dialog-height), calc(100vh - 2rem));
   max-height: min(var(--nowo-chat-dialog-height), calc(100dvh - 2rem));
+  /* 1.36.1: centred whatever the host's reset (Tailwind preflight zeroes `margin`, which is what centres a modal <dialog>). */
+  margin: auto;
 }
 .nowo-chat-dialog--wide {
   --nowo-chat-dialog-width: var(--nowo-dialog-width-wide, min(56rem, calc(100vw - 2rem)));
@@ -4621,24 +4623,63 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
   left: 0;
 }
 
-/* 1.35: Message info (a modal dialog; a bottom sheet on phones). */
+/* 1.35: Message info (a modal dialog; a bottom sheet on phones). 1.36.1: the standard dialog anatomy (`nowo-chat-dialog
+   nowo-chat-dialog--md`: header with the title and ×, a scrolling body, a footer) and an explicit centring margin. */
 .nowo-chat-info {
-  width: min(420px, calc(100vw - 32px));
-  max-height: min(80vh, 560px);
-  padding: 16px;
-  overflow-y: auto;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--nowo-chat-border);
   border-radius: var(--nowo-chat-radius-window);
   background: var(--nowo-chat-surface);
   color: var(--nowo-chat-text);
   box-shadow: var(--nowo-chat-shadow);
 }
+.nowo-chat-info[open],
+.nowo-chat-forward[open] {
+  display: flex;
+  flex-direction: column;
+}
+/* 1.36.1: the shared header / body / footer of the info and forward dialogs. */
+.nowo-chat-dialog__header,
+.nowo-chat-dialog__footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+.nowo-chat-dialog__header {
+  justify-content: space-between;
+  border-bottom: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+  background: color-mix(in srgb, var(--nowo-chat-mist) 35%, var(--nowo-chat-surface));
+}
+.nowo-chat-dialog__footer {
+  justify-content: flex-end;
+  border-top: 1px solid color-mix(in srgb, var(--nowo-chat-border) 50%, transparent);
+}
+.nowo-chat-dialog__close {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.nowo-chat-dialog__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 12px 14px 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .nowo-chat-info::backdrop {
   background: color-mix(in srgb, var(--nowo-chat-text) 35%, transparent);
 }
 .nowo-chat-info__title {
-  margin: 0 0 8px;
+  margin: 0;
+  font-family: var(--nowo-chat-font-display);
   font-size: 1rem;
+  font-weight: 600;
 }
 .nowo-chat-info__count,
 .nowo-chat-info__hint,
@@ -4667,7 +4708,6 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
   color: var(--nowo-chat-muted);
 }
 .nowo-chat-info__close {
-  margin-top: 12px;
   padding: 6px 12px;
   border: 1px solid var(--nowo-chat-border);
   border-radius: var(--nowo-chat-radius-button);
@@ -4686,7 +4726,9 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
     max-width: none;
     margin: auto 0 0;
     border-radius: var(--nowo-chat-radius-window) var(--nowo-chat-radius-window) 0 0;
-    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .nowo-chat-info .nowo-chat-dialog__footer {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   }
 }
 
@@ -4801,11 +4843,12 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
 }
 
 /* 1.36: the forward dialog and the thread panel (modal dialogs; full-height sheets on phones). */
-.nowo-chat-forward,
 .nowo-chat-thread-panel {
   box-sizing: border-box;
   width: min(460px, calc(100vw - 32px));
   max-height: min(85vh, 640px);
+  /* 1.36.1: centred below 64rem whatever the host's reset (the wide-screen side panel sets its own margin). */
+  margin: auto;
   padding: 16px;
   border: 1px solid var(--nowo-chat-border);
   border-radius: var(--nowo-chat-radius-window);
@@ -4817,16 +4860,30 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
 .nowo-chat-thread-panel::backdrop {
   background: color-mix(in srgb, var(--nowo-chat-text) 35%, transparent);
 }
-.nowo-chat-forward[open],
 .nowo-chat-thread-panel[open] {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+/* 1.36.1: the forward dialog is a `nowo-chat-dialog nowo-chat-dialog--md` (width and height tokens, header, body, footer). */
+.nowo-chat-forward {
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-window);
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+  box-shadow: var(--nowo-chat-shadow);
+}
 .nowo-chat-forward__title,
 .nowo-chat-thread-panel__title {
   margin: 0;
   font-size: 1rem;
+}
+.nowo-chat-forward__title {
+  font-family: var(--nowo-chat-font-display);
+  font-weight: 600;
 }
 .nowo-chat-forward__label {
   font-size: 0.8125rem;
@@ -4967,7 +5024,12 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
     max-height: none;
     margin: 0;
     border-radius: 0;
+  }
+  .nowo-chat-thread-panel {
     padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .nowo-chat-forward .nowo-chat-dialog__footer {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   }
 }
 @media (prefers-reduced-motion: no-preference) {

@@ -105,6 +105,11 @@ describe('forward dialog (1.36)', () => {
   it('shows "None" when there is nothing to pick', async () => {
     const dialog = openForwardDialog(api({ forwardTargets: vi.fn().mockResolvedValue([]) }), i18n, 'src', 'msg', 5, null, vi.fn());
     await vi.waitFor(() => expect(dialog.querySelector('.nowo-chat-forward__empty')?.textContent).toBe('None'));
+    // 1.36.1: the standard anatomy, a header with the title and the ×; the × closes it.
+    expect(dialog.classList.contains('nowo-chat-dialog')).toBe(true);
+    expect(dialog.querySelector('header .nowo-chat-forward__title')).not.toBeNull();
+    const cross = dialog.querySelector('header [data-part="forward-close"]') as HTMLButtonElement;
+    expect(cross).not.toBeNull();
     (dialog.querySelector('[data-part="dialog-cancel"]') as HTMLButtonElement).click();
     expect(document.body.contains(dialog)).toBe(false);
   });

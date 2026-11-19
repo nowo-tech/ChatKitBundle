@@ -50,6 +50,10 @@ describe('message info (1.35)', () => {
     const counts = openMessageInfo(info({ mode: 'counts', readCount: 30, memberCount: 40 }), i18n, 'en', null);
     expect(counts.hasAttribute('open')).toBe(true);
     expect(counts.querySelector('[data-part="info-readers"]')).toBeNull();
+    // 1.36.1: the standard anatomy, a header with the title and the × (labelled by `close`).
+    expect(counts.classList.contains('nowo-chat-dialog')).toBe(true);
+    expect(counts.querySelector('header .nowo-chat-info__title')).not.toBeNull();
+    expect(counts.querySelector('header [data-part="info-header-close"]')?.getAttribute('aria-label')).not.toBeNull();
     (counts.querySelector('[data-part="info-close"]') as HTMLButtonElement).click();
     HTMLDialogElement.prototype.showModal = showModal;
     const hidden = openMessageInfo(info({ readTimes: false, readers: [{ uuid: 'a', name: 'Ana', initials: 'A', avatarUrl: null, read: true, readAt: null }] }), i18n, 'en', null);

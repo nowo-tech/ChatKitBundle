@@ -26,7 +26,8 @@ export function openMessageInfo(
 ): HTMLDialogElement {
   const title = h('h2', { class: 'nowo-chat-info__title', id: `nowo-chat-info-${Date.now()}`, text: t(i18n, 'info_title') });
   const close = h('button', { type: 'button', class: 'nowo-chat-info__close', 'data-part': 'info-close', text: t(i18n, 'info_close') });
-  const body = h('div', { class: 'nowo-chat-info__body' });
+  const cross = h('button', { type: 'button', class: 'nowo-chat-icon-btn nowo-chat-dialog__close', 'data-part': 'info-header-close', 'aria-label': t(i18n, 'close'), title: t(i18n, 'close') }, h('span', { 'aria-hidden': 'true', text: '×' }));
+  const body = h('div', { class: 'nowo-chat-info__body nowo-chat-dialog__body' });
   const summary = t(i18n, 'info_read_count', { read: info.readCount, total: info.memberCount });
   body.append(h('p', { class: 'nowo-chat-info__count', 'data-part': 'info-count', text: summary }));
   if (info.mode === 'people') {
@@ -56,7 +57,14 @@ export function openMessageInfo(
   if (edits.length > 0) {
     body.append(editsSection(edits, i18n, locale, revisions));
   }
-  const dialog = h('dialog', { class: 'nowo-chat-info', 'aria-labelledby': title.id, 'data-part': 'info-dialog' }, title, body, close);
+  // 1.36.1: the standard dialog anatomy (header with the title and ×, scrolling body, footer), medium width and height.
+  const dialog = h(
+    'dialog',
+    { class: 'nowo-chat-dialog nowo-chat-dialog--md nowo-chat-info', 'aria-labelledby': title.id, 'data-part': 'info-dialog' },
+    h('header', { class: 'nowo-chat-dialog__header' }, title, cross),
+    body,
+    h('footer', { class: 'nowo-chat-dialog__footer' }, close),
+  );
   presentDialog(dialog, close, returnTo);
   return dialog;
 }
