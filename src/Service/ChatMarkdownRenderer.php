@@ -73,7 +73,8 @@ final class ChatMarkdownRenderer
         // Fenced code blocks are cut out first so no other rule touches their content.
         $blocks = [];
         $text   = (string) preg_replace_callback('/```(?:[a-z0-9_-]*\n)?(.*?)```/s', static function (array $m) use (&$blocks): string {
-            $blocks[] = '<pre><code>' . self::escape(rtrim($m[1], "\n")) . '</code></pre>';
+            // 1.37 (audit VA5-1/2): code never shows a reference title.
+            $blocks[] = '<pre><code>' . self::escape(ChatReferences::neutralTokens(rtrim($m[1], "\n"))) . '</code></pre>';
 
             return "\u{E000}B" . (count($blocks) - 1) . "\u{E000}";
         }, $text);
@@ -257,8 +258,9 @@ final class ChatMarkdownRenderer
     }
 
     /**
-     * 1.37 (audit VA3-7): the HTML of a stored message: its stored render, or a new one when its body holds a
-     * `#reference` token whose title has a backtick (stored by 1.9–1.36: that render shows the title to every reader).
+     * 1.37 (audits VA3-7, VA5-1/2): the HTML of a stored message: its stored render, or a new one when its body holds a
+     * `#reference` token whose title has a backtick, or its stored render shows a token with a title (inside code: 1.9–1.36
+     * rendered code as written), since either can show the title to every reader.
      *
      * @param ChatMessage $message The message
      *
@@ -266,7 +268,7 @@ final class ChatMarkdownRenderer
      */
     public function htmlOf(ChatMessage $message): string
     {
-        return ChatReferences::hasUnsafeTitles($message->getBody()) ? $this->render($message->getBody()) : $message->getBodyHtml();
+        return ChatReferences::isUnsafeStored($message->getBody(), $message->getBodyHtml()) ? $this->render($message->getBody()) : $message->getBodyHtml();
     }
 
     /**
@@ -289,7 +291,7 @@ final class ChatMarkdownRenderer
     {
         $codes = [];
         $text  = (string) preg_replace_callback('/`([^`\n]+)`/', static function (array $m) use (&$codes): string {
-            $codes[] = '<code>' . self::escape($m[1]) . '</code>';
+            $codes[] = '<code>' . self::escape(ChatReferences::neutralTokens($m[1])) . '</code>';
 
             return "\u{E000}C" . (count($codes) - 1) . "\u{E000}";
         }, $text);

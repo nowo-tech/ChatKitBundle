@@ -102,7 +102,7 @@ final readonly class ChatMessageView
      */
     private static function safeHtml(ChatMessage $message): string
     {
-        if (!ChatReferences::hasUnsafeTitles($message->getBody())) {
+        if (!ChatReferences::isUnsafeStored($message->getBody(), $message->getBodyHtml())) {
             return $message->getBodyHtml();
         }
 

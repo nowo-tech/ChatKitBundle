@@ -39,7 +39,7 @@ final class ChatReferencesTest extends DatabaseTestCase
         self::assertSame('#[?](task:1)', ChatReferences::token(new ChatReference('task', '1', ' ', '/x')));
 
         $renderer = new ChatMarkdownRenderer();
-        self::assertSame('<p><strong>see</strong> <span class="nowo-chat-ref-slot"></span> and <code>#[B](task:2)</code></p>', $renderer->render('**see** #[A](task:1) and `#[B](task:2)`'));
+        self::assertSame('<p><strong>see</strong> <span class="nowo-chat-ref-slot"></span> and <code>#[…](task:2)</code></p>', $renderer->render('**see** #[A](task:1) and `#[B](task:2)`'));
         self::assertSame('see #… now', $renderer->plainText('see #[Secret](task:2) now'), 'no title without a reader');
     }
 

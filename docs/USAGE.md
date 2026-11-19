@@ -862,6 +862,10 @@ id. `ChatReferences::plainText()` gives the same per-reader text for previews, p
 same string) in your own notifications. A page of messages resolves its references in one `resolve()` per type,
 cached for the request.
 
+**Code formatting (1.37).** Text shaped like a reference token inside an inline code span or a fenced block is shown
+as `#[…](type:id)`, never with its title: a reference title never appears inside code, whatever the backticks around
+it. Token titles never contain a backtick (it becomes a space).
+
 ## Link previews
 
 Messages that contain links to your application (absolute or root-relative URLs) can show a small card. The dock asks

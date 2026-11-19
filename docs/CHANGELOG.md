@@ -269,11 +269,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   stored token kept the backtick (`` #[Fix `foo](task:7) ``), and the renderer cut inline code first, so the backtick opened
   a code span that showed the stored title as text in the message's HTML, for every reader, including those who may
   not open the item. A backtick earlier on the same line (`` Let`s check … ``, an escaped `` \` ``, a quote or a list
-  item) could do the same, and made the writer's typed title be stored as is (audit VA4-1). Now:
+  item) could do the same, and made the writer's typed title be stored as is (audit VA4-1). And a reference that sat
+  inside code formatting — an inline code span or a fenced block, including one formed by a lone backtick or fence
+  earlier in the text, next to the same item outside code — was shown as written, its title with it (audit VA5). Now:
   - no token title keeps a backtick: `ChatReferences::token()` and the composer (`tokenTitle()`) turn it into a space,
     and `ChatReferences::safeTitles()` cleans every token-shaped title anywhere in a body before `validate()`, `parse()`,
     `plainText()`, `neutralizeFor()` and the renderer read it (slots and tokens stay in step);
-  - messages whose stored HTML may show such a title are rendered again when shown (`ChatMarkdownRenderer::htmlOf()`,
+  - reference titles are never shown inside code: the renderer shows every token-shaped text in an inline code span
+    or a fenced block as `#[…](type:id)` (accepted loss: such text a writer typed in code reads that way), and
+    `validate()` sets fenced blocks aside first, as `parse()` and the renderer do, so it resolves only the tokens they
+    see;
+  - messages whose stored HTML may show such a title (a token title with a backtick in the body, or a token with a
+    title in the stored HTML) are rendered again when shown (`ChatMarkdownRenderer::htmlOf()`,
     through the application's configured renderer: the API, the pages, realtime payloads and `ChatMessageView` from the
     services; a `ChatMessageView` built without one shows the escaped plain text).
 

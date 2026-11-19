@@ -18,9 +18,13 @@ use Symfony\Contracts\Service\ResetInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 use function array_slice;
+use function count;
+use function html_entity_decode;
+use function preg_match_all;
 use function sprintf;
 use function str_contains;
 use function str_replace;
+use function strip_tags;
 use function trim;
 
 use const ENT_HTML5;
@@ -50,6 +54,9 @@ final class ChatReferences implements ResetInterface
 
     /** 1.36 (audit UB-2): the title of a forwarded token the forwarder could not open. */
     public const string NEUTRAL_TITLE = '…';
+
+    /** 1.37: placeholder of a fenced block while validate() reads the tokens around it (a private-use character). */
+    private const string FENCE_MARK = "\u{F8FF}";
 
     /** 1.10.1: a slot alone in its paragraph (only cards, spaces and line breaks) becomes a full-width card. */
     private const string BLOCK_SLOT = '<span class="nowo-chat-ref-slot" data-block></span>';
@@ -214,8 +221,19 @@ final class ChatReferences implements ResetInterface
         }
         $kept = 0;
 
+        // 1.37 (audit VA5-2): fenced blocks are set aside first, as parse() and the renderer cut them, so a token is
+        // replaced only where parse() found it (a lone backtick before a fence no longer shifts the pairing).
+        $fences = [];
+        if (!str_contains($body, self::FENCE_MARK)) {
+            $body = (string) preg_replace_callback('/```.*?```/s', static function (array $match) use (&$fences): string {
+                $fences[] = $match[0];
+
+                return self::FENCE_MARK . (count($fences) - 1) . self::FENCE_MARK;
+            }, $body);
+        }
+
         // Code spans and blocks are kept as written (their tokens are never rendered as cards).
-        return (string) preg_replace_callback(self::CODE_OR_TOKEN, static function (array $match) use ($valid, &$kept): string {
+        $validated = (string) preg_replace_callback(self::CODE_OR_TOKEN, static function (array $match) use ($valid, &$kept): string {
             if ($match[1] !== '') {
                 return $match[1];
             }
@@ -227,6 +245,8 @@ final class ChatReferences implements ResetInterface
 
             return self::token($reference);
         }, $body);
+
+        return $fences === [] ? $validated : (string) preg_replace_callback('/' . self::FENCE_MARK . '(\d+)' . self::FENCE_MARK . '/u', static fn (array $match): string => $fences[(int) $match[1]], $validated);
     }
 
     /**
@@ -255,6 +275,48 @@ final class ChatReferences implements ResetInterface
 
             return '#[' . ($title === '' ? '?' : $title) . '](' . $match[2] . ':' . $match[3] . ')';
         }, $body);
+    }
+
+    /**
+     * 1.37 (audits VA5-1/2): text shown as code with every `#reference`-shaped token as `#[…](type:id)`, so code never
+     * shows a reference title (whatever pairing of backticks or fences put the token there). Accepted loss: token-shaped
+     * text a writer typed inside code reads as `#[…](type:id)`.
+     *
+     * @param string $code The content of an inline code span or a fenced block
+     *
+     * @return string The content to escape and show
+     */
+    public static function neutralTokens(string $code): string
+    {
+        return str_contains($code, '#[') ? (string) preg_replace(self::TOKEN, '#[' . self::NEUTRAL_TITLE . ']($2:$3)', $code) : $code;
+    }
+
+    /**
+     * 1.37 (audits VA3-7, VA5-1/2): whether a stored message must be rendered again before it is shown: its body holds a
+     * token title with a backtick, or its stored render shows a token with a real title (1.9–1.36 showed code as
+     * written, and a validated title could end up inside code).
+     *
+     * @param string $body Stored Markdown
+     * @param string $html Stored render
+     *
+     * @return bool True when the stored render must not be served
+     */
+    public static function isUnsafeStored(string $body, string $html): bool
+    {
+        if (self::hasUnsafeTitles($body)) {
+            return true;
+        }
+        if (!str_contains($html, '#[')) {
+            return false;
+        }
+        preg_match_all(self::TOKEN, html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8'), $matches);
+        foreach ($matches[1] as $title) {
+            if ($title !== self::NEUTRAL_TITLE) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
