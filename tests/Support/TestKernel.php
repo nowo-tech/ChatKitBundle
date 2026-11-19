@@ -40,6 +40,8 @@ use Nowo\ChatKitBundle\Tests\Support\TwinPorts\TwinRealtime;
 use Nowo\FormKitBundle\NowoFormKitBundle;
 use Nowo\RuntimeSettingContract\Bridge\Symfony\NowoRuntimeSettingBundle;
 use Nowo\RuntimeSettingContract\InMemory\InMemoryRuntimeSettingStore;
+use Nowo\SearchKitBundle\Test\QueryCounter as SearchKitQueryCounter;
+use Nowo\SearchKitBundle\Test\QueryCountingMiddleware as SearchKitQueryCountingMiddleware;
 use Nowo\TransactionContract\TransactionRunnerInterface;
 use Nowo\UiKitBundle\NowoUiKitBundle;
 use ReflectionMethod;
@@ -60,6 +62,7 @@ use Twig\Environment;
 use Twig\Extra\TwigExtraBundle\TwigExtraBundle;
 
 use function array_key_exists;
+use function class_exists;
 use function dirname;
 use function is_array;
 use function is_string;
@@ -283,6 +286,13 @@ final class TestKernel extends Kernel
         // Query-count regression tests (N+1): every SQL statement of the connection is recorded.
         $services->set(QueryCounter::class);
         $services->set(QueryCountingMiddleware::class)->tag('doctrine.middleware');
+        // 1.38: SearchKit's test-kit counter (EntitySearchProviderTestCase's query budget), only for kernels with the
+        // SearchKit groups on (it records every statement: the memory tests' kernels must not carry it), and on DBAL 4
+        // only (the kit's middleware does not implement DBAL 3's driver interfaces: audit VO-5).
+        if (class_exists(SearchKitQueryCountingMiddleware::class) && !self::dbal3() && ($this->chatKitConfig['profiles']['default']['search_kit']['enabled'] ?? false) === true) {
+            $services->set(SearchKitQueryCounter::class);
+            $services->set(SearchKitQueryCountingMiddleware::class)->tag('doctrine.middleware');
+        }
         $services->alias(ChatDirectoryInterface::class, TestDirectory::class);
         $services->alias(ChatAccessPolicyInterface::class, TestAccessPolicy::class);
         $services->alias(ChatChannelProviderInterface::class, TestChannelProvider::class);

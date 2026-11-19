@@ -455,7 +455,9 @@ jobs:
         env:
           CHAT_KIT_RACE_DATABASE_URL: ${{ matrix.url }}
           CHAT_KIT_RACE_ID_GENERATION: ${{ matrix.generation }}
-        run: vendor/bin/phpunit --no-coverage --fail-on-skipped --testsuite database
+        # 1.38: SearchKit's contract kit (QueryCountingMiddleware) supports DBAL 4 only: the DBAL 3 cells leave out the
+        # SearchKit group (its contract runs on the DBAL 4 cells of every server).
+        run: vendor/bin/phpunit --no-coverage --fail-on-skipped --testsuite database ${{ matrix.dbal != '' && '--exclude-group searchkit' || '' }}
 
   coverage:
     name: Code Coverage

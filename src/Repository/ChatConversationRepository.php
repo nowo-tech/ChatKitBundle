@@ -9,6 +9,7 @@ use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
+use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatKitRowLock;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
@@ -23,7 +24,9 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use function array_filter;
 use function array_slice;
 use function count;
+use function implode;
 use function in_array;
+use function strtr;
 
 /**
  * Queries for conversations: lookups by uuid / direct key / channel / support owner, the dock list, the support inbox and counters.
@@ -263,6 +266,84 @@ class ChatConversationRepository extends ServiceEntityRepository
         usort($merged, static fn (ChatConversation $a, ChatConversation $b): int => [$b->getLastMessageAt(), $b->getId()] <=> [$a->getLastMessageAt(), $a->getId()]);
 
         return array_slice($merged, 0, $limit);
+    }
+
+    /**
+     * 1.38 (SearchKit conversation group): a new query builder of the conversations the viewer may open, as ChatKit's
+     * own pages allow them — direct conversations through the viewer's participant row, the viewer's own support tickets
+     * (every ticket for a support agent), and the conversations of the given channels — never intake drafts (support
+     * conversations without a ticket number). Newest activity first; no limit (the caller adds it).
+     *
+     * @param ChatUserInterface $viewer The viewer
+     * @param list<string> $channelKeys Keys of the channels the viewer may use (the caller's channelsFor() ∩ canUse())
+     * @param bool $everyTicket Whether every ticket is included (support agents)
+     *
+     * @return QueryBuilder The query (alias `c`); one that matches nothing when the viewer has no reference
+     */
+    public function createSearchQueryBuilder(ChatUserInterface $viewer, array $channelKeys, bool $everyTicket): QueryBuilder
+    {
+        $qb       = $this->createQueryBuilder('c')->orderBy('c.lastMessageAt', 'DESC')->addOrderBy('c.id', 'DESC');
+        $branches = [];
+        if (ChatUserReferences::key($viewer) !== null) {
+            $branches[] = '(c.kind = :chat_direct AND EXISTS (SELECT 1 FROM ' . ChatParticipant::class . ' chat_p WHERE chat_p.conversation = c AND ' . $this->refs->field('chat_p', 'user') . ' = :chat_viewer) AND ' . $this->pairCondition($qb, $viewer) . ')';
+            $qb->setParameter('chat_direct', ConversationKind::Direct)->setParameter('chat_viewer', $this->refs->value($viewer));
+            $branches[] = $everyTicket
+                ? '(c.kind = :chat_support AND c.ticketNumber IS NOT NULL)'
+                : '(c.kind = :chat_support AND c.ticketNumber IS NOT NULL AND ' . $this->refs->field('c', 'supportOwner') . ' = :chat_viewer)';
+            $qb->setParameter('chat_support', ConversationKind::Support);
+        }
+        if ($channelKeys !== []) {
+            $branches[] = '(c.kind = :chat_channel AND c.channelKey IN (:chat_channels))';
+            $qb->setParameter('chat_channel', ConversationKind::Channel)->setParameter('chat_channels', $channelKeys);
+        }
+
+        return $qb->where($branches === [] ? '1 = 0' : '(' . implode(' OR ', $branches) . ')');
+    }
+
+    /**
+     * 1.38 (SearchKit conversation group): the viewer's newest direct conversations (through their participant row),
+     * newest activity first, at most `$limit` — the window in which direct conversations are matched by the other
+     * person's name. Rows whose pair does not hold the viewer exactly are left to the caller's check (involvesDirectly()).
+     *
+     * @param ChatUserInterface $viewer The viewer (a persisted participant)
+     * @param positive-int $limit Maximum number of conversations
+     *
+     * @return list<ChatConversation> The conversations
+     */
+    public function findDirectForSearch(ChatUserInterface $viewer, int $limit): array
+    {
+        $qb = $this->createQueryBuilder('c')
+            ->innerJoin(ChatParticipant::class, 'p', 'WITH', 'p.conversation = c AND ' . $this->refs->field('p', 'user') . ' = :user')
+            ->setParameter('user', $this->refs->value($viewer))
+            ->setParameter('direct', ConversationKind::Direct)
+            ->orderBy('c.lastMessageAt', 'DESC')
+            ->addOrderBy('c.id', 'DESC')
+            ->setMaxResults($limit);
+        $qb->where('c.kind = :direct AND ' . $this->pairCondition($qb, $viewer));
+
+        /** @var list<ChatConversation> $rows */
+        $rows = $qb->getQuery()->getResult();
+
+        return $rows;
+    }
+
+    /**
+     * 1.38: the DQL condition "the direct pair holds the viewer" (ChatConversation::involvesDirectly() in SQL, so a
+     * participant row that grants nothing never becomes a search candidate): `<low>:<high>` integer keys through the
+     * direct key, string references through `directUserLow` / `directUserHigh`. The pair is still compared byte for byte
+     * per row (look-alikes under a folding collation, house rule LQ).
+     */
+    private function pairCondition(QueryBuilder $qb, ChatUserInterface $viewer): string
+    {
+        $key = strtr((string) ChatUserReferences::key($viewer), ['!' => '!!', '%' => '!%', '_' => '!_']);
+        $qb->setParameter('chat_pair_low', $key . ':%')->setParameter('chat_pair_high', '%:' . $key);
+        $conditions = ["c.directKey LIKE :chat_pair_low ESCAPE '!'", "c.directKey LIKE :chat_pair_high ESCAPE '!'"];
+        if ($this->getClassMetadata()->hasField('directUserLow') && $this->getClassMetadata()->hasField('directUserHigh')) {
+            $conditions[] = 'c.directUserLow = :chat_pair_ref OR c.directUserHigh = :chat_pair_ref';
+            $qb->setParameter('chat_pair_ref', (string) ChatUserReferences::key($viewer));
+        }
+
+        return '(' . implode(' OR ', $conditions) . ')';
     }
 
     /**

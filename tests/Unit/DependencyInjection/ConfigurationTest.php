@@ -49,7 +49,7 @@ final class ConfigurationTest extends TestCase
             'dock'                      => ['overlay' => 'hide', 'watch_aria_modal' => false],
             'links'                     => ['enabled' => true, 'max_pinned' => 20, 'allow_http' => false, 'channel_managers' => 'members', 'providers' => Configuration::DEFAULT_LINK_PROVIDERS],
             'search'                    => ['enabled' => false, 'dock_entry' => true, 'fulltext' => true, 'postgresql_config' => 'simple', 'mysql_min_token_length' => 3, 'min_query_length' => 2, 'max_query_length' => 200, 'page_size' => 20],
-            'search_kit'                => ['enabled' => false, 'priority' => 30],
+            'search_kit'                => ['enabled' => false, 'priority' => 30, 'messages' => ['enabled' => true, 'max_candidates' => 100], 'channels' => ['enabled' => true, 'priority' => 35, 'max_candidates' => 100, 'direct_scan' => 200]],
             'message_menu'              => [
                 'quick_reactions' => ['emojis' => Configuration::DEFAULT_QUICK_REACTIONS, 'picker' => true],
                 'copy_text'       => true,
@@ -90,7 +90,11 @@ final class ConfigurationTest extends TestCase
     {
         $config = $this->process([['profiles' => ['default' => ['search' => ['enabled' => true, 'postgresql_config' => 'english', 'min_query_length' => 3, 'max_query_length' => 50, 'page_size' => 50], 'search_kit' => ['enabled' => true, 'priority' => 5]]]]]);
         self::assertSame('english', $config['profiles']['default']['search']['postgresql_config']);
-        self::assertSame(['enabled' => true, 'priority' => 5], $config['profiles']['default']['search_kit']);
+        self::assertSame(['enabled' => true, 'priority' => 5, 'messages' => ['enabled' => true, 'max_candidates' => 100], 'channels' => ['enabled' => true, 'priority' => 35, 'max_candidates' => 100, 'direct_scan' => 200]], $config['profiles']['default']['search_kit']);
+        // 1.38: the groups' own options.
+        $config = $this->process([['profiles' => ['default' => ['search_kit' => ['messages' => ['enabled' => false, 'max_candidates' => 20], 'channels' => ['enabled' => false, 'priority' => 1, 'max_candidates' => 50, 'direct_scan' => 40]]]]]]);
+        self::assertSame(['enabled' => false, 'max_candidates' => 20], $config['profiles']['default']['search_kit']['messages']);
+        self::assertSame(['enabled' => false, 'priority' => 1, 'max_candidates' => 50, 'direct_scan' => 40], $config['profiles']['default']['search_kit']['channels']);
     }
 
     public function testSearchMinAboveMaxIsRejected(): void

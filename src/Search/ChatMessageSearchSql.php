@@ -77,25 +77,13 @@ final readonly class ChatMessageSearchSql
     public function candidateIds(ChatSearchScope $scope, ChatMessageSearchQuery $query, int|string|null $author, DateTimeImmutable $cutoff, ?int $beforeId, int $limit): array
     {
         $qb = new QueryBuilder($this->entityManager->getConnection());
-        if ($query->words === [] || !$this->visible($qb, $scope)) {
+        if ($query->words === [] || !$this->readableOn($qb, $scope, $author, $cutoff)) {
             return [];
         }
         $messages = $this->meta(ChatMessage::class);
-        $qb->select('m.' . $messages->getSingleIdentifierColumnName())
-            ->leftJoin('m', $messages->getTableName(), 'r', 'r.' . $messages->getSingleIdentifierColumnName() . ' = m.' . $messages->getSingleAssociationJoinColumnName('threadRoot'))
-            ->andWhere('m.' . $messages->getColumnName('kind') . ' IN (:kinds)')
-            ->andWhere('m.' . $messages->getColumnName('deletedAt') . ' IS NULL')
-            ->andWhere('m.' . $messages->getColumnName('createdAt') . ' >= :cutoff')
-            ->andWhere('(m.' . $messages->getSingleAssociationJoinColumnName('threadRoot') . ' IS NULL OR r.' . $messages->getColumnName('createdAt') . ' >= :cutoff)')
-            ->setParameter('kinds', self::KINDS, ArrayParameterType::STRING)
-            ->setParameter('cutoff', $cutoff, Types::DATETIME_IMMUTABLE)
-            ->orderBy('m.' . $messages->getSingleIdentifierColumnName(), 'DESC')
-            ->setMaxResults($limit);
+        $qb->setMaxResults($limit);
         if ($query->conversation !== null) {
             $qb->andWhere('c.' . $this->meta(ChatConversation::class)->getColumnName('uuid') . ' = :conversation')->setParameter('conversation', $query->conversation);
-        }
-        if ($author !== null) {
-            $qb->andWhere('m.' . $this->userColumn($messages, 'author') . ' = :author')->setParameter('author', $author);
         }
         if ($query->after instanceof DateTimeImmutable) {
             $qb->andWhere('m.' . $messages->getColumnName('createdAt') . ' >= :after')->setParameter('after', $query->after, Types::DATETIME_IMMUTABLE);
@@ -110,13 +98,88 @@ final readonly class ChatMessageSearchSql
         if ($beforeId !== null) {
             $qb->andWhere('m.' . $messages->getSingleIdentifierColumnName() . ' < :beforeId')->setParameter('beforeId', $beforeId);
         }
-        // Audit VA2-1: the viewer-neutral search text, never the raw body (a NULL, not yet backfilled row never matches).
-        if (!$this->match($qb, 'm.' . $messages->getColumnName('searchText'), $query->words)) {
+        if (!$this->matchWords($qb, $query->words)) {
             // Full-text platforms only (audit VA-7): covered by tests/Database on MySQL, MariaDB and PostgreSQL.
             return []; // @codeCoverageIgnore
         }
 
         return array_map(intval(...), $qb->executeQuery()->fetchFirstColumn());
+    }
+
+    /**
+     * 1.38: the ids of the messages the scope may read now (a fresh DBAL query builder of this call, alias `m` for the
+     * message and `c` for its conversation): the permission filter, the kinds people write, not deleted, inside the
+     * retention window (replies to an older root left out too) and, with `$author`, only that author's; newest first, no
+     * limit and no text condition (the caller adds them). Null when the scope may read nothing. The SearchKit message
+     * group builds on it (ChatMessageSearchDefinition), so both searches share one permission filter.
+     *
+     * @param ChatSearchScope $scope What the viewer may read now
+     * @param int|string|null $author SQL value of the author filter (null: any author)
+     * @param DateTimeImmutable $cutoff Retention start
+     *
+     * @return QueryBuilder|null The query; null when nothing is readable
+     */
+    public function readable(ChatSearchScope $scope, int|string|null $author, DateTimeImmutable $cutoff): ?QueryBuilder
+    {
+        $qb = new QueryBuilder($this->entityManager->getConnection());
+
+        return $this->readableOn($qb, $scope, $author, $cutoff) ? $qb : null;
+    }
+
+    /**
+     * Builds readable() on a fresh query builder of this call; false when the scope may read nothing.
+     */
+    private function readableOn(QueryBuilder $qb, ChatSearchScope $scope, int|string|null $author, DateTimeImmutable $cutoff): bool
+    {
+        if (!$this->visible($qb, $scope)) {
+            return false;
+        }
+        $messages = $this->meta(ChatMessage::class);
+        $qb->select('m.' . $messages->getSingleIdentifierColumnName() . ' AS id')
+            ->leftJoin('m', $messages->getTableName(), 'r', 'r.' . $messages->getSingleIdentifierColumnName() . ' = m.' . $messages->getSingleAssociationJoinColumnName('threadRoot'))
+            ->andWhere('m.' . $messages->getColumnName('kind') . ' IN (:kinds)')
+            ->andWhere('m.' . $messages->getColumnName('deletedAt') . ' IS NULL')
+            ->andWhere('m.' . $messages->getColumnName('createdAt') . ' >= :cutoff')
+            ->andWhere('(m.' . $messages->getSingleAssociationJoinColumnName('threadRoot') . ' IS NULL OR r.' . $messages->getColumnName('createdAt') . ' >= :cutoff)')
+            ->setParameter('kinds', self::KINDS, ArrayParameterType::STRING)
+            ->setParameter('cutoff', $cutoff, Types::DATETIME_IMMUTABLE)
+            ->orderBy('m.' . $messages->getSingleIdentifierColumnName(), 'DESC');
+        if ($author !== null) {
+            $qb->andWhere('m.' . $this->userColumn($messages, 'author') . ' = :author')->setParameter('author', $author);
+        }
+
+        return true;
+    }
+
+    /**
+     * 1.38: a query of readable()'s shape that matches no row (the answer to a viewer who may read nothing, an unknown
+     * author or an unreadable retention: no rows, no hint).
+     *
+     * @return QueryBuilder The query
+     */
+    public function none(): QueryBuilder
+    {
+        $messages = $this->meta(ChatMessage::class);
+
+        return (new QueryBuilder($this->entityManager->getConnection()))
+            ->select('m.' . $messages->getSingleIdentifierColumnName() . ' AS id')
+            ->from($messages->getTableName(), 'm')
+            ->where('1 = 0');
+    }
+
+    /**
+     * 1.38: adds the text condition of the words to a query of readable(): the viewer-neutral search text (audit VA2-1,
+     * never the raw body; a NULL, not yet backfilled row never matches), through the platform's full-text operator or an
+     * escaped LIKE ({@see self::textMatch()}).
+     *
+     * @param QueryBuilder $qb A query of readable()
+     * @param list<string> $words The query words (lower case)
+     *
+     * @return bool False (nothing added) on a full-text platform when no word can use the index: the caller answers no rows
+     */
+    public function matchWords(QueryBuilder $qb, array $words): bool
+    {
+        return $this->match($qb, 'm.' . $this->meta(ChatMessage::class)->getColumnName('searchText'), $words);
     }
 
     /**
@@ -159,10 +222,11 @@ final readonly class ChatMessageSearchSql
 
         $branches = [];
         if ($scope->viewer !== null) {
-            // Direct conversations of the viewer (their participant row) and the viewer's own support tickets.
+            // Direct conversations of the viewer (their participant row, and 1.38: the viewer is one of the pair, so a
+            // participant row that grants nothing never makes a candidate) and the viewer's own support tickets.
             $branches[] = '(' . $kind . ' = :direct AND EXISTS (SELECT 1 FROM ' . $participants->getTableName() . ' p WHERE p.'
                 . $participants->getSingleAssociationJoinColumnName('conversation') . ' = c.' . $conversations->getSingleIdentifierColumnName()
-                . ' AND p.' . $this->userColumn($participants, 'user') . ' = :viewer))';
+                . ' AND p.' . $this->userColumn($participants, 'user') . ' = :viewer) AND ' . $this->pairCondition($qb, $conversations, (string) $scope->viewer) . ')';
             $branches[] = '(' . $kind . ' = :support AND c.' . $this->userColumn($conversations, 'supportOwner') . ' = :viewer)';
             $qb->setParameter('viewer', $scope->viewer)->setParameter('direct', ConversationKind::Direct->value);
         }
@@ -182,6 +246,27 @@ final readonly class ChatMessageSearchSql
         $qb->where('(' . implode(' OR ', $branches) . ')');
 
         return true;
+    }
+
+    /**
+     * 1.38: the direct pair holds the viewer (SQL of ChatConversation::involvesDirectly()): `<low>:<high>` integer keys
+     * through the direct key, string references (`doctrine.user_reference: string`) through `direct_user_low` /
+     * `direct_user_high`. ChatAccess::canView() still compares the pair byte for byte.
+     *
+     * @param ClassMetadata<ChatConversation> $conversations
+     */
+    private function pairCondition(QueryBuilder $qb, ClassMetadata $conversations, string $viewer): string
+    {
+        $key = 'c.' . $conversations->getColumnName('directKey');
+        $qb->setParameter('pair_low', strtr($viewer, ['!' => '!!', '%' => '!%', '_' => '!_']) . ':%')
+            ->setParameter('pair_high', '%:' . strtr($viewer, ['!' => '!!', '%' => '!%', '_' => '!_']));
+        $conditions = [$key . " LIKE :pair_low ESCAPE '!'", $key . " LIKE :pair_high ESCAPE '!'"];
+        if ($conversations->hasField('directUserLow') && $conversations->hasField('directUserHigh')) {
+            $conditions[] = 'c.' . $conversations->getColumnName('directUserLow') . ' = :viewer';
+            $conditions[] = 'c.' . $conversations->getColumnName('directUserHigh') . ' = :viewer';
+        }
+
+        return '(' . implode(' OR ', $conditions) . ')';
     }
 
     /**

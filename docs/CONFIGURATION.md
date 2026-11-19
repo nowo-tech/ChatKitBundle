@@ -143,8 +143,14 @@ nowo_chat_kit:
 | `profiles.<name>.search.min_query_length` | int 1–50 | `2` | 1.37: shortest search text (characters). |
 | `profiles.<name>.search.max_query_length` | int 10–500 | `200` | 1.37: longest search text (characters); longer text answers 400 `query_too_long`. |
 | `profiles.<name>.search.page_size` | int 1–50 | `20` | 1.37: results per page. |
-| `profiles.<name>.search_kit.enabled` | bool | `false` | 1.37: register the SearchKit provider (a **Messages** group of the Ctrl/⌘+K palette, results page and recents) when `nowo-tech/search-kit-bundle` ^1.8 is installed and its recents are revalidated (`nowo_search_kit.recent.revalidate: true`, or `recent.enabled: false`; otherwise it is not registered) ([USAGE](USAGE.md#searchkit-palette-137)). Needs `search.enabled`. |
-| `profiles.<name>.search_kit.priority` | int | `30` | 1.37: tag priority of the group (higher groups first). |
+| `profiles.<name>.search_kit.enabled` | bool | `false` | 1.37: register the SearchKit groups (**Messages** and, 1.38, **Conversations** in the Ctrl/⌘+K palette, results page and recents) when `nowo-tech/search-kit-bundle` ^1.10 is installed and its recents are revalidated (`nowo_search_kit.recent.revalidate: true`, or `recent.enabled: false`; otherwise they are not registered) ([USAGE](USAGE.md#searchkit-palette-137)). The Messages group answers only with `search.enabled`. |
+| `profiles.<name>.search_kit.priority` | int | `30` | 1.37: tag priority of the Messages group (higher groups first). |
+| `profiles.<name>.search_kit.messages.enabled` | bool | `true` | 1.38: register the Messages group (key `messages`). |
+| `profiles.<name>.search_kit.messages.max_candidates` | int | `100` | 1.38: messages read and checked per search (1–1000): SearchKit's candidate window, which bounds the per-row checks, the visible total and the deepest results page. |
+| `profiles.<name>.search_kit.channels.enabled` | bool | `true` | 1.38: register the Conversations group (key `chat_channels`): direct conversations, channels and support tickets the viewer can open, found by their name. |
+| `profiles.<name>.search_kit.channels.priority` | int | `35` | 1.38: tag priority of the Conversations group. |
+| `profiles.<name>.search_kit.channels.max_candidates` | int | `100` | 1.38: conversations read and checked per search (1–1000). |
+| `profiles.<name>.search_kit.channels.direct_scan` | int | `200` | 1.38: the viewer's newest direct conversations in which the other person's name is matched (1–5000; the names come from the directory, not from ChatKit's tables). Older direct conversations are not found; when the scan is full the group's total is marked not exact. |
 | `profiles.<name>.message_menu.quick_reactions.emojis` | list | `👍 ❤️ 😂 😮 😢 🙏` | 1.35: the row of emoji at the top of the message menu (`[]` hides it). Each must be one of `reactions`, or of the picker catalog (`ChatEmojiCatalog`) with `picker` on; anything else fails the container build. |
 | `profiles.<name>.message_menu.quick_reactions.picker` | bool | `true` | 1.35: **More…** opens the emoji picker; the reaction endpoint then accepts `reactions` plus the picker catalog, nothing else. |
 | `profiles.<name>.message_menu.copy_text` | bool | `true` | 1.35: **Copy text** (client side: the plain text the viewer sees). |
@@ -245,7 +251,7 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 | `limits.references_per_minute` | `nowo_chat_reference` (`/` command menu and `#` search) | 120 |
 | `limits.buzz_interval_seconds` | `nowo_chat_buzz` (per conversation) | 15 |
 | `limits.buzz_per_minute` | `nowo_chat_buzz_global` | 10 |
-| `limits.searches_per_minute` | `nowo_chat_search` (1.37, at least 3: message searches of the page and the API, key `nowo_chat_search_page_<public id>`; the SearchKit palette has its own bucket of the same size, key `nowo_chat_search_palette_<public id>`, one token per search a call runs, up to 3) | 30 |
+| `limits.searches_per_minute` | `nowo_chat_search` (1.37, at least 3: message searches of the page and the API, key `nowo_chat_search_page_<public id>`; the SearchKit palette has its own bucket of the same size, key `nowo_chat_search_palette_<public id>`, one token per call since 1.38; 1.38: the SearchKit Conversations group has its own bucket too, key `nowo_chat_search_conversations_<public id>`, one token per call) | 30 |
 | `limits.mention_all_per_hour` | `nowo_chat_mention_all` (1.24: `@channel` / `@here` per writer, when the channel provider allows them; over it the message is sent without the group mention) | 6 |
 
 ## Table names

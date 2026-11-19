@@ -142,16 +142,7 @@ final readonly class ChatPresenter
         bool $peerOnline = false,
         ?array $peerStatus = null,
     ): array {
-        [$title, $subtitle, $initials] = match (true) {
-            $conversation->isDirect() => [
-                $peer?->getChatDisplayName() ?? $this->trans('chat.deleted_user'),
-                $peer?->getChatEmail() ?? '',
-                $peer?->getChatInitials() ?? '?',
-            ],
-            // 1.24: the channel's subtitle (topic) and icon, when the application gives them.
-            $conversation->isChannel() => ['#' . ($channel->label ?? ''), $this->clip($channel?->subtitle, ChatChannel::SUBTITLE_MAX_LENGTH) ?? $this->trans('chat.channel'), $this->clip($channel?->icon, ChatChannel::ICON_MAX_LENGTH) ?? '#'],
-            default                    => $this->supportTitle($conversation, $viewer, $viewerIsAgent),
-        };
+        [$title, $subtitle, $initials] = $this->heading($conversation, $viewer, $peer, $channel, $viewerIsAgent);
 
         return [
             'uuid'     => $conversation->getUuid(),
@@ -189,6 +180,47 @@ final readonly class ChatPresenter
                 'authorName' => $last->getAuthor()?->getChatDisplayName(),
             ] : null,
         ];
+    }
+
+    /**
+     * 1.38: the title, subtitle and initials of a conversation as the viewer's list shows them (the one rule of
+     * conversation() and of the SearchKit conversation group): a direct conversation is the other person (or "Deleted
+     * user"), a channel `#label`, a support ticket its owner for an agent and its ticket label for anyone else.
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param ChatUserInterface $viewer The user the heading is built for
+     * @param ChatUserInterface|null $peer The other person of a direct thread; null otherwise or when gone
+     * @param ChatChannel|null $channel The channel of a channel conversation; null otherwise
+     * @param bool $viewerIsAgent Whether the viewer is a support agent (support thread titles)
+     *
+     * @return array{string, string, string} Title, subtitle and initials
+     */
+    public function heading(ChatConversation $conversation, ChatUserInterface $viewer, ?ChatUserInterface $peer, ?ChatChannel $channel, bool $viewerIsAgent = false): array
+    {
+        return match (true) {
+            $conversation->isDirect() => [
+                $peer?->getChatDisplayName() ?? $this->trans('chat.deleted_user'),
+                $peer?->getChatEmail() ?? '',
+                $peer?->getChatInitials() ?? '?',
+            ],
+            // 1.24: the channel's subtitle (topic) and icon, when the application gives them.
+            $conversation->isChannel() => ['#' . ($channel->label ?? ''), $this->clip($channel?->subtitle, ChatChannel::SUBTITLE_MAX_LENGTH) ?? $this->trans('chat.channel'), $this->clip($channel?->icon, ChatChannel::ICON_MAX_LENGTH) ?? '#'],
+            default                    => $this->supportTitle($conversation, $viewer, $viewerIsAgent),
+        };
+    }
+
+    /**
+     * 1.38: the label of a support ticket, the same for its owner and every agent: `SUP-000123 · Topic`.
+     *
+     * @param ChatConversation $conversation A support conversation
+     *
+     * @return string|null The label; null for an intake draft (no ticket number) and other kinds
+     */
+    public function ticketLabel(ChatConversation $conversation): ?string
+    {
+        $number = $conversation->isSupport() ? $this->policy->format($conversation->getTicketNumber()) : null;
+
+        return $number === null ? null : $number . ' · ' . $this->topics->label($conversation->getTicketTopic());
     }
 
     /**
@@ -378,8 +410,7 @@ final readonly class ChatPresenter
     private function supportTitle(ChatConversation $conversation, ChatUserInterface $viewer, bool $viewerIsAgent): array
     {
         $owner  = $conversation->getSupportOwner();
-        $number = $this->policy->format($conversation->getTicketNumber());
-        $ticket = $number === null ? null : $number . ' · ' . $this->topics->label($conversation->getTicketTopic());
+        $ticket = $this->ticketLabel($conversation);
         if ($viewerIsAgent && $owner instanceof ChatUserInterface && !ChatUserReferences::same($owner, $viewer)) {
             return [$owner->getChatDisplayName(), $ticket ?? $this->trans('chat.support_thread'), $owner->getChatInitials()];
         }

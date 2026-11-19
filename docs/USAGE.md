@@ -1792,30 +1792,89 @@ elements itself, the palette gets text that SearchKit escapes. No message HTML i
 
 ### SearchKit palette (1.37)
 
-With `nowo-tech/search-kit-bundle` ^1.8 installed, `search_kit.enabled: true` **and SearchKit's recents revalidated**
-(`nowo_search_kit.recent.revalidate: true`, or recents off with `recent.enabled: false`), the bundle registers
-`ChatMessageSearchProvider`: a **Messages** group (key `messages`, tag priority `search_kit.priority`, 30) in the
-Ctrl/⌘+K palette and on SearchKit's results page, with the same rules as the search above.
+With `nowo-tech/search-kit-bundle` ^1.10 installed, `search_kit.enabled: true` **and SearchKit's recents revalidated**
+(`nowo_search_kit.recent.revalidate: true`, or recents off with `recent.enabled: false`), the bundle registers two
+groups in the Ctrl/⌘+K palette and on SearchKit's results page: **Messages** (key `messages`, 1.37) and
+**Conversations** (key `chat_channels`, 1.38, below). Since 1.38 both run on SearchKit's provider base: SearchKit's
+generic `EntitySearchProvider` around a ChatKit definition (`ChatMessageSearchDefinition`,
+`ChatConversationSearchDefinition`), so they share SearchKit's flow — a bounded candidate window, ChatKit's own per-row
+checks, then the host's `SearchKitEvents::ITEM_VISIBILITY` votes (a deny wins; subjects of type `chat_message` and
+`chat_conversation`), and a total counted from the visible rows only. Each group can be turned off on either side
+(`search_kit.messages.enabled` / `search_kit.channels.enabled`, or SearchKit's `nowo_search_kit.groups.<key>.enabled`).
 
-- Rows: the excerpt as the title, "conversation · author" as the subtitle, the message link, the date; no total
-  (SearchKit shows the rows it got). "See all" opens `/chat/search?q=…`.
+ChatKit has no tenants: SearchKit's "tenant" of a chat search is the viewer's own participant key, and every hook
+resolves the signed-in user again. Rows only for the signed-in user whose identifier is the query's; a search run by
+identifier for someone else (`SearchEngineInterface::searchFor()`) gets no chat rows (the providers are not
+`IdentifierAwareSearchProviderInterface`). A scoped search answers no rows (ChatKit has no scopes).
+
+**Messages** (`ChatMessageSearchProvider`, tag priority `search_kit.priority`, 30), with the same rules as the search
+above:
+
+- Rows: the excerpt as the title, "conversation · author" as the subtitle, the message link, the date; the visible
+  total within the window. "See all" opens `/chat/search?q=…`.
 - Filter `from:` (`from:me`, `from:<public id>`). A negated or repeated `from:`, any other filter key, and a scoped
   search answer no rows (deny by default).
-- **Recents must be revalidated.** With SearchKit's default (`recent.revalidate: false`) the palette stores the title
-  and subtitle of a picked row — here a message excerpt — in the browser's localStorage and shows it again later, even
-  after the message was deleted or erased or the viewer lost access. The provider is therefore not registered unless
-  revalidation is on (or recents are off): fail closed, no chat group in the palette.
+- Window: `search_kit.messages.max_candidates` (100) messages are read and checked per search; the palette and
+  SearchKit's results page go as deep as that window. Older matches are on ChatKit's own search page ("See all",
+  `/chat/search`, keyset paging over every readable message).
 - The palette has **its own budget**: the same limiter as the page (`nowo_chat_search`, `limits.searches_per_minute`),
   with a separate key per user (`nowo_chat_search_palette_<public id>`), so typing in the palette never uses up the
-  page and API budget. Weight: one token per search a call runs (the dropdown and results page 1 cost 1, results page
-  N costs N). Over the budget the group is left out. ChatKit relies on SearchKit's input debounce (`debounce_ms`) to
-  keep keystrokes from becoming one search each; keep it at its default or above.
-- Paging on the results page (`PaginatedSearchProviderInterface`, pages 1 to 3: each page replays the ones before it)
-  and recents
-  (`SearchReferenceResolverInterface`): a recent message is checked again on every display and disappears once it is
-  deleted, purged or no longer readable.
-- Rows only for the signed-in user whose identifier is the query's. A search run by identifier for someone else
-  (`SearchEngineInterface::searchFor()`) gets no chat rows: the provider is not `IdentifierAwareSearchProviderInterface`.
+  page and API budget. Since 1.38 every call costs one token (one query, whatever the results page). Over the budget the
+  group is left out. ChatKit relies on SearchKit's input debounce (`debounce_ms`) to keep keystrokes from becoming one
+  search each; keep it at its default or above.
+
+**Conversations** (`ChatConversationSearchProvider`, tag priority `search_kit.channels.priority`, 35): the
+conversations the viewer can open on ChatKit's own pages, found by their name, titled as the viewer's list shows them.
+
+| Kind | Who finds it | Matched on | Title / subtitle |
+| --- | --- | --- | --- |
+| Direct | The two people of the pair (their participant row, then the exact pair) | The other person's name | The other person ("Deleted user" when gone) / "Direct message" (never their e-mail address) |
+| Channel | Members: `channelsFor()` ∩ `canUse()` | `#label` | `#label` / the channel's subtitle or "Channel" |
+| Support ticket | Its owner, and every support agent (as the inbox and the conversation page allow) | The ticket label `SUP-000123 · Topic` | The owner (agents) or the label / as in the list |
+
+- Only names the viewer already sees in their own list are matched or shown: never message text (that is the
+  Messages group), never a channel's members, never a ticket's owner name as a match (agents see it as the title).
+- The names do not live in ChatKit's tables (people come from the directory, channel labels from the channel provider,
+  topic labels from the configuration), so they are matched in PHP, ignoring case and accents, as plain substrings
+  (`%`, `_`, `!` and `\` are literal); only the matching ids, channel keys, topic keys and ticket numbers reach SQL, as
+  bound parameters. A topic that is no longer configured is matched on its stored key with SearchKit's escaped LIKE.
+  A word of the prefix (`sup`) matches every ticket the viewer may open.
+- Direct conversations are matched within the viewer's newest `search_kit.channels.direct_scan` (200) ones: an older
+  direct conversation is not found by name (it is still in the list and on the conversation page). When the scan is
+  full, the group's total is marked not exact (a lower bound), so the palette never claims it found everything.
+- Ticket numbers: search by the whole number (`123`, `000123`, `SUP-000123`) or by the full label; a part of a number
+  (`12` for ticket 123) does not match.
+- The group has **its own budget** of `limits.searches_per_minute` (key `nowo_chat_search_conversations_<public id>`,
+  one token per call); over it the group is left out.
+- Conversations the viewer **closed** in their list are found (they still open, from the list's closed view as from a
+  link); resolved and closed tickets are found too (they open read-only). Intake drafts (support conversations without a
+  ticket number) are not. A channel the provider no longer lists for the viewer (left, removed), or one it never lists
+  (opened by key only), is not found; neither is a listed channel nobody has opened yet (it has no conversation page).
+- No "see all" link: ChatKit has no page that lists conversations by name; SearchKit's results page pages the group.
+- Window: `search_kit.channels.max_candidates` (100) conversations per search.
+
+Both groups:
+
+- **Recents must be revalidated.** With SearchKit's default (`recent.revalidate: false`) the palette stores the title
+  and subtitle of a picked row — a message excerpt, a person's or a private channel's name — in the browser's
+  localStorage and shows it again later, even after the message was deleted or the viewer lost access. The providers
+  are therefore not registered unless revalidation is on (or recents are off): fail closed, no chat groups in the
+  palette. Both groups are also `sensitive()` for SearchKit, which keeps them off at run time in that mode.
+- Recents (`SearchReferenceResolverInterface`): a stored row is read again through every check on each display and is
+  kept only with the same URL; references are shape-checked (route `nowo_chat_page_conversation`, UUIDs only).
+- Paging on the results page (`PaginatedSearchProviderInterface`) within the candidate window.
+- **Membership is decided in SQL**, before the window: direct conversations by the viewer's participant row and the
+  pair (1.38, the message search page too), tickets by their owner (every ticket for agents), channels by the listed and
+  usable keys, messages also by kind, deletion and the retention window. A row the viewer may not open therefore never
+  takes a slot of the window, the total or the "exact" flag. What PHP still checks per row (byte-exact pairs and
+  channel keys, the text the viewer sees, the host's `ITEM_VISIBILITY` votes) only drops rows that are rare by
+  construction; a host deny does take a window slot (SearchKit marks such a total as not exact).
+- Display data (titles, excerpts, the other people of direct conversations) is loaded once per page for the shown rows
+  only (SearchKit 1.10 `prepareItems()`), into SearchKit's per-render context.
+- Stateless and read-only: nothing about a viewer is kept in a service (FrankenPHP worker mode, kernel reset off; the
+  people and channels of a search are kept on the current request by `ChatAccess`), and the groups never write, flush,
+  clear or open a transaction on any entity manager. A search costs a constant number of queries (Messages: the search,
+  the messages, their people; Conversations: the viewer's direct conversations, their people, the search).
 
 ## Automatic replies
 
