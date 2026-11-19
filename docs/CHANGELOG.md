@@ -268,10 +268,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - **A `#reference` title holding a backtick was shown to every reader** (audit VA3-7; affects 1.9.0 to 1.36.1). The
   stored token kept the backtick (`` #[Fix `foo](task:7) ``), and the renderer cut inline code first, so the backtick opened
   a code span that showed the stored title as text in the message's HTML, for every reader, including those who may
-  not open the item. New tokens never hold a backtick (`ChatReferences::token()` turns it into a space), every render
-  makes such a stored token safe first (`ChatReferences::safeTitles()`), and messages whose stored HTML already shows
-  the title are rendered again when shown (`ChatMarkdownRenderer::htmlOf()`: the API, the pages, realtime payloads and
-  `ChatMessageView`). Plain-text previews were not affected.
+  not open the item. A backtick earlier on the same line (`` Let`s check … ``, an escaped `` \` ``, a quote or a list
+  item) could do the same, and made the writer's typed title be stored as is (audit VA4-1). Now:
+  - no token title keeps a backtick: `ChatReferences::token()` and the composer (`tokenTitle()`) turn it into a space,
+    and `ChatReferences::safeTitles()` cleans every token-shaped title anywhere in a body before `validate()`, `parse()`,
+    `plainText()`, `neutralizeFor()` and the renderer read it (slots and tokens stay in step);
+  - messages whose stored HTML may show such a title are rendered again when shown (`ChatMarkdownRenderer::htmlOf()`,
+    through the application's configured renderer: the API, the pages, realtime payloads and `ChatMessageView` from the
+    services; a `ChatMessageView` built without one shows the escaped plain text).
+
+  Plain-text previews were not affected.
 
 ### Changed
 

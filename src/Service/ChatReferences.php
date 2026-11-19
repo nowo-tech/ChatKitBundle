@@ -172,7 +172,8 @@ final class ChatReferences implements ResetInterface
      */
     public static function parse(string $body): array
     {
-        $text = (string) preg_replace(['/```.*?```/s', '/`[^`\n]+`/'], ' ', $body);
+        // 1.37 (audit VA4-3): the same safe titles as every renderer, so tokens and slots always match.
+        $text = (string) preg_replace(['/```.*?```/s', '/`[^`\n]+`/'], ' ', self::safeTitles($body));
         preg_match_all(self::TOKEN, $text, $matches, PREG_SET_ORDER);
 
         return array_map(static fn (array $match): array => ['title' => $match[1], 'type' => $match[2], 'id' => $match[3]], $matches);
@@ -191,6 +192,8 @@ final class ChatReferences implements ResetInterface
      */
     public function validate(ChatConversation $conversation, ChatUserInterface $author, string $body): string
     {
+        // 1.37 (audit VA4-1): no token title keeps a backtick, before the code spans are told apart.
+        $body   = self::safeTitles($body);
         $tokens = self::parse($body);
         if ($tokens === []) {
             return $body;
@@ -227,13 +230,16 @@ final class ChatReferences implements ResetInterface
     }
 
     /**
-     * 1.37 (audit VA3-7): the body with every `#reference` token outside code whose stored title holds a backtick made
-     * safe (its backticks become spaces), the grammar of {@see self::parse()}: messages stored by 1.13–1.36 may hold such
-     * a token, and rendered as is its backtick opens a code span that shows the title to every reader.
+     * 1.37 (audits VA3-7, VA4-1): the body with the title of every `#reference`-shaped token made safe — its backticks
+     * become spaces — anywhere in the text, code spans and blocks included (a lone backtick earlier on the line, an
+     * escaped one, a quote or a list item could otherwise pair with a title's backtick and turn the stored title into
+     * code that every reader sees). Messages stored by 1.9–1.36 may hold such a title. Every reader of tokens goes
+     * through it: {@see self::parse()}, validate(), plainText(), neutralizeFor() and the renderer, so slots and tokens
+     * always match.
      *
      * @param string $body Stored Markdown
      *
-     * @return string The body to render
+     * @return string The body to render or read tokens from
      */
     public static function safeTitles(string $body): string
     {
@@ -241,12 +247,13 @@ final class ChatReferences implements ResetInterface
             return $body;
         }
 
-        return (string) preg_replace_callback(self::CODE_OR_TOKEN, static function (array $match): string {
-            if ($match[1] !== '' || !str_contains($match[2], '`')) {
+        return (string) preg_replace_callback(self::TOKEN, static function (array $match): string {
+            if (!str_contains($match[1], '`')) {
                 return $match[0];
             }
+            $title = trim(str_replace('`', ' ', $match[1]));
 
-            return '#[' . trim(str_replace('`', ' ', $match[2])) . '](' . $match[3] . ':' . $match[4] . ')';
+            return '#[' . ($title === '' ? '?' : $title) . '](' . $match[2] . ':' . $match[3] . ')';
         }, $body);
     }
 
@@ -350,6 +357,7 @@ final class ChatReferences implements ResetInterface
      */
     public function plainText(ChatMarkdownRenderer $markdown, string $body, ChatUserInterface $viewer, int $maxLength, ?string $locale = null): string
     {
+        $body = self::safeTitles($body);
         if (preg_match(self::TOKEN, $body) === 1) {
             $cards = $this->resolveFor($viewer, self::parse($body));
             // 1.37 (audit VA2-2): a token inside a code span or block is text as written, never resolved (as validate() and
@@ -379,6 +387,7 @@ final class ChatReferences implements ResetInterface
      */
     public function neutralizeFor(ChatUserInterface $viewer, string $body): string
     {
+        $body   = self::safeTitles($body);
         $tokens = self::parse($body);
         if ($tokens === []) {
             return $body;

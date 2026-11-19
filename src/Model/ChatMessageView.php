@@ -6,8 +6,14 @@ namespace Nowo\ChatKitBundle\Model;
 
 use DateTimeImmutable;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Search\ChatSearchText;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Service\ChatMentions;
+use Nowo\ChatKitBundle\Service\ChatReferences;
+
+use const ENT_HTML5;
+use const ENT_QUOTES;
+use const ENT_SUBSTITUTE;
 
 /**
  * 1.24: read-only snapshot of a message for event listeners and application ports (DDD hosts): scalars and public ids
@@ -62,7 +68,7 @@ final readonly class ChatMessageView
      *
      * @return self The view
      */
-    public static function of(ChatMessage $message): self
+    public static function of(ChatMessage $message, ?ChatMarkdownRenderer $markdown = null): self
     {
         $conversation = $message->getConversation();
         $tokens       = $message->isDeleted() || $message->isBot() || $message->isSystem() ? [] : array_keys(ChatMentions::parse($message->getBody()));
@@ -76,8 +82,9 @@ final readonly class ChatMessageView
             $message->getKind(),
             $message->getAuthor()?->getChatPublicId(),
             $message->getBody(),
-            // 1.37 (audit VA3-7): never a stored render that shows a #reference title.
-            (new ChatMarkdownRenderer())->htmlOf($message),
+            // 1.37 (audits VA3-7, VA4-6): never a stored render that shows a #reference title; a new render goes through
+            // the application's configured renderer, and without one the text is shown as escaped plain text.
+            $markdown instanceof ChatMarkdownRenderer ? $markdown->htmlOf($message) : self::safeHtml($message),
             array_values(array_map(strval(...), $tokens)),
             $message->getMentionAll(),
             $message->isDeleted(),
@@ -87,5 +94,18 @@ final readonly class ChatMessageView
             $message->getThreadReplyCount(),
             $message->isForwarded(),
         );
+    }
+
+    /**
+     * The stored render, or (audit VA3-7) the escaped plain text of a body whose stored render may show a `#reference`
+     * title — plain text holds no title (`#…`).
+     */
+    private static function safeHtml(ChatMessage $message): string
+    {
+        if (!ChatReferences::hasUnsafeTitles($message->getBody())) {
+            return $message->getBodyHtml();
+        }
+
+        return '<p>' . htmlspecialchars(ChatMarkdownRenderer::plain($message->getBody(), ChatSearchText::INDEXABLE_LENGTH), ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8') . '</p>';
     }
 }

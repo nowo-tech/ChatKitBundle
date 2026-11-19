@@ -258,7 +258,7 @@ final class ChatMarkdownRenderer
 
     /**
      * 1.37 (audit VA3-7): the HTML of a stored message: its stored render, or a new one when its body holds a
-     * `#reference` token whose title has a backtick (stored by 1.13–1.36: that render shows the title to every reader).
+     * `#reference` token whose title has a backtick (stored by 1.9–1.36: that render shows the title to every reader).
      *
      * @param ChatMessage $message The message
      *

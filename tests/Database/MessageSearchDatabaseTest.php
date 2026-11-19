@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Database;
 
+use DateTimeImmutable;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
@@ -24,6 +26,7 @@ use Nowo\ChatKitBundle\Tests\Support\TestKernel;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Symfony\Component\Console\Tester\CommandTester;
+use Symfony\Component\Uid\Uuid;
 
 use function array_filter;
 use function array_map;
@@ -246,6 +249,40 @@ final class MessageSearchDatabaseTest extends TestCase
         self::assertSame(0, $tester->execute(['--after-id' => (string) $ids[1]]));
         self::assertSame(0, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE search_text IS NULL'));
         self::assertSame($this->sortedIds($ids), $this->sortedIds(array_map(intval(...), $this->connection()->fetchFirstColumn("SELECT id FROM nowo_chat_message WHERE search_text LIKE 'legacy line %'"))));
+    }
+
+    /**
+     * Audit VA4-2: a batch locks only its own rows (by id), never a range of the primary key, so a message sent while a
+     * sparse batch holds its locks is not held back (MySQL 8.4 / MariaDB 11.4 next-key locks; PostgreSQL has none).
+     */
+    public function testABackfillBatchNeverHoldsBackNewMessages(): void
+    {
+        $ana  = $this->user('Ana');
+        $luis = $this->user('Luis');
+        $chat = $this->get(ChatService::class);
+        $dm   = $chat->openDirect($ana, $luis);
+        $ids  = [];
+        for ($i = 0; $i < 6; ++$i) {
+            $ids[] = (int) $chat->send($luis, $dm, 'line ' . $i)->getId();
+        }
+        // A sparse batch: two of six rows still need a search text, a batch of 500 (the scan would reach the end).
+        $this->connection()->executeStatement('UPDATE nowo_chat_message SET search_text = NULL WHERE id IN (?, ?)', [$ids[1], $ids[4]]);
+        [$find, $read] = ChatSearchBackfillCommand::statements($this->em, 500);
+        $candidates    = array_map(intval(...), $this->connection()->fetchFirstColumn($find, [0]));
+        self::assertSame([$ids[1], $ids[4]], $candidates);
+        $this->connection()->beginTransaction();
+        $locked = $this->connection()->fetchAllAssociative($read, [$candidates], [ArrayParameterType::INTEGER]);
+        self::assertCount(2, $locked);
+
+        $other = $this->other = new SecondConnection((string) TestKernel::databaseUrl());
+        $other->execute($this->mysql() ? 'SET SESSION innodb_lock_wait_timeout = 1' : "SET lock_timeout = '1s'");
+        $conversation = (int) $this->connection()->fetchOne('SELECT conversation_id FROM nowo_chat_message WHERE id = ?', [$ids[0]]);
+        $now          = (new DateTimeImmutable())->format('Y-m-d H:i:s');
+        $insert       = sprintf("INSERT INTO nowo_chat_message (uuid, conversation_id, kind, body, body_html, search_text, created_at, thread_reply_count, forwarded) VALUES ('%s', %d, 'text', 'new', '<p>new</p>', 'new', '%s', 0, %s)", Uuid::v4()->toRfc4122(), $conversation, $now, $this->mysql() ? '0' : 'false');
+        self::assertSame('OK', $other->execute($insert), 'a new message is not held back by the batch');
+        // An edit of a row of the batch does wait for it (and gives up after the second here).
+        self::assertStringStartsWith('ERR', $other->execute('UPDATE nowo_chat_message SET body = body WHERE id = ' . $ids[1]));
+        $this->connection()->rollBack();
     }
 
     /**

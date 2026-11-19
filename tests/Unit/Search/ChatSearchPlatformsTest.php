@@ -192,6 +192,7 @@ final class ChatSearchPlatformsTest extends TestCase
             [$entityManager, $connection] = $this->entityManager(new MySQL80Platform());
             $metadata                     = $entityManager->getClassMetadata(ChatMessage::class);
             $metadata->mapField(['fieldName' => 'id', 'type' => 'integer', 'id' => true]);
+            $connection->method('fetchFirstColumn')->willReturn([7]);
             $connection->method('fetchAllAssociative')->willReturn([['id' => 7, 'body' => 'hello']]);
             $connection->method('executeStatement')->willThrowException($failure);
             $tester = new CommandTester(new ChatSearchBackfillCommand($entityManager));
