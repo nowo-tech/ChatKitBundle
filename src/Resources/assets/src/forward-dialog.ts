@@ -69,18 +69,14 @@ export function openForwardDialog(api: ForwardApi, i18n: Record<string, string>,
   const status = h('p', { class: 'nowo-chat-forward__status', role: 'status', 'data-part': 'forward-status' });
   const cancel = h('button', { type: 'button', class: 'nowo-chat-forward__cancel', 'data-part': 'dialog-cancel', text: t(i18n, 'cancel') });
   const send = h('button', { type: 'button', class: 'nowo-chat-forward__send', 'data-part': 'forward-send', text: t(i18n, 'forward_send'), disabled: true });
+  const cross = h('button', { type: 'button', class: 'nowo-chat-icon-btn nowo-chat-dialog__close', 'data-part': 'forward-close', 'aria-label': t(i18n, 'close'), title: t(i18n, 'close') }, h('span', { 'aria-hidden': 'true', text: '×' }));
+  // 1.36.1: the standard dialog anatomy (header with the title and ×, scrolling body, footer), medium width and height.
   const dialog = h(
     'dialog',
-    { class: 'nowo-chat-forward', 'aria-labelledby': title.id, 'data-part': 'forward-dialog' },
-    title,
-    searchLabel,
-    search,
-    hint,
-    list,
-    commentLabel,
-    comment,
-    status,
-    h('div', { class: 'nowo-chat-forward__actions' }, cancel, send),
+    { class: 'nowo-chat-dialog nowo-chat-dialog--md nowo-chat-forward', 'aria-labelledby': title.id, 'data-part': 'forward-dialog' },
+    h('header', { class: 'nowo-chat-dialog__header' }, title, cross),
+    h('div', { class: 'nowo-chat-dialog__body' }, searchLabel, search, hint, list, commentLabel, comment, status),
+    h('footer', { class: 'nowo-chat-dialog__footer nowo-chat-forward__actions' }, cancel, send),
   );
 
   const paint = (targets: ForwardTarget[]): void => {

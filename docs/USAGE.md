@@ -1593,6 +1593,11 @@ parts for the items it wants.
 | **Forward** (`menu-forward`) | whoever sees a text message (`forward.enabled`) | `GET /chat/api/forward-targets?q=`, `POST …/messages/{m}/forward` |
 | **Edits** in message info | the info's readers; previous texts for the author and moderators (`edit_history.enabled`) | `GET …/messages/{m}/revisions` |
 
+**Dialogs (1.36.1).** Message info and Forward are native modal `<dialog>` elements with the standard dialog anatomy of
+`.nowo-chat-dialog` (a header with the title and a close button, a scrolling body, a footer; width and height from
+`--nowo-dialog-width-md` / `--nowo-dialog-height-md`) and set `margin: auto` themselves, so they stay centred under a
+host CSS reset that zeroes margins (Tailwind preflight). The sheets on phones keep their own margins.
+
 **Forward.** The dialog lists the viewer's conversations where they may write (tickets for support agents only) and,
 when a name is typed, people for a new direct conversation. The viewer picks up to `forward.max_targets` and may add a
 comment. `POST …/forward {targets: [{conversationUuid} | {contactUuid}], comment?}` needs an `Idempotency-Key` header
