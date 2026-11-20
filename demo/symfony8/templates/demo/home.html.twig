@@ -1,7 +1,10 @@
 {% extends 'base.html.twig' %}
 
+{% block nowo_ui_page_header %}
+    {{ include(nowo_ui_partial('page_header'), { title: 'demo.heading'|trans }) }}
+{% endblock %}
+
 {% block body %}
-<div class="nowo-ui-page-header"><h1 class="nowo-ui-page-header__title">{{ 'demo.heading'|trans }}</h1></div>
 <p>{{ 'demo.lead'|trans }}</p>
 <p class="nowo-ui-muted">{{ 'demo.body'|trans({ '%profile%': default_profile }) }}</p>
 
