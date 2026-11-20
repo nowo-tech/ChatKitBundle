@@ -8,6 +8,11 @@ on:
       - reopened
       - synchronize
 
+# Superseded PR runs are cancelled; push runs never are (own group per run).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   semantic-pr:
     name: Validate semantic PR title
