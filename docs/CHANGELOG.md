@@ -212,9 +212,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Host-flush probe (REQ-ARCH-001 rule 6 deprecation layer).** Without `doctrine.private_entity_manager: true` every
+  chat write flushes your entity manager, and with it your own pending changes. Right before each of those flushes
+  (ChatKit's transaction runner, the writes it runs, auto-replies, links, mentions, GDPR mention scrubbing) ChatKit now
+  calls nowo-tech/transaction-doctrine's `HostFlushProbe`: every entity class outside `Nowo\ChatKitBundle\Entity` with
+  pending work triggers one `E_USER_DEPRECATED` per class and request, *"Your pending changes to App\X were flushed by
+  NowoChatKitBundle; 2.0 no longer does."* The probe is read-only (nothing is flushed, cleared, detached or reset) and
+  off with the private manager. Its state is emptied at every request, message and command boundary
+  (`ChatRequestBoundaryListener`, FrankenPHP worker mode with kernel reset off included) and at `kernel.reset`. The
+  shared `nowo_transaction_doctrine.host_flush_probe` is used when nowo-tech/transaction-doctrine's bundle is
+  registered, an own instance otherwise. New internal `Doctrine\ChatHostFlushProbe`.
+
+### Deprecated
+
+- **Leaving `profiles.<name>.doctrine.private_entity_manager` unset** now triggers a deprecation at the container build
+  (before, only an explicit `false` did): in 2.0 the private entity manager is the only mode. Opt in now with
+  `private_entity_manager: true` (see UPGRADING "To 1.39.0").
+- **Application ports on the deprecated interfaces** (`ChatChannelProviderInterface`, `ChatRealtimeInterface`,
+  `CurrentChatUserResolverInterface`, deprecated since 1.27 and removed in 2.0) now trigger a deprecation: at the
+  container build for a service whose class is known, when the service is created for a factory service. The bundle's
+  own defaults trigger none.
+- The `page_layout` deprecation (since 1.5) now says it is removed in 2.0, with `page_legacy.html.twig` and the Twig
+  global `nowo_chat_kit_page_layout`.
+
 ### Changed
 
-- Requires `nowo-tech/transaction-doctrine` ^1.8.1 (fixes GHSA-9wh3-m3m5-jffx and GHSA-65w2-9r4h-848g); root and demo locks updated to v1.8.1.
+- Requires `nowo-tech/transaction-doctrine` ^1.9 (the host-flush probe; 1.8.1 fixed GHSA-9wh3-m3m5-jffx and
+  GHSA-65w2-9r4h-848g); root and demo locks updated to v1.9.0.
 - Demo: aligned with UiKit and FormKit (`demo` FormKit profile, UiKit page header, `demo-nav-*` test ids on the masthead).
 
 ## [1.38.1] - 2026-11-20

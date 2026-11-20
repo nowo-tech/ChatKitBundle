@@ -25,9 +25,11 @@ use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Contract\ChatSupportTopicProviderInterface;
 use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerReferencesPass;
 use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
+use Nowo\ChatKitBundle\Doctrine\ChatHostFlushProbe;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
@@ -67,6 +69,7 @@ use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use Nowo\TransactionContract\TransactionRunnerInterface;
+use Nowo\TransactionDoctrine\HostFlushProbe;
 use Nowo\TransactionDoctrine\Symfony\Conflict\ConflictResponseFormatterInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\Mercure\HubInterface;
@@ -170,6 +173,8 @@ return static function (ContainerConfigurator $container): void {
             service(StringReferenceSchemaGuard::class)->ignoreOnUninitialized(),
             // 1.30: a shared manager closed by a failed chat write is replaced at the boundary (never mid-request).
             service(ChatKitTransactionRunner::SERVICE_ID)->ignoreOnUninitialized(),
+            // 1.39: the classes the host-flush probe already reported in this request.
+            service(ChatHostFlushProbe::class)->ignoreOnUninitialized(),
         ]));
     // 1.34: the shared lock-conflict policy (409 by default); absent when the host did not register nowo-tech/transaction-doctrine's bundle (the listener then uses 409 + 1 s).
     $services->set(ChatApiExceptionListener::class)
@@ -179,7 +184,12 @@ return static function (ContainerConfigurator $container): void {
     }
     // 1.30: ChatKit's runner (the extension sets the private manager's name and mode).
     $services->set(ChatKitTransactionRunner::SERVICE_ID, ChatKitTransactionRunner::class)
-        ->args([service(EntityManagerInterface::class), service('doctrine'), null, false, 1, service('logger')->nullOnInvalid()]);
+        ->args([service(EntityManagerInterface::class), service('doctrine'), null, false, 1, service('logger')->nullOnInvalid(), service(ChatHostFlushProbe::class)]);
+    // 1.39 (REQ-ARCH-001 rule 6 deprecation layer): the host-flush probe of host mode (off with the private manager);
+    // transaction-doctrine's shared probe when its bundle is registered, else an own one. Reset at every boundary.
+    $services->set(ChatHostFlushProbe::class)
+        ->args([service(HostFlushProbe::SERVICE_ID)->nullOnInvalid(), param(PrivateEntityManagerReferencesPass::PARAMETER)])
+        ->tag('kernel.reset', ['method' => 'reset']);
     $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).
     $services->alias(ChatServiceInterface::class, ChatService::class);

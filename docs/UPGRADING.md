@@ -5,6 +5,8 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [Preparing for 2.0](#preparing-for-20)
+- [To 1.39.0](#to-1390)
 - [To 1.38.1](#to-1381)
 - [To 1.38.0](#to-1380)
 - [To 1.37.0](#to-1370)
@@ -85,6 +87,83 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## Preparing for 2.0
+
+ChatKit 2.0 contains only the deprecations announced in 1.x; every one of them triggers a runtime deprecation in
+1.39.0, so a 1.39 application with an empty deprecation log for `nowo-tech/chat-kit-bundle` and no
+"flushed by NowoChatKitBundle" entry upgrades without changes. What 2.0 removes:
+
+| 1.x | 2.0 | Notice in 1.39 |
+|---|---|---|
+| `doctrine.private_entity_manager` unset or `false` (chat writes flush your entity manager) | the private entity manager is the only mode; the option goes | at the container build (unset: 1.39, `false`: 1.27) |
+| your pending changes flushed by a chat write | no longer written by ChatKit: flush them yourself | host-flush probe, one per entity class and request |
+| `ChatChannelProviderInterface`, `ChatRealtimeInterface`, `CurrentChatUserResolverInterface` | `ChatChannelSourceInterface`, `ChatRealtimeTransportInterface`, `ChatParticipantResolverInterface` | at the container build (or when a factory service is created) |
+| `profiles.<name>.page_layout`, `page_legacy.html.twig`, Twig global `nowo_chat_kit_page_layout` | `profiles.<name>.web_ui.layout_template` (or `nowo_ui_kit.layouts.admin`) | when the key is set (since 1.5) |
+| `ChatMessageSearchProvider::MAX_PAGE` (unused since 1.38) | `search_kit.messages.max_candidates` | none (a constant) |
+
+**1.x security support.** After 2.0.0 is tagged, the 1.x line gets security fixes for 6 months: Moderate and higher
+are backported to the last 1.x minor; Low ones are fixed in 2.x only, with the advice to upgrade. Advisories name both
+lines.
+
+## To 1.39.0
+
+From **1.38.x**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+Requires `nowo-tech/transaction-doctrine` ^1.9 (Composer updates it). Nothing breaks: with the same configuration the
+bundle behaves as 1.38, and no migration is needed. What is new is what you see in your deprecation log (the profiler,
+`var/log/*.deprecations.log`, or the container's build log):
+
+**Unset `private_entity_manager`.** Without `doctrine.private_entity_manager` you now get, once per container build:
+
+> Not setting "nowo_chat_kit.profiles.default.doctrine.private_entity_manager" is deprecated: chat writes then flush the
+> application's entity manager, including its pending changes. In 2.0 the private entity manager is the only mode (as
+> if true). [...]
+
+Opt in now; it needs no schema change and the tables stay where they are (see "Private entity manager" under
+[To 1.27.0](#private-entity-manager-req-arch-001-rule-6-opt-in) for what to check):
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            doctrine:
+                private_entity_manager: true
+```
+
+**The host-flush probe: your migration list.** Until you opt in, a chat write (sending, editing, deleting, reacting,
+pinning, links, auto-replies, support status, settings, GDPR erasure...) flushes your entity manager. Right before each
+of those flushes ChatKit now lists the entity classes **outside ChatKit** with pending changes in your unit of work
+and triggers, once per class and request (or message, or command):
+
+> Your pending changes to App\Entity\Order were flushed by NowoChatKitBundle; 2.0 no longer does.
+
+Each entry is a place where your code changed or persisted an `App\Entity\Order` and relied on the chat write to save
+it. In 2.0 (and in 1.39 with `private_entity_manager: true`) ChatKit writes only its own rows, so that change would
+be lost. To migrate:
+
+1. Run the application (or its test suite) on 1.39 for a while and collect the "flushed by NowoChatKitBundle" entries:
+   that is the exact list of classes.
+2. For each class, find the code that changes it before a chat call and add your own `$entityManager->flush()` (or
+   your usual unit of work) after the change.
+3. Turn `private_entity_manager: true` on and check that no new entries appear (with the private manager the probe is
+   off: the entries stop because ChatKit no longer flushes your manager).
+
+The probe only reads: it never flushes, clears, detaches or resets anything, and it costs nothing for ChatKit's own
+classes. It is reset at every request, message and command boundary, also in FrankenPHP worker mode with kernel reset
+off.
+
+**Deprecated port interfaces.** An application service on `ChatChannelProviderInterface`, `ChatRealtimeInterface` or
+`CurrentChatUserResolverInterface` (deprecated since 1.27) now triggers, once per container build:
+
+> App\Chat\ProjectChannels implements the deprecated Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface, which is
+> removed in 2.0. Implement Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface instead [...]
+
+Move it to the twin as described in [Framework-free port twins](#framework-free-port-twins-req-arch-001-rule-3).
 
 ## To 1.38.1
 

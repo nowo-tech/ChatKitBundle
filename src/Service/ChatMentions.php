@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Service;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelMentionPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatHostFlushProbe;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -56,6 +57,8 @@ final readonly class ChatMentions
 
     /**
      * Builds the service from the recipients (conversation members), the access checks and the mention rows.
+     *
+     * @param ChatHostFlushProbe|null $hostFlushProbe 1.39: reports the application's pending changes its flush writes on the shared manager; null reports none
      */
     public function __construct(
         private ChatRecipients $recipients,
@@ -67,6 +70,7 @@ final readonly class ChatMentions
         private ?RateLimiterFactoryInterface $mentionAllLimiter = null,
         private ?ChatParticipantRepository $participants = null,
         private ClockInterface $clock = new Clock(),
+        private ?ChatHostFlushProbe $hostFlushProbe = null,
     ) {
     }
 
@@ -229,6 +233,7 @@ final readonly class ChatMentions
                     if (in_array($clash, $pending, true)) {
                         // The row it may fold onto is not stored yet: store it, then ask the column. 1.30: sync() runs inside
                         // ChatService's unit of work (TransactionRunnerInterface), which recovers the manager on failure.
+                        $this->hostFlushProbe?->beforeFlush($this->entityManager);
                         $this->entityManager->flush(); // @phpstan-ignore frankenphp.worker.noFlushWithoutClosedManagerRecovery
                         $stored  = [...$stored, ...$pending];
                         $pending = [];
