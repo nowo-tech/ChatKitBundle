@@ -218,6 +218,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Message search inside the conversation (owner request through Beacon): a search button in each conversation header
+  (`search.conversation_entry`, default true with `search.enabled`) opens a modal over the conversation — UiKit
+  `confirm_dialog` anatomy (title, ×, a body of sections that alone scrolls, a footer with Close then the one primary
+  "Search"), the wide size (`--nowo-dialog-width-wide` / `--nowo-dialog-height-wide`, fit-content height), a
+  full-screen sheet on phones. The scope is this conversation by default, with "All my conversations" to widen it; the
+  rare filters (From, From date, To date, Has a link) fold under "More filters" (`<details>`). Each result shows the
+  excerpt with the words marked (escaped by Twig, then marked); picking one closes the modal and scrolls to the message
+  and highlights it, or opens the other conversation at the message (`/chat/{uuid}?message=<uuid>`). Focus stays in the
+  modal (Tab cycles), Escape closes it and gives focus back to the button, closing aborts the pending request. Without
+  JavaScript the button (and a link in the server-rendered conversation header) opens `/chat/search?conversation=<uuid>`.
+- `GET /chat/search/results` (route `nowo_chat_search_results`): the modal's results as an HTML fragment
+  (`_search_results.html.twig`, block `nowo_chat_msearch_results`), the same search service, access rules (membership
+  filtered in SQL), budget (`limits.searches_per_minute`) and escaping as the page; `scope=all` drops the
+  `conversation` filter (`scope=current` without `conversation` is the same), so it still finds only the viewer's own
+  conversations. GET only, reads only (no CSRF token), `Cache-Control: no-store`, marked with `X-Nowo-Chat-Fragment:
+  search-results` (the modal shows a "session expired, reload" notice for any other answer, such as a login page); nothing kept between requests (FrankenPHP worker mode, kernel reset off).
+- `ChatMessageSearchType` option `scope` (the modal's "this conversation / all my conversations" field); dock
+  global `nowo_chat_search_conversation`, the form view `nowo_chat_dock_forms().message_search` and the endpoints
+  `searchResults` / `searchPage` (present only while the modal is on); `_templates.html.twig` block
+  `nowo_chat_template_search_dialog`. Translations `chat_search.modal.*` in every locale.
+
 ## [1.39.1] - 2026-11-20
 
 ### Fixed

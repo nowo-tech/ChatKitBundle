@@ -292,7 +292,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$packages', service('assets.packages')->nullOnInvalid())
         ->arg('$messageContextMenu', param('nowo_chat_kit.web_ui.message_context_menu'))
         ->arg('$messageMenu', param('nowo_chat_kit.message_menu'))
-        ->arg('$searchDockEntry', param('nowo_chat_kit.search.dock_link'));
+        ->arg('$searchDockEntry', param('nowo_chat_kit.search.dock_link'))
+        ->arg('$searchConversationEntry', param('nowo_chat_kit.search.conversation_link'));
     // 1.25: the host sections of the sidebar (UX icon names rendered with the dock's icon set).
     $services->get(ChatSidebar::class)
         ->arg('$iconRenderer', service(IconRendererInterface::class)->nullOnInvalid())

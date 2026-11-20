@@ -89,6 +89,25 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+**1.40.0** — the conversation header gets a message search button that opens a modal, whenever `search.enabled` is on
+(`search.conversation_entry`, default **true**). To keep the 1.39 header, turn it off:
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            search:
+                conversation_entry: false
+```
+
+- Hosts that override `_templates.html.twig`: the `window` template gets an `<a data-part="message-search">` before
+  the resolve button, and a new `search-dialog` template (block `nowo_chat_template_search_dialog`) renders after the
+  others. An override of the `window` block without the button simply has no search button; an override without the
+  `search-dialog` template makes the button open `/chat/search` instead.
+- Hosts that bundle the dock's TypeScript themselves: rebuild (new module `search-dialog.ts`).
+- The modal uses UiKit's `confirm_dialog` anatomy and dialog CSS (UiKit ≥ 2.29; the bundle already requires ^2.58.1).
+- Nothing changes in who can search what: the modal's fragment endpoint calls the same search as the page.
+
 ## To 1.39.1
 
 From **1.39.0**:

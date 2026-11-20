@@ -432,3 +432,19 @@ chat_search:
   conversations:
     group: 'Unterhaltungen'
     direct: 'Direktnachricht'
+  # 1.40: the search modal of the conversation header.
+  modal:
+    open: 'In dieser Unterhaltung suchen'
+    title: 'Nachrichten suchen'
+    close: 'Schließen'
+    more_filters: 'Weitere Filter'
+    scope: 'Suchen in'
+    scope_current: 'Diese Unterhaltung'
+    scope_all: 'Alle meine Unterhaltungen'
+    start_title: 'Eine Nachricht finden'
+    start: 'Gib die gesuchten Wörter ein; passende Nachrichten erscheinen hier.'
+    empty_title: 'Keine Ergebnisse'
+    loading: 'Suche läuft…'
+    failed: 'Die Suche ist fehlgeschlagen. Versuche es erneut.'
+    expired: 'Deine Sitzung ist abgelaufen. Lade die Seite neu, um erneut zu suchen.'
+    reload: 'Neu laden'

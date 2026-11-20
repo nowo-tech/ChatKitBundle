@@ -34,14 +34,31 @@ final class ChatMessageSearchType extends AbstractType
 {
     use FormOptionsTrait;
 
+    /** 1.40: scope of the search modal — the open conversation. */
+    public const string SCOPE_CURRENT = 'current';
+
+    /** 1.40: scope of the search modal — every conversation the viewer may read. */
+    public const string SCOPE_ALL = 'all';
+
     /**
      * Adds the text, the filters and the submit button.
      *
      * @param FormBuilderInterface<array<string, mixed>|null> $builder The form builder
-     * @param array<string, mixed> $options The options (`max_length`: the text's maxlength)
+     * @param array<string, mixed> $options The options (`max_length`: the text's maxlength; `scope`, 1.40: the modal's
+     *                                      "this conversation / all" choice)
      */
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
+        if ($options['scope'] === true) {
+            // 1.40, the search modal: this conversation (default) or every conversation of the viewer.
+            $this->addWithDefaults($builder, 'scope', ChoiceType::class, [
+                'label'    => 'chat_search.modal.scope',
+                'required' => true,
+                'choices'  => ['chat_search.modal.scope_current' => self::SCOPE_CURRENT, 'chat_search.modal.scope_all' => self::SCOPE_ALL],
+                'data'     => self::SCOPE_CURRENT,
+                'attr'     => ['data-testid' => 'chat-search-scope'],
+            ]);
+        }
         $this->addWithDefaults($builder, 'q', SearchType::class, [
             'label'    => 'chat_search.label',
             'required' => true,
@@ -78,8 +95,10 @@ final class ChatMessageSearchType extends AbstractType
             'csrf_protection'    => false,
             'allow_extra_fields' => true,
             'max_length'         => 200,
+            'scope'              => false,
         ]);
         $resolver->setAllowedTypes('max_length', 'int');
+        $resolver->setAllowedTypes('scope', 'bool');
     }
 
     public function getBlockPrefix(): string

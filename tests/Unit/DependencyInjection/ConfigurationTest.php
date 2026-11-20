@@ -48,7 +48,7 @@ final class ConfigurationTest extends TestCase
             'auto_away_minutes'         => 10,
             'dock'                      => ['overlay' => 'hide', 'watch_aria_modal' => false],
             'links'                     => ['enabled' => true, 'max_pinned' => 20, 'allow_http' => false, 'channel_managers' => 'members', 'providers' => Configuration::DEFAULT_LINK_PROVIDERS],
-            'search'                    => ['enabled' => false, 'dock_entry' => true, 'fulltext' => true, 'postgresql_config' => 'simple', 'mysql_min_token_length' => 3, 'min_query_length' => 2, 'max_query_length' => 200, 'page_size' => 20],
+            'search'                    => ['enabled' => false, 'dock_entry' => true, 'conversation_entry' => true, 'fulltext' => true, 'postgresql_config' => 'simple', 'mysql_min_token_length' => 3, 'min_query_length' => 2, 'max_query_length' => 200, 'page_size' => 20],
             'search_kit'                => ['enabled' => false, 'priority' => 30, 'messages' => ['enabled' => true, 'max_candidates' => 100], 'channels' => ['enabled' => true, 'priority' => 35, 'max_candidates' => 100, 'direct_scan' => 200]],
             'message_menu'              => [
                 'quick_reactions' => ['emojis' => Configuration::DEFAULT_QUICK_REACTIONS, 'picker' => true],

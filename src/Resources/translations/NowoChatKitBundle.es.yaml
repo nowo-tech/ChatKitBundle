@@ -432,3 +432,19 @@ chat_search:
   conversations:
     group: 'Conversaciones'
     direct: 'Mensaje directo'
+  # 1.40: the search modal of the conversation header.
+  modal:
+    open: 'Buscar en esta conversación'
+    title: 'Buscar mensajes'
+    close: 'Cerrar'
+    more_filters: 'Más filtros'
+    scope: 'Buscar en'
+    scope_current: 'Esta conversación'
+    scope_all: 'Todas mis conversaciones'
+    start_title: 'Encuentra un mensaje'
+    start: 'Escribe las palabras que buscas; los mensajes que coincidan aparecerán aquí.'
+    empty_title: 'Sin resultados'
+    loading: 'Buscando…'
+    failed: 'La búsqueda ha fallado. Inténtalo de nuevo.'
+    expired: 'Tu sesión ha caducado. Recarga la página para volver a buscar.'
+    reload: 'Recargar'

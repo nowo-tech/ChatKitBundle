@@ -432,3 +432,19 @@ chat_search:
   conversations:
     group: 'Conversations'
     direct: 'Direct message'
+  # 1.40: the search modal of the conversation header.
+  modal:
+    open: 'Search in this conversation'
+    title: 'Search messages'
+    close: 'Close'
+    more_filters: 'More filters'
+    scope: 'Search in'
+    scope_current: 'This conversation'
+    scope_all: 'All my conversations'
+    start_title: 'Find a message'
+    start: 'Type the words to find; the matching messages appear here.'
+    empty_title: 'No results'
+    loading: 'Searching…'
+    failed: 'The search failed. Try again.'
+    expired: 'Your session has expired. Reload the page to search again.'
+    reload: 'Reload'

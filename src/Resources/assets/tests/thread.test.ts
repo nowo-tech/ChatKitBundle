@@ -1938,3 +1938,64 @@ describe('plain', () => {
     expect(plain('<p>see <a class="nowo-chat-ref"><span>Task</span><span class="nowo-chat-ref__title">Deploy</span></a>, <span class="nowo-chat-ref nowo-chat-ref--restricted"><span class="nowo-chat-ref__title">Hidden</span></span> <span class="nowo-chat-ref"></span></p>')).toBe('see #Deploy, [Hidden] #');
   });
 });
+
+describe('search button of the header (1.40)', () => {
+  afterEach(() => {
+    document.body.querySelectorAll('dialog').forEach((dialog) => dialog.remove());
+  });
+
+  it('goes away without the search endpoints', () => {
+    const { q } = setup();
+    expect(q('[data-part="message-search"]')).toBeNull();
+  });
+
+  it('links to the search page and opens the modal; a pick here jumps, elsewhere navigates', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    const fetcher = vi.spyOn(window, 'fetch').mockImplementation(async () => new Response(
+      '<ol><li><a href="/chat/c1?message=m1" data-nowo-chat-search-hit data-conversation="c1" data-message="m1">here</a></li><li><a href="/chat/c9?message=m9" data-nowo-chat-search-hit data-conversation="c9" data-message="m9">there</a></li></ol>',
+      { status: 200, headers: { 'X-Nowo-Chat-Fragment': 'search-results' } },
+    ));
+    const { view, q } = setup({}, {}, { endpoints: { page: '/chat/__uuid__', searchResults: '/chat/search/results', searchPage: '/chat/search' } } as Partial<ChatConfig>);
+    const jump = vi.spyOn(view, 'jumpWhenLoaded').mockImplementation(() => undefined);
+    const link = q<HTMLAnchorElement>('[data-part="message-search"]');
+    expect(link.getAttribute('href')).toBe('/chat/search?conversation=c1');
+
+    const modified = new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true });
+    link.dispatchEvent(modified);
+    expect(modified.defaultPrevented).toBe(false);
+    expect(document.querySelector('[data-testid="chat-search-dialog"]')).toBeNull();
+
+    link.click();
+    const dialog = document.querySelector<HTMLDialogElement>('[data-testid="chat-search-dialog"]');
+    expect(dialog).not.toBeNull();
+    (dialog!.querySelector('input[type="search"]') as HTMLInputElement).value = 'here';
+    dialog!.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+    await vi.waitFor(() => expect(dialog!.querySelectorAll('[data-nowo-chat-search-hit]')).toHaveLength(2));
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain('conversation=c1');
+    (dialog!.querySelector('[data-message="m1"]') as HTMLAnchorElement).click();
+    expect(jump).toHaveBeenCalledWith('m1');
+    expect(document.activeElement).toBe(link);
+
+    link.click();
+    const again = document.querySelector<HTMLDialogElement>('[data-testid="chat-search-dialog"]')!;
+    (again.querySelector('input[type="search"]') as HTMLInputElement).value = 'there';
+    again.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
+    await vi.waitFor(() => expect(again.querySelectorAll('[data-nowo-chat-search-hit]')).toHaveLength(2));
+    (again.querySelector('[data-message="m9"]') as HTMLAnchorElement).click();
+    expect(assign).toHaveBeenCalledWith(expect.stringContaining('/chat/c9?message=m9'));
+    vi.unstubAllGlobals();
+  });
+
+  it('falls back to the page when the host template has no modal', () => {
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, assign });
+    const { q, host } = setup({}, {}, { endpoints: { page: '/chat/__uuid__', searchResults: '/chat/search/results', searchPage: '/chat/search' } } as Partial<ChatConfig>);
+    vi.spyOn(host.templates, 'clone').mockImplementation(() => {
+      throw new Error('missing');
+    });
+    q<HTMLAnchorElement>('[data-part="message-search"]').click();
+    expect(assign).toHaveBeenCalledWith(expect.stringContaining('/chat/search?conversation=c1'));
+    vi.unstubAllGlobals();
+  });
+});

@@ -227,7 +227,7 @@
                     <span class="nowo-chat-badge" data-part="badge" hidden></span>
                 </button>
                 <span class="nowo-chat-window__actions">
-                        <button type="button" class="nowo-chat-icon-btn nowo-chat-window__resolve" data-part="resolve" aria-label="Mark resolved" title="Mark resolved"><span data-icon="check"></span></button>
+                    <a class="nowo-chat-icon-btn nowo-chat-window__search" data-part="message-search" href="/chat/search" aria-haspopup="dialog" aria-label="Search in this conversation" title="Search in this conversation"><span data-icon="search"></span></a>    <button type="button" class="nowo-chat-icon-btn nowo-chat-window__resolve" data-part="resolve" aria-label="Mark resolved" title="Mark resolved"><span data-icon="check"></span></button>
 
                         <button type="button" class="nowo-chat-icon-btn nowo-chat-window__mute" data-part="mute" aria-label="Mute conversation" title="Mute conversation"><span data-icon="bell"></span></button>
 
@@ -515,6 +515,42 @@
         <a class="nowo-chat-sidebar__action" tabindex="-1"><span class="nowo-chat-sidebar__icon" data-part="icon" aria-hidden="true"></span><span data-part="label"></span></a>
     </template>
 
-                <template data-nowo-chat-icon="close"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"></path></svg></template>
+                <template data-nowo-chat-template="search-dialog">
+            
+<dialog class="nowo-ui-confirm-dialog nowo-ui-confirm-dialog--wide nowo-ui-confirm-dialog--anatomy nowo-chat-msearch" data-confirm-dialog-target="dialog" data-testid="chat-search-dialog" aria-labelledby="nowo-chat-msearch-title">
+            <header class="nowo-ui-dialog__header">
+        <h2 class="nowo-ui-dialog__title" id="nowo-chat-msearch-title">Search messages</h2>
+                    <button type="button" class="nowo-ui-dialog__close" data-confirm-dialog-close aria-label="Close" title="Close"><span aria-hidden="true">&times;</span></button>
+            </header>
+    <div class="nowo-ui-dialog__body">                                        <div class="nowo-chat-msearch__section nowo-chat-msearch__section--form">
+                        <form name="nowo_chat_msearch" method="get" action="/chat/search" id="nowo_chat_msearch_form" class="nowo-chat-msearch__form" role="search" data-part="search-form">
+                            <div><label for="nowo_chat_msearch_scope" class="required">Search in</label><select id="nowo_chat_msearch_scope" name="nowo_chat_msearch[scope]" data-testid="chat-search-scope"><option value="current" selected="selected">This conversation</option><option value="all">All my conversations</option></select></div>
+                            <div><label for="nowo_chat_msearch_q" class="required">Words to find</label><input type="search" id="nowo_chat_msearch_q" name="nowo_chat_msearch[q]" required="required" maxlength="200" autocomplete="off" data-testid="chat-search-input" /></div>
+                            <details class="nowo-chat-msearch__filters" data-part="search-filters" data-testid="chat-msearch-filters">
+                                <summary class="nowo-chat-msearch__filters-toggle">More filters</summary>
+                                <div class="nowo-chat-msearch__filters-body">
+                                    <div><label for="nowo_chat_msearch_from">From</label><select id="nowo_chat_msearch_from" name="nowo_chat_msearch[from]"><option value="">Anyone</option><option value="me">Me</option></select></div>
+                                    <div><label for="nowo_chat_msearch_after">From date</label><input type="date" id="nowo_chat_msearch_after" name="nowo_chat_msearch[after]" /></div>
+                                    <div><label for="nowo_chat_msearch_before">To date</label><input type="date" id="nowo_chat_msearch_before" name="nowo_chat_msearch[before]" /></div>
+                                    <div><label for="nowo_chat_msearch_link">Has a link</label><input type="checkbox" id="nowo_chat_msearch_link" name="nowo_chat_msearch[link]" value="1" /></div>
+                                </div>
+                            </details>
+                                                        <input type="hidden" id="nowo_chat_msearch_conversation" name="nowo_chat_msearch[conversation]" />
+                        </form>
+                    </div>
+                    <div class="nowo-chat-msearch__section nowo-chat-msearch__section--results" data-part="search-results" aria-live="polite" aria-busy="false" data-loading="Searching…" data-failed="The search failed. Try again." data-expired="Your session has expired. Reload the page to search again." data-reload="Reload" data-notice-class="nowo-ui-flash nowo-ui-flash--error alert alert-danger" data-reload-class="nowo-ui-btn nowo-ui-btn--secondary btn btn-outline-secondary" data-testid="chat-msearch-area">
+                        <div class="nowo-chat-msearch__empty" data-testid="chat-msearch-start">
+                                        <div class="nowo-ui-empty nowo-ui-muted text-muted">
+        <p class="nowo-ui-empty__title">Find a message</p>        <p class="nowo-ui-empty__message">Type the words to find; the matching messages appear here.</p>
+            </div>
+
+                        </div>
+                    </div>
+                </div>
+    <footer class="nowo-ui-dialog__footer">                    <button type="button" class="nowo-ui-btn nowo-ui-btn--secondary btn btn-outline-secondary" data-part="search-close" data-testid="chat-msearch-close">Close</button>
+                    <button type="submit" form="nowo_chat_msearch_form" class="nowo-ui-btn nowo-ui-btn--primary btn btn-primary" data-part="search-submit" data-testid="chat-msearch-submit">Search</button>
+                </footer>
+</dialog>
+        </template>                <template data-nowo-chat-icon="close"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"></path></svg></template>
             <template data-nowo-chat-icon="send"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M4 12 20 4l-6 16-3-7z"></path></svg></template>
     

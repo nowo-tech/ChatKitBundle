@@ -70,12 +70,14 @@ final class ChatMessageSearchTest extends DatabaseTestCase
         $this->client->request(Request::METHOD_GET, '/chat/api/search?q=hello');
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
         self::assertSame(['ok' => false, 'error' => 'not_found'], $this->decode());
-        self::assertStringNotContainsString('data-part="message-search"', $this->renderDockTemplates());
+        // 1.40: the conversation header has its own search button (search.conversation_entry); the dock header link is gone.
+        self::assertStringNotContainsString('nowo-chat-panel__search', $this->renderDockTemplates());
     }
 
     public function testDockLinkCanBeHidden(): void
     {
-        self::assertStringNotContainsString('data-part="message-search"', $this->renderDockTemplates());
+        // 1.40: the conversation header has its own search button (search.conversation_entry); the dock header link is gone.
+        self::assertStringNotContainsString('nowo-chat-panel__search', $this->renderDockTemplates());
     }
 
     public function testGuestsAndUnreachableUsersGetNothing(): void
