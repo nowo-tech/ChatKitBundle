@@ -21,6 +21,9 @@ use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Routing\Loader\AttributeServicesLoader;
 use Symfony\Component\Routing\RouterInterface;
 
+use const E_DEPRECATED;
+use const E_USER_DEPRECATED;
+
 /**
  * Smoke test: the bundle boots in a real kernel with default configuration.
  *
@@ -90,6 +93,37 @@ final class BundleBootTest extends TestCase
         $orm = $container->getExtensionConfig('doctrine')[0]['orm'];
         self::assertSame([ChatUserInterface::class => TestUser::class], $orm['resolve_target_entities']);
         self::assertSame('Nowo\\ChatKitBundle\\Entity', $orm['mappings']['NowoChatKitBundle']['prefix']);
+        // 1.40.1: no `alias` (deprecated by DoctrineBundle 3.4, removed in 4.0; doctrine/orm 3 has no alias namespaces).
+        self::assertArrayNotHasKey('alias', $orm['mappings']['NowoChatKitBundle']);
+    }
+
+    /**
+     * 1.40.1: building the container raises no DoctrineBundle deprecation about the bundle's mapping (DoctrineBundle 3.4
+     * deprecates `mappings.<name>.alias`; older DoctrineBundle versions never raise it).
+     */
+    public function testBootingRaisesNoMappingAliasDeprecation(): void
+    {
+        (new Filesystem())->remove(sys_get_temp_dir() . '/nowo-chat-kit-bundle');
+        $deprecations = [];
+        // Restored right after the boot (a test, never a worker).
+        // @phpstan-ignore frankenphp.worker.noSetErrorExceptionHandler
+        set_error_handler(static function (int $level, string $message) use (&$deprecations): bool {
+            $deprecations[] = $message;
+
+            return true;
+        }, E_USER_DEPRECATED | E_DEPRECATED);
+        $kernel = new TestKernel();
+
+        try {
+            $kernel->boot();
+        } finally {
+            restore_error_handler();
+            $kernel->shutdown();
+        }
+
+        foreach ($deprecations as $message) {
+            self::assertDoesNotMatchRegularExpression('/NowoChatKitBundle\.alias\b.*deprecated/i', $message);
+        }
     }
 
     public function testPrependIgnoresEnvValuesItDoesNotNeed(): void
