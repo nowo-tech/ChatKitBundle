@@ -42,7 +42,7 @@
         "doctrine/orm": "^3.3",
         "nowo-tech/form-kit-bundle": "^2.17",
         "nowo-tech/transaction-contract": "^1.0",
-        "nowo-tech/transaction-doctrine": "^1.6",
+        "nowo-tech/transaction-doctrine": "^1.8",
         "nowo-tech/ui-kit-bundle": "^2.58.1",
         "psr/cache": "^3.0",
         "psr/log": "^3.0",

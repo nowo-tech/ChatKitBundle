@@ -209,6 +209,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Requires `nowo-tech/transaction-doctrine` ^1.8 (fixes GHSA-9wh3-m3m5-jffx and GHSA-65w2-9r4h-848g).
+
 ### Fixed
 
 - Tests: the two private entity manager rollback-bookkeeping tests (`PrivateEntityManagerDetailsTest::testRefreshTransactionsAndClear`,
