@@ -231,6 +231,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   into the default mode's INT (`SQLSTATE[42804]: column "user_id" cannot be cast automatically to type integer`), so
   the "Load readiness (PostgreSQL 16)" job failed. The test now leaves the default schema behind. No change to the
   bundle.
+- Tests only: the dock template fixture (`src/Resources/assets/tests/fixtures/templates.html`) follows UiKit 2.61.0, whose
+  empty state renders its first line without a line break, and the development lock now installs UiKit 2.61.0. No change
+  to the bundle or to its requirements.
 
 ## [1.40.1] - 2026-11-20
 
