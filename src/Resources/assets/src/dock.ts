@@ -114,6 +114,8 @@ export class ChatDock implements ThreadHost {
   private sessionStale = false;
   /** 1.23: last measured height of the folded dock (px, gap included); 0 until measured. */
   private reserve = 0;
+  /** The lift (px) the dock currently has over avoided bars; excluded from the measured reserve. */
+  private toolbarOffset = 0;
   /** Link previews already asked for (null: nothing to show), shared by every window. */
   private readonly previews = new Map<string, Promise<LinkPreview | null>>();
   private previewBatch: { urls: string[]; resolve: (map: Record<string, LinkPreview>) => void } | null = null;
@@ -476,30 +478,74 @@ export class ChatDock implements ThreadHost {
    * Keeps the dock flush with the bottom of the viewport, or just above whatever covers it there: elements the
    * application marks with `data-nowo-chat-avoid` (e.g. its footer — fixed, or static and scrolled into view) and the
    * Symfony web debug toolbar (collapsed, open, wrapped on two rows). Their visible height goes to
-   * `--nowo-chat-toolbar-offset`, recomputed when they appear or change, on resize and on every scroll — captured, so
-   * an inner scroller (the host's main column under a fixed header) counts too.
+   * `--nowo-chat-toolbar-offset`, recomputed when they appear, move or change, on resize and on the scroll of the document or of a
+   * scroller that holds one of them (captured, so the host's main column under a fixed header counts; a sidebar does not).
    *
    * @param signal Stops the observers and listeners when the dock is destroyed.
    */
   private trackBottomBars(signal: AbortSignal): void {
+    const selector = '[data-nowo-chat-avoid], .sf-toolbar .sf-toolbarreset, .sf-toolbar .sf-minitoolbar';
+    let last = -1;
     const measure = (): void => {
       let offset = 0;
-      document
-        .querySelectorAll<HTMLElement>('[data-nowo-chat-avoid], .sf-toolbar .sf-toolbarreset, .sf-toolbar .sf-minitoolbar')
-        .forEach((bar) => {
-          const rect = bar.getBoundingClientRect();
-          if (rect.height > 0 && rect.width > 0 && rect.top < window.innerHeight && rect.bottom > 0) {
-            offset = Math.max(offset, Math.round(window.innerHeight - rect.top));
-          }
-        });
-      this.root.style.setProperty('--nowo-chat-toolbar-offset', `${Math.max(0, offset)}px`);
-      // The dock moved with the bars: what it covers moved too.
-      this.syncReserve();
+      document.querySelectorAll<HTMLElement>(selector).forEach((bar) => {
+        const rect = bar.getBoundingClientRect();
+        if (rect.height > 0 && rect.width > 0 && rect.top < window.innerHeight && rect.bottom > 0) {
+          offset = Math.max(offset, Math.round(window.innerHeight - rect.top));
+        }
+      });
+      offset = Math.max(0, offset);
+      this.toolbarOffset = offset;
+      this.root.style.setProperty('--nowo-chat-toolbar-offset', `${offset}px`);
+      // The dock moved with the bars: what it covers moved too. Only when the lift changed (the reserve excludes it, so a
+      // scroll that moves nothing has nothing to re-measure).
+      if (offset !== last) {
+        last = offset;
+        this.syncReserve();
+      }
     };
     let frame = 0;
     const schedule = (): void => {
       window.cancelAnimationFrame(frame);
       frame = window.requestAnimationFrame(measure);
+    };
+    // A bar that moves without any scroll or resize (the page grows or shrinks around it, a bar is shown) is caught by
+    // observers: sizes through ResizeObserver, visibility through IntersectionObserver. Both are absent in old engines
+    // and in jsdom: the listeners below still cover those.
+    let resizes: ResizeObserver | null = null;
+    let visibility: IntersectionObserver | null = null;
+    const disconnectGeometry = (): void => {
+      resizes?.disconnect();
+      visibility?.disconnect();
+      resizes = null;
+      visibility = null;
+    };
+    const watchGeometry = (): void => {
+      disconnectGeometry();
+      if (typeof ResizeObserver === 'function') {
+        const observer = new ResizeObserver(schedule);
+        resizes = observer;
+        observer.observe(document.documentElement);
+        observer.observe(document.body);
+      }
+      if (typeof IntersectionObserver === 'function') {
+        visibility = new IntersectionObserver(schedule, { threshold: [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1] });
+      }
+      document.querySelectorAll<HTMLElement>(selector).forEach((bar) => {
+        visibility?.observe(bar);
+        if (resizes === null) {
+          return;
+        }
+        resizes.observe(bar);
+        // What grows around a bar (the content above it in its scroller) moves it: observe its parent and siblings too.
+        const parent = bar.parentElement;
+        if (parent !== null) {
+          resizes.observe(parent);
+          Array.from(parent.children)
+            .slice(0, 50)
+            .forEach((sibling) => resizes?.observe(sibling));
+        }
+      });
     };
     const bars = new MutationObserver(measure);
     const watch = (): void => {
@@ -507,20 +553,47 @@ export class ChatDock implements ThreadHost {
       document.querySelectorAll('.sf-toolbar, [data-nowo-chat-avoid]').forEach((element) =>
         bars.observe(element, { attributes: true, attributeFilter: ['class', 'style'], childList: true, subtree: true }),
       );
+      watchGeometry();
       measure();
     };
     // The toolbar is injected after the page loads (AJAX): watch the body's direct children for it.
     const body = new MutationObserver(watch);
     body.observe(document.body, { childList: true });
-    window.addEventListener('resize', measure, { signal });
-    // 1.27.1: `capture: true` is what makes this work in a host whose scroller is an inner element (a fixed header with
-    // a scrolling main column): scroll events do not bubble, so a bubble-phase listener on `window` only ever sees the
-    // document scrolling, and a static footer scrolled into view would never be measured.
-    window.addEventListener('scroll', schedule, { signal, passive: true, capture: true });
+    window.addEventListener(
+      'resize',
+      () => {
+        measure();
+        this.syncReserve();
+      },
+      { signal },
+    );
+    // `capture: true` is what makes this work in a host whose scroller is an inner element (a fixed header with a
+    // scrolling main column): scroll events do not bubble, so a bubble-phase listener on `window` only ever sees the
+    // document scrolling, and a static footer scrolled into view would never be measured. Only the scrollers that
+    // matter count: the document, or an element that holds an avoided bar. A sidebar or a message list scrolling says
+    // nothing about where the bars are.
+    window.addEventListener(
+      'scroll',
+      (event) => {
+        const target = event.target;
+        if (target instanceof Element && target !== document.documentElement && target !== document.body) {
+          let relevant = false;
+          document.querySelectorAll(selector).forEach((bar) => {
+            relevant = relevant || target.contains(bar);
+          });
+          if (!relevant) {
+            return;
+          }
+        }
+        schedule();
+      },
+      { signal, passive: true, capture: true },
+    );
     signal.addEventListener('abort', () => {
       window.cancelAnimationFrame(frame);
       bars.disconnect();
       body.disconnect();
+      disconnectGeometry();
     });
     watch();
   }
@@ -1769,7 +1842,11 @@ export class ChatDock implements ThreadHost {
     if (!this.panel.classList.contains('is-open') && !this.panelBody.hasAttribute('data-nowo-chat-closing')) {
       const rect = this.panel.getBoundingClientRect();
       if (rect.height > 0) {
-        this.reserve = Math.max(0, Math.round(window.innerHeight - rect.top)) + RESERVE_GAP;
+        // The dock's lift over avoided bars is not space the dock covers in the page: counting it made a footer inside
+        // the scroller loop (footer visible, page grows by the lift, footer leaves the view, dock drops, page shrinks...).
+        const bottomOffset = Number.parseFloat(getComputedStyle(this.root).getPropertyValue('--nowo-chat-bottom-offset'));
+        const lift = Math.max(0, this.toolbarOffset - (Number.isFinite(bottomOffset) ? bottomOffset : 0));
+        this.reserve = Math.max(0, Math.round(window.innerHeight - rect.top - lift)) + RESERVE_GAP;
       }
     }
     const reserve = this.reserve > 0 ? this.reserve : (this.isMobile() ? RESERVE_FALLBACK_MOBILE : RESERVE_FALLBACK_DESKTOP) + RESERVE_GAP;

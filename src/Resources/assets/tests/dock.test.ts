@@ -985,6 +985,128 @@ describe('ChatDock', () => {
     scroller.remove();
   });
 
+  it('keeps the dock lift over an avoided footer out of the reserve, so a footer in the scroller does not loop', async () => {
+    const reserve = (): string => document.documentElement.style.getPropertyValue('--nowo-chat-dock-reserve');
+    const scroller = document.createElement('div');
+    const footer = document.createElement('footer');
+    footer.setAttribute('data-nowo-chat-avoid', '');
+    scroller.append(footer);
+    document.body.append(scroller);
+    const { dock, root, q } = mount([summary('a')]);
+    await dock.start();
+    const rect = (top: number, height: number) => ({ top, height, width: 600, bottom: top + height, left: 0, right: 600, x: 0, y: top, toJSON: () => ({}) });
+    const innerHeight = window.innerHeight;
+    // The folded dock is 60px tall and rests on the bottom edge.
+    const panel = q('.nowo-chat-panel');
+    const panelRect = vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue(rect(innerHeight - 60, 60) as DOMRect);
+    footer.getBoundingClientRect = () => rect(innerHeight + 100, 48) as DOMRect;
+    window.dispatchEvent(new Event('resize'));
+    expect(reserve()).toBe('68px');
+
+    // The footer comes into view: the dock rises by 48px (its top moves with it), but the reserve stays 60 + gap.
+    footer.getBoundingClientRect = () => rect(innerHeight - 48, 48) as DOMRect;
+    panelRect.mockReturnValue(rect(innerHeight - 48 - 60, 60) as DOMRect);
+    scroller.dispatchEvent(new Event('scroll', { bubbles: false }));
+    vi.advanceTimersByTime(20);
+    expect(root.style.getPropertyValue('--nowo-chat-toolbar-offset')).toBe('48px');
+    expect(reserve(), 'the lift is not part of the reserve').toBe('68px');
+    dock.destroy();
+    scroller.remove();
+  });
+
+  it('ignores scrolls of elements that hold no avoided bar (a sidebar), and still follows the ones that do', async () => {
+    const sidebar = document.createElement('aside');
+    const scroller = document.createElement('div');
+    const footer = document.createElement('footer');
+    footer.setAttribute('data-nowo-chat-avoid', '');
+    scroller.append(footer);
+    document.body.append(sidebar, scroller);
+    const { dock, root } = mount([]);
+    await dock.start();
+    const offset = (): string => root.style.getPropertyValue('--nowo-chat-toolbar-offset');
+    const rect = (top: number, height: number) => ({ top, height, width: 600, bottom: top + height, left: 0, right: 600, x: 0, y: top, toJSON: () => ({}) });
+    const measured = vi.fn((top: number) => rect(top, 40) as DOMRect);
+    let top = window.innerHeight + 50;
+    footer.getBoundingClientRect = () => measured(top);
+    await flush();
+    measured.mockClear();
+    top = window.innerHeight - 40;
+    sidebar.dispatchEvent(new Event('scroll', { bubbles: false }));
+    vi.advanceTimersByTime(50);
+    expect(measured, 'the sidebar scroll did not measure').not.toHaveBeenCalled();
+    expect(offset()).toBe('0px');
+    scroller.dispatchEvent(new Event('scroll', { bubbles: false }));
+    vi.advanceTimersByTime(50);
+    expect(offset()).toBe('40px');
+    dock.destroy();
+    scroller.remove();
+    sidebar.remove();
+  });
+
+  it('re-measures when an avoided bar moves without a scroll or resize, and disconnects its observers on destroy', async () => {
+    const resizeCallbacks: Array<() => void> = [];
+    const disconnected = { resize: 0, intersection: 0 };
+    const observed: Element[] = [];
+    class FakeResizeObserver {
+      constructor(callback: () => void) {
+        resizeCallbacks.push(callback);
+      }
+      observe(element: Element): void {
+        observed.push(element);
+      }
+      unobserve(): void {}
+      disconnect(): void {
+        disconnected.resize += 1;
+      }
+    }
+    const intersectionCallbacks: Array<() => void> = [];
+    class FakeIntersectionObserver {
+      constructor(callback: () => void) {
+        intersectionCallbacks.push(callback);
+      }
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {
+        disconnected.intersection += 1;
+      }
+    }
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+    try {
+      const footer = document.createElement('footer');
+      footer.setAttribute('data-nowo-chat-avoid', '');
+      document.body.append(footer);
+      const rect = (top: number, height: number) => ({ top, height, width: 600, bottom: top + height, left: 0, right: 600, x: 0, y: top, toJSON: () => ({}) });
+      let top = window.innerHeight + 200;
+      footer.getBoundingClientRect = () => rect(top, 48) as DOMRect;
+      const { dock, root } = mount([]);
+      await dock.start();
+      const offset = (): string => root.style.getPropertyValue('--nowo-chat-toolbar-offset');
+      expect(offset()).toBe('0px');
+      expect(observed, 'the bar itself is watched').toContain(footer);
+
+      // Content above grows: the footer slides into view with no scroll and no resize.
+      top = window.innerHeight - 48;
+      resizeCallbacks[resizeCallbacks.length - 1]?.();
+      vi.advanceTimersByTime(20);
+      expect(offset(), 'ResizeObserver').toBe('48px');
+
+      // Then it slides out again (visibility change).
+      top = window.innerHeight + 200;
+      intersectionCallbacks[intersectionCallbacks.length - 1]?.();
+      vi.advanceTimersByTime(20);
+      expect(offset(), 'IntersectionObserver').toBe('0px');
+
+      const before = { ...disconnected };
+      dock.destroy();
+      expect(disconnected.resize).toBeGreaterThan(before.resize);
+      expect(disconnected.intersection).toBeGreaterThan(before.intersection);
+      footer.remove();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('reserves the folded dock space for the host while it is shown (1.23, MUX-02)', async () => {
     const reserve = () => document.documentElement.style.getPropertyValue('--nowo-chat-dock-reserve');
     const shown = () => document.body.classList.contains('nowo-chat-dock-shown');

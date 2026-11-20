@@ -1156,6 +1156,7 @@ Shapes and sizes are tokens too (defaults shown):
 | `--nowo-chat-shadow` / `--nowo-chat-shadow-soft` | elevation | menus, jump button / reaction bar |
 | `--nowo-chat-window-width` / `--nowo-chat-panel-width` | `336px` / `312px` | conversation windows / list panel |
 | `--nowo-chat-font-size` | `0.875rem` | base text size of the dock |
+| `--nowo-ui-scrollbar-size` / `-thumb` / `-thumb-hover` / `-track` | `6px` / text colour at 28% / 45% / transparent | every scroller (the UiKit thin scrollbar tokens; the fallbacks apply when they are not set) |
 
 ```css
 /* Square, flat look */

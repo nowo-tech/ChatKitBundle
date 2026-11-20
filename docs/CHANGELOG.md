@@ -211,6 +211,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Dock reserve (`--nowo-chat-dock-reserve`): the measured reserve no longer includes the dock's lift over avoided bars
+  (`--nowo-chat-toolbar-offset`). With a `data-nowo-chat-avoid` footer inside the scroller the old reserve grew by the lift
+  when the footer came into view, which pushed the footer out of view, dropped the dock and shrank the page again (a loop).
+- The bottom-bar measurement reacts only to scrolls of the document or of a scroller that holds an avoided bar; a
+  sidebar or a message list scrolling no longer triggers it. The reserve is re-measured only when the lift changed.
+- The lift over avoided bars is re-measured when a bar moves without a scroll or resize (content growing or shrinking
+  around it, a bar shown or hidden): `ResizeObserver` on the bars, their parent and siblings, and `IntersectionObserver` on the
+  bars; both are disconnected when the dock is destroyed.
+- Dock header: the launcher label gets `min-width: 0` and an ellipsis, the unread badge and the chevron never shrink, and the
+  folded list panel grows by the Saved and Search actions that are shown (34px each), so at the default 312px the badge no
+  longer covers the Saved icon and the chevron no longer touches the Search icon. On phones the folded launcher's Search
+  button keeps an 8px gap from the round launcher.
+
+### Changed
+
+- Scrollers (messages, list, picker, emoji, composer, filters) use the UiKit thin scrollbar look: size, thumb, thumb hover
+  and track come from the `--nowo-ui-scrollbar-*` tokens, with a fallback from the chat's own text colour (and
+  `scrollbar-width: thin` where `::-webkit-scrollbar` is unsupported) when UiKit is absent.
+
 - Tests: the two private entity manager rollback-bookkeeping tests (`PrivateEntityManagerDetailsTest::testRefreshTransactionsAndClear`,
   `PrivateEntityManagerPartsTest::testTheMiddlewareTellsTheManagerAboutRollbacks`) assumed DBAL 4's rollback middleware and
   failed on doctrine/dbal 3. On DBAL 3 they now assert the documented behaviour (no rollback report; the manager is

@@ -129,6 +129,19 @@
 .nowo-chat-panel {
   width: var(--nowo-chat-panel-width);
 }
+/* The header actions (Saved, Search) each take an icon button of the 312px panel: the panel grows by what is shown, so
+   the label, the unread badge and the chevron keep the room they have without them. */
+.nowo-chat:not(.is-mobile) .nowo-chat-panel {
+  --nowo-chat-panel-actions: 0px;
+  width: calc(var(--nowo-chat-panel-width) + var(--nowo-chat-panel-actions));
+}
+.nowo-chat:not(.is-mobile) .nowo-chat-panel:has(.nowo-chat-panel__saved),
+.nowo-chat:not(.is-mobile) .nowo-chat-panel:has(.nowo-chat-panel__search) {
+  --nowo-chat-panel-actions: 34px;
+}
+.nowo-chat:not(.is-mobile) .nowo-chat-panel:has(.nowo-chat-panel__saved):has(.nowo-chat-panel__search) {
+  --nowo-chat-panel-actions: 68px;
+}
 
 /* Tucked: the list and every window leave the screen (layout kept); one tab on the right edge brings them back. */
 .nowo-chat.is-tucked .nowo-chat-dock {
@@ -232,12 +245,20 @@
 
 .nowo-chat-launcher__label {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
   font-family: var(--nowo-chat-font-display, inherit);
 }
 
+.nowo-chat-launcher .nowo-chat-badge {
+  flex: none;
+}
 .nowo-chat-launcher__chevron {
   display: grid;
+  flex: none;
   color: var(--nowo-chat-muted);
 }
 
@@ -1184,6 +1205,8 @@
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__header {
   min-height: 0;
   padding: 0;
+  /* The folded launcher can sit next to the Search action: keep it off the round button. */
+  gap: 8px;
 }
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher {
   position: relative;
@@ -1777,7 +1800,9 @@
 }
 
 /*
- * Thin scrollbars in every scrollable part. Chromium ignores ::-webkit-scrollbar once scrollbar-width is set
+ * Thin scrollbars in every scrollable part, the UiKit `thin.scrollbar()` look: size, thumb, thumb-hover and track come
+ * from the --nowo-ui-scrollbar-* tokens (set them on :root to restyle every scroller at once), with a fallback derived
+ * from the chat's own text colour when UiKit is absent. Chromium ignores ::-webkit-scrollbar once scrollbar-width is set
  * (and draws the wide bar with arrow buttons), so the standard properties are for engines without it.
  */
 @supports not selector(::-webkit-scrollbar) {
@@ -1788,7 +1813,7 @@
   .nowo-chat-composer__input,
   .nowo-chat-filters {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--nowo-chat-text) 28%, transparent) transparent;
+    scrollbar-color: var(--nowo-ui-scrollbar-thumb, color-mix(in srgb, var(--nowo-chat-text) 28%, transparent)) var(--nowo-ui-scrollbar-track, transparent);
   }
 }
 .nowo-chat-window__body::-webkit-scrollbar,
@@ -1797,8 +1822,8 @@
 .nowo-chat-emoji::-webkit-scrollbar,
 .nowo-chat-composer__input::-webkit-scrollbar,
 .nowo-chat-filters::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: var(--nowo-ui-scrollbar-size, 6px);
+  height: var(--nowo-ui-scrollbar-size, 6px);
 }
 .nowo-chat-window__body::-webkit-scrollbar-button,
 .nowo-chat-list::-webkit-scrollbar-button,
@@ -1815,7 +1840,15 @@
 .nowo-chat-composer__input::-webkit-scrollbar-thumb,
 .nowo-chat-filters::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: color-mix(in srgb, var(--nowo-chat-text) 28%, transparent);
+  background: var(--nowo-ui-scrollbar-thumb, color-mix(in srgb, var(--nowo-chat-text) 28%, transparent));
+}
+.nowo-chat-window__body::-webkit-scrollbar-thumb:hover,
+.nowo-chat-list::-webkit-scrollbar-thumb:hover,
+.nowo-chat-picker__results::-webkit-scrollbar-thumb:hover,
+.nowo-chat-emoji::-webkit-scrollbar-thumb:hover,
+.nowo-chat-composer__input::-webkit-scrollbar-thumb:hover,
+.nowo-chat-filters::-webkit-scrollbar-thumb:hover {
+  background: var(--nowo-ui-scrollbar-thumb-hover, color-mix(in srgb, var(--nowo-chat-text) 45%, transparent));
 }
 .nowo-chat-window__body::-webkit-scrollbar-track,
 .nowo-chat-list::-webkit-scrollbar-track,
@@ -1823,7 +1856,7 @@
 .nowo-chat-emoji::-webkit-scrollbar-track,
 .nowo-chat-composer__input::-webkit-scrollbar-track,
 .nowo-chat-filters::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--nowo-ui-scrollbar-track, transparent);
 }
 
 .nowo-chat-list__start {
