@@ -47,6 +47,9 @@ final class ChatSearchController extends AbstractController
     /** Limiter key prefix of the page and API search budget (the palette has its own, audit VA3-2). */
     public const string LIMITER_KEY = 'nowo_chat_search_page_';
 
+    /** 1.40: header of the results fragment, so the modal never renders another answer (a login page) as results. */
+    public const string FRAGMENT_HEADER = 'X-Nowo-Chat-Fragment';
+
     /**
      * @param ChatMessageSearch $search Message search
      * @param ChatAccess $access Reachability of the signed-in participant
@@ -121,7 +124,8 @@ final class ChatSearchController extends AbstractController
      * 1.40: the search modal's results, an HTML fragment (`_search_results.html.twig`): the same search, budget and
      * escaping as the page. `scope=all` searches every conversation the viewer may read; any other value keeps the
      * `conversation` filter (the open conversation), which the search checks like any other value (an unknown or
-     * forbidden conversation finds nothing). GET only, reads only (no CSRF token); nothing is kept between requests.
+     * forbidden conversation finds nothing); without `conversation` it is the same as `all`. GET only, reads only (no
+     * CSRF token); nothing is kept between requests. The answer carries {@see self::FRAGMENT_HEADER}.
      *
      * @param Request $request Query `q`, `scope`, `conversation`, `from`, `after`, `before`, `link`, `cursor`
      *
@@ -150,7 +154,7 @@ final class ChatSearchController extends AbstractController
             'error'    => $error,
             'items'    => $page instanceof ChatMessageSearchPage ? array_map($this->pageItem(...), $page->hits) : [],
             'next'     => $page?->next === null ? null : $this->generateUrl('nowo_chat_search_results', ['cursor' => $page->next] + $query),
-        ], new Response(null, $status, ['Cache-Control' => 'no-store, private', 'X-Robots-Tag' => 'noindex']));
+        ], new Response(null, $status, ['Cache-Control' => 'no-store, private', 'X-Robots-Tag' => 'noindex', self::FRAGMENT_HEADER => 'search-results']));
     }
 
     /**

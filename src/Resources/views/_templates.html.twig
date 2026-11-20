@@ -542,7 +542,7 @@
                             {{ form_rest(_f) }}
                         {{ form_end(_f, {render_rest: false}) }}
                     </div>
-                    <div class="nowo-chat-msearch__section nowo-chat-msearch__section--results" data-part="search-results" aria-live="polite" aria-busy="false" data-loading="{{ 'chat_search.modal.loading'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-failed="{{ 'chat_search.modal.failed'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-testid="chat-msearch-area">
+                    <div class="nowo-chat-msearch__section nowo-chat-msearch__section--results" data-part="search-results" aria-live="polite" aria-busy="false" data-loading="{{ 'chat_search.modal.loading'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-failed="{{ 'chat_search.modal.failed'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-expired="{{ 'chat_search.modal.expired'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-reload="{{ 'chat_search.modal.reload'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-notice-class="{{ nowo_ui_class('flash_error', 'NowoChatKitBundle') }}" data-reload-class="{{ nowo_ui_class('btn_secondary', 'NowoChatKitBundle') }}" data-testid="chat-msearch-area">
                         <div class="nowo-chat-msearch__empty" data-testid="chat-msearch-start">
                             {{ include(nowo_ui_partial('empty', 'NowoChatKitBundle'), {empty: {title: 'chat_search.modal.start_title'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), message: 'chat_search.modal.start'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), action: null}, bundle: 'NowoChatKitBundle'}, false) }}
                         </div>

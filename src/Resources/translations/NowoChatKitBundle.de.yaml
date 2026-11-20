@@ -446,3 +446,5 @@ chat_search:
     empty_title: 'Keine Ergebnisse'
     loading: 'Suche läuft…'
     failed: 'Die Suche ist fehlgeschlagen. Versuche es erneut.'
+    expired: 'Deine Sitzung ist abgelaufen. Lade die Seite neu, um erneut zu suchen.'
+    reload: 'Neu laden'

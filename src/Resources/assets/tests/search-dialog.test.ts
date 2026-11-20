@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { openSearchDialog, searchParams } from '../src/search-dialog';
+import { FRAGMENT_HEADER, fragment, openSearchDialog, sameOriginUrl, searchParams } from '../src/search-dialog';
 import { Templates } from '../src/templates';
 
 /** The `search-dialog` template as `_templates.html.twig` renders it (UiKit confirm_dialog anatomy, trimmed). */
@@ -19,7 +19,7 @@ const TEMPLATE = `
           <input type="hidden" name="nowo_chat_msearch[conversation]" value="">
         </form>
       </div>
-      <div class="nowo-chat-msearch__section" data-part="search-results" aria-live="polite" data-loading="Searching…" data-failed="The search failed."><p>Find a message</p></div>
+      <div class="nowo-chat-msearch__section" data-part="search-results" aria-live="polite" data-loading="Searching…" data-failed="The search failed." data-expired="Session expired." data-reload="Reload" data-notice-class="nowo-ui-flash nowo-ui-flash--error" data-reload-class="nowo-ui-btn"><p>Find a message</p></div>
     </div>
     <footer class="nowo-ui-dialog__footer"><button type="button" data-part="search-close">Close</button><button type="submit" form="nowo_chat_msearch_form" data-part="search-submit">Search</button></footer>
   </dialog>
@@ -28,7 +28,7 @@ const TEMPLATE = `
 const HIT = (conversation: string, message: string): string => `<li><a href="/chat/${conversation}?message=${message}" data-nowo-chat-search-hit data-conversation="${conversation}" data-message="${message}">Hit <mark>word</mark></a></li>`;
 const PAGE = (hits: string, next: string | null = null): string => `<ol data-testid="chat-msearch-results">${hits}</ol>${next ? `<a href="${next}" data-nowo-chat-search-more>More results</a>` : ''}<script>window.pwned = true</script>`;
 
-const respond = (body: string, status = 200): Response => new Response(body, { status, headers: { 'Content-Type': 'text/html' } });
+const respond = (body: string, status = 200, marked = true): Response => new Response(body, { status, headers: { 'Content-Type': 'text/html', ...(marked ? { [FRAGMENT_HEADER]: 'search-results' } : {}) } });
 
 describe('search modal (1.40)', () => {
   let templates: Templates;
@@ -174,5 +174,66 @@ describe('search modal (1.40)', () => {
   it('needs the form, the results section and the text field', () => {
     document.body.innerHTML = '<template data-nowo-chat-template="search-dialog"><dialog></dialog></template>';
     expect(() => openSearchDialog({ templates: new Templates(document), endpoint: '/x', conversationUuid: 'c', returnTo: null, pick: vi.fn() })).toThrow(/search-dialog template/);
+  });
+
+  it('shows "session expired, reload" instead of a login page (401, a redirect, or an answer without the fragment header)', async () => {
+    const redirected = respond('<form><input name="_username"></form>', 200, false);
+    Object.defineProperty(redirected, 'redirected', { value: true });
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(respond('', 401, false))
+      .mockResolvedValueOnce(redirected)
+      .mockResolvedValueOnce(respond('<h1>Sign in</h1><input name="_username">', 200, false));
+    const reload = vi.fn();
+    vi.stubGlobal('location', { ...window.location, href: window.location.href, origin: window.location.origin, reload });
+    const { modal } = open(fetcher);
+    field(modal.dialog, 'q').value = 'word';
+    for (let i = 0; i < 3; i += 1) {
+      await modal.search();
+      const notice = modal.dialog.querySelector<HTMLElement>('[data-testid="chat-msearch-expired"]');
+      expect(notice?.getAttribute('role')).toBe('alert');
+      expect(notice?.className).toContain('nowo-ui-flash--error');
+      expect(notice?.textContent).toContain('Session expired.');
+      expect(modal.dialog.querySelector('[name="_username"], h1')).toBeNull();
+    }
+    const button = modal.dialog.querySelector<HTMLButtonElement>('[data-testid="chat-msearch-expired"] button')!;
+    expect(button.textContent).toBe('Reload');
+    expect(button.className).toBe('nowo-ui-btn');
+    button.click();
+    expect(reload).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps only same-site addresses and drops on* attributes and active elements from the fragment', () => {
+    const nodes = fragment([
+      '<a href="/chat/c1?message=m1" onclick="alert(1)" onmouseover="x()">ok</a>',
+      `<a href="${window.location.origin}/chat/c2">same origin</a>`,
+      '<a href="https://evil.example/x">elsewhere</a>',
+      '<a href="//evil.example/x">protocol-relative</a>',
+      '<a href="javascript:alert(1)">script</a>',
+      '<a href="data:text/html,x">data</a>',
+      '<img src="https://evil.example/pixel.png" onerror="alert(2)">',
+      '<img src="/icons/ok.png">',
+      '<svg><a xlink:href="javascript:alert(3)"><text>x</text></a></svg>',
+      '<form action="https://evil.example"><button formaction="https://evil.example">go</button></form>',
+      '<iframe src="/x"></iframe><object data="/x"></object><base href="https://evil.example/"><meta http-equiv="refresh" content="0"><link rel="stylesheet" href="/x"><template><b>t</b></template>',
+    ].join(''));
+    const box = document.createElement('div');
+    box.append(...nodes);
+    const anchors = [...box.querySelectorAll('a')];
+    expect(anchors.map((a) => a.getAttribute('href'))).toEqual(['/chat/c1?message=m1', `${window.location.origin}/chat/c2`, null, null, null, null, null]);
+    expect(box.querySelectorAll('[onclick], [onmouseover], [onerror]')).toHaveLength(0);
+    expect([...box.querySelectorAll('img')].map((img) => img.getAttribute('src'))).toEqual([null, '/icons/ok.png']);
+    expect(box.querySelector('svg a')?.getAttribute('xlink:href')).toBeNull();
+    expect(box.querySelectorAll('form, iframe, object, base, meta, link, template, script')).toHaveLength(0);
+  });
+
+  it('tells same-site addresses apart', () => {
+    expect(sameOriginUrl('/chat/x')).toBe(true);
+    expect(sameOriginUrl('chat/x?y=1')).toBe(true);
+    expect(sameOriginUrl(`${window.location.origin}/a`)).toBe(true);
+    expect(sameOriginUrl('https://evil.example/a')).toBe(false);
+    expect(sameOriginUrl('//evil.example/a')).toBe(false);
+    expect(sameOriginUrl('javascript:alert(1)')).toBe(false);
+    expect(sameOriginUrl('http://[')).toBe(false);
   });
 });

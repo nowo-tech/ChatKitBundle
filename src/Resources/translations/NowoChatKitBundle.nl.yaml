@@ -446,3 +446,5 @@ chat_search:
     empty_title: 'Geen resultaten'
     loading: 'Zoeken…'
     failed: 'Het zoeken is mislukt. Probeer het opnieuw.'
+    expired: 'Je sessie is verlopen. Laad de pagina opnieuw om weer te zoeken.'
+    reload: 'Opnieuw laden'

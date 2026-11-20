@@ -1744,7 +1744,8 @@ Off by default (`search.enabled: false`). Build the full-text index first ([UPGR
   by default, "All my conversations" widens it, the rare filters fold under "More filters". A result in this
   conversation closes the modal, scrolls to the message and highlights it; one in another conversation opens it at the
   message. The results come from `GET /chat/search/results` (route `nowo_chat_search_results`, an HTML fragment: the
-  same search, rules and budget as the page; GET only). Without JavaScript the button opens
+  same search, rules and budget as the page; GET only; `scope=all`, or `scope=current` without `conversation`, searches
+  every conversation the viewer may read). Without JavaScript the button opens
   `/chat/search?conversation=<uuid>`.
 
   <img src="images/demo/search-modal.webp" alt="The search modal over a conversation: scope, words, More filters, one result with the word marked, Close and Search in the footer" width="640" />

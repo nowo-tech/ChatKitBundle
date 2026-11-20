@@ -1954,7 +1954,7 @@ describe('search button of the header (1.40)', () => {
     vi.stubGlobal('location', { ...window.location, assign });
     const fetcher = vi.spyOn(window, 'fetch').mockImplementation(async () => new Response(
       '<ol><li><a href="/chat/c1?message=m1" data-nowo-chat-search-hit data-conversation="c1" data-message="m1">here</a></li><li><a href="/chat/c9?message=m9" data-nowo-chat-search-hit data-conversation="c9" data-message="m9">there</a></li></ol>',
-      { status: 200 },
+      { status: 200, headers: { 'X-Nowo-Chat-Fragment': 'search-results' } },
     ));
     const { view, q } = setup({}, {}, { endpoints: { page: '/chat/__uuid__', searchResults: '/chat/search/results', searchPage: '/chat/search' } } as Partial<ChatConfig>);
     const jump = vi.spyOn(view, 'jumpWhenLoaded').mockImplementation(() => undefined);

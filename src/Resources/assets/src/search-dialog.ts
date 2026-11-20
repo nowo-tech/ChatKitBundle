@@ -66,17 +66,70 @@ export function searchParams(form: HTMLFormElement, conversationUuid: string): U
   return params;
 }
 
+/** Response header that marks the results fragment (`ChatSearchController::FRAGMENT_HEADER`). */
+export const FRAGMENT_HEADER = 'X-Nowo-Chat-Fragment';
+
+/** Attributes holding an address: kept only for a relative path or this origin (http / https). */
+const URL_ATTRIBUTES = ['href', 'src', 'srcset', 'action', 'formaction', 'xlink:href', 'poster', 'data'];
+
 /**
- * Parses the server's fragment into nodes of this document (the fragment is the bundle's escaped Twig output).
+ * Whether an address stays on this site: a relative path, or an absolute http(s) URL of this origin.
+ *
+ * @param value The attribute value.
+ * @returns True when it may be kept.
+ */
+export function sameOriginUrl(value: string): boolean {
+  try {
+    const url = new URL(value, window.location.href);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Parses the server's fragment into nodes of this document. The fragment is the bundle's escaped Twig output; it is
+ * still cleaned here: no script, style, frame, object or form element, no `on*` attribute, and no address that leaves
+ * the site (`href`, `src` … must be a relative path or this origin).
  *
  * @param html The fragment.
  * @returns Its nodes.
  */
-function fragment(html: string): Node[] {
+export function fragment(html: string): Node[] {
   const parsed = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
-  // Never run anything the fragment could hold: the bundle's partial has no script, and none is kept.
-  parsed.querySelectorAll('script, style, iframe, object, embed').forEach((node) => node.remove());
+  parsed.querySelectorAll('script, style, iframe, frame, object, embed, base, meta, link, form, template').forEach((node) => node.remove());
+  parsed.body.querySelectorAll('*').forEach((element) => {
+    [...element.attributes].forEach((attribute) => {
+      const name = attribute.name.toLowerCase();
+      if (name.startsWith('on') || (URL_ATTRIBUTES.includes(name) && !sameOriginUrl(attribute.value))) {
+        element.removeAttribute(attribute.name);
+      }
+    });
+  });
   return [...parsed.body.childNodes].map((node) => document.importNode(node, true));
+}
+
+/**
+ * The "session expired" notice (UiKit notice class and the texts from the results section's data attributes) with a
+ * button that reloads the page.
+ *
+ * @param results The results section.
+ * @returns The notice.
+ */
+function expiredNotice(results: HTMLElement): HTMLElement {
+  const notice = document.createElement('div');
+  notice.className = `${results.dataset.noticeClass ?? ''} nowo-chat-notice nowo-chat-msearch__expired`.trim();
+  notice.setAttribute('role', 'alert');
+  notice.dataset.testid = 'chat-msearch-expired';
+  const text = document.createElement('p');
+  text.textContent = results.dataset.expired ?? '';
+  const reload = document.createElement('button');
+  reload.type = 'button';
+  reload.className = results.dataset.reloadClass ?? '';
+  reload.textContent = results.dataset.reload ?? '';
+  reload.addEventListener('click', () => window.location.reload());
+  notice.append(text, reload);
+  return notice;
 }
 
 /**
@@ -119,7 +172,13 @@ export function openSearchDialog(options: SearchDialogOptions): SearchDialog {
       if (current.signal.aborted) {
         return;
       }
-      // 400 / 429 answer the fragment with the notice; anything else that is not HTML is a failure.
+      // Signed out (401, or a redirect to the login page answered 200 without the fragment header): never show that
+      // page inside the modal; say the session expired and offer a reload.
+      if (response.status === 401 || response.redirected || (response.ok && response.headers.get(FRAGMENT_HEADER) !== 'search-results')) {
+        results.replaceChildren(expiredNotice(results));
+        return;
+      }
+      // 400 / 429 answer the fragment with the notice; any other error is a failure.
       if (!response.ok && response.status !== 400 && response.status !== 429) {
         throw new Error(`HTTP ${response.status}`);
       }
@@ -142,7 +201,7 @@ export function openSearchDialog(options: SearchDialogOptions): SearchDialog {
         return;
       }
       const failed = document.createElement('p');
-      failed.className = 'nowo-chat-notice';
+      failed.className = `${results.dataset.noticeClass ?? ''} nowo-chat-notice`.trim();
       failed.setAttribute('role', 'alert');
       failed.textContent = results.dataset.failed ?? String(error);
       results.replaceChildren(failed);

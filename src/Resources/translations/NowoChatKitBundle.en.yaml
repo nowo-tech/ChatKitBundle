@@ -446,3 +446,5 @@ chat_search:
     empty_title: 'No results'
     loading: 'Searching…'
     failed: 'The search failed. Try again.'
+    expired: 'Your session has expired. Reload the page to search again.'
+    reload: 'Reload'

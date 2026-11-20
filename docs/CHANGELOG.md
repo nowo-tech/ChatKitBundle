@@ -233,8 +233,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `GET /chat/search/results` (route `nowo_chat_search_results`): the modal's results as an HTML fragment
   (`_search_results.html.twig`, block `nowo_chat_msearch_results`), the same search service, access rules (membership
   filtered in SQL), budget (`limits.searches_per_minute`) and escaping as the page; `scope=all` drops the
-  `conversation` filter, so it still finds only the viewer's own conversations. GET only, reads only (no CSRF token),
-  `Cache-Control: no-store`; nothing kept between requests (FrankenPHP worker mode, kernel reset off).
+  `conversation` filter (`scope=current` without `conversation` is the same), so it still finds only the viewer's own
+  conversations. GET only, reads only (no CSRF token), `Cache-Control: no-store`, marked with `X-Nowo-Chat-Fragment:
+  search-results` (the modal shows a "session expired, reload" notice for any other answer, such as a login page); nothing kept between requests (FrankenPHP worker mode, kernel reset off).
 - `ChatMessageSearchType` option `scope` (the modal's "this conversation / all my conversations" field); dock
   global `nowo_chat_search_conversation`, the form view `nowo_chat_dock_forms().message_search` and the endpoints
   `searchResults` / `searchPage` (present only while the modal is on); `_templates.html.twig` block

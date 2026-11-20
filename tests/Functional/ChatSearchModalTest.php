@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
+use Nowo\ChatKitBundle\Controller\ChatSearchController;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
@@ -71,6 +72,9 @@ final class ChatSearchModalTest extends DatabaseTestCase
         self::assertSame([], $this->found(['q' => 'budget', 'scope' => 'current', 'conversation' => $foreignConversation]));
         self::assertSame([], $this->found(['q' => 'budget', 'scope' => 'current', 'conversation' => '0f8fad5b-d9cb-469f-a165-70867728950e']));
         self::assertNotContains($foreign->getUuid(), $this->found(['q' => 'secret', 'scope' => 'all']));
+        // `current` without a conversation is the same as `all` (still only the viewer's conversations).
+        self::assertSame($this->found(['q' => 'budget', 'scope' => 'all']), $this->found(['q' => 'budget', 'scope' => 'current']));
+        self::assertSame($this->sorted([$withLuis, $withEve]), $this->found(['q' => 'budget']));
     }
 
     public function testFragmentMarkup(): void
@@ -85,6 +89,7 @@ final class ChatSearchModalTest extends DatabaseTestCase
         $crawler = $this->fragment(['q' => 'payload', 'conversation' => $conversation]);
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
         self::assertStringContainsString('no-store', (string) $this->client->getResponse()->headers->get('Cache-Control'));
+        self::assertSame('search-results', $this->client->getResponse()->headers->get(ChatSearchController::FRAGMENT_HEADER), 'the modal renders only this answer');
         $html = (string) $this->client->getResponse()->getContent();
         self::assertStringNotContainsString('<html', $html, 'a fragment, not a page');
         self::assertStringNotContainsString('<script>alert(1)</script>', $html);

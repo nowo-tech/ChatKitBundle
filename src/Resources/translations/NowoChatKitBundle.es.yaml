@@ -446,3 +446,5 @@ chat_search:
     empty_title: 'Sin resultados'
     loading: 'Buscando…'
     failed: 'La búsqueda ha fallado. Inténtalo de nuevo.'
+    expired: 'Tu sesión ha caducado. Recarga la página para volver a buscar.'
+    reload: 'Recargar'
