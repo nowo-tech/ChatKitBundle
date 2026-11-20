@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.40.0](#to-1400)
 - [To 1.39.1](#to-1391)
 - [Preparing for 2.0](#preparing-for-20)
 - [To 1.39.0](#to-1390)
@@ -88,6 +89,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.40.0
+
+From **1.39.1**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 **1.40.0** — the conversation header gets a message search button that opens a modal, whenever `search.enabled` is on
 (`search.conversation_entry`, default **true**). To keep the 1.39 header, turn it off:
