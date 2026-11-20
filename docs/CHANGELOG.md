@@ -209,6 +209,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Tests: the two private entity manager rollback-bookkeeping tests (`PrivateEntityManagerDetailsTest::testRefreshTransactionsAndClear`,
+  `PrivateEntityManagerPartsTest::testTheMiddlewareTellsTheManagerAboutRollbacks`) assumed DBAL 4's rollback middleware and
+  failed on doctrine/dbal 3. On DBAL 3 they now assert the documented behaviour (no rollback report; the manager is
+  replaced at the next boundary). No change under `src/`.
+
 ## [1.38.0] - 2026-11-19
 
 ### Added
