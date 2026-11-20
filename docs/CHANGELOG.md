@@ -216,6 +216,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Message search page (`/chat/search`) on phones (Beacon report): the page now follows the UiKit page anatomy. The page
+  header has a back link (`chat_search.back`) to the referring page when it is a page of the same site (scheme, host and
+  port; given as a path), otherwise to the chat home; any other referrer is ignored, so there is no open redirect.
+  When the host's UiKit header presentation hides the header (`compact`, `no_title`, `no_header`), a page bar (block
+  `nowo_chat_search_bar`) shows the title and, in compact, the back link. "Search" is the UiKit primary button
+  (`btn_primary`, at least 44 px high on phones, beside the text field from 30rem). The filters (From, From date,
+  To date, Has a link) sit in a `<details>` disclosure (block `nowo_chat_search_filters`), closed unless one is set,
+  in one compact row on wide screens. The results area (`data-testid="chat-search-area"`) always renders: an empty
+  state before searching (`chat-search-start`) and when nothing matches (`chat-search-empty`, now a UiKit empty state
+  with a title and a hint). The section's class is now `nowo-chat-search-page`: it used to be `nowo-chat-search`, the
+  dock's search-field class, which squeezed the page into a 34 px tinted band (the label over a misaligned band).
+  Who can search what is unchanged. The blocks `nowo_chat_search_form` and `nowo_chat_search_results` keep their names
+  and places; new strings in every locale. Demo: `FRANKENPHP_RESET_KERNEL=false` (worker mode, kernel kept alive), a
+  phone e2e at 375 and 414 px with an axe check, and a phone screenshot of the page in the README.
+- `docs/UPGRADING.md`: one "To 1.39.0" section (the 1.39.0 release left a second, short one before "Preparing for 2.0").
+
 ## [1.39.0] - 2026-11-20
 
 ### Added

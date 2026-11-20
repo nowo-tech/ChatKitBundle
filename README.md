@@ -25,6 +25,13 @@ This bundle is **FrankenPHP worker mode friendly**, including worker mode with t
       <br /><sub>Full-page chat — works without JavaScript, in the host's UiKit layout</sub>
     </td>
   </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/demo/search-phone.webp" alt="The message search page on a phone: back link, title, the search field and button, folded filters and the results" width="280" />
+      <br /><sub>Message search on a phone — UiKit page anatomy, filters folded</sub>
+    </td>
+    <td></td>
+  </tr>
 </table>
 
 - **Direct messages** between people your application allows to talk (you decide: same team, same project, anyone…)

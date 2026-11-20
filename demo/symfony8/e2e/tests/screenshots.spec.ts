@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 /**
  * REQ-DEMO-013 — the chat dock in situ: navbar, the demo page, the dock with the list and an open conversation,
  * and the Symfony WebProfiler toolbar (full demo frame; the dock sits above the toolbar); the full-page chat in the
- * demo's UiKit host layout (REQ-UI-003).
+ * demo's UiKit host layout (REQ-UI-003); 1.39.1: the message search page on a phone (375 px).
  */
 const outDir = process.env.SCREENSHOT_DIR
   ? resolve(process.env.SCREENSHOT_DIR)
@@ -41,5 +41,16 @@ test.describe('feature screenshots', () => {
     await expect(page.locator('.nowo-chat-pagemode .nowo-chat-window__title')).toHaveText('Bob Lee');
     await page.waitForTimeout(400);
     await page.screenshot({ path: resolve(outDir, 'page.png') });
+  });
+
+  test('search — the message search page on a phone (1.39.1)', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/en/login');
+    await page.getByLabel('Username').fill('alice');
+    await page.getByLabel('Password').fill('password');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.goto('/chat/search?q=chat');
+    await expect(page.getByTestId('chat-search-area')).toBeVisible();
+    await page.screenshot({ path: resolve(outDir, 'search-phone.png') });
   });
 });

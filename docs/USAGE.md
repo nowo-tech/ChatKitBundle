@@ -1731,7 +1731,12 @@ Off by default (`search.enabled: false`). Build the full-text index first ([UPGR
   "From" (anyone / me), a date range, "Has a link" and, when it is opened with `?conversation=<uuid>`, that
   conversation only; then one page of results, newest first, each with the conversation title, the author, the time,
   a plain-text excerpt with the words marked, and an "Open" link to the message in its conversation
-  (`/chat/{uuid}?message=<uuid>`); "More results" loads the next page. It works without JavaScript.
+  (`/chat/{uuid}?message=<uuid>`); "More results" loads the next page. It works without JavaScript. Since 1.39.1 the
+  page follows the UiKit page anatomy: a back link in the page header (the referring page when it is on the same site,
+  otherwise the chat home), the primary "Search" button, the filters folded in a `<details>` (open when one is set)
+  and a results area with an empty state before searching and when nothing matches. Twig blocks:
+  `nowo_chat_search_bar` (title and back link when the host's header presentation hides the page header),
+  `nowo_chat_search_form`, `nowo_chat_search_filters` (inside the form block) and `nowo_chat_search_results`.
 - the endpoint **`GET /chat/api/search`** (route `nowo_chat_api_search`), [below](#json-api);
 - a search link in the dock header (`search.dock_entry`, default true; `data-part="message-search"`).
 

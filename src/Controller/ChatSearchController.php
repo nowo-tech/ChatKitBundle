@@ -16,6 +16,8 @@ use Nowo\ChatKitBundle\Search\ChatMessageSearchQuery;
 use Nowo\ChatKitBundle\Search\ChatSearchQueryException;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\View\ChatPage;
+use Nowo\UiKitBundle\View\BackLink;
+use Nowo\UiKitBundle\View\Label;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -26,7 +28,13 @@ use Symfony\Component\Routing\Attribute\Route;
 
 use function array_map;
 use function is_string;
+use function parse_url;
 use function preg_match;
+use function str_starts_with;
+use function strlen;
+use function substr;
+
+use const PHP_URL_PATH;
 
 /**
  * 1.37 (spec 002): message search — the page `GET /chat/search` (FormKit form, works without JavaScript) and the JSON
@@ -105,9 +113,13 @@ final class ChatSearchController extends AbstractController
             }
         }
 
+        $back = $this->backHref($request);
+
         return $this->render('@NowoChatKitBundle/search.html.twig', [
             'layout'                => $this->webUiLayout ?? $this->layout,
-            'header'                => ChatPage::searchHeader(),
+            'header'                => ChatPage::searchHeader(new BackLink($back, new Label('chat_search.back', ChatPage::BUNDLE), 'chat-search-back')),
+            'back'                  => $back,
+            'filters_active'        => $this->filtersActive($request),
             'bundle'                => ChatPage::BUNDLE,
             'form'                  => $form->createView(),
             'searched'              => $page instanceof ChatMessageSearchPage,
@@ -194,6 +206,42 @@ final class ChatSearchController extends AbstractController
             $request->query->getBoolean('link'),
             $string('cursor'),
         );
+    }
+
+    /**
+     * 1.39.1: where the page's back link goes — the referring page when it is a page of this site (same scheme, host
+     * and port; returned as a path, never as an absolute URL), otherwise the chat home. The search page itself, a
+     * protocol-relative or backslash path and any other origin fall back to the chat home (no open redirect).
+     */
+    private function backHref(Request $request): string
+    {
+        $home    = $this->generateUrl('nowo_chat_page');
+        $referer = $request->headers->get('referer');
+        $origin  = $request->getSchemeAndHttpHost();
+        if (!is_string($referer) || $referer === '' || preg_match('/[\x00-\x20\x7f\\\\]/', $referer) === 1 || !str_starts_with($referer, $origin . '/')) {
+            return $home;
+        }
+        $path = substr($referer, strlen($origin));
+        if (str_starts_with($path, '//') || parse_url($path, PHP_URL_PATH) === $this->generateUrl('nowo_chat_page_search')) {
+            return $home;
+        }
+
+        return $path;
+    }
+
+    /**
+     * 1.39.1: whether a filter of the form has a value other than its default (the filters disclosure then starts open).
+     */
+    private function filtersActive(Request $request): bool
+    {
+        foreach (['from', 'after', 'before'] as $key) {
+            $value = $request->query->get($key);
+            if (is_string($value) && $value !== '') {
+                return true;
+            }
+        }
+
+        return $request->query->getBoolean('link');
     }
 
     private function participant(): ?ChatUserInterface
