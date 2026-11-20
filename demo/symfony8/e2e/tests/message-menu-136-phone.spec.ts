@@ -10,7 +10,7 @@ async function signIn(page: Page, username: string): Promise<void> {
   await page.getByLabel('Username').fill(username);
   await page.getByLabel('Password').fill('password');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.locator('nav')).toContainText(username);
+  await expect(page.getByTestId('demo-platform')).toContainText(username);
 }
 
 test('the forward dialog and the thread panel fill the phone screen', async ({ page }) => {

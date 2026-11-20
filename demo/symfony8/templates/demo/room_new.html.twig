@@ -1,10 +1,11 @@
 {% extends 'base.html.twig' %}
 
+{% block nowo_ui_page_header %}
+    {{ include(nowo_ui_partial('page_header'), {title: 'demo.rooms.create'|trans}) }}
+{% endblock %}
+
 {% block body %}
-<div class="nowo-ui-page-header"><h1 class="nowo-ui-page-header__title">{{ 'demo.rooms.create'|trans }}</h1></div>
-<section class="nowo-ui-card">
-    <div class="nowo-ui-card__body">
-        {{ include('demo/_room_form.html.twig') }}
-    </div>
-</section>
+    {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'demo.rooms.section'|trans, kind: 'form'} %}
+        {% block section_body %}{{ include('demo/_room_form.html.twig') }}{% endblock %}
+    {% endembed %}
 {% endblock %}

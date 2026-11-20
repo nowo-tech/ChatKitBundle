@@ -9,7 +9,7 @@ async function signIn(page: Page, username: string): Promise<void> {
   await page.getByLabel('Username').fill(username);
   await page.getByLabel('Password').fill('password');
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.locator('nav')).toContainText(username);
+  await expect(page.getByTestId('demo-platform')).toContainText(username);
 }
 
 test.describe('chat kit demo', () => {
@@ -172,7 +172,7 @@ test.describe('chat kit demo', () => {
     await expect(app.locator('.nowo-chat-pagemode__empty')).toBeVisible();
     // REQ-UI-003: the page renders in the UiKit host layout (nowo_ui_kit.layouts.admin) with the UiKit page header.
     await expect(page.locator('main[data-nowo-ui-bundle="NowoChatKitBundle"] [data-nowo-ui-region="header"] h1')).toHaveText('Messages');
-    await expect(page.locator('[data-testid="demo-masthead"]')).toBeVisible();
+    await expect(page.locator('[data-testid="demo-platform"]')).toBeVisible();
   });
 });
 

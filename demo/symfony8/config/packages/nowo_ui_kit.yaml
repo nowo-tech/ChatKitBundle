@@ -1,10 +1,12 @@
 # UiKit page contract (REQ-UI-003) and REQ-DEMO-014: UiKit's default theme, unchanged (no CSS framework, no CDN, no
-# token override). The full-page chat renders in layouts.admin and the dock / page read UiKit's tokens through the
-# --nowo-chat-* defaults.
+# token override). The demo shell (templates/base.html.twig) serves as the admin and guest layout, so the full-page
+# chat renders inside it; the chat dock and page read UiKit's tokens through the --nowo-chat-* defaults.
 nowo_ui_kit:
     css_framework: custom
+    base_stylesheet: true
     layouts:
-        admin: 'layouts/admin.html.twig'
+        admin: 'base.html.twig'
+        guest: 'base.html.twig'
     # 1.33 demo: UiKit 2.54 context menus on every kebab (the chat messages included): right-click, Shift+F10, the
     # ContextMenu key or a long press opens the kebab's items. The UiKit scripts partial loads the runtime.
     theme:

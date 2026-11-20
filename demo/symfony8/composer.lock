@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e9841b6311adb81f32a9e8be392889e7",
+    "content-hash": "bd1bfb21d86f8fbe55f9b4af6beb24ec",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -951,7 +951,7 @@
             "dist": {
                 "type": "path",
                 "url": "/var/chat-kit-bundle",
-                "reference": "84b5c4cc50ae9f9496ff3394f933f2893b77ebae"
+                "reference": "9c81ef58c9bc3cdaac079650c758d0b7140328d0"
             },
             "require": {
                 "doctrine/doctrine-bundle": "^2.13 || ^3.0",
@@ -1424,16 +1424,16 @@
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v2.58.1",
+            "version": "v2.60.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "1b4fc0130612c03de3313a879080165f9f76cd0f"
+                "reference": "cd142ddce9afc51681e85f64d5fc96ef0c14302e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/1b4fc0130612c03de3313a879080165f9f76cd0f",
-                "reference": "1b4fc0130612c03de3313a879080165f9f76cd0f",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/cd142ddce9afc51681e85f64d5fc96ef0c14302e",
+                "reference": "cd142ddce9afc51681e85f64d5fc96ef0c14302e",
                 "shasum": ""
             },
             "require": {
@@ -1480,7 +1480,8 @@
                 "symfony/validator": "Colour validation in the optional appearance forms"
             },
             "bin": [
-                "bin/nowo-ui-token-lint"
+                "bin/nowo-ui-token-lint",
+                "bin/nowo-ui-demo-style-lint"
             ],
             "type": "symfony-bundle",
             "autoload": {
@@ -1522,8 +1523,8 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-11-18T15:42:30+00:00",
-            "published-time": "2026-11-18T15:45:49+00:00"
+            "time": "2026-11-20T20:27:14+00:00",
+            "published-time": "2026-11-20T20:30:01+00:00"
         },
         {
             "name": "pentatrion/vite-bundle",

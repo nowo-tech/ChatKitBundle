@@ -11,6 +11,14 @@ const outDir = process.env.SCREENSHOT_DIR
   ? resolve(process.env.SCREENSHOT_DIR)
   : resolve(__dirname, '../../../../docs/images/demo');
 
+// The Symfony WebProfiler toolbar is not part of the demo platform: hide it in every capture.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((css) => {
+    const add = () => { const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', add); else add();
+  }, '.sf-toolbar,.sf-minitoolbar,[id^="sfwdt"]{display:none!important}');
+});
+
 test.beforeAll(() => {
   mkdirSync(outDir, { recursive: true });
 });

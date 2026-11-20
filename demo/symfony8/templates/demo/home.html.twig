@@ -1,38 +1,32 @@
+{#- Demo home, in the demo platform layout grammar: page header (title, lead, the one primary action), then one
+    section card per topic (demo_platform/_section.html.twig). -#}
 {% extends 'base.html.twig' %}
 
 {% block nowo_ui_page_header %}
-    {{ include(nowo_ui_partial('page_header'), { title: 'demo.heading'|trans }) }}
+    {% set _toolbar %}{% if app.user %}<a class="nowo-ui-btn nowo-ui-btn--primary" href="{{ path('nowo_chat_page') }}">{{ 'demo.try.page'|trans }}</a>{% else %}<a class="nowo-ui-btn nowo-ui-btn--primary" href="{{ path('demo_login', {_locale: app.request.locale}) }}">{{ 'demo.login.nav'|trans }}</a>{% endif %}{% endset %}
+    {{ include(nowo_ui_partial('page_header'), {title: 'demo.heading'|trans, intro: 'demo.lead'|trans ~ ' ' ~ 'demo.body'|trans({'%profile%': default_profile}), toolbar: _toolbar}) }}
 {% endblock %}
 
 {% block body %}
-<p>{{ 'demo.lead'|trans }}</p>
-<p class="nowo-ui-muted">{{ 'demo.body'|trans({ '%profile%': default_profile }) }}</p>
-
-<div class="nowo-ui-cards">
-    <section class="nowo-ui-card" data-screenshot-target>
-        <div class="nowo-ui-card__header"><h2 class="nowo-ui-card__title">{{ 'demo.features.title'|trans }}</h2></div>
-        <div class="nowo-ui-card__body">
-            <ul>
-                {% for key in ['dms', 'channels', 'support', 'realtime', 'presence', 'buzz', 'page', 'theming'] %}
-                    <li>{{ ('demo.features.' ~ key)|trans }}</li>
-                {% endfor %}
-            </ul>
-        </div>
-    </section>
-    <section class="nowo-ui-card">
-        <div class="nowo-ui-card__header"><h2 class="nowo-ui-card__title">{{ 'demo.try.title'|trans }}</h2></div>
-        <div class="nowo-ui-card__body">
-            {% if app.user %}
-                <p>{{ 'demo.try.signed_in'|trans }}</p>
-                <div class="nowo-ui-card__toolbar">
-                    <a class="nowo-ui-btn nowo-ui-btn--outline" href="{{ path('nowo_chat_page') }}">{{ 'demo.try.page'|trans }}</a>
+    <div class="nowo-ui-cards">
+        {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'demo.features.title'|trans, kind: 'list', attr: {'data-screenshot-target': ''}} %}
+            {% block section_body %}
+                <ul class="nowo-ui-list">
+                    {% for key in ['dms', 'channels', 'support', 'realtime', 'presence', 'buzz', 'page', 'theming'] %}
+                        <li class="nowo-ui-list-item">{{ ('demo.features.' ~ key)|trans }}</li>
+                    {% endfor %}
+                </ul>
+            {% endblock %}
+        {% endembed %}
+        {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'demo.try.title'|trans, kind: 'detail'} %}
+            {% block section_body %}
+                <p>{{ (app.user ? 'demo.try.signed_in' : 'demo.try.guest')|trans }}</p>
+            {% endblock %}
+            {% block section_footer %}
+                {% if app.user %}
                     <a class="nowo-ui-btn nowo-ui-btn--outline" href="#" data-nowo-chat-open="support">{{ 'demo.try.support'|trans }}</a>
-                </div>
-            {% else %}
-                <p>{{ 'demo.try.guest'|trans }}</p>
-                <a class="nowo-ui-btn nowo-ui-btn--primary" href="{{ path('demo_login', { _locale: app.request.locale }) }}">{{ 'demo.login.nav'|trans }}</a>
-            {% endif %}
-        </div>
-    </section>
-</div>
+                {% endif %}
+            {% endblock %}
+        {% endembed %}
+    </div>
 {% endblock %}
