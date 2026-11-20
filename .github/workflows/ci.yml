@@ -31,48 +31,11 @@ jobs:
     outputs:
       mode: ${{ steps.classify.outputs.mode }}
     steps:
-      - name: Checkout code (PR merge commit and its base parent)
-        if: github.event_name == 'pull_request'
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 2
-
       - name: Classify the change
         id: classify
-        env:
-          EVENT: ${{ github.event_name }}
-          SWITCH: ${{ vars.NOWO_CI_PR_MODE }}
-          LIGHT: '^((demo/([^/]+/)?)?composer\.(json|lock)|docs/.*|specs/.*|\.cursor/.*|\.github/ISSUE_TEMPLATE/.*|.*\.md|\.github/workflows/.*)$' # TEMP pilot measurement only: reverted before merge
-        run: |
-          mode=full; paths=""
-          if [ "$EVENT" != pull_request ]; then
-            reason="event '$EVENT' always runs full"
-          else
-            case "$SWITCH" in
-              light) mode=light; reason="NOWO_CI_PR_MODE=light: every PR is light" ;;
-              full) reason="NOWO_CI_PR_MODE=full: every PR is full" ;;
-              ''|auto)
-                if files=$(git diff --name-only --no-renames HEAD^1 HEAD); then
-                  mode=light; reason="NOWO_CI_PR_MODE=${SWITCH:-unset} (auto): only deps/docs paths changed"
-                  while IFS= read -r f; do
-                    [ -n "$f" ] || continue
-                    if ! printf '%s\n' "$f" | grep -Eq "$LIGHT"; then mode=full; paths="$paths $f"; fi
-                  done <<< "$files"
-                  [ "$mode" = light ] || reason="NOWO_CI_PR_MODE=${SWITCH:-unset} (auto): non deps/docs paths changed:$paths"
-                else
-                  reason="NOWO_CI_PR_MODE=${SWITCH:-unset} (auto): git diff failed, fail-closed"
-                fi ;;
-              *) reason="NOWO_CI_PR_MODE='$SWITCH' is not light/auto/full, fail-closed" ;;
-            esac
-          fi
-          echo "mode=$mode ($reason)"
-          echo "mode=$mode" >> "$GITHUB_OUTPUT"
-          {
-            echo "### CI mode: \`$mode\`"
-            echo ""
-            echo "$reason"
-            if [ "$EVENT" = pull_request ] && [ -n "${files:-}" ]; then echo ""; echo "Changed paths:"; echo '```'; echo "$files" | head -200; echo '```'; fi
-          } >> "$GITHUB_STEP_SUMMARY"
+        uses: nowo-tech/ci-actions/changes@v1
+        with:
+          mode-variable: ${{ vars.NOWO_CI_PR_MODE }}
 
   git-hygiene:
     name: Git history (no Cursor co-author)
