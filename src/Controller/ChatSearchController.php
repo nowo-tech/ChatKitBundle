@@ -89,21 +89,7 @@ final class ChatSearchController extends AbstractController
         $form = $this->container->get('form.factory')->createNamed('', ChatMessageSearchType::class, null, ['max_length' => $this->maxQueryLength]);
         $form->handleRequest($request);
         // The form only shows the values; the search reads and checks the parameters itself.
-        $status = Response::HTTP_OK;
-        $error  = null;
-        $page   = null;
-        $text   = $request->query->get('q');
-        if (is_string($text) && $text !== '') {
-            if (!$this->withinBudget($user)) {
-                [$status, $error] = [Response::HTTP_TOO_MANY_REQUESTS, 'chat_search.rate_limited'];
-            } else {
-                try {
-                    $page = $this->search->search($user, $this->queryFrom($request, $text));
-                } catch (ChatSearchQueryException $exception) {
-                    [$status, $error] = [Response::HTTP_BAD_REQUEST, $exception->errorCode === ChatSearchQueryException::TOO_LONG ? 'chat_search.too_long' : 'chat_search.too_short'];
-                }
-            }
-        }
+        [$status, $error, $page] = $this->run($user, $request, false);
 
         return $this->render('@NowoChatKitBundle/search.html.twig', [
             'layout'                => $this->webUiLayout ?? $this->layout,
@@ -117,6 +103,66 @@ final class ChatSearchController extends AbstractController
             'nowo_chat_assets'      => $this->assets,
             'nowo_chat_full_height' => $this->fullHeight,
         ], new Response(null, $status));
+    }
+
+    /**
+     * 1.40: the search modal's results, an HTML fragment (`_search_results.html.twig`): the same search, budget and
+     * escaping as the page. `scope=all` searches every conversation the viewer may read; any other value keeps the
+     * `conversation` filter (the open conversation), which the search checks like any other value (an unknown or
+     * forbidden conversation finds nothing). GET only, reads only (no CSRF token); nothing is kept between requests.
+     *
+     * @param Request $request Query `q`, `scope`, `conversation`, `from`, `after`, `before`, `link`, `cursor`
+     *
+     * @return Response The fragment (400 / 429 with the notice, 401 without a participant, 404 when search is off)
+     */
+    #[Route('/search/results', name: 'nowo_chat_search_results', methods: ['GET'])]
+    public function results(Request $request): Response
+    {
+        if (!$this->search->enabled()) {
+            throw $this->createNotFoundException();
+        }
+        $user = $this->participant();
+        if (!$user instanceof ChatUserInterface) {
+            return new Response('', Response::HTTP_UNAUTHORIZED);
+        }
+        $all                     = $request->query->get('scope') === ChatMessageSearchType::SCOPE_ALL;
+        [$status, $error, $page] = $this->run($user, $request, $all);
+        $query                   = $request->query->all();
+        if ($all) {
+            unset($query['conversation']);
+        }
+
+        return $this->render('@NowoChatKitBundle/_search_results.html.twig', [
+            'bundle'   => ChatPage::BUNDLE,
+            'searched' => $page instanceof ChatMessageSearchPage,
+            'error'    => $error,
+            'items'    => $page instanceof ChatMessageSearchPage ? array_map($this->pageItem(...), $page->hits) : [],
+            'next'     => $page?->next === null ? null : $this->generateUrl('nowo_chat_search_results', ['cursor' => $page->next] + $query),
+        ], new Response(null, $status, ['Cache-Control' => 'no-store, private', 'X-Robots-Tag' => 'noindex']));
+    }
+
+    /**
+     * Runs the search of the page or the modal: nothing without a text; over the budget, 429; a bad text, 400.
+     *
+     * @param bool $all 1.40: true drops the `conversation` filter (the modal's "all my conversations")
+     *
+     * @return array{0: int, 1: string|null, 2: ChatMessageSearchPage|null} The status, the notice key and the page
+     */
+    private function run(ChatUserInterface $user, Request $request, bool $all): array
+    {
+        $text = $request->query->get('q');
+        if (!is_string($text) || $text === '') {
+            return [Response::HTTP_OK, null, null];
+        }
+        if (!$this->withinBudget($user)) {
+            return [Response::HTTP_TOO_MANY_REQUESTS, 'chat_search.rate_limited', null];
+        }
+
+        try {
+            return [Response::HTTP_OK, null, $this->search->search($user, $this->queryFrom($request, $text, $all))];
+        } catch (ChatSearchQueryException $exception) {
+            return [Response::HTTP_BAD_REQUEST, $exception->errorCode === ChatSearchQueryException::TOO_LONG ? 'chat_search.too_long' : 'chat_search.too_short', null];
+        }
     }
 
     /**
@@ -171,7 +217,7 @@ final class ChatSearchController extends AbstractController
      * The query from the request parameters (the form only reads them for its own view). `after` and `before` are dates
      * (`Y-m-d`), both days included; any other value is ignored.
      */
-    private function queryFrom(Request $request, string $text): ChatMessageSearchQuery
+    private function queryFrom(Request $request, string $text, bool $all = false): ChatMessageSearchQuery
     {
         $string = static fn (string $key): ?string => is_string($value = $request->query->get($key)) ? $value : null;
         $date   = static function (?string $value): ?DateTimeImmutable {
@@ -186,7 +232,7 @@ final class ChatSearchController extends AbstractController
 
         return $this->search->query(
             $text,
-            $string('conversation'),
+            $all ? null : $string('conversation'),
             $string('from'),
             $date($string('after')),
             // "Before" is inclusive of that day in the form: the search takes messages before the next day.

@@ -5123,3 +5123,110 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
     transform: translateY(8px);
   }
 }
+
+/* 1.40: the search modal of the conversation header (UiKit confirm_dialog anatomy, wide size: UiKit's header, body and
+   footer, the --nowo-dialog-*-wide tokens and fit-content height). Here only the body's sections (separated by a
+   divider, no cards), the folded filters, the result rows and the phone sheet. */
+.nowo-chat-msearch .nowo-chat-msearch__section {
+  min-width: 0;
+}
+.nowo-chat-msearch .nowo-chat-msearch__section + .nowo-chat-msearch__section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--nowo-chat-border);
+}
+.nowo-chat-msearch__form {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+.nowo-chat-msearch__form > *,
+.nowo-chat-msearch__filters-body > * {
+  min-width: 0;
+  margin-bottom: 0;
+}
+.nowo-chat-msearch__form :is(input:not([type="checkbox"]), select) {
+  width: 100%;
+  box-sizing: border-box;
+}
+.nowo-chat-msearch__filters-toggle {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  color: var(--nowo-chat-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+.nowo-chat-msearch__filters-toggle:focus-visible,
+.nowo-chat-msearch__link:focus-visible {
+  outline: 2px solid var(--nowo-chat-accent);
+  outline-offset: 2px;
+}
+.nowo-chat-msearch__filters-body {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+}
+@media (min-width: 48rem) {
+  .nowo-chat-msearch__filters-body {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+    align-items: end;
+  }
+}
+.nowo-chat-msearch__status {
+  margin: 0;
+  color: var(--nowo-chat-muted);
+}
+.nowo-chat-msearch__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nowo-chat-msearch__item + .nowo-chat-msearch__item {
+  border-top: 1px solid var(--nowo-chat-border);
+}
+.nowo-chat-msearch__link {
+  display: grid;
+  gap: 4px;
+  padding: 10px 4px;
+  color: var(--nowo-chat-text);
+  text-decoration: none;
+}
+.nowo-chat-msearch__link:hover {
+  background: var(--nowo-chat-surface-muted);
+}
+.nowo-chat-msearch__where {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--nowo-chat-muted);
+  font-size: 0.8125rem;
+}
+.nowo-chat-msearch__conversation {
+  color: var(--nowo-chat-text);
+  font-weight: 600;
+}
+.nowo-chat-msearch__snippet {
+  overflow-wrap: anywhere;
+}
+.nowo-chat-msearch__snippet mark {
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--nowo-chat-mention-bg, rgba(255, 213, 79, 0.45));
+  color: inherit;
+}
+.nowo-chat-msearch__more {
+  display: inline-block;
+  margin-top: 8px;
+}
+/* Phones: a full-screen sheet (the × and Close stay in the header and footer). */
+@media (max-width: 40rem) {
+  dialog.nowo-chat-msearch[open] {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+  }
+}

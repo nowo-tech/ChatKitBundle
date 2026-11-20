@@ -16,11 +16,12 @@ final class DockTemplatesFixtureTest extends DatabaseTestCase
     private const string FIXTURE = __DIR__ . '/../../../src/Resources/assets/tests/fixtures/templates.html';
 
     /**
-     * 1.35: every message menu item is offered, so the browser tests see each of them.
+     * 1.35: every message menu item is offered, so the browser tests see each of them. 1.40: the search modal too.
      */
     protected function chatKitConfig(): array
     {
-        return ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true], 'message_info' => ['enabled' => true], 'forward' => ['enabled' => true], 'threads' => ['enabled' => true]]]]];
+        // 1.40: search on (without the dock header link) so the window has the search button and the modal template.
+        return ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true], 'message_info' => ['enabled' => true], 'forward' => ['enabled' => true], 'threads' => ['enabled' => true]], 'search' => ['enabled' => true, 'dock_entry' => false]]]];
     }
 
     public function testFixtureMatchesTheTemplates(): void
@@ -33,7 +34,7 @@ final class DockTemplatesFixtureTest extends DatabaseTestCase
 
         self::assertFileExists(self::FIXTURE);
         self::assertSame($html, file_get_contents(self::FIXTURE), 'Run UPDATE_FIXTURES=1 vendor/bin/phpunit --filter DockTemplatesFixtureTest');
-        foreach (['dock', 'row', 'list-state', 'picker-section', 'picker-row', 'picker-state', 'overflow-item', 'window', 'message', 'edit-form', 'delete-confirm', 'pending', 'buzz-line', 'day', 'unseen', 'seen', 'thread-state', 'thread-empty'] as $name) {
+        foreach (['dock', 'row', 'list-state', 'picker-section', 'picker-row', 'picker-state', 'overflow-item', 'window', 'message', 'edit-form', 'delete-confirm', 'pending', 'buzz-line', 'day', 'unseen', 'seen', 'thread-state', 'thread-empty', 'search-dialog'] as $name) {
             self::assertStringContainsString('data-nowo-chat-template="' . $name . '"', $html);
         }
     }

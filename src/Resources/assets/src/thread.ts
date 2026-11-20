@@ -15,6 +15,7 @@ import { ConversationLinks, copyText, decodeLinkTokens, linksSettings, linkToken
 import { plainText, quoteBlock, quoteOf, stripReservedAttributes, tidySeparators, visibleItems, type MessageMenuItem } from './message-menu';
 import { openMessageInfo } from './message-info';
 import { openForwardDialog } from './forward-dialog';
+import { openSearchDialog } from './search-dialog';
 import { ThreadPanel } from './thread-panel';
 import { SupportPanel } from './support';
 import { customStatus, statusLabel } from './status';
@@ -251,6 +252,7 @@ export class ThreadView {
     this.element = host.templates.clone('window');
     this.element.dataset.uuid = summary.uuid;
     part<HTMLAnchorElement>(this.element, 'popout').href = host.config.endpoints.page.replace('__uuid__', encodeURIComponent(summary.uuid));
+    this.bindMessageSearch();
     this.identity = part<HTMLButtonElement>(this.element, 'identity');
     this.badge = part(this.element, 'badge');
     this.minimiseBtn = part<HTMLButtonElement>(this.element, 'minimise');
@@ -839,6 +841,47 @@ export class ThreadView {
     } else {
       this.logState('loading');
     }
+  }
+
+  /**
+   * 1.40: the header's search button (`search.conversation_entry`): a link to /chat/search for this conversation that,
+   * with the script, opens the search modal instead. Without the endpoints (search off) the button goes away.
+   */
+  private bindMessageSearch(): void {
+    const link = this.element.querySelector<HTMLAnchorElement>('[data-part="message-search"]');
+    if (link === null) {
+      return;
+    }
+    const { searchResults, searchPage } = this.host.config.endpoints;
+    if (searchResults === undefined || searchPage === undefined) {
+      link.remove();
+      return;
+    }
+    link.href = `${searchPage}?conversation=${encodeURIComponent(this.summary.uuid)}`;
+    link.addEventListener('click', (event) => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.button !== 0) {
+        return;
+      }
+      event.preventDefault();
+      try {
+        openSearchDialog({
+          templates: this.host.templates,
+          endpoint: searchResults,
+          conversationUuid: this.summary.uuid,
+          returnTo: link,
+          pick: (conversationUuid, messageUuid, href) => {
+            if (conversationUuid === this.summary.uuid) {
+              this.jumpWhenLoaded(messageUuid);
+            } else {
+              window.location.assign(href);
+            }
+          },
+        });
+      } catch {
+        // A host template without the modal: the search page.
+        window.location.assign(link.href);
+      }
+    });
   }
 
   /**

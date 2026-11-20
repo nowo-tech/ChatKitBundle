@@ -225,6 +225,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         }
         $container->setParameter(Configuration::ALIAS . '.search_kit.enabled', $profile['search_kit']['enabled']);
         $container->setParameter(Configuration::ALIAS . '.search.dock_link', $profile['search']['enabled'] === true && $profile['search']['dock_entry'] === true);
+        $container->setParameter(Configuration::ALIAS . '.search.conversation_link', $profile['search']['enabled'] === true && $profile['search']['conversation_entry'] === true);
 
         // #references: every application service implementing the contract is a provider.
         $container->registerForAutoconfiguration(ChatReferenceProviderInterface::class)->addTag(ChatReferenceProviderInterface::TAG);

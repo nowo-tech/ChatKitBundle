@@ -16,6 +16,7 @@ use Nowo\ChatKitBundle\Form\ChatDockComposerType;
 use Nowo\ChatKitBundle\Form\ChatDockEditType;
 use Nowo\ChatKitBundle\Form\ChatDockSearchType;
 use Nowo\ChatKitBundle\Form\ChatDockStatusType;
+use Nowo\ChatKitBundle\Form\ChatMessageSearchType;
 use Nowo\ChatKitBundle\Link\ChatLinks;
 use Nowo\ChatKitBundle\Link\ChatLinkUrls;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
@@ -85,6 +86,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         'delete'      => 'danger',
     ];
 
+    /** 1.40: name of the search modal's form (its fields are `nowo_chat_msearch[q]` …; the client sends them unprefixed). */
+    public const string SEARCH_FORM = 'nowo_chat_msearch';
+
     /** 1.26: name of UiKit's asset package. */
     public const string UI_KIT_PACKAGE = 'nowo_ui_kit';
 
@@ -115,6 +119,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param ChatAuthorBadges|null $authorBadges 1.29: whether the application gives author badges; null: it does not
      * @param bool|null $messageContextMenu 1.33: the message context menu (`web_ui.message_context_menu`): null follows UiKit's theme flag, true / false force it
      * @param array<string, mixed> $messageMenu 1.35: `message_menu` (quick reactions, items and their order)
+     * @param bool $searchDockEntry 1.37: the dock header links to message search (`search.enabled` and `search.dock_entry`)
+     * @param bool $searchConversationEntry 1.40: each conversation header opens the search modal (`search.enabled` and `search.conversation_entry`)
      */
     public function __construct(
         private readonly Security $security,
@@ -152,6 +158,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly ?bool $messageContextMenu = null,
         private readonly array $messageMenu = [],
         private readonly bool $searchDockEntry = false,
+        private readonly bool $searchConversationEntry = false,
     ) {
     }
 
@@ -175,7 +182,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * when the application aliased ChatAuthorBadgeProviderInterface (the dock's `author-badge` template is rendered only
      * then, so the dock markup of a host without badges is unchanged). 1.33: `nowo_chat_message_context_menu`, the
      * `context_menu` option of each message's kebab (null: UiKit's `theme.context_menus` decides). 1.37:
-     * `nowo_chat_search_entry`, true when the dock header links to message search.
+     * `nowo_chat_search_entry`, true when the dock header links to message search. 1.40: `nowo_chat_search_conversation`,
+     * true when each conversation header opens the search modal.
      *
      * @return array<string, mixed> The globals
      */
@@ -192,6 +200,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'nowo_chat_message_menu' => $this->menuTemplate(),
             // 1.37: the message search link of the dock header (`search.enabled` and `search.dock_entry`).
             'nowo_chat_search_entry' => $this->searchDockEntry,
+            // 1.40: the search button of each conversation header and the search modal template.
+            'nowo_chat_search_conversation' => $this->searchConversationEntry,
         ];
     }
 
@@ -200,11 +210,14 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * `composer` and `edit` (child `body` each), `status` (children `emoji`, `text` and `clearAfter`, 1.10; `moreStatus`
      * and the view var `status_presets`, 1.12).
      *
-     * @return array{search: FormView, composer: FormView, edit: FormView, status: FormView} The Form views
+     * 1.40: `message_search` (the search modal's form, {@see ChatMessageSearchType} named `nowo_chat_msearch` with the
+     * scope field), only while the conversation header offers the modal.
+     *
+     * @return array{search: FormView, composer: FormView, edit: FormView, status: FormView, message_search?: FormView} The Form views
      */
     public function forms(): array
     {
-        return [
+        return ($this->searchConversationEntry ? ['message_search' => $this->forms->createNamed(self::SEARCH_FORM, ChatMessageSearchType::class, null, ['scope' => true, 'action' => $this->urls->generate('nowo_chat_page_search'), 'attr' => ['id' => self::SEARCH_FORM . '_form']])->createView()] : []) + [
             'search'   => $this->forms->create(ChatDockSearchType::class)->createView(),
             'composer' => $this->forms->create(ChatDockComposerType::class)->createView(),
             'edit'     => $this->forms->create(ChatDockEditType::class)->createView(),
@@ -294,6 +307,11 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
                 'thread'         => $this->pattern('nowo_chat_api_thread', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 'threadRead'     => $this->pattern('nowo_chat_api_thread_read', ['messageUuid' => self::PLACEHOLDER], '__message__'),
                 'revisions'      => $this->pattern('nowo_chat_api_revisions', ['messageUuid' => self::PLACEHOLDER], '__message__'),
+            ] + ($this->searchConversationEntry ? [
+                // 1.40: the search modal of the conversation header (absent while it is off).
+                'searchResults' => $this->urls->generate('nowo_chat_search_results'),
+                'searchPage'    => $this->urls->generate('nowo_chat_page_search'),
+            ] : []) + [
                 // 1.26: the session's current CSRF token (asked for once when the page's token is refused).
                 'csrf' => $this->urls->generate('nowo_chat_api_csrf'),
             ] + $this->linkEndpoints(),

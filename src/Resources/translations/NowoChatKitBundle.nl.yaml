@@ -424,3 +424,17 @@ chat_search:
   conversations:
     group: 'Gesprekken'
     direct: 'Direct bericht'
+  # 1.40: the search modal of the conversation header.
+  modal:
+    open: 'Zoeken in dit gesprek'
+    title: 'Berichten zoeken'
+    close: 'Sluiten'
+    more_filters: 'Meer filters'
+    scope: 'Zoeken in'
+    scope_current: 'Dit gesprek'
+    scope_all: 'Al mijn gesprekken'
+    start_title: 'Een bericht vinden'
+    start: 'Typ de woorden die je zoekt; de berichten die overeenkomen verschijnen hier.'
+    empty_title: 'Geen resultaten'
+    loading: 'Zoeken…'
+    failed: 'Het zoeken is mislukt. Probeer het opnieuw.'

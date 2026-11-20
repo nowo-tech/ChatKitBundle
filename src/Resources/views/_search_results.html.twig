@@ -1,0 +1,38 @@
+{#
+ # 1.40: results of the search modal (GET /chat/search/results, route nowo_chat_search_results), an HTML fragment the
+ # dock script puts in the modal's results section. Same rules as the page: only messages the viewer may read, and
+ # every excerpt is plain text — each segment is escaped by Twig and only the words are wrapped in <mark> here. Each
+ # result is a link to the message (`/chat/{uuid}?message=<uuid>`, it works without the script) carrying the
+ # conversation and message uuids; "More results" carries the next page's address. Rows with dividers, no cards.
+ # Classes: nowo-chat-msearch__*.
+ #}
+{% trans_default_domain 'NowoChatKitBundle' %}
+{% set _b = bundle|default('NowoChatKitBundle') %}
+{% block nowo_chat_msearch_results %}
+    {% if error %}
+        <p class="{{ nowo_ui_class('flash_error', _b) }} nowo-chat-notice" role="alert" data-testid="chat-msearch-error">{{ error|trans }}</p>
+    {% elseif searched and items is empty %}
+        <div class="nowo-chat-msearch__empty" data-testid="chat-msearch-empty">
+            {{ include(nowo_ui_partial('empty', _b), {empty: {title: 'chat_search.modal.empty_title'|trans, message: 'chat_search.empty'|trans, action: null}, bundle: _b}, false) }}
+        </div>
+    {% elseif items is not empty %}
+        <ol class="nowo-chat-msearch__list" role="list" data-testid="chat-msearch-results">
+            {% for item in items %}
+                {% set hit = item.hit %}
+                <li class="nowo-chat-msearch__item">
+                    <a class="nowo-chat-msearch__link" href="{{ item.link }}" data-nowo-chat-search-hit data-conversation="{{ hit.conversationUuid }}" data-message="{{ hit.messageUuid }}" data-testid="chat-msearch-item">
+                        <span class="nowo-chat-msearch__where">
+                            <span class="nowo-chat-msearch__conversation">{{ hit.conversationTitle }}</span>
+                            {% if hit.authorName is not null %}<span class="nowo-chat-msearch__author">{{ hit.authorName }}</span>{% endif %}
+                            <time class="{{ nowo_ui_class('muted', _b) }}" datetime="{{ hit.createdAt|date(constant('DATE_ATOM')) }}">{{ hit.createdAt|date('Y-m-d H:i') }}</time>
+                        </span>
+                        <span class="nowo-chat-msearch__snippet" data-testid="chat-msearch-snippet">{% for segment in hit.segments %}{% if segment.mark %}<mark>{{ segment.text }}</mark>{% else %}{{ segment.text }}{% endif %}{% endfor %}</span>
+                    </a>
+                </li>
+            {% endfor %}
+        </ol>
+    {% endif %}
+    {% if next %}
+        <a class="{{ nowo_ui_class('btn_link', _b) }} nowo-chat-msearch__more" href="{{ next }}" data-nowo-chat-search-more data-testid="chat-msearch-more">{{ 'chat_search.more'|trans }}</a>
+    {% endif %}
+{% endblock %}

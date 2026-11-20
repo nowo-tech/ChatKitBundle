@@ -254,7 +254,7 @@
                     <span class="nowo-chat-badge" data-part="badge" hidden></span>
                 </button>
                 <span class="nowo-chat-window__actions">
-                    {% block nowo_chat_window_header_actions %}{# 1.24: header actions slot; the window carries data-kind and data-channel-key for your script. #}{% endblock %}{{ ui.icon_button('check', 'chat.resolve'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'resolve', 'nowo-chat-window__resolve') }}
+                    {% block nowo_chat_window_header_actions %}{# 1.24: header actions slot; the window carries data-kind and data-channel-key for your script. #}{% endblock %}{% if nowo_chat_search_conversation ?? false %}{# 1.40: search in this conversation (a modal; without the script, the link opens /chat/search). #}<a class="nowo-chat-icon-btn nowo-chat-window__search" data-part="message-search" href="{{ path('nowo_chat_page_search') }}" aria-haspopup="dialog" aria-label="{{ 'chat_search.modal.open'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" title="{{ 'chat_search.modal.open'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}"><span data-icon="search"></span></a>{% endif %}{{ ui.icon_button('check', 'chat.resolve'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'resolve', 'nowo-chat-window__resolve') }}
                     {{ ui.icon_button('bell', 'chat.mute'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'mute', 'nowo-chat-window__mute') }}
                     <a class="nowo-chat-icon-btn nowo-chat-window__popout" data-part="popout" aria-label="{{ 'chat.popout'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" title="{{ 'chat.popout'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}"><span data-icon="external"></span></a>
                     {{ ui.icon_button('buzz', 'chat.buzz'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), 'buzz', 'nowo-chat-window__buzz') }}
@@ -499,6 +499,63 @@
         <a class="nowo-chat-sidebar__action" tabindex="-1"><span class="nowo-chat-sidebar__icon" data-part="icon" aria-hidden="true"></span><span data-part="label"></span></a>
     </template>
 {% endblock %}
+
+{% block nowo_chat_template_search_dialog %}
+    {#-
+     # 1.40: the search modal of the conversation header (`search.conversation_entry`): UiKit's confirm_dialog anatomy
+     # (header with the title and ×, a body of sections — the form, then the results — that alone scrolls, a footer
+     # with Close then the one primary "Search"), wide size, a full-screen sheet on phones (CSS). The form is the
+     # FormKit ChatMessageSearchType (scope "this conversation / all my conversations", the words, the rare filters
+     # folded under "More filters"); the dock script sends it to GET /chat/search/results and puts the HTML fragment in
+     # the results section. Without the script the header link opens /chat/search.
+     -#}
+    {%- if (nowo_chat_search_conversation ?? false) and nowo_chat_forms.message_search is defined %}
+        {% set nowo_chat_msearch = nowo_chat_forms.message_search %}
+        <template data-nowo-chat-template="search-dialog">
+            {% embed nowo_ui_partial('confirm_dialog', 'NowoChatKitBundle') with {
+                only_dialog: true,
+                anatomy: true,
+                size: 'wide',
+                title: 'chat_search.modal.title'|trans({}, 'NowoChatKitBundle', nowo_chat_locale),
+                title_id: 'nowo-chat-msearch-title',
+                close_label: 'chat_search.modal.close'|trans({}, 'NowoChatKitBundle', nowo_chat_locale),
+                dialog_testid: 'chat-search-dialog',
+                dialog_modifier: 'nowo-chat-msearch',
+                bundle: 'NowoChatKitBundle',
+            } %}
+                {% block body %}
+                    {% set _f = nowo_chat_msearch %}
+                    <div class="nowo-chat-msearch__section nowo-chat-msearch__section--form">
+                        {{ form_start(_f, {attr: {class: 'nowo-chat-msearch__form', role: 'search', 'data-part': 'search-form'}}) }}
+                            {{ form_row(_f.scope) }}
+                            {{ form_row(_f.q) }}
+                            <details class="nowo-chat-msearch__filters" data-part="search-filters" data-testid="chat-msearch-filters">
+                                <summary class="nowo-chat-msearch__filters-toggle">{{ 'chat_search.modal.more_filters'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</summary>
+                                <div class="nowo-chat-msearch__filters-body">
+                                    {{ form_row(_f.from) }}
+                                    {{ form_row(_f.after) }}
+                                    {{ form_row(_f.before) }}
+                                    {{ form_row(_f.link) }}
+                                </div>
+                            </details>
+                            {% do _f.search.setRendered() %}
+                            {{ form_rest(_f) }}
+                        {{ form_end(_f, {render_rest: false}) }}
+                    </div>
+                    <div class="nowo-chat-msearch__section nowo-chat-msearch__section--results" data-part="search-results" aria-live="polite" aria-busy="false" data-loading="{{ 'chat_search.modal.loading'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-failed="{{ 'chat_search.modal.failed'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-testid="chat-msearch-area">
+                        <div class="nowo-chat-msearch__empty" data-testid="chat-msearch-start">
+                            {{ include(nowo_ui_partial('empty', 'NowoChatKitBundle'), {empty: {title: 'chat_search.modal.start_title'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), message: 'chat_search.modal.start'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), action: null}, bundle: 'NowoChatKitBundle'}, false) }}
+                        </div>
+                    </div>
+                {% endblock %}
+                {% block footer %}
+                    <button type="button" class="{{ nowo_ui_class('btn_secondary', 'NowoChatKitBundle') }}" data-part="search-close" data-testid="chat-msearch-close">{{ 'chat_search.modal.close'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                    <button type="submit" form="{{ nowo_chat_msearch.vars.attr.id }}" class="{{ nowo_ui_class('btn_primary', 'NowoChatKitBundle') }}" data-part="search-submit" data-testid="chat-msearch-submit">{{ 'chat_search.submit'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                {% endblock %}
+            {% endembed %}
+        </template>
+    {%- endif %}
+{% endblock -%}
 
 {% block nowo_chat_icons %}
     {# icon_set: ux_icon — the application's UX Icons replace the built-in SVG (same names as data-icon). #}

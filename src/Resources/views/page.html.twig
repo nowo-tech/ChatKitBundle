@@ -98,7 +98,7 @@
                 {% if current %}
                     <header class="nowo-chat-page__header">
                         <a class="{{ nowo_ui_class('btn_link', _b) }} nowo-chat-page__back" href="{{ path('nowo_chat_page') }}">{{ 'chat.back'|trans }}</a>
-                        <h2>{{ current.title }}</h2>
+                        <h2>{{ current.title }}</h2>{% if nowo_chat_search_conversation ?? false %}{# 1.40: search in this conversation (the page without the script; the window's button opens the modal). #}<a class="{{ nowo_ui_class('btn_link', _b) }} nowo-chat-page__search" href="{{ path('nowo_chat_page_search', {conversation: current.uuid}) }}" data-testid="chat-page-search">{{ 'chat_search.modal.open'|trans }}</a>{% endif %}{{ '' }}
                         {% if current.subtitle %}<p class="{{ nowo_ui_class('muted', _b) }}">{{ current.subtitle }}</p>{% endif %}
                         {% set _peer_status = current.peerStatus ?? 'offline' %}
                         {% if (current.kind ?? null) == 'direct' and (_peer_status != 'offline' or (current.peerStatusText ?? null)) %}

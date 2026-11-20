@@ -400,6 +400,9 @@ export interface ChatConfig {
     /** 1.35: the Saved list (`GET`, `?before=`) and its page. */
     saved?: string;
     savedPage?: string;
+    /** 1.40: the search modal of the conversation header — its results fragment and the no-script page (absent while off). */
+    searchResults?: string;
+    searchPage?: string;
     /** 1.36: the forward picker (`GET ?q=`). */
     forwardTargets?: string;
     /** 1.36: forward (`POST`), the thread (`GET`, `POST`), its read cursor (`POST`), the previous texts (`GET`) (`__uuid__`, `__message__`). */
