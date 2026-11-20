@@ -34,7 +34,7 @@ use const PHP_URL_PATH;
 abstract class LoadDatabaseTestCase extends TestCase
 {
     /** The schema is created once per test process (a test helper, never a worker). */
-    private static bool $schema = false; // @phpstan-ignore frankenphp.worker.noMutableStaticProperty
+    protected static bool $schema = false; // @phpstan-ignore frankenphp.worker.noMutableStaticProperty
 
     protected TestKernel $kernel;
 

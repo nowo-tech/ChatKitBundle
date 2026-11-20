@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.40.1](#to-1401)
 - [To 1.40.0](#to-1400)
 - [To 1.39.1](#to-1391)
 - [Preparing for 2.0](#preparing-for-20)
@@ -89,6 +90,114 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.40.1
+
+From **1.40.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+From 1.26.4 to 1.40.0, on MySQL and MariaDB with `doctrine/orm` 3.7 or 3.8 and `doctrine/dbal` 4.5 or later, the schema
+the bundle generated (`doctrine:schema:create`, `doctrine:schema:update`, `doctrine:migrations:diff`) missed the foreign
+keys, and their indexes, of the tables whose key columns get the exact-match collation. A migration generated then may
+have dropped them. Without them, deleting a user or a conversation leaves chat rows (personal data) behind that no purge
+reaches. PostgreSQL and SQLite were not affected, nor was `doctrine.user_reference: id`.
+
+1.40.1 generates the keys again, so your next `doctrine:migrations:diff` adds them, and `doctrine:schema:validate`
+reports the mapping and the database out of sync until they are there. They cannot be added while orphaned rows exist.
+The statements below use the default table names (`doctrine.table_name_prefix: nowo_chat_`, no `table_prefix`); with a
+prefix the table, index and key names differ, take them from `doctrine:migrations:diff` or `doctrine:schema:update
+--dump-sql`. They are the same on MySQL 8.4 and MariaDB 11.4. Skip the statements whose index or key already exists
+(`SHOW CREATE TABLE …`). Afterwards `doctrine:schema:validate` reports the database in sync.
+
+**`doctrine.user_reference: relation`** (the default), from 1.26.4: the user foreign keys of `nowo_chat_conversation`.
+`app_user` stands for your user table (the table of `user_class`). Find the orphans:
+
+```sql
+SELECT c.id, c.support_owner_id, c.resolved_by_id, c.assignee_id
+FROM nowo_chat_conversation c
+LEFT JOIN app_user so ON so.id = c.support_owner_id
+LEFT JOIN app_user rb ON rb.id = c.resolved_by_id
+LEFT JOIN app_user a ON a.id = c.assignee_id
+WHERE (c.support_owner_id IS NOT NULL AND so.id IS NULL)
+   OR (c.resolved_by_id IS NOT NULL AND rb.id IS NULL)
+   OR (c.assignee_id IS NOT NULL AND a.id IS NULL);
+```
+
+Then do what the keys would have done: delete the support conversations of deleted owners (ON DELETE CASCADE; their
+messages, participants and the rest go with them through their own keys) and unset the deleted resolvers and assignees
+(ON DELETE SET NULL); then add the indexes and the keys:
+
+```sql
+DELETE c FROM nowo_chat_conversation c LEFT JOIN app_user u ON u.id = c.support_owner_id WHERE c.support_owner_id IS NOT NULL AND u.id IS NULL;
+UPDATE nowo_chat_conversation c LEFT JOIN app_user u ON u.id = c.resolved_by_id SET c.resolved_by_id = NULL WHERE c.resolved_by_id IS NOT NULL AND u.id IS NULL;
+UPDATE nowo_chat_conversation c LEFT JOIN app_user u ON u.id = c.assignee_id SET c.assignee_id = NULL WHERE c.assignee_id IS NOT NULL AND u.id IS NULL;
+CREATE INDEX IDX_D7385CFFCA8AEAC6 ON nowo_chat_conversation (support_owner_id);
+CREATE INDEX IDX_D7385CFF6713A32B ON nowo_chat_conversation (resolved_by_id);
+ALTER TABLE nowo_chat_conversation ADD CONSTRAINT FK_D7385CFFCA8AEAC6 FOREIGN KEY (support_owner_id) REFERENCES app_user (id) ON DELETE CASCADE;
+ALTER TABLE nowo_chat_conversation ADD CONSTRAINT FK_D7385CFF6713A32B FOREIGN KEY (resolved_by_id) REFERENCES app_user (id) ON DELETE SET NULL;
+ALTER TABLE nowo_chat_conversation ADD CONSTRAINT FK_D7385CFF59EC7D60 FOREIGN KEY (assignee_id) REFERENCES app_user (id) ON DELETE SET NULL;
+```
+
+**`doctrine.user_reference: string`**, from 1.27.0: the foreign keys of the message, mention, reaction, saved message,
+thread read, participant and conversation link tables (`nowo_chat_conversation` has no other foreign key in that mode).
+Find the orphans, for example:
+
+```sql
+SELECT 'nowo_chat_message' AS t, COUNT(*) FROM nowo_chat_message x LEFT JOIN nowo_chat_conversation c ON c.id = x.conversation_id WHERE c.id IS NULL
+UNION ALL SELECT 'nowo_chat_participant', COUNT(*) FROM nowo_chat_participant x LEFT JOIN nowo_chat_conversation c ON c.id = x.conversation_id WHERE c.id IS NULL
+UNION ALL SELECT 'nowo_chat_conversation_link', COUNT(*) FROM nowo_chat_conversation_link x LEFT JOIN nowo_chat_conversation c ON c.id = x.conversation_id WHERE c.id IS NULL
+UNION ALL SELECT 'nowo_chat_message (thread)', COUNT(*) FROM nowo_chat_message x LEFT JOIN nowo_chat_message r ON r.id = x.thread_root_id WHERE x.thread_root_id IS NOT NULL AND r.id IS NULL
+UNION ALL SELECT 'nowo_chat_message_mention', COUNT(*) FROM nowo_chat_message_mention x LEFT JOIN nowo_chat_message m ON m.id = x.message_id WHERE m.id IS NULL
+UNION ALL SELECT 'nowo_chat_reaction', COUNT(*) FROM nowo_chat_reaction x LEFT JOIN nowo_chat_message m ON m.id = x.message_id WHERE m.id IS NULL
+UNION ALL SELECT 'nowo_chat_saved_message', COUNT(*) FROM nowo_chat_saved_message x LEFT JOIN nowo_chat_message m ON m.id = x.message_id WHERE m.id IS NULL
+UNION ALL SELECT 'nowo_chat_thread_read', COUNT(*) FROM nowo_chat_thread_read x LEFT JOIN nowo_chat_message m ON m.id = x.root_message_id WHERE m.id IS NULL;
+```
+
+Delete them (ON DELETE CASCADE) and unset the forwarded-from references to deleted rows (ON DELETE SET NULL), in this
+order (messages first, so the rows of the messages they take are orphaned next):
+
+```sql
+DELETE x FROM nowo_chat_participant x LEFT JOIN nowo_chat_conversation c ON c.id = x.conversation_id WHERE c.id IS NULL;
+DELETE x FROM nowo_chat_conversation_link x LEFT JOIN nowo_chat_conversation c ON c.id = x.conversation_id WHERE c.id IS NULL;
+DELETE x FROM nowo_chat_message x LEFT JOIN nowo_chat_conversation c ON c.id = x.conversation_id WHERE c.id IS NULL;
+DELETE x FROM nowo_chat_message x LEFT JOIN nowo_chat_message r ON r.id = x.thread_root_id WHERE x.thread_root_id IS NOT NULL AND r.id IS NULL;
+UPDATE nowo_chat_message x LEFT JOIN nowo_chat_message f ON f.id = x.forwarded_from_message_id SET x.forwarded_from_message_id = NULL WHERE x.forwarded_from_message_id IS NOT NULL AND f.id IS NULL;
+UPDATE nowo_chat_message x LEFT JOIN nowo_chat_conversation c ON c.id = x.forwarded_from_conversation_id SET x.forwarded_from_conversation_id = NULL WHERE x.forwarded_from_conversation_id IS NOT NULL AND c.id IS NULL;
+DELETE x FROM nowo_chat_message_mention x LEFT JOIN nowo_chat_message m ON m.id = x.message_id WHERE m.id IS NULL;
+DELETE x FROM nowo_chat_reaction x LEFT JOIN nowo_chat_message m ON m.id = x.message_id WHERE m.id IS NULL;
+DELETE x FROM nowo_chat_saved_message x LEFT JOIN nowo_chat_message m ON m.id = x.message_id WHERE m.id IS NULL;
+DELETE x FROM nowo_chat_thread_read x LEFT JOIN nowo_chat_message m ON m.id = x.root_message_id WHERE m.id IS NULL;
+```
+
+Then add the indexes and the keys:
+
+```sql
+CREATE INDEX IDX_A40D82CC9AC0396 ON nowo_chat_message (conversation_id);
+CREATE INDEX IDX_A40D82CCC8BC80CF ON nowo_chat_message (thread_root_id);
+CREATE INDEX IDX_A40D82CC4645CC3E ON nowo_chat_message (forwarded_from_message_id);
+CREATE INDEX IDX_A40D82CCBDD9A572 ON nowo_chat_message (forwarded_from_conversation_id);
+CREATE INDEX IDX_9DF33B9B537A1329 ON nowo_chat_message_mention (message_id);
+CREATE INDEX IDX_9FE7FEB9AC0396 ON nowo_chat_participant (conversation_id);
+CREATE INDEX IDX_F6AD5573537A1329 ON nowo_chat_reaction (message_id);
+CREATE INDEX IDX_C835FCC3537A1329 ON nowo_chat_saved_message (message_id);
+CREATE INDEX IDX_C2874913F639B458 ON nowo_chat_thread_read (root_message_id);
+ALTER TABLE nowo_chat_message ADD CONSTRAINT FK_A40D82CC9AC0396 FOREIGN KEY (conversation_id) REFERENCES nowo_chat_conversation (id) ON DELETE CASCADE;
+ALTER TABLE nowo_chat_message ADD CONSTRAINT FK_A40D82CCC8BC80CF FOREIGN KEY (thread_root_id) REFERENCES nowo_chat_message (id) ON DELETE CASCADE;
+ALTER TABLE nowo_chat_message ADD CONSTRAINT FK_A40D82CC4645CC3E FOREIGN KEY (forwarded_from_message_id) REFERENCES nowo_chat_message (id) ON DELETE SET NULL;
+ALTER TABLE nowo_chat_message ADD CONSTRAINT FK_A40D82CCBDD9A572 FOREIGN KEY (forwarded_from_conversation_id) REFERENCES nowo_chat_conversation (id) ON DELETE SET NULL;
+ALTER TABLE nowo_chat_message_mention ADD CONSTRAINT FK_9DF33B9B537A1329 FOREIGN KEY (message_id) REFERENCES nowo_chat_message (id) ON DELETE CASCADE;
+ALTER TABLE nowo_chat_participant ADD CONSTRAINT FK_9FE7FEB9AC0396 FOREIGN KEY (conversation_id) REFERENCES nowo_chat_conversation (id) ON DELETE CASCADE;
+ALTER TABLE nowo_chat_reaction ADD CONSTRAINT FK_F6AD5573537A1329 FOREIGN KEY (message_id) REFERENCES nowo_chat_message (id) ON DELETE CASCADE;
+ALTER TABLE nowo_chat_saved_message ADD CONSTRAINT FK_C835FCC3537A1329 FOREIGN KEY (message_id) REFERENCES nowo_chat_message (id) ON DELETE CASCADE;
+ALTER TABLE nowo_chat_thread_read ADD CONSTRAINT FK_C2874913F639B458 FOREIGN KEY (root_message_id) REFERENCES nowo_chat_message (id) ON DELETE CASCADE;
+ALTER TABLE nowo_chat_conversation_link ADD CONSTRAINT FK_C437798C9AC0396 FOREIGN KEY (conversation_id) REFERENCES nowo_chat_conversation (id) ON DELETE CASCADE;
+```
+
+If you call the collation listener yourself: it now listens to `postGenerateSchema`;
+`ChannelKeyCollationListener::postGenerateSchemaTable()` is a deprecated no-op and its registry argument is unused.
 
 ## To 1.40.0
 

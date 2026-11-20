@@ -485,7 +485,6 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                         'is_bundle' => false,
                         'dir'       => __DIR__ . '/../Entity',
                         'prefix'    => 'Nowo\\ChatKitBundle\\Entity',
-                        'alias'     => 'NowoChatKit',
                     ],
                 ],
             ],
