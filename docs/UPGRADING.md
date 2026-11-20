@@ -5,9 +5,8 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
-- [To 1.39.0](#to-1390)
 - [Preparing for 2.0](#preparing-for-20)
-- [To 1.39.0](#to-1390-1)
+- [To 1.39.0](#to-1390)
 - [To 1.38.1](#to-1381)
 - [To 1.38.0](#to-1380)
 - [To 1.37.0](#to-1370)
@@ -89,13 +88,16 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
-## To 1.39.0
+Message search page (`/chat/search`): nothing to do unless you restyled or overrode it.
 
-From **1.38.1**:
-
-```bash
-composer update nowo-tech/chat-kit-bundle
-```
+- The page's `<section>` class is now `nowo-chat-search-page` (it was `nowo-chat-search`, the dock's search-field
+  class). Move host CSS that targeted the page through `.nowo-chat-search` to `.nowo-chat-search-page`; the
+  `.nowo-chat-search__*` element classes are unchanged.
+- Overrides of `nowo_chat_search_form` and `nowo_chat_search_results` keep working (same names and places). A form
+  block override that renders every field still works; to keep the new layout, start from the bundle's block, which
+  renders the text and the button first, then `nowo_chat_search_filters`.
+- New translation keys under `chat_search.*`: `back`, `filters`, `results`, `start_title`, `start`, `empty_title`,
+  `empty_hint`.
 
 ## Preparing for 2.0
 

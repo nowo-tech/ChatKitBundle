@@ -21,6 +21,7 @@ services:
       - APP_DEBUG=1
       - APP_SECRET=${APP_SECRET:-demo-secret}
       - FRANKENPHP_MODE=${FRANKENPHP_MODE:-worker}
+      - FRANKENPHP_RESET_KERNEL=${FRANKENPHP_RESET_KERNEL:-false}
       - DEFAULT_URI=${DEFAULT_URI:-http://localhost:8147}
       - DATABASE_URL=${DATABASE_URL:-mysql://app:app@db:3306/app?serverVersion=8.0&charset=utf8mb4}
     # Mitigate Docker/WSL DNS failures resolving repo.packagist.org (composer curl error 6).

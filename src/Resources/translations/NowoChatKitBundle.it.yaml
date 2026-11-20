@@ -419,6 +419,14 @@ chat_search:
   too_long: 'Il testo di ricerca è troppo lungo.'
   too_short: 'Il testo di ricerca è troppo corto.'
   rate_limited: 'Troppe ricerche. Attendi un momento e riprova.'
+  # 1.39.1: page anatomy (back link, filters disclosure, results area, empty states).
+  back: 'Indietro'
+  filters: 'Filtri'
+  results: 'Risultati della ricerca'
+  start_title: 'Cerca nei tuoi messaggi'
+  start: 'Scrivi le parole da cercare; i messaggi corrispondenti compaiono qui.'
+  empty_title: 'Nessun risultato'
+  empty_hint: 'Prova altre parole o rimuovi i filtri.'
   group: 'Messaggi'
   see_all: 'Tutti i messaggi trovati'
   conversations:
