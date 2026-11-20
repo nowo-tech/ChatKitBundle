@@ -129,7 +129,18 @@ final class PrivateEntityManagerPartsTest extends DatabaseTestCase
 
     public function testTheMiddlewareTellsTheManagerAboutRollbacks(): void
     {
-        self::assertTrue(PrivateEntityManagerPass::supportsRollbackMiddleware());
+        if (!PrivateEntityManagerPass::supportsRollbackMiddleware()) {
+            // DBAL 3: no rollback middleware (Connection::rollBack() returns bool); the manager is replaced at the next boundary.
+            $this->get(ChatKitEntityManager::class)->live();
+            $connection = $this->em->getConnection();
+            $connection->beginTransaction();
+            $this->get(ChatKitEntityManager::class)->noteWrite();
+            $connection->rollBack();
+            self::assertFalse($this->get(ChatKitEntityManager::class)->isStale(), 'DBAL 3 tells the manager nothing about rollbacks');
+
+            return;
+        }
+
         $container = $this->kernel->getContainer()->get('test.service_container');
         assert($container instanceof ContainerInterface);
         self::assertInstanceOf(PrivateEntityManagerMiddleware::class, $container->get(PrivateEntityManagerMiddleware::class));

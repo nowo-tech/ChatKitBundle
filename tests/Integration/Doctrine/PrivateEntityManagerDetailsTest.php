@@ -11,6 +11,7 @@ use Doctrine\ORM\Mapping\ClassMetadataFactory;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerPass;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
@@ -68,7 +69,8 @@ final class PrivateEntityManagerDetailsTest extends DatabaseTestCase
         $connection->beginTransaction();
         $connection->commit();
         $connection->rollBack();
-        self::assertTrue($private->isStale());
+        // Stale only where DBAL 4's rollback middleware reports it; DBAL 3 replaces the manager at the next boundary.
+        self::assertSame(PrivateEntityManagerPass::supportsRollbackMiddleware(), $private->isStale());
         $private->live();
         self::assertFalse($private->isStale());
         $private->reset();
