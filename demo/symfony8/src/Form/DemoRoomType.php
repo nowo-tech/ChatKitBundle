@@ -22,7 +22,7 @@ use Symfony\Component\Validator\Constraints\NotBlank;
  *
  * @extends AbstractType<array{name?: string}>
  */
-#[FormKitConfig('chat_kit')]
+#[FormKitConfig('demo')]
 final class DemoRoomType extends AbstractType
 {
     use FormOptionsTrait;

@@ -23,7 +23,7 @@ use Symfony\Component\OptionsResolver\OptionsResolver;
  *
  * @extends AbstractType<null>
  */
-#[FormKitConfig('chat_kit')]
+#[FormKitConfig('demo')]
 final class LoginType extends AbstractType
 {
     use FormOptionsTrait;

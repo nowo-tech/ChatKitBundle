@@ -1,7 +1,10 @@
 {% extends 'base.html.twig' %}
 
+{% block nowo_ui_page_header %}
+    {{ include(nowo_ui_partial('page_header'), { title: 'demo.login.nav'|trans }) }}
+{% endblock %}
+
 {% block body %}
-<div class="nowo-ui-page-header"><h1 class="nowo-ui-page-header__title">{{ 'demo.login.nav'|trans }}</h1></div>
 <section class="nowo-ui-card">
     <div class="nowo-ui-card__body">
         <p class="nowo-ui-muted">{{ 'demo.login.hint'|trans }}</p>
