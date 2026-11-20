@@ -419,6 +419,14 @@ chat_search:
   too_long: 'De zoektekst is te lang.'
   too_short: 'De zoektekst is te kort.'
   rate_limited: 'Te veel zoekopdrachten. Wacht even en probeer het opnieuw.'
+  # 1.39.1: page anatomy (back link, filters disclosure, results area, empty states).
+  back: 'Terug'
+  filters: 'Filters'
+  results: 'Zoekresultaten'
+  start_title: 'Doorzoek je berichten'
+  start: 'Typ de woorden die je zoekt; de berichten die overeenkomen verschijnen hier.'
+  empty_title: 'Geen resultaten'
+  empty_hint: 'Probeer andere woorden of wis de filters.'
   group: 'Berichten'
   see_all: 'Alle gevonden berichten'
   conversations:

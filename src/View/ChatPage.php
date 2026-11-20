@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\View;
 
+use Nowo\UiKitBundle\View\BackLink;
 use Nowo\UiKitBundle\View\Label;
 use Nowo\UiKitBundle\View\PageHeader;
 
@@ -40,12 +41,15 @@ final class ChatPage
     }
 
     /**
-     * 1.37: header of the message search page (`chat_search.title`, intro `chat_search.intro`).
+     * 1.37: header of the message search page (`chat_search.title`, intro `chat_search.intro`). 1.39.1: with the
+     * page's back link (`chat_search.back`; the controller gives a same-origin path or the chat home).
+     *
+     * @param BackLink|null $back The back link above the title
      *
      * @return PageHeader The page header view model
      */
-    public static function searchHeader(): PageHeader
+    public static function searchHeader(?BackLink $back = null): PageHeader
     {
-        return new PageHeader(new Label('chat_search.title', self::BUNDLE), new Label('chat_search.intro', self::BUNDLE));
+        return new PageHeader(new Label('chat_search.title', self::BUNDLE), new Label('chat_search.intro', self::BUNDLE), back: $back);
     }
 }

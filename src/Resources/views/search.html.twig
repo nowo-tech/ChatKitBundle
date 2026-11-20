@@ -2,7 +2,15 @@
  # 1.37: message search (`search.enabled`, GET /chat/search). Works without JavaScript: a GET FormKit form (UiKit form
  # theme), one page of results newest first and a "More results" link (keyset cursor). Only messages the viewer may
  # read are listed. Every excerpt is plain text: each segment is escaped by Twig and the words are wrapped in <mark>
- # here, never in the text. Classes: nowo-chat-search__*.
+ # here, never in the text. Classes: nowo-chat-search-page / nowo-chat-search__*.
+ #
+ # 1.39.1 (phone layout, UiKit page anatomy): the page header carries a back link (`back`: the same-origin referrer or
+ # the chat home); when the host's header presentation hides it (UiKit compact / no_title / no_header), the page bar
+ # (block nowo_chat_search_bar) shows the title and the back link above the form. The text and the primary "Search"
+ # button come first; the rare filters sit in a <details> (block nowo_chat_search_filters), closed unless one is set.
+ # The results area always renders: an empty state before searching and when nothing matches. The section's class is
+ # `nowo-chat-search-page` (1.37–1.39 used `nowo-chat-search`, the dock's search-field class, which squeezed the page into
+ # a 34px tinted band). Every 1.37 block (nowo_chat_search_form, nowo_chat_search_results) keeps its name and place.
  #}
 {% extends layout ?? nowo_ui_layout.admin %}
 {% trans_default_domain 'NowoChatKitBundle' %}
@@ -33,9 +41,41 @@
 
 {% block nowo_ui_content %}
     {% set _b = nowo_ui_bundle %}
-    <section class="{{ nowo_ui_class('section', _b) }} nowo-chat-search{{ (nowo_chat_full_height ?? false) ? ' nowo-chat-page--fill' }}" data-testid="chat-search" aria-label="{{ 'chat_search.title'|trans }}"{{ nowo_ui_attrs('section', _b) }}>
+    {% set _hp = nowo_ui_header|default(null) %}
+    {% set _presentation = _hp ? _hp.resolve(null) : 'standard' %}
+    <section class="{{ nowo_ui_class('section', _b) }} nowo-chat-search-page{{ (nowo_chat_full_height ?? false) ? ' nowo-chat-page--fill' }}" data-testid="chat-search" aria-label="{{ 'chat_search.title'|trans }}"{{ nowo_ui_attrs('section', _b) }}>
+        {% block nowo_chat_search_bar %}
+            {% if _presentation in ['compact', 'no_title', 'no_header'] %}
+                <div class="nowo-chat-search-page__bar" data-testid="chat-search-bar">
+                    {% if _presentation == 'compact' and back is defined and back %}
+                        {{ include(nowo_ui_partial('back_link', _b), {href: back, label: 'chat_search.back'|trans, testid: 'chat-search-bar-back', bundle: _b}, false) }}
+                    {% endif %}
+                    <p class="nowo-chat-search-page__title" aria-hidden="true">{{ 'chat_search.title'|trans }}</p>
+                </div>
+            {% endif %}
+        {% endblock %}
         {% block nowo_chat_search_form %}
             {{ form_start(form, {attr: {class: nowo_ui_class('form', _b) ~ ' nowo-chat-search__form', role: 'search'}}) }}
+                <div class="nowo-chat-search__query">
+                    {% if form.q is defined %}{{ form_row(form.q) }}{% endif %}
+                    {% if form.search is defined %}
+                        <div class="nowo-chat-search__submit">
+                            {{ form_widget(form.search, {attr: {class: (nowo_ui_class('btn_primary', _b) ~ ' nowo-chat-search__button')|trim, 'data-testid': 'chat-search-submit'}}) }}
+                        </div>
+                    {% endif %}
+                </div>
+                {% block nowo_chat_search_filters %}
+                    <details class="nowo-chat-search__filters" data-testid="chat-search-filters"{{ (filters_active ?? false) ? ' open' }}>
+                        <summary class="nowo-chat-search__filters-toggle">{{ 'chat_search.filters'|trans }}</summary>
+                        <div class="nowo-chat-search__filters-body">
+                            {% for name in ['from', 'after', 'before', 'link'] %}
+                                {% if attribute(form, name) is defined and not attribute(form, name).rendered %}
+                                    {{ form_row(attribute(form, name)) }}
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </details>
+                {% endblock %}
                 {% for child in form %}
                     {% if not child.rendered %}
                         {{ form_row(child) }}
@@ -43,11 +83,14 @@
                 {% endfor %}
             {{ form_end(form) }}
         {% endblock %}
+        <div class="nowo-chat-search__results" data-testid="chat-search-area" aria-live="polite" aria-label="{{ 'chat_search.results'|trans }}" role="region">
         {% block nowo_chat_search_results %}
             {% if error %}
                 <p class="{{ nowo_ui_class('flash_error', _b) }} nowo-chat-notice" role="alert" data-testid="chat-search-error">{{ error|trans }}</p>
             {% elseif searched and items is empty %}
-                <p class="{{ nowo_ui_class('empty', _b) }} nowo-chat-search__empty" data-testid="chat-search-empty">{{ 'chat_search.empty'|trans }}</p>
+                <div class="nowo-chat-search__empty" data-testid="chat-search-empty">
+                    {{ include(nowo_ui_partial('empty', _b), {empty: {title: 'chat_search.empty_title'|trans, message: 'chat_search.empty'|trans ~ ' ' ~ 'chat_search.empty_hint'|trans, action: null}, bundle: _b}, false) }}
+                </div>
             {% elseif items is not empty %}
                 <ol class="nowo-chat-search__list" role="list" data-testid="chat-search-results">
                     {% for item in items %}
@@ -65,10 +108,15 @@
                         </li>
                     {% endfor %}
                 </ol>
+            {% else %}
+                <div class="nowo-chat-search__empty nowo-chat-search__empty--start" data-testid="chat-search-start">
+                    {{ include(nowo_ui_partial('empty', _b), {empty: {title: 'chat_search.start_title'|trans, message: 'chat_search.start'|trans, action: null}, bundle: _b}, false) }}
+                </div>
             {% endif %}
             {% if next %}
                 <a class="{{ nowo_ui_class('btn_link', _b) }} nowo-chat-search__more" href="{{ next }}" data-testid="chat-search-more">{{ 'chat_search.more'|trans }}</a>
             {% endif %}
         {% endblock %}
+        </div>
     </section>
 {% endblock %}
