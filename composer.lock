@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "56c94a098524bca7639c1ec28620a511",
+    "content-hash": "820f9a0210355a89b5e6b8d10a04e7a8",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -1129,16 +1129,16 @@
         },
         {
             "name": "nowo-tech/transaction-doctrine",
-            "version": "v1.8.1",
+            "version": "v1.9.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/transaction-doctrine.git",
-                "reference": "58724e0ca8c3ebe3ff8c675b22a329a3d83d2ea3"
+                "reference": "08a61ada85176c760acd223f1222a955d9a95eb1"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/58724e0ca8c3ebe3ff8c675b22a329a3d83d2ea3",
-                "reference": "58724e0ca8c3ebe3ff8c675b22a329a3d83d2ea3",
+                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/08a61ada85176c760acd223f1222a955d9a95eb1",
+                "reference": "08a61ada85176c760acd223f1222a955d9a95eb1",
                 "shasum": ""
             },
             "require": {
@@ -1235,8 +1235,8 @@
                 "issues": "https://github.com/nowo-tech/transaction-doctrine/issues",
                 "source": "https://github.com/nowo-tech/transaction-doctrine"
             },
-            "time": "2026-11-20T09:09:22+00:00",
-            "published-time": "2026-11-20T09:23:55+00:00"
+            "time": "2026-11-20T13:46:37+00:00",
+            "published-time": "2026-11-20T13:50:08+00:00"
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
