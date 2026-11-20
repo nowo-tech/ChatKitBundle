@@ -35,12 +35,28 @@ final class ChatKitWrites
      */
     public static function runRecovering(TransactionRunnerInterface $runner, EntityManagerInterface $entityManager, callable $work): mixed
     {
-        return $runner->run(static function () use ($entityManager, $work): mixed {
+        return $runner->run(static function () use ($runner, $entityManager, $work): mixed {
             $result = $work();
+            self::beforeFlush($runner, $entityManager);
             $entityManager->flush();
 
             return $result;
         });
+    }
+
+    /**
+     * 1.39 (REQ-ARCH-001 rule 6 deprecation layer): called by the chat services right before they flush the manager
+     * inside a unit of work. With ChatKit's runner on the application's (shared) manager the host-flush probe reports
+     * the application entity classes with pending changes that flush writes; otherwise nothing happens. Read-only.
+     *
+     * @param TransactionRunnerInterface $runner The runner of the unit of work
+     * @param EntityManagerInterface $entityManager The manager about to be flushed
+     */
+    public static function beforeFlush(TransactionRunnerInterface $runner, EntityManagerInterface $entityManager): void
+    {
+        if ($runner instanceof ChatKitTransactionRunner) {
+            $runner->beforeHostFlush($entityManager);
+        }
     }
 
     /**

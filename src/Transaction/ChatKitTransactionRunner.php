@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Transaction;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatHostFlushProbe;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagerRegistry;
 use Nowo\TransactionContract\TransactionRunnerInterface;
 use Nowo\TransactionDoctrine\DoctrineTransactionRunner;
@@ -56,6 +57,7 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
      * @param bool $privateManager Whether it is ChatKit's private manager
      * @param int|null $retryAfterSeconds Retry-After hint of the TransientStorageFailure; null for none
      * @param LoggerInterface|null $logger Warns when a closed manager is replaced at a boundary
+     * @param ChatHostFlushProbe|null $hostFlushProbe 1.39: reports the application's pending changes each flush of the shared manager writes; null reports none
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -64,6 +66,7 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
         private bool $privateManager = false,
         private ?int $retryAfterSeconds = 1,
         private ?LoggerInterface $logger = null,
+        private ?ChatHostFlushProbe $hostFlushProbe = null,
     ) {
     }
 
@@ -87,7 +90,9 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
     public function run(callable $operation): mixed
     {
         $manager = $this->entityManager;
-        // Pending work first, on its own: a failed chat unit never rolls it back (PV-L6, QD-M1).
+        // Pending work first, on its own: a failed chat unit never rolls it back (PV-L6, QD-M1). 1.39: on the shared
+        // manager that pending work is the application's; the probe reports its classes (2.0 no longer flushes them).
+        $this->beforeHostFlush($manager);
         $manager->flush();
         if ($this->privateManager) {
             // ChatKit's own manager: transaction-doctrine 1.1's runner (a storage failure closes and replaces it, a
@@ -99,8 +104,9 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
         // a connection-level transaction instead, and only the ChatKit rows it touched are forgotten.
         $before = $this->chatRows($manager);
         try {
-            return DoctrineTransactionRunner::forConnection($manager->getConnection(), $this->retryAfterSeconds)->run(static function () use ($operation, $manager): mixed {
+            return DoctrineTransactionRunner::forConnection($manager->getConnection(), $this->retryAfterSeconds)->run(function () use ($operation, $manager): mixed {
                 $result = $operation();
+                $this->beforeHostFlush($manager);
                 $manager->flush();
 
                 return $result;
@@ -112,6 +118,21 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
             }
 
             throw $failure;
+        }
+    }
+
+    /**
+     * 1.39 (REQ-ARCH-001 rule 6 deprecation layer): called right before a flush of the manager the chat rows are
+     * written through. On the application's (shared) manager the host-flush probe reports every application entity
+     * class with pending changes that flush writes on ChatKit's behalf; with the private manager, or without a probe,
+     * nothing happens. Read-only.
+     *
+     * @param EntityManagerInterface $entityManager The manager about to be flushed
+     */
+    public function beforeHostFlush(EntityManagerInterface $entityManager): void
+    {
+        if (!$this->privateManager) {
+            $this->hostFlushProbe?->beforeFlush($entityManager);
         }
     }
 

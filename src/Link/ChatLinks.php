@@ -158,6 +158,7 @@ final readonly class ChatLinks
             }
             $link = new ChatConversationLink($conversation, $by, $url, $host, $title, $now);
             $this->entityManager->persist($link);
+            ChatKitWrites::beforeFlush($this->transactions, $this->entityManager);
             $this->entityManager->flush();
             if ($this->pinned->countFor($conversation) > $this->maxPinned) {
                 throw new InvalidArgumentException('too_many_links');
