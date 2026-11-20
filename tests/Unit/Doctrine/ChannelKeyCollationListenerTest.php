@@ -19,10 +19,11 @@ use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Doctrine\ORM\Mapping\ClassMetadataFactory;
+use Doctrine\ORM\Tools\Event\GenerateSchemaEventArgs;
 use Doctrine\ORM\Tools\Event\GenerateSchemaTableEventArgs;
-use Doctrine\Persistence\ManagerRegistry;
-use Doctrine\Persistence\ObjectManager;
 use Nowo\ChatKitBundle\Doctrine\ChannelKeyCollationListener;
+use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -33,6 +34,7 @@ use function method_exists;
 
 /**
  * House rule LQ: `channel_key` gets a binary NO PAD collation on MySQL 8 / MariaDB, so look-alike keys are distinct rows.
+ * 1.40.1: applied on `postGenerateSchema`, by table name (the table event is a deprecated no-op).
  */
 final class ChannelKeyCollationListenerTest extends TestCase
 {
@@ -62,30 +64,54 @@ final class ChannelKeyCollationListenerTest extends TestCase
     {
         self::assertSame($expected, ChannelKeyCollationListener::collationFor($platform));
 
-        $args = $this->args(ChatConversation::class, $platform);
-        (new ChannelKeyCollationListener($this->registry($platform)))->postGenerateSchemaTable($args);
-        $column = $args->getClassTable()->getColumn('channel_key');
+        $args   = $this->args($platform);
+        $schema = $args->getSchema();
+        (new ChannelKeyCollationListener())->postGenerateSchema($args);
+        $column = $args->getSchema()->getTable('nowo_chat_conversation')->getColumn('channel_key');
         self::assertSame($expected, $column->getPlatformOptions()['collation'] ?? null);
         self::assertSame($expected === null ? null : 'utf8mb4', $column->getPlatformOptions()['charset'] ?? null);
+        if ($expected === null) {
+            self::assertSame($schema, $args->getSchema(), 'nothing to collate: the schema is kept');
+        }
+        self::assertArrayNotHasKey('collation', $args->getSchema()->getTable('nowo_chat_message')->getColumn('channel_key')->getPlatformOptions(), 'other tables are untouched');
     }
 
-    public function testOtherEntitiesAndUnknownManagersAreUntouched(): void
+    public function testAManagerWithoutTheBundleEntitiesOrWithoutTheTableIsUntouched(): void
     {
         $platform = new MySQL80Platform();
-        $args     = $this->args(ChatMessage::class, $platform);
-        (new ChannelKeyCollationListener($this->registry($platform)))->postGenerateSchemaTable($args);
-        self::assertArrayNotHasKey('collation', $args->getClassTable()->getColumn('channel_key')->getPlatformOptions());
+        $args     = $this->args($platform, transient: true);
+        $schema   = $args->getSchema();
+        (new ChannelKeyCollationListener())->postGenerateSchema($args);
+        self::assertSame($schema, $args->getSchema());
 
-        $registry = $this->createStub(ManagerRegistry::class);
-        $registry->method('getManagerForClass')->willReturn($this->createStub(ObjectManager::class));
-        $args = $this->args(ChatConversation::class, $platform);
-        (new ChannelKeyCollationListener($registry))->postGenerateSchemaTable($args);
-        self::assertArrayNotHasKey('collation', $args->getClassTable()->getColumn('channel_key')->getPlatformOptions());
+        $args   = $this->args($platform, tables: false);
+        $schema = $args->getSchema();
+        (new ChannelKeyCollationListener())->postGenerateSchema($args);
+        self::assertSame($schema, $args->getSchema(), 'table filtered out of the schema');
+    }
+
+    public function testStringModeCollatesTheUserReferenceColumnsOfEveryTable(): void
+    {
+        $args = $this->args(new MySQL80Platform(), stringMode: true);
+        (new ChannelKeyCollationListener(null, new ChatUserReferences(ChatUserReferences::STRING)))->postGenerateSchema($args);
+        self::assertSame('utf8mb4_0900_bin', $args->getSchema()->getTable('nowo_chat_conversation')->getColumn('channel_key')->getPlatformOptions()['collation'] ?? null);
+        self::assertSame('utf8mb4_0900_bin', $args->getSchema()->getTable('nowo_chat_conversation')->getColumn('support_owner_id')->getPlatformOptions()['collation'] ?? null);
+        self::assertSame('utf8mb4_0900_bin', $args->getSchema()->getTable('nowo_chat_message')->getColumn('author_id')->getPlatformOptions()['collation'] ?? null);
+        self::assertArrayNotHasKey('collation', $args->getSchema()->getTable('nowo_chat_message')->getColumn('channel_key')->getPlatformOptions());
+    }
+
+    public function testTheDeprecatedTableEventDoesNothing(): void
+    {
+        $table = $this->table('nowo_chat_conversation');
+        $args  = new GenerateSchemaTableEventArgs(new ClassMetadata(ChatConversation::class), new Schema([$table]), $table);
+        (new ChannelKeyCollationListener())->postGenerateSchemaTable($args);
+        self::assertArrayNotHasKey('collation', $table->getColumn('channel_key')->getPlatformOptions());
+        self::assertSame($table, $args->getClassTable());
     }
 
     public function testCollateInPlaceAndThroughTheEditor(): void
     {
-        $table = $this->table();
+        $table = $this->table('nowo_chat_conversation');
         self::assertNull(ChannelKeyCollationListener::collate($table, 'channel_key', 'utf8mb4_0900_bin', false));
         self::assertSame('utf8mb4_0900_bin', $table->getColumn('channel_key')->getPlatformOptions()['collation'] ?? null);
 
@@ -93,37 +119,49 @@ final class ChannelKeyCollationListenerTest extends TestCase
         if (!method_exists(Table::class, 'edit')) {
             return;
         }
-        $edited = ChannelKeyCollationListener::collate($this->table(), 'channel_key', 'utf8mb4_nopad_bin', true);
+        $edited = ChannelKeyCollationListener::collate($this->table('nowo_chat_conversation'), 'channel_key', 'utf8mb4_nopad_bin', true);
         self::assertInstanceOf(Table::class, $edited);
         self::assertSame('utf8mb4_nopad_bin', $edited->getColumn('channel_key')->getPlatformOptions()['collation'] ?? null);
     }
 
-    private function table(): Table
+    private function table(string $name): Table
     {
-        return new Table('nowo_chat_conversation', [new Column('channel_key', Type::getType(Types::STRING), ['length' => 120, 'notnull' => false])]);
+        return new Table($name, [
+            new Column('channel_key', Type::getType(Types::STRING), ['length' => 120, 'notnull' => false]),
+            new Column('support_owner_id', Type::getType(Types::STRING), ['length' => 64, 'notnull' => false]),
+            new Column('author_id', Type::getType(Types::STRING), ['length' => 64, 'notnull' => false]),
+        ]);
     }
 
     /**
-     * @param class-string $class
+     * The schema tool's event with the conversation and message tables (each with all three columns).
      */
-    private function args(string $class, AbstractPlatform $platform): GenerateSchemaTableEventArgs
-    {
-        $metadata = new ClassMetadata($class);
-        $metadata->setPrimaryTable(['name' => 'nowo_chat_conversation']);
-        $metadata->mapField(['fieldName' => 'channelKey', 'columnName' => 'channel_key', 'type' => Types::STRING, 'length' => 120, 'nullable' => true]);
-
-        return new GenerateSchemaTableEventArgs($metadata, new Schema(), $this->table());
-    }
-
-    private function registry(AbstractPlatform $platform): ManagerRegistry
+    private function args(AbstractPlatform $platform, bool $transient = false, bool $tables = true, bool $stringMode = false): GenerateSchemaEventArgs
     {
         $connection = $this->createStub(Connection::class);
         $connection->method('getDatabasePlatform')->willReturn($platform);
+        $factory = $this->createStub(ClassMetadataFactory::class);
+        $factory->method('isTransient')->willReturn($transient);
         $manager = $this->createStub(EntityManagerInterface::class);
         $manager->method('getConnection')->willReturn($connection);
-        $registry = $this->createStub(ManagerRegistry::class);
-        $registry->method('getManagerForClass')->willReturn($manager);
+        $manager->method('getMetadataFactory')->willReturn($factory);
+        $manager->method('getClassMetadata')->willReturnCallback(static function (string $class) use ($stringMode): ClassMetadata {
+            /** @var class-string $class */
+            $metadata = new ClassMetadata($class);
+            $metadata->setPrimaryTable(['name' => $class === ChatConversation::class ? 'nowo_chat_conversation' : ($class === ChatMessage::class ? 'nowo_chat_message' : 'nowo_chat_other')]);
+            if ($class === ChatConversation::class) {
+                $metadata->mapField(['fieldName' => 'channelKey', 'columnName' => 'channel_key', 'type' => Types::STRING, 'length' => 120, 'nullable' => true]);
+            }
+            if ($stringMode && $class === ChatConversation::class) {
+                $metadata->mapField(['fieldName' => 'supportOwnerRef', 'columnName' => 'support_owner_id', 'type' => Types::STRING, 'length' => 64, 'nullable' => true]);
+            }
+            if ($stringMode && $class === ChatMessage::class) {
+                $metadata->mapField(['fieldName' => 'authorRef', 'columnName' => 'author_id', 'type' => Types::STRING, 'length' => 64, 'nullable' => true]);
+            }
 
-        return $registry;
+            return $metadata;
+        });
+
+        return new GenerateSchemaEventArgs($manager, new Schema($tables ? [$this->table('nowo_chat_conversation'), $this->table('nowo_chat_message')] : []));
     }
 }
