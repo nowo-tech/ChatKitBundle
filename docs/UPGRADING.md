@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.39.1](#to-1391)
 - [Preparing for 2.0](#preparing-for-20)
 - [To 1.39.0](#to-1390)
 - [To 1.38.1](#to-1381)
@@ -87,6 +88,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 1.39.1
+
+From **1.39.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 Message search page (`/chat/search`): nothing to do unless you restyled or overrode it.
 
