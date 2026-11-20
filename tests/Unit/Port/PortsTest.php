@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Tests\Unit\Port;
 use DateTimeImmutable;
 use LogicException;
 use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface;
 use Nowo\ChatKitBundle\Contract\ChatParticipantResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeTransportInterface;
@@ -19,6 +20,8 @@ use Nowo\ChatKitBundle\Port\ChatChannelSourceGate;
 use Nowo\ChatKitBundle\Port\ChatParticipantResolverGate;
 use Nowo\ChatKitBundle\Port\ChatRealtimeTransportGate;
 use Nowo\ChatKitBundle\Port\Ports;
+use Nowo\ChatKitBundle\Tests\Support\Deprecation\DeprecationRecorder;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Symfony\Component\HttpFoundation\Request;
@@ -31,18 +34,27 @@ use Symfony\Component\Security\Core\User\UserInterface;
  */
 final class PortsTest extends TestCase
 {
+    /** 1.39: asked as is, with a deprecation each (the interfaces are removed in 2.0). */
+    #[IgnoreDeprecations]
     public function testADeprecatedImplementationIsAskedAsIs(): void
     {
         $provider = $this->createStub(ChatChannelProviderInterface::class);
         $realtime = $this->createStub(ChatRealtimeInterface::class);
         $resolver = $this->createStub(CurrentChatUserResolverInterface::class);
 
-        self::assertSame($provider, Ports::channelProvider($provider));
-        self::assertSame($realtime, Ports::realtime($realtime));
-        self::assertSame($resolver, Ports::currentUser($resolver));
+        [, $messages] = DeprecationRecorder::record('removed in 2.0', static function () use ($provider, $realtime, $resolver): void {
+            self::assertSame($provider, Ports::channelProvider($provider));
+            self::assertSame($realtime, Ports::realtime($realtime));
+            self::assertSame($resolver, Ports::currentUser($resolver));
+        });
         self::assertSame($provider, Ports::companion($provider));
+        self::assertCount(3, $messages);
+        self::assertStringContainsString('the deprecated ' . ChatChannelProviderInterface::class . ', which is removed in 2.0. Implement ' . ChatChannelSourceInterface::class, $messages[0]);
+        self::assertStringContainsString('the deprecated ' . ChatRealtimeInterface::class . ', which is removed in 2.0. Implement ' . ChatRealtimeTransportInterface::class, $messages[1]);
+        self::assertStringContainsString('the deprecated ' . CurrentChatUserResolverInterface::class . ', which is removed in 2.0. Implement ' . ChatParticipantResolverInterface::class, $messages[2]);
     }
 
+    #[IgnoreDeprecations]
     public function testAServiceImplementingBothIsAskedThroughTheDeprecatedInterface(): void
     {
         $both = new class implements ChatRealtimeInterface, ChatRealtimeTransportInterface {

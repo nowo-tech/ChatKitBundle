@@ -44,6 +44,9 @@ use function sprintf;
  *   decides per object and fails closed (`LogicException`) when the object implements neither;
  * - it implements neither: the build fails.
  *
+ * 1.39: an application service asked through a deprecated interface triggers a deprecation at the container build (the
+ * interfaces are removed in 2.0); the bundle's own defaults do not.
+ *
  * Runs after RealtimeTransportPass (which may point ChatRealtimeInterface at the null transport).
  *
  * @internal
@@ -80,6 +83,10 @@ final class ChatKitPortsPass implements CompilerPassInterface
 
             $class = $this->classOf($container, $target);
             if ($class !== null && is_a($class, $legacy, true)) {
+                // 1.39: an application service on the deprecated interface is announced (the interface goes in 2.0).
+                if (!in_array($class, $port['defaults'], true)) {
+                    trigger_deprecation('nowo-tech/chat-kit-bundle', '1.39', Ports::legacyPortMessage($class, $legacy, $port['twin']));
+                }
                 if ($target !== $this->resolve($container, $legacy)) {
                     $container->setAlias($legacy, $target)->setPublic($this->isPublic($container, $legacy));
                 }

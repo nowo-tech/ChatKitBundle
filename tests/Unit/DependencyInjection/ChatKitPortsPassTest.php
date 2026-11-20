@@ -18,7 +18,9 @@ use Nowo\ChatKitBundle\Port\ChatParticipantResolverGate;
 use Nowo\ChatKitBundle\Port\Ports;
 use Nowo\ChatKitBundle\Realtime\NullChatRealtime;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
+use Nowo\ChatKitBundle\Tests\Support\Deprecation\DeprecationRecorder;
 use Nowo\ChatKitBundle\Tests\Unit\Port\TwinOnlySource;
+use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -132,6 +134,59 @@ final class ChatKitPortsPassTest extends TestCase
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('"app.realtime" (stdClass) of ' . ChatRealtimeInterface::class . ' must implement');
         (new ChatKitPortsPass())->process($container);
+    }
+
+    /** 1.39: an application service on a deprecated interface is announced at the build; the bundle defaults are not. */
+    #[IgnoreDeprecations]
+    public function testADeprecatedApplicationServiceIsAnnouncedAtTheBuild(): void
+    {
+        [, $defaults] = DeprecationRecorder::record('removed in 2.0', function (): void {
+            (new ChatKitPortsPass())->process($this->container());
+        });
+        self::assertSame([], $defaults, 'the bundle\'s own defaults');
+
+        $container = $this->container();
+        $container->register('app.legacy', LegacyResolver::class);
+        $container->setAlias(CurrentChatUserResolverInterface::class, 'app.legacy');
+        [, $messages] = DeprecationRecorder::record('removed in 2.0', static function () use ($container): void {
+            (new ChatKitPortsPass())->process($container);
+        });
+
+        self::assertSame(['Since nowo-tech/chat-kit-bundle 1.39: ' . Ports::legacyPortMessage(LegacyResolver::class, CurrentChatUserResolverInterface::class, ChatParticipantResolverInterface::class)], $messages);
+        self::assertStringContainsString('implements the deprecated ' . CurrentChatUserResolverInterface::class . ', which is removed in 2.0', $messages[0]);
+        self::assertStringContainsString(ChatParticipantResolverInterface::class . ": '@" . LegacyResolver::class . "'", $messages[0]);
+
+        $twin = $this->container();
+        $twin->register('app.resolver', TwinResolver::class);
+        $twin->setAlias(ChatParticipantResolverInterface::class, 'app.resolver');
+        [, $none] = DeprecationRecorder::record('removed in 2.0', static function () use ($twin): void {
+            (new ChatKitPortsPass())->process($twin);
+        });
+        self::assertSame([], $none, 'a twin is not deprecated');
+    }
+
+    /** 1.39: a factory service on a deprecated interface is announced when it is created. */
+    #[IgnoreDeprecations]
+    public function testADeprecatedFactoryServiceIsAnnouncedWhenCreated(): void
+    {
+        $container = $this->container();
+        $container->register('app.legacy', LegacyResolver::class)->setFactory([self::class, 'legacy']);
+        $container->setAlias(CurrentChatUserResolverInterface::class, 'app.legacy')->setPublic(true);
+        (new ChatKitPortsPass())->process($container);
+        $container->compile();
+
+        [$service, $messages] = DeprecationRecorder::record('removed in 2.0', static fn (): mixed => $container->get(CurrentChatUserResolverInterface::class));
+
+        self::assertInstanceOf(LegacyResolver::class, $service);
+        self::assertSame(['Since nowo-tech/chat-kit-bundle 1.39: ' . Ports::legacyPortMessage(LegacyResolver::class, CurrentChatUserResolverInterface::class, ChatParticipantResolverInterface::class)], $messages);
+    }
+
+    /**
+     * A factory of a resolver of the deprecated interface.
+     */
+    public static function legacy(): LegacyResolver
+    {
+        return new LegacyResolver();
     }
 
     public function testAMissingPortIsSkipped(): void

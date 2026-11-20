@@ -259,7 +259,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $this->registerSearch($container, $profile['search_kit']);
         $this->registerRuntimeRetention($container, $profile['runtime']['retention_days'] ?? null, $profile['retention_days']);
         $this->registerTableNames($container, $configs, $config['default_profile'], $profile['doctrine']);
-        $this->registerPrivateEntityManager($container, $profile['doctrine']['private_entity_manager'], $profile['doctrine']['entity_manager']);
+        $this->registerPrivateEntityManager($container, $profile['doctrine']['private_entity_manager'], $profile['doctrine']['entity_manager'], $config['default_profile']);
         foreach ($profile['links'] as $key => $value) {
             $container->setParameter(Configuration::ALIAS . '.links.' . $key, $value);
         }
@@ -387,15 +387,18 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      * {@see ChatKitManagerRegistry}; {@see PrivateEntityManagerReferencesPass} then points every bundle service at them,
      * {@see PrivateEntityManagerPass} attaches the rollback middleware (DBAL 4) to the source manager's connection, and
      * the boundary listener drops the private manager after the memos. null keeps the 1.26 wiring; false too, with a
-     * deprecation (the private manager is the only mode in 2.0).
+     * deprecation (the private manager is the only mode in 2.0). 1.39: null (unset) triggers a deprecation as well.
      */
-    private function registerPrivateEntityManager(ContainerBuilder $container, ?bool $private, string $emName): void
+    private function registerPrivateEntityManager(ContainerBuilder $container, ?bool $private, string $emName, string $profileName): void
     {
         $container->setParameter(PrivateEntityManagerReferencesPass::PARAMETER, $private === true);
         $container->setParameter(PrivateEntityManagerReferencesPass::SOURCE_PARAMETER, $emName);
         // 1.30: with the private manager ChatKit's runner drives it alone (the registry's source name resolves to it).
         if ($private === true && $container->hasDefinition(ChatKitTransactionRunner::SERVICE_ID)) {
             $container->getDefinition(ChatKitTransactionRunner::SERVICE_ID)->replaceArgument(2, $emName)->replaceArgument(3, true);
+        }
+        if ($private === null) {
+            trigger_deprecation('nowo-tech/chat-kit-bundle', '1.39', self::unsetPrivateEntityManagerMessage($profileName));
         }
         if ($private === false) {
             trigger_deprecation('nowo-tech/chat-kit-bundle', '1.27', '"nowo_chat_kit ... doctrine.private_entity_manager: false" is deprecated: chat writes then flush the application\'s entity manager, including its pending changes; the private entity manager becomes the only mode in 2.0. Set it to true (see UPGRADING.md).');
@@ -422,6 +425,16 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $values   = $memos instanceof IteratorArgument ? $memos->getValues() : [];
         $values[] = new Reference(ChatKitEntityManager::class, ContainerInterface::IGNORE_ON_UNINITIALIZED_REFERENCE);
         $listener->setArgument('$memos', new IteratorArgument($values));
+    }
+
+    /**
+     * 1.39 (REQ-ARCH-001 rule 6 deprecation layer): the notice for an unset `doctrine.private_entity_manager`.
+     *
+     * @param string $profileName The default profile
+     */
+    public static function unsetPrivateEntityManagerMessage(string $profileName): string
+    {
+        return sprintf('Not setting "nowo_chat_kit.profiles.%1$s.doctrine.private_entity_manager" is deprecated: chat writes then flush the application\'s entity manager, including its pending changes. In 2.0 the private entity manager is the only mode (as if true). Opt in now with "nowo_chat_kit: { profiles: { %1$s: { doctrine: { private_entity_manager: true } } } }" and read the "Your pending changes to ... were flushed by NowoChatKitBundle" deprecations as the list of your own flushes to add (see UPGRADING.md, "To 1.39.0").', $profileName);
     }
 
     /**
