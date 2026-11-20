@@ -951,14 +951,14 @@
             "dist": {
                 "type": "path",
                 "url": "/var/chat-kit-bundle",
-                "reference": "f4172cf283d235b803fa26c98251b3a66ed6cfdb"
+                "reference": "41a701cbdb6a710963ce5bba5397dae9e523012c"
             },
             "require": {
                 "doctrine/doctrine-bundle": "^2.13 || ^3.0",
                 "doctrine/orm": "^3.3",
                 "nowo-tech/form-kit-bundle": "^2.17",
                 "nowo-tech/transaction-contract": "^1.0",
-                "nowo-tech/transaction-doctrine": "^1.6",
+                "nowo-tech/transaction-doctrine": "^1.8.1",
                 "nowo-tech/ui-kit-bundle": "^2.58.1",
                 "php": ">=8.3 <8.6",
                 "psr/cache": "^3.0",
@@ -986,13 +986,15 @@
                 "twig/twig": "^3.12"
             },
             "conflict": {
-                "nowo-tech/runtime-setting-contract": "<1.0 || >=2.0"
+                "nowo-tech/runtime-setting-contract": "<1.0 || >=2.0",
+                "nowo-tech/search-kit-bundle": "<1.10 || >=2.0"
             },
             "require-dev": {
                 "friendsofphp/php-cs-fixer": "^3.64",
                 "igor-php/igor-php": "^0.9.7 || ^0.10.0",
                 "nowo-tech/phpstan-frankenphp": "^1.4",
                 "nowo-tech/runtime-setting-contract": "^1.0",
+                "nowo-tech/search-kit-bundle": "^1.10",
                 "phpstan/phpstan": "^2.1",
                 "phpstan/phpstan-doctrine": "^2.0",
                 "phpstan/phpstan-phpunit": "^2.0",
@@ -1009,6 +1011,7 @@
             "suggest": {
                 "minishlink/web-push": "Web Push notifications when the app is not open (implement ChatPushSenderInterface)",
                 "nowo-tech/runtime-setting-contract": "^1.0 — for runtime.retention_days (1.32): the retention read from a runtime setting (.env or database, changed live with nowo:runtime-setting:set)",
+                "nowo-tech/search-kit-bundle": "^1.10 — for search_kit.enabled: chat messages (1.37) and conversations (1.38) as groups of the Ctrl/⌘+K palette and its results page",
                 "symfony/mercure-bundle": "Realtime delivery of messages, presence, typing and read receipts (default ChatRealtimeInterface)",
                 "symfony/messenger": "Asynchronous push fan-out"
             },
@@ -1093,7 +1096,7 @@
                     "homepage": "https://nowo.tech"
                 }
             ],
-            "description": "Floating LinkedIn-style chat for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens.",
+            "description": "Floating chat dock for Symfony: direct messages, channels and a support inbox with realtime (Mercure), presence, read receipts, typing, Web Push, customizable Twig templates and theme tokens.",
             "homepage": "https://github.com/nowo-tech/ChatKitBundle",
             "keywords": [
                 "bundle",
@@ -1310,16 +1313,16 @@
         },
         {
             "name": "nowo-tech/transaction-doctrine",
-            "version": "v1.6.0",
+            "version": "v1.8.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/transaction-doctrine.git",
-                "reference": "707309320afbe69add2450ed31f67d32f888fe93"
+                "reference": "58724e0ca8c3ebe3ff8c675b22a329a3d83d2ea3"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/707309320afbe69add2450ed31f67d32f888fe93",
-                "reference": "707309320afbe69add2450ed31f67d32f888fe93",
+                "url": "https://api.github.com/repos/nowo-tech/transaction-doctrine/zipball/58724e0ca8c3ebe3ff8c675b22a329a3d83d2ea3",
+                "reference": "58724e0ca8c3ebe3ff8c675b22a329a3d83d2ea3",
                 "shasum": ""
             },
             "require": {
@@ -1377,7 +1380,8 @@
             },
             "autoload": {
                 "psr-4": {
-                    "Nowo\\TransactionDoctrine\\": "src/"
+                    "Nowo\\TransactionDoctrine\\": "src/",
+                    "Nowo\\TransactionDoctrine\\WriteUnit\\Dbal\\Dbal3\\": "compat/dbal3/"
                 }
             },
             "notification-url": "https://packagist.org/downloads/",
@@ -1415,8 +1419,8 @@
                 "issues": "https://github.com/nowo-tech/transaction-doctrine/issues",
                 "source": "https://github.com/nowo-tech/transaction-doctrine"
             },
-            "time": "2026-11-18T15:30:13+00:00",
-            "published-time": "2026-11-18T15:33:30+00:00"
+            "time": "2026-11-20T09:09:22+00:00",
+            "published-time": "2026-11-20T09:23:55+00:00"
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
