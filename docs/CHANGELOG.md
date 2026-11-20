@@ -241,6 +241,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Requires `nowo-tech/transaction-doctrine` ^1.9 (the host-flush probe; 1.8.1 fixed GHSA-9wh3-m3m5-jffx and
   GHSA-65w2-9r4h-848g); root and demo locks updated to v1.9.0.
+- Demo: aligned with UiKit and FormKit (`demo` FormKit profile, UiKit page header, `demo-nav-*` test ids on the masthead).
 
 ## [1.38.1] - 2026-11-20
 
