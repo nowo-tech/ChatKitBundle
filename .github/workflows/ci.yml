@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Classify the change
         id: classify
-        uses: nowo-tech/ci-actions/changes@main
+        uses: nowo-tech/ci-actions/changes@v1
         with:
           mode-variable: ${{ vars.NOWO_CI_PR_MODE }}
 

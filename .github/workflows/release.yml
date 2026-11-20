@@ -10,4 +10,4 @@ permissions:
 
 jobs:
   release:
-    uses: nowo-tech/ci-actions/.github/workflows/release.yml@main
+    uses: nowo-tech/ci-actions/.github/workflows/release.yml@v1

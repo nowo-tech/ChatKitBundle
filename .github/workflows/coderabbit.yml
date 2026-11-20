@@ -28,6 +28,6 @@ concurrency:
 
 jobs:
   coderabbit:
-    uses: nowo-tech/ci-actions/.github/workflows/coderabbit.yml@main
+    uses: nowo-tech/ci-actions/.github/workflows/coderabbit.yml@v1
     secrets:
       CODERABBIT_API_KEY: ${{ secrets.CODERABBIT_API_KEY }}

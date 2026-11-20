@@ -10,4 +10,4 @@ permissions:
 
 jobs:
   stale:
-    uses: nowo-tech/ci-actions/.github/workflows/stale.yml@main
+    uses: nowo-tech/ci-actions/.github/workflows/stale.yml@v1
