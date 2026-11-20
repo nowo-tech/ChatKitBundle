@@ -100,7 +100,7 @@ nowo_chat_kit:
 | `profiles.<name>.doctrine.table_prefix` | string | `''` | Prepended to every bundle table, index and unique-constraint name **after** `table_name_prefix` is applied (lowercase letters, digits, `_`). `app_` gives `app_nowo_chat_conversation`, `app_idx_nowo_chat_message_created`, … Generate a migration after changing it. |
 | `profiles.<name>.doctrine.user_reference` | `relation` \| `id` \| `string` | `relation` | 1.24: how the chat tables point at users. `relation` = Doctrine relations to `user_class` with foreign keys (`resolve_target_entities`). `id` = each user column holds the user's id as a string (`VARCHAR(64)`, no foreign key, indexed), users are loaded through `ChatDirectoryInterface::findByIds()` after the rows, `user_class` is not needed and need not be an entity. Global like the table names. Switching needs a migration ([User references](#user-references-124)). |
 | `profiles.<name>.doctrine.entity_manager` | string | `default` | 1.27: the Doctrine entity manager that maps the chat entities: the source of `private_entity_manager` (connection, mapping, caches, events). |
-| `profiles.<name>.doctrine.private_entity_manager` | ?bool | `null` | 1.27 (REQ-ARCH-001 rule 6): `true` = the bundle reads and writes its rows through its own private entity manager, so a chat write never flushes, clears or closes yours ([Private entity manager](#private-entity-manager-127)). `null` (default) = 1.26 behaviour: the chat flushes your default manager. `false` = the same, deprecated: `true` becomes the only mode in 2.0. |
+| `profiles.<name>.doctrine.private_entity_manager` | ?bool | `null` | 1.27 (REQ-ARCH-001 rule 6): `true` = the bundle reads and writes its rows through its own private entity manager, so a chat write never flushes, clears or closes yours ([Private entity manager](#private-entity-manager-127)). `null` (default) = 1.26 behaviour: the chat flushes your default manager (1.39: deprecated, with the host-flush probe listing your pending changes it flushes). `false` = the same, deprecated: `true` becomes the only mode in 2.0. |
 | `profiles.<name>.web_ui.layout_template` | ?string | `null` | Layout the full-page chat extends (REQ-UI-003); `null` = `nowo_ui_kit.layouts.admin`. It must render the UiKit canonical blocks. |
 | `profiles.<name>.web_ui.templates.page` | string | `@NowoChatKitBundle/page.html.twig` | Template of the full-page chat (a host template extending `@!NowoChatKitBundle/page.html.twig` and overriding one block). |
 | `profiles.<name>.web_ui.assets` | bool | `true` | 1.21: `false` = the full-page chat leaves out the `nowo-chat.css` and `nowo-chat.js` tags (your bundler ships them). The dock on your other pages takes its own `nowo_chat_assets: false` ([USAGE](USAGE.md#front-end-iife-or-your-bundler)). |
@@ -370,6 +370,12 @@ pending there, and a failed chat write closed your manager. With `private_entity
 - in `relation` mode, your user objects on chat rows (the security user, a user your code loaded) are replaced on the
   row by the private manager's reference to the same id before each flush; your instance is never written. Users read
   back from chat rows are the private manager's instances: compare users by id, never with `===`.
+
+1.39: leaving the option unset is deprecated (it becomes the only mode in 2.0). Until you set it, the host-flush probe
+reports, right before each chat write flushes your manager, every entity class of yours with pending changes in that
+flush (one deprecation per class and request: "Your pending changes to App\X were flushed by NowoChatKitBundle; 2.0 no
+longer does."). The probe only reads, and is off with `private_entity_manager: true`. See
+[UPGRADING](UPGRADING.md#to-1390).
 
 ## Container parameters
 
