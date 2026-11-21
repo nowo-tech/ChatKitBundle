@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Contract\ChatMentionInboxInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
+use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Model\ChatMentionView;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Repository\ChatMessageMentionRepository;
@@ -55,7 +56,7 @@ final readonly class ChatMentionInbox implements ChatMentionInboxInterface
     public function mentions(ChatUserInterface $user, array $channelKeys, bool $supportAgent, int $limit, bool $unreadOnly = false, ?DateTimeImmutable $since = null, bool $channelsOnly = false): array
     {
         return array_map(
-            static fn ($mention): ChatMentionView => ChatMentionView::of($mention, $user),
+            static fn (ChatMessageMention $mention): ChatMentionView => ChatMentionView::of($mention, $user),
             $this->mentions->findForUser($user, $channelKeys, $supportAgent, $limit, $unreadOnly, $since, $channelsOnly),
         );
     }

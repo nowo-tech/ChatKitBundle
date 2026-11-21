@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Service;
 
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -123,7 +124,7 @@ final readonly class ChatConversationPurger
     private function deleteRows(ChatConversation $conversation, int $id): ?array
     {
         // The row lock first: a concurrent purge (or a writer of the conversation) queues here, and finds it gone after.
-        if ($this->conversations->lockActivity($conversation) === null) {
+        if (!$this->conversations->lockActivity($conversation) instanceof DateTimeImmutable) {
             return null;
         }
         $qb         = $this->entityManager->createQueryBuilder(...);
