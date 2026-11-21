@@ -10,6 +10,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\LockMode;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
@@ -90,6 +91,8 @@ class ChatIdempotencyKeyRepository extends ServiceEntityRepository
             ->setParameter('key', $key)
             ->getQuery()
             ->execute());
+        // 2.0: the managed row of this claim (if any) shows the stored result.
+        ChatKitManagedRows::refreshManaged($this->getEntityManager(), ChatIdempotencyKey::class, static fn (ChatIdempotencyKey $row): bool => $row->getKey() === $key && ChatUserReferences::same($row->getUser(), $user));
     }
 
     /**
@@ -101,10 +104,14 @@ class ChatIdempotencyKeyRepository extends ServiceEntityRepository
      */
     public function purgeOlderThan(DateTimeImmutable $cutoff): int
     {
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('k')->delete()
+        $deleted = (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('k')->delete()
             ->where('k.createdAt < :cutoff')
             ->setParameter('cutoff', $cutoff)
             ->getQuery()
             ->execute());
+        // 2.0: purged rows the manager held are forgotten (the DQL delete bypassed it).
+        ChatKitManagedRows::forgetGone($this->getEntityManager(), [ChatIdempotencyKey::class]);
+
+        return $deleted;
     }
 }

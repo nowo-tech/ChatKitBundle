@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -84,7 +85,11 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             $qb->andWhere($this->refs->identity('mm', 'user') . ' NOT IN (:keep)')->setParameter('keep', $this->refs->ids($keepUserIds));
         }
 
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), static fn (): mixed => $qb->getQuery()->execute());
+        $removed = (int) ChatKitSavepoint::write($this->getEntityManager(), static fn (): mixed => $qb->getQuery()->execute());
+        // 2.0: removed rows the manager held are forgotten (the DQL delete bypassed it).
+        ChatKitManagedRows::forgetGone($this->getEntityManager(), [ChatMessageMention::class]);
+
+        return $removed;
     }
 
     /**
@@ -123,7 +128,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
                 }
             }
 
-            return $ids === [] ? 0 : (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
+            $marked = $ids === [] ? 0 : (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
                 ->update(ChatMessageMention::class, 'mm')
                 ->set('mm.readAt', ':now')
                 ->where('mm.id IN (:ids)')
@@ -131,9 +136,13 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
                 ->setParameter('ids', $ids)
                 ->getQuery()
                 ->execute());
+            // 2.0: the rows the manager holds show the stored read time (the DQL update bypassed them).
+            ChatKitManagedRows::refresh($this->getEntityManager(), ChatMessageMention::class, $ids);
+
+            return $marked;
         }
 
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
+        $marked = (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->update(ChatMessageMention::class, 'mm')
             ->set('mm.readAt', ':now')
             ->where($this->refs->field('mm', 'user') . ' = :user')
@@ -145,6 +154,16 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             ->setParameter('upTo', $messageId)
             ->getQuery()
             ->execute());
+        // 2.0: the rows the manager holds show the stored read time (the DQL update bypassed them).
+        if ($marked > 0) {
+            $conversationId = $conversation->getId();
+            ChatKitManagedRows::refreshManaged($this->getEntityManager(), ChatMessageMention::class, static fn (ChatMessageMention $mention): bool => $mention->isUnread()
+                && ChatUserReferences::same($mention->getUser(), $user)
+                && $mention->getMessage()->getConversation()->getId() === $conversationId
+                && (int) $mention->getMessage()->getId() <= $messageId);
+        }
+
+        return $marked;
     }
 
     /**

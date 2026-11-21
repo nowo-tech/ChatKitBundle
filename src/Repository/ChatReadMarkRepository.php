@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReadMark;
 
@@ -142,5 +143,7 @@ class ChatReadMarkRepository extends ServiceEntityRepository
             return;
         }
         $this->createQueryBuilder('r')->delete()->where('r.id IN (:ids)')->setParameter('ids', $ids)->getQuery()->execute();
+        // 2.0: a deleted row the manager held is forgotten (the DQL delete bypassed it).
+        ChatKitManagedRows::forgetGone($this->getEntityManager(), [ChatReadMark::class]);
     }
 }

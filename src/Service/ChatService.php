@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitRows;
 use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
@@ -438,9 +439,8 @@ final readonly class ChatService implements ChatServiceInterface
             }
             $this->entityManager->createQueryBuilder()->delete(ChatParticipant::class, 'p')->where('IDENTITY(p.conversation) = :id')->setParameter('id', $id)->getQuery()->execute();
             $this->entityManager->createQueryBuilder()->delete(ChatConversation::class, 'c')->where('c.id = :id')->setParameter('id', $id)->getQuery()->execute();
-            if ($this->entityManager->contains($conversation)) {
-                $this->entityManager->detach($conversation);
-            }
+            // 2.0: the conversation and its participant rows the manager held are forgotten (the DQL deletes bypassed it).
+            ChatKitManagedRows::forgetGone($this->entityManager, [ChatConversation::class, ChatParticipant::class]);
 
             return true;
         });

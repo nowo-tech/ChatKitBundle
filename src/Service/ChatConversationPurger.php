@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Service;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -107,6 +108,10 @@ final readonly class ChatConversationPurger
         if ($messageIds === null) {
             return false;
         }
+        // After the commit: the bulk deletes bypassed ChatKit's manager, so every managed instance of a deleted row is
+        // detached (a later find() answers null, in this request and in the next one of a worker), and managed rows
+        // elsewhere that pointed at them (forwards) drop the pointer the database dropped. Nothing else is detached.
+        ChatKitManagedRows::forgetGone($this->entityManager, ChatKitManagedRows::CONVERSATION_ROWS);
         $this->events?->dispatch(new ChatConversationDeletedEvent($id, $uuid, $kind, $key, $messageIds));
 
         return true;

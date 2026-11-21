@@ -10,6 +10,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\LockMode;
 use Doctrine\Persistence\ManagerRegistry;
 use LogicException;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
@@ -98,7 +99,7 @@ class ChatThreadReadRepository extends ServiceEntityRepository
      */
     public function readUpTo(ChatThreadRead $row, int $replyId, DateTimeImmutable $now): bool
     {
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('t')->update()
+        $moved = (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('t')->update()
             ->set('t.lastReadReplyId', ':reply')
             ->set('t.updatedAt', ':now')
             ->where('t.id = :id AND (t.lastReadReplyId IS NULL OR t.lastReadReplyId < :reply)')
@@ -107,6 +108,12 @@ class ChatThreadReadRepository extends ServiceEntityRepository
             ->setParameter('id', $row->getId())
             ->getQuery()
             ->execute()) > 0;
+        // 2.0: the row the manager holds shows the stored cursor (the DQL update bypassed it).
+        if ($moved) {
+            ChatKitManagedRows::refresh($this->getEntityManager(), ChatThreadRead::class, [(int) $row->getId()]);
+        }
+
+        return $moved;
     }
 
     /**

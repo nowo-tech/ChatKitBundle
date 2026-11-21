@@ -68,6 +68,8 @@ final readonly class ChatReadTimesOptOutListener
                     ->setParameter('ids', $ids)
                     ->getQuery()
                     ->execute();
+                // 2.0: read times the manager held are forgotten (the DQL delete bypassed it).
+                ChatKitManagedRows::forgetGone($manager, [ChatReadMark::class]);
             }
         }
     }

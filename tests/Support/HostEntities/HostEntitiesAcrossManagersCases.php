@@ -346,7 +346,12 @@ trait HostEntitiesAcrossManagersCases
         self::assertNull($sql->fetchOne('SELECT read_at FROM nowo_chat_message_mention WHERE id = ?', [$forAna]));
 
         $messaging = $this->hostService(ChatMessagingInterface::class);
+        $private   = $this->hostService(ChatKitEntityManager::class);
+        self::assertTrue($private->contains($direct));
         self::assertTrue($messaging->deleteConversation($direct->getUuid()));
+        // The private manager no longer holds the deleted instance.
+        self::assertFalse($private->contains($direct));
+        self::assertNull($private->find(ChatConversation::class, $direct->getId()));
         self::assertFalse($messaging->deleteConversation($direct->getUuid()));
         foreach (['nowo_chat_conversation', 'nowo_chat_message', 'nowo_chat_message_mention', 'nowo_chat_participant'] as $table) {
             self::assertSame(0, $this->rows($table), $table);
