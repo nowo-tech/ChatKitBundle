@@ -64,7 +64,7 @@ final class RemovedPortsPass implements CompilerPassInterface
     {
         $twin = self::REMOVED[$removed];
 
-        return sprintf('nowo_chat_kit: the service "%1$s" uses %2$s, which was deprecated in 1.27 and removed in 2.0. Implement %3$s instead and alias it ("%3$s: \'@%1$s\'" in config/services.yaml); see UPGRADING.md, "To 2.0.0".', $service, $removed, $twin);
+        return sprintf('nowo_chat_kit: the service "%1$s" uses %2$s, which was deprecated in 1.27 and removed in 2.0. Implement %3$s instead and alias it ("%3$s: \'@%1$s\'" in config/services.yaml); see UPGRADING.md, "To 2.0.0", "Port interfaces".', $service, $removed, $twin);
     }
 
     /**

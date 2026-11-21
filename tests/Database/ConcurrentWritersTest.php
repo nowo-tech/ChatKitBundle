@@ -12,6 +12,7 @@ use Nowo\ChatKitBundle\Tests\Database\Support\LoadDatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use RuntimeException;
 
+use function array_unique;
 use function is_resource;
 use function json_decode;
 use function microtime;
@@ -235,6 +236,11 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
      */
     private function race(string $modeA, string $modeB = 'send'): array
     {
+        // YB-2: warm the shared kernel cache of each mode's config first, one process at a time.
+        foreach (array_unique([$modeA, $modeB]) as $mode) {
+            $this->finish($this->start(['warm-' . $mode, '0', 'w', '0']));
+        }
+
         $start = (string) (microtime(true) + 2.0);
         $a     = $this->start([$modeA, (string) self::CALLS, 'a', $start]);
         $b     = $this->start([$modeB, (string) self::CALLS, 'b', $start]);

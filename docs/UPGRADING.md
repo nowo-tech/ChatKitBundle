@@ -189,6 +189,10 @@ hook of that id:** decorate your own twin service instead (or the twin's id, whi
 (`NullChannelProvider`, `MercureChatRealtime`, `NullChatRealtime`, `SecurityChatUserResolver`) are no longer instances
 of the removed interfaces; decorate your twin rather than them.
 
+A host service that injects a removed interface to call it (for example a nullable parameter with a `null` default,
+which silently receives `null` once the interface is gone) must switch to the new port interface, or it quietly stops
+calling it.
+
 ### Configuration, templates and the Twig global
 
 - `profiles.<name>.page_layout` fails the container build. Move the layout to `profiles.<name>.web_ui.layout_template`
@@ -208,7 +212,8 @@ The 1.27 "Check after enabling it" list, now unconditional:
 - **The reverse is not saved either.** Host code that loads a chat row through a ChatKit repository service (it uses
   the private manager), changes it and flushes its own manager saves nothing: the private manager drops the change at
   the next boundary with only a warning in the log. Change chat rows through the ChatKit services
-  (`ChatServiceInterface`, `ChatMessagingInterface`, …).
+  (`ChatServiceInterface`, `ChatMessagingInterface`, …). That includes `ChatServiceInterface::participant()`: the row it
+  returns is persisted in ChatKit's private manager, so flushing your own manager does not save it.
 - **Chat rows you load through your own manager** (a route value resolver, your own query) are loaded again by id when
   you hand them to ChatKit, never inserted again; a row deleted meanwhile throws `ChatNotFoundException`. Your copy is
   not updated by the chat write.

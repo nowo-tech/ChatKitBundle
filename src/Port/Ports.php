@@ -87,6 +87,6 @@ final class Ports
 
     private static function notTwin(object $service, string $twin): LogicException
     {
-        return new LogicException(sprintf('nowo_chat_kit: the service of %1$s (%2$s) must implement "%1$s" (since 2.0 the only interface of this port; see UPGRADING.md, "Removed in 2.0").', $twin, get_debug_type($service)));
+        return new LogicException(sprintf('nowo_chat_kit: the service of %1$s (%2$s) must implement "%1$s" (since 2.0 the only interface of this port; see UPGRADING.md, "To 2.0.0", "Port interfaces").', $twin, get_debug_type($service)));
     }
 }
