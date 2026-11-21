@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 1.x]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, 1.x]
   # REQ-GH-008: weekly scheduled run (Monday 06:00 UTC) catches upstream dependency drift.
   schedule:
     - cron: '0 6 * * 1'

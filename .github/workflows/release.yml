@@ -1,5 +1,8 @@
 name: Create Release
 
+# 1.x maintenance branch: the steps of nowo-tech/ci-actions/.github/workflows/release.yml@v1 (e5f465f), inlined because
+# the reusable workflow has no input for softprops/action-gh-release's make_latest. Release notes come from the tag
+# message and the CHANGELOG section, as on main.
 on:
   push:
     tags:
@@ -10,4 +13,89 @@ permissions:
 
 jobs:
   release:
-    uses: nowo-tech/ci-actions/.github/workflows/release.yml@v1
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Get tag name
+        id: tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Get tag message
+        id: tag_message
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          TAG_MESSAGE=$(git tag -l --format='%(contents)' "$TAG_NAME" 2>/dev/null || echo "")
+          if [ -z "$TAG_MESSAGE" ]; then
+            TAG_MESSAGE="Release $TAG_NAME"
+          fi
+          DELIM="EOF_MSG_$(openssl rand -hex 8)"
+          { echo "MESSAGE<<${DELIM}"; printf '%s' "$TAG_MESSAGE"; echo ""; echo "${DELIM}"; } >> "$GITHUB_OUTPUT"
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG_NAME#v}
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Get changelog entry
+        id: changelog
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          CHANGELOG_FILE: docs/CHANGELOG.md
+        run: |
+          VERSION_RE=${VERSION//./\\.}
+
+          if [ -f "$CHANGELOG_FILE" ]; then
+            CHANGELOG_ENTRY=$(awk "/^## \\[?${VERSION_RE}\\]?/ {flag=1; next} /^## \\[?[0-9]/ {flag=0} flag" "$CHANGELOG_FILE" 2>/dev/null || echo "")
+
+            if [ -n "$CHANGELOG_ENTRY" ]; then
+              echo "HAS_CHANGELOG=true" >> "$GITHUB_OUTPUT"
+              DELIM="EOF_CL_$(openssl rand -hex 8)"
+              { echo "ENTRY<<${DELIM}"; printf '%s' "$CHANGELOG_ENTRY"; echo ""; echo "${DELIM}"; } >> "$GITHUB_OUTPUT"
+            else
+              echo "HAS_CHANGELOG=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "HAS_CHANGELOG=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare release body
+        id: body
+        env:
+          TAG_MSG: ${{ steps.tag_message.outputs.MESSAGE }}
+          HAS_CHANGELOG: ${{ steps.changelog.outputs.HAS_CHANGELOG }}
+          CHANGELOG_ENTRY: ${{ steps.changelog.outputs.ENTRY }}
+          UPGRADING_PATH: docs/UPGRADING.md
+        run: |
+          BODY="$TAG_MSG"
+          if [ "$HAS_CHANGELOG" = "true" ] && [ -n "$CHANGELOG_ENTRY" ]; then
+            BODY=$(printf '%s\n\n## Changelog\n\n%s' "$TAG_MSG" "$CHANGELOG_ENTRY")
+          fi
+          # Relative docs links break on the release page: point UPGRADING links at the tagged file.
+          if [ -n "$UPGRADING_PATH" ]; then
+            UPGRADING_URL="https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF#refs/tags/}/${UPGRADING_PATH}"
+            BODY=$(printf '%s' "$BODY" | sed -E "s#\]\((\./|\.\./)?(docs/)?UPGRADING\.md#](${UPGRADING_URL}#g")
+          fi
+          DELIM="EOF_BODY_$(openssl rand -hex 16)"
+          { echo "content<<${DELIM}"; printf '%s' "$BODY"; echo ""; echo "${DELIM}"; } >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.tag.outputs.TAG_NAME }}
+          name: Release ${{ steps.tag.outputs.TAG_NAME }}
+          body: ${{ steps.body.outputs.content }}
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.TAG_NAME, '-alpha') || contains(steps.tag.outputs.TAG_NAME, '-beta') || contains(steps.tag.outputs.TAG_NAME, '-rc') }}
+          generate_release_notes: true
+          # 1.x maintenance line: a 1.x patch released after 2.0 must never become the "Latest" release.
+          make_latest: false
