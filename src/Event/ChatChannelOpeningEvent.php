@@ -32,6 +32,7 @@ final class ChatChannelOpeningEvent extends Event
      */
     public function __construct(
         public readonly ChatChannel $channel,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this user); removed in 3.0 */
         public readonly ChatUserInterface $user,
     ) {
         $this->channelKey = $channel->key;
@@ -72,5 +73,21 @@ final class ChatChannelOpeningEvent extends Event
     public function reason(): string
     {
         return $this->reason;
+    }
+
+    /**
+     * 2.0: The requesting user. The key the chat stores for the user: the host user id as a string (`getReference()` / compare with your own id).
+     */
+    public function userReference(): string
+    {
+        return EventRefs::user($this->user);
+    }
+
+    /**
+     * 2.0: the user public id.
+     */
+    public function userPublicId(): string
+    {
+        return $this->user->getChatPublicId();
     }
 }

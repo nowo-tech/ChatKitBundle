@@ -17,10 +17,10 @@ use function preg_match;
 use function sprintf;
 
 /**
- * 1.27 (`doctrine.private_entity_manager: true`): attaches {@see PrivateEntityManagerMiddleware} to the connection of
+ * 1.27 (the private entity manager; since 2.0 always): attaches {@see PrivateEntityManagerMiddleware} to the connection of
  * the source manager (`doctrine.entity_manager`: the first argument of its definition; the default connection when it
- * cannot be read) and to no other connection. Runs before DoctrineBundle's MiddlewaresPass. The services are registered
- * only with the option, so without it nothing happens.
+ * cannot be read) and to no other connection. Runs before DoctrineBundle's MiddlewaresPass. Without the middleware
+ * service (doctrine/dbal 3) nothing happens.
  *
  * @internal
  */

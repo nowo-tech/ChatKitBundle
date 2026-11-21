@@ -14,8 +14,7 @@ use function assert;
 
 /**
  * REQ-UI-003: the chat page on a UiKit layout (`web_ui.layout_template`) that includes the dock — canonical blocks,
- * UiKit page header, chat assets once — and a one-block host override (`web_ui.templates.page`). The 1.x default
- * `page_layout` value counts as "no host layout".
+ * UiKit page header, chat assets once — and a one-block host override (`web_ui.templates.page`).
  *
  * @author Héctor Franco Aceituno <hectorfranco@nowo.tech>
  * @copyright 2026 Nowo.tech
@@ -25,8 +24,7 @@ final class ChatPageUiKitTest extends DatabaseTestCase
     protected function chatKitConfig(): array
     {
         return ['profiles' => ['default' => [
-            'page_layout' => '@NowoChatKitBundle/page_layout.html.twig',
-            'web_ui'      => [
+            'web_ui' => [
                 'layout_template' => '@ChatKitTest/uikit_layout.html.twig',
                 'templates'       => ['page' => '@ChatKitTest/page_override.html.twig'],
             ],

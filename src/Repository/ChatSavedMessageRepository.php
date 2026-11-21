@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitRows;
 use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
@@ -86,7 +87,11 @@ class ChatSavedMessageRepository extends ServiceEntityRepository
      */
     public function delete(ChatSavedMessage $row): bool
     {
-        return (int) $this->createQueryBuilder('s')->delete()->where('s.id = :id')->setParameter('id', $row->getId())->getQuery()->execute() > 0;
+        $deleted = (int) $this->createQueryBuilder('s')->delete()->where('s.id = :id')->setParameter('id', $row->getId())->getQuery()->execute() > 0;
+        // 2.0: the row is gone either way (this request or another one deleted it): the manager forgets it.
+        ChatKitManagedRows::forget($this->getEntityManager(), [$row]);
+
+        return $deleted;
     }
 
     /**

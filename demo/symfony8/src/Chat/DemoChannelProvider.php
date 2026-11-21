@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Chat;
 
 use App\Repository\UserRepository;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Model\ChatRequestContext;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
-use Symfony\Component\HttpFoundation\Request;
 
 /**
  * One "General" channel for every demo account, offered as the page's channel on the home page.
@@ -16,7 +16,7 @@ use Symfony\Component\HttpFoundation\Request;
  * @author Héctor Franco Aceituno <hectorfranco@nowo.tech>
  * @copyright 2026 Nowo.tech
  */
-final readonly class DemoChannelProvider implements ChatChannelProviderInterface
+final readonly class DemoChannelProvider implements ChatChannelSourceInterface
 {
     public const string KEY = 'demo:general';
 
@@ -35,9 +35,9 @@ final readonly class DemoChannelProvider implements ChatChannelProviderInterface
         return self::KEY === $key ? $this->general() : null;
     }
 
-    public function contextChannel(ChatUserInterface $user, Request $request): ?ChatChannel
+    public function contextChannel(ChatUserInterface $user, ChatRequestContext $page): ?ChatChannel
     {
-        return 'homepage' === $request->attributes->get('_route') ? $this->general() : null;
+        return 'homepage' === $page->route ? $this->general() : null;
     }
 
     public function canUse(ChatUserInterface $user, ChatChannel $channel): bool

@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Support\Chat;
 
 use DateTimeImmutable;
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\Port\ChatRealtimePort;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Records published events (and can simulate a hub outage).
  */
-final class RecordingRealtime implements ChatRealtimeInterface
+final class RecordingRealtime implements ChatRealtimePort
 {
     /** @var list<array{topics: list<string>, payload: array<string, mixed>}> */
     public array $published = [];

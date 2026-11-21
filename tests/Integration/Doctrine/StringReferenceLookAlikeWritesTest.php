@@ -27,7 +27,6 @@ use Nowo\ChatKitBundle\Tests\Support\Ddd\RefChatUser;
 use Nowo\ChatKitBundle\Tests\Support\Ddd\RefDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
-use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -305,16 +304,16 @@ final class StringReferenceLookAlikeWritesTest extends TestCase
 
     /**
      * 1.30, audit QD-L1 (ported from the audit's PoC, inverted): a refusal the host treats as recoverable never detaches
-     * the host's entities; a change it makes afterwards is written. The application's manager only: the private one is
-     * replaced after a rollback that undid its rows, and holds no host entity anyway.
+     * the host's entities; a change it makes afterwards is written. 2.0: a row the host keeps in its own manager (the
+     * private one is replaced after a rollback that undid its rows, and holds no host entity anyway).
      */
-    #[Group('application-manager')]
     public function testARecoverableLookAlikeRefusalLeavesTheHostsEntitiesManaged(): void
     {
         $bob  = $this->make('bob');
         $bigB = $this->make('Bob');
-        $this->em->persist($hostRow = new ChatQuickReply($bob, 'host title', 'v1'));
-        $this->em->flush();
+        $host = $this->hostManager();
+        $host->persist($hostRow = new ChatQuickReply($bob, 'host title', 'v1'));
+        $host->flush();
         $this->fold('nowo_chat_participant', 'user_id');
 
         try {
@@ -323,9 +322,9 @@ final class StringReferenceLookAlikeWritesTest extends TestCase
         } catch (ChatUserLookAlikeException) {
         }
         $hostRow->change('host title', 'v2');
-        $this->em->flush();
+        $host->flush();
 
-        self::assertTrue($this->em->isOpen());
+        self::assertTrue($host->isOpen());
         self::assertSame('v2', $this->em->getConnection()->fetchOne('SELECT body FROM nowo_chat_quick_reply'));
     }
 
@@ -333,7 +332,6 @@ final class StringReferenceLookAlikeWritesTest extends TestCase
      * 1.30: a membership insert that meets a look-alike's row written just before it (a folding column) is refused as a
      * look-alike after the savepoint rolled it back; nothing of the refused unit stays.
      */
-    #[Group('application-manager')]
     public function testAMembershipInsertMeetingALookAlikesNewRowIsRefused(): void
     {
         // bob is known to the directory; his row is the one another request writes.
@@ -541,6 +539,15 @@ final class StringReferenceLookAlikeWritesTest extends TestCase
         foreach ($indexes as $index) {
             $connection->executeStatement((string) $index);
         }
+    }
+
+    /** 2.0: the application's own entity manager (the test acting as the host). */
+    private function hostManager(): EntityManagerInterface
+    {
+        $manager = $this->kernel->getContainer()->get('doctrine.orm.entity_manager');
+        assert($manager instanceof EntityManagerInterface);
+
+        return $manager;
     }
 
     private function services(): ContainerInterface

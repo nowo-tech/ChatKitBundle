@@ -6,14 +6,13 @@ namespace Nowo\ChatKitBundle\Service;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelMentionPolicyInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
-use Nowo\ChatKitBundle\Doctrine\ChatHostFlushProbe;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Port\Ports;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Realtime\ChatRecipients;
@@ -58,20 +57,21 @@ final readonly class ChatMentions
     /**
      * Builds the service from the recipients (conversation members), the access checks and the mention rows.
      *
-     * @param ChatHostFlushProbe|null $hostFlushProbe 1.39: reports the application's pending changes its flush writes on the shared manager; null reports none
+     * @param object|null $hostFlushProbe @deprecated since 2.0, ignored (the 1.39 host-flush probe of the removed shared-manager mode); removed in 3.0
      */
     public function __construct(
         private ChatRecipients $recipients,
         private ChatAccess $access,
         private ChatMessageMentionRepository $mentions,
         private EntityManagerInterface $entityManager,
-        private ?ChatChannelProviderInterface $channels = null,
+        private ?ChatChannelPort $channels = null,
         private ?ChatPresence $presence = null,
         private ?RateLimiterFactoryInterface $mentionAllLimiter = null,
         private ?ChatParticipantRepository $participants = null,
         private ClockInterface $clock = new Clock(),
-        private ?ChatHostFlushProbe $hostFlushProbe = null,
+        ?object $hostFlushProbe = null,
     ) {
+        unset($hostFlushProbe);
     }
 
     /**
@@ -162,7 +162,7 @@ final readonly class ChatMentions
     private function grantGroup(ChatConversation $conversation, ChatUserInterface $author, string $group, int $memberCount, ?string $previousGroup): ?string
     {
         $channel = $this->access->channel((string) $conversation->getChannelKey());
-        if (!$channel instanceof ChatChannel || !($policy = $this->channels instanceof ChatChannelProviderInterface ? Ports::companion($this->channels) : null) instanceof ChatChannelMentionPolicyInterface
+        if (!$channel instanceof ChatChannel || !($policy = $this->channels instanceof ChatChannelPort ? Ports::companion($this->channels) : null) instanceof ChatChannelMentionPolicyInterface
             || !$this->access->canWriteChannel($author, $channel->key) || !$policy->canMentionAll($author, $channel, $memberCount)) {
             return null;
         }
@@ -233,7 +233,6 @@ final readonly class ChatMentions
                     if (in_array($clash, $pending, true)) {
                         // The row it may fold onto is not stored yet: store it, then ask the column. 1.30: sync() runs inside
                         // ChatService's unit of work (TransactionRunnerInterface), which recovers the manager on failure.
-                        $this->hostFlushProbe?->beforeFlush($this->entityManager);
                         $this->entityManager->flush(); // @phpstan-ignore frankenphp.worker.noFlushWithoutClosedManagerRecovery
                         $stored  = [...$stored, ...$pending];
                         $pending = [];

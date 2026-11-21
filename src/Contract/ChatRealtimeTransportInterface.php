@@ -8,10 +8,10 @@ use DateTimeImmutable;
 use Nowo\ChatKitBundle\Model\ChatRequestContext;
 
 /**
- * 1.27: framework-free twin of ChatRealtimeInterface (REQ-ARCH-001 rules 1 and 3): the browser hub URL is built from a
- * ChatRequestContext instead of the HttpFoundation `Request`. Alias ChatRealtimeInterface (or this interface) to a
- * service that implements it; the bundle asks it through an internal gate. A service that also implements the
- * deprecated ChatRealtimeInterface is asked through that one, exactly as in 1.26.
+ * 1.27: framework-free twin of the 1.x ChatRealtimeInterface (REQ-ARCH-001 rules 1 and 3): the browser hub URL is built
+ * from a ChatRequestContext instead of the HttpFoundation `Request`. 2.0: the only host interface of the realtime port
+ * (ChatRealtimeInterface was removed). Alias this interface to a service that implements it; the bundle asks it through
+ * an internal gate. Without one the bundle uses Mercure (when a hub is configured) or the null transport.
  */
 interface ChatRealtimeTransportInterface
 {

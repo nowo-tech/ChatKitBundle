@@ -28,7 +28,6 @@ use Nowo\ChatKitBundle\SearchKit\ChatMessageSearchProvider;
 use Nowo\ChatKitBundle\SearchKit\ChatSearchKitViewer;
 use Nowo\ChatKitBundle\Support\ChatEmojiCatalog;
 use Nowo\ChatKitBundle\Support\ChatRetention;
-use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use Nowo\RuntimeSettingContract\Bridge\Symfony\DependencyInjection\RuntimeSettingsConfiguration;
 use Nowo\RuntimeSettingContract\Contract\Exception\InvalidRuntimeSettingId;
@@ -204,7 +203,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 $profile['icons']['provider_' . $key] ??= $provider['icon'];
             }
         }
-        foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'push_preview', 'cache_pool', 'page_layout', 'web_ui', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'auto_away_minutes', 'status_presets', 'max_pins', 'auto_reply_interval_hours', 'limits', 'digest', 'doctrine', 'support', 'dock', 'links'] as $key) {
+        foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'push_preview', 'cache_pool', 'web_ui', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'auto_away_minutes', 'status_presets', 'max_pins', 'auto_reply_interval_hours', 'limits', 'digest', 'doctrine', 'support', 'dock', 'links'] as $key) {
             $container->setParameter(Configuration::ALIAS . '.' . $key, $profile[$key]);
         }
         // 1.35: the message menu; the quick reactions must be ones the server accepts.
@@ -234,6 +233,8 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
 
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.php');
+        // 2.0: the private entity manager is the only mode (a profile's `private_entity_manager: false` fails here).
+        $this->registerPrivateEntityManager($container, $config['profiles'], $profile['doctrine']['entity_manager']);
         foreach ($profile['digest'] as $key => $value) {
             $container->setParameter(Configuration::ALIAS . '.digest.' . $key, $value);
         }
@@ -260,7 +261,6 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $this->registerSearch($container, $profile['search_kit']);
         $this->registerRuntimeRetention($container, $profile['runtime']['retention_days'] ?? null, $profile['retention_days']);
         $this->registerTableNames($container, $configs, $config['default_profile'], $profile['doctrine']);
-        $this->registerPrivateEntityManager($container, $profile['doctrine']['private_entity_manager'], $profile['doctrine']['entity_manager'], $config['default_profile']);
         foreach ($profile['links'] as $key => $value) {
             $container->setParameter(Configuration::ALIAS . '.links.' . $key, $value);
         }
@@ -269,9 +269,6 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
             $container->setParameter(Configuration::ALIAS . '.support.' . $key, $value);
         }
         $container->setAlias('nowo_chat_kit.cache', $profile['cache_pool']);
-        // REQ-UI-003: the 1.x default layout means "no host layout" (the UiKit layout applies).
-        $legacyLayout = $profile['page_layout'] === Configuration::LEGACY_PAGE_LAYOUT ? null : $profile['page_layout'];
-        $container->setParameter(Configuration::ALIAS . '.page_layout', $legacyLayout);
         $container->setParameter(Configuration::ALIAS . '.web_ui.layout_template', $profile['web_ui']['layout_template']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.templates.page', $profile['web_ui']['templates']['page']);
         $container->setParameter(Configuration::ALIAS . '.web_ui.assets', $profile['web_ui']['assets']);
@@ -384,29 +381,27 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     }
 
     /**
-     * 1.27 (REQ-ARCH-001 rule 6): `doctrine.private_entity_manager: true` registers {@see ChatKitEntityManager} and
-     * {@see ChatKitManagerRegistry}; {@see PrivateEntityManagerReferencesPass} then points every bundle service at them,
-     * {@see PrivateEntityManagerPass} attaches the rollback middleware (DBAL 4) to the source manager's connection, and
-     * the boundary listener drops the private manager after the memos. null keeps the 1.26 wiring; false too, with a
-     * deprecation (the private manager is the only mode in 2.0). 1.39: null (unset) triggers a deprecation as well.
+     * 1.27 (REQ-ARCH-001 rule 6): registers {@see ChatKitEntityManager} and {@see ChatKitManagerRegistry};
+     * {@see PrivateEntityManagerReferencesPass} then points every bundle service at them, {@see PrivateEntityManagerPass}
+     * attaches the rollback middleware (DBAL 4) to the source manager's connection, and the boundary listener drops the
+     * private manager after the memos. 2.0: the private manager is the only mode. `doctrine.private_entity_manager:
+     * false` (in any profile) fails the build; `true` is accepted as a deprecated no-op until 3.0.
+     *
+     * @param array<string, array{doctrine: array{private_entity_manager: bool|null}}> $profiles The processed profiles
+     *
+     * @throws InvalidConfigurationException When a profile sets `doctrine.private_entity_manager: false`
      */
-    private function registerPrivateEntityManager(ContainerBuilder $container, ?bool $private, string $emName, string $profileName): void
+    private function registerPrivateEntityManager(ContainerBuilder $container, array $profiles, string $emName): void
     {
-        $container->setParameter(PrivateEntityManagerReferencesPass::PARAMETER, $private === true);
+        // Before any other check of the profiles (registerTableNames() refuses doctrine keys of the other profiles).
+        foreach ($profiles as $profileName => $profile) {
+            if ($profile['doctrine']['private_entity_manager'] === false) {
+                throw new InvalidConfigurationException(self::privateEntityManagerFalseMessage((string) $profileName));
+            }
+        }
+        // Kept for host code that reads it: always true since 2.0.
+        $container->setParameter(PrivateEntityManagerReferencesPass::PARAMETER, true);
         $container->setParameter(PrivateEntityManagerReferencesPass::SOURCE_PARAMETER, $emName);
-        // 1.30: with the private manager ChatKit's runner drives it alone (the registry's source name resolves to it).
-        if ($private === true && $container->hasDefinition(ChatKitTransactionRunner::SERVICE_ID)) {
-            $container->getDefinition(ChatKitTransactionRunner::SERVICE_ID)->replaceArgument(2, $emName)->replaceArgument(3, true);
-        }
-        if ($private === null) {
-            trigger_deprecation('nowo-tech/chat-kit-bundle', '1.39', self::unsetPrivateEntityManagerMessage($profileName));
-        }
-        if ($private === false) {
-            trigger_deprecation('nowo-tech/chat-kit-bundle', '1.27', '"nowo_chat_kit ... doctrine.private_entity_manager: false" is deprecated: chat writes then flush the application\'s entity manager, including its pending changes; the private entity manager becomes the only mode in 2.0. Set it to true (see UPGRADING.md).');
-        }
-        if ($private !== true) {
-            return;
-        }
 
         $container->register(ChatKitEntityManager::class, ChatKitEntityManager::class)
             ->setArguments([new Reference('doctrine'), $emName, new Reference('logger', ContainerInterface::IGNORE_ON_INVALID_REFERENCE)])
@@ -429,13 +424,13 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     }
 
     /**
-     * 1.39 (REQ-ARCH-001 rule 6 deprecation layer): the notice for an unset `doctrine.private_entity_manager`.
+     * 2.0: the build error for `doctrine.private_entity_manager: false`.
      *
-     * @param string $profileName The default profile
+     * @param string $profileName The profile that sets it
      */
-    public static function unsetPrivateEntityManagerMessage(string $profileName): string
+    public static function privateEntityManagerFalseMessage(string $profileName): string
     {
-        return sprintf('Not setting "nowo_chat_kit.profiles.%1$s.doctrine.private_entity_manager" is deprecated: chat writes then flush the application\'s entity manager, including its pending changes. In 2.0 the private entity manager is the only mode (as if true). Opt in now with "nowo_chat_kit: { profiles: { %1$s: { doctrine: { private_entity_manager: true } } } }" and read the "Your pending changes to ... were flushed by NowoChatKitBundle" deprecations as the list of your own flushes to add (see UPGRADING.md, "To 1.39.0").', $profileName);
+        return sprintf('"nowo_chat_kit.profiles.%s.doctrine.private_entity_manager: false" is no longer supported: since 2.0 ChatKit always reads and writes its rows through its own private entity manager and never flushes the application\'s entity manager. Remove the option (true is accepted until 3.0 and has no effect); flush your own pending changes yourself. See UPGRADING.md, "To 2.0.0".', $profileName);
     }
 
     /**

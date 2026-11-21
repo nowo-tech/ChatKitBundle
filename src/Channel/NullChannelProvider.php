@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Channel;
 
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Default: the application defines no channels (direct messages and support only).
  */
-final class NullChannelProvider implements ChatChannelProviderInterface
+final class NullChannelProvider implements ChatChannelPort
 {
     /**
      * There are no channels.

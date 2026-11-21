@@ -14,6 +14,7 @@ use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatUserReferenceDirectoryInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
@@ -414,6 +415,11 @@ final readonly class ChatPersonalData
 
             return [$erasure, $removedLinks];
         });
+        // 2.0: the bulk statements bypassed ChatKit's manager: no deleted row stays managed, no updated one stale.
+        ChatKitManagedRows::forgetGone($this->entityManager, ChatKitManagedRows::ALL);
+        foreach ([ChatMessage::class, ChatConversation::class, ChatMessageRevision::class] as $class) {
+            ChatKitManagedRows::refreshManaged($this->entityManager, $class);
+        }
 
         // Audit FT-L2: the event first (host re-index, skipped report), then the best-effort broadcast.
         $this->dispatchErased($erasure);
@@ -599,6 +605,9 @@ final readonly class ChatPersonalData
         $this->assertLabel($label);
         // 1.30: one unit of work through the transaction runner.
         $erasure = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, fn (): ChatMentionErasure => $this->scrubMentions($user, $label));
+        // 2.0: the mention rows and previous texts the bulk statements deleted or rewrote.
+        ChatKitManagedRows::forgetGone($this->entityManager, [ChatMessageMention::class, ChatMessageRevision::class]);
+        ChatKitManagedRows::refreshManaged($this->entityManager, ChatMessageRevision::class);
         $this->dispatchErased($erasure);
         $this->publishRewritten($erasure->messageIds);
 
@@ -657,7 +666,6 @@ final readonly class ChatPersonalData
                 }
             }
             if ($changed) {
-                ChatKitWrites::beforeFlush($this->transactions, $this->entityManager);
                 $this->entityManager->flush();
             }
             foreach ($loaded as $message) {

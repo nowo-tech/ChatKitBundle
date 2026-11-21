@@ -18,6 +18,10 @@ declare(strict_types=1);
  * history on); `delreply` deletes the first message's replies one by one (both workers the same ones); `delroot`
  * deletes the first message halfway through.
  *
+ * 2.0: `purge` deletes the seeded channel conversations `room:race-<n>` one by one through
+ * ChatMessagingInterface::purgeChannel() (both workers the same ones, at the same moment: one deletes, the other finds
+ * nothing; neither throws).
+ *
  * Prints one JSON line: {ok, failures, poisoned, closed}.
  */
 
@@ -28,6 +32,7 @@ use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Service\ChatForwarder;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
+use Nowo\ChatKitBundle\Service\ChatMessaging;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatThreads;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
@@ -37,6 +42,8 @@ use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 require dirname(__DIR__, 3) . '/vendor/autoload.php';
 
 [, $mode, $calls, $tag, $start] = $argv + [null, 'send', '50', 'a', '0'];
+$warm                           = str_starts_with((string) $mode, 'warm-');
+$mode                           = $warm ? substr((string) $mode, 5) : $mode;
 $menuModes                      = ['menu', 'savecap', 'unread', 'readonly', 'optout'];
 $threadModes                    = ['forward', 'thread', 'edit', 'delreply', 'delroot'];
 $kernel                         = new TestKernel(match (true) {
@@ -60,12 +67,25 @@ $settings = $container->get(ChatUserSettingsRepository::class);
 assert($settings instanceof ChatUserSettingsRepository);
 $boundary = $container->get(ChatRequestBoundaryListener::class);
 assert($boundary instanceof ChatRequestBoundaryListener);
+$messaging = $container->get(ChatMessaging::class);
+assert($messaging instanceof ChatMessaging);
 $em = static function () use ($registry): EntityManagerInterface {
     $manager = $registry->getManager();
     assert($manager instanceof EntityManagerInterface);
 
     return $manager;
 };
+// YB-2: `warm-<mode>` boots this kernel config and writes every Doctrine proxy class to the shared cache, so the racing writers
+// never generate proxies concurrently on a cold cache (a half-written proxy file fails the other process's require).
+if ($warm) {
+    foreach ($registry->getManagers() as $manager) {
+        assert($manager instanceof EntityManagerInterface);
+        $manager->getProxyFactory()->generateProxyClasses($manager->getMetadataFactory()->getAllMetadata());
+    }
+    echo json_encode(['ok' => 0, 'failures' => [], 'poisoned' => 0, 'closed' => 0]);
+
+    return;
+}
 while (microtime(true) < (float) $start) {
     usleep(1000);
 }
@@ -89,7 +109,9 @@ for ($i = 0; $i < (int) $calls; ++$i) {
         // 1.36 (audit UB-4): both workers delete the same replies; one deletes the root while the other replies.
         'delreply' => 'delreply',
         'delroot'  => $i === intdiv((int) $calls, 2) ? 'delroot' : 'idle',
-        default    => 'send',
+        // 2.0: both workers purge the same channel conversations in the same order.
+        'purge' => 'purge',
+        default => 'send',
     };
     try {
         $ana   = $em()->getRepository(TestUser::class)->findOneBy(['name' => 'ana']) ?? throw new RuntimeException('ana');
@@ -113,7 +135,9 @@ for ($i = 0; $i < (int) $calls; ++$i) {
             'delreply' => $chat->delete($ana, $em()->getRepository(ChatMessage::class)->findBy(['threadRoot' => $first()], ['id' => 'ASC'])[$i] ?? throw new RuntimeException('reply')),
             'delroot'  => $chat->delete($ana, $first()),
             'idle'     => usleep(2000),
-            'optout'   => (static function () use ($settings, $luis, $i): void {
+            // True for the worker that deleted it, false for the one that found it gone: both are success.
+            'purge'  => $messaging->purgeChannel('room:race-' . $i),
+            'optout' => (static function () use ($settings, $luis, $i): void {
                 $mine = $settings->forUser($luis);
                 $mine->setShareReadTimes($i % 2 === 0);
                 $settings->save($mine);

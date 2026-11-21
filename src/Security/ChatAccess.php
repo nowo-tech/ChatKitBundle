@@ -6,7 +6,6 @@ namespace Nowo\ChatKitBundle\Security;
 
 use Closure;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelWritePolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPolicyInterface;
@@ -18,6 +17,7 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatChannelKey;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Port\Ports;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -41,12 +41,12 @@ final class ChatAccess implements ResetInterface
      * Builds the access checks on top of the application's policy, channel provider and directory.
      *
      * @param ChatAccessPolicyInterface $policy Who can talk to whom
-     * @param ChatChannelProviderInterface $channelProvider Application channels
+     * @param ChatChannelPort $channelProvider Application channels
      * @param ChatDirectoryInterface $directory Loads direct peers
      */
     public function __construct(
         private readonly ChatAccessPolicyInterface $policy,
-        private readonly ChatChannelProviderInterface $channelProvider,
+        private readonly ChatChannelPort $channelProvider,
         private readonly ChatDirectoryInterface $directory,
         private readonly ?RequestStack $requests = null,
         private readonly ?ChatUserReferences $refs = null,

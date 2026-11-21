@@ -21,7 +21,9 @@ final readonly class SupportTicketReopenedEvent
      * @param ChatUserInterface $by Who reopened it (the requester or an agent)
      */
     public function __construct(
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this entity); removed in 3.0 */
         public ChatConversation $ticket,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this user); removed in 3.0 */
         public ChatUserInterface $by,
     ) {
     }
@@ -44,5 +46,29 @@ final readonly class SupportTicketReopenedEvent
     public function byPublicId(): string
     {
         return $this->by->getChatPublicId();
+    }
+
+    /**
+     * 2.0: the ticket (conversation) uuid.
+     */
+    public function ticketUuid(): string
+    {
+        return $this->ticket->getUuid();
+    }
+
+    /**
+     * 2.0: The user who reopened. The key the chat stores for the user: the host user id as a string (`getReference()` / compare with your own id).
+     */
+    public function byReference(): string
+    {
+        return EventRefs::user($this->by);
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function ticketId(): int
+    {
+        return EventRefs::id($this->ticket->getId());
     }
 }

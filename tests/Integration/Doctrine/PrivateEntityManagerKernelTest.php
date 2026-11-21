@@ -14,6 +14,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
+use PHPUnit\Framework\Attributes\Group;
 use ReflectionMethod;
 use ReflectionProperty;
 use Throwable;
@@ -23,11 +24,12 @@ use Throwable;
  * the application's entity manager; the security user (managed by the application's manager) is adopted, never
  * written; a failing chat write closes only the private manager, which is created again on the next call.
  */
+#[Group('private-manager')]
 final class PrivateEntityManagerKernelTest extends DatabaseTestCase
 {
-    protected function chatKitConfig(): array
+    protected function hostFixtures(): bool
     {
-        return ['profiles' => ['default' => ['doctrine' => ['private_entity_manager' => true]]]];
+        return true;
     }
 
     public function testChatWritesLeaveThePendingApplicationChangesAlone(): void

@@ -9,11 +9,13 @@ use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageLink;
+use Nowo\ChatKitBundle\Entity\ChatMessageMention;
 use Nowo\ChatKitBundle\Entity\ChatMessageRevision;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
@@ -287,12 +289,16 @@ class ChatMessageRepository extends ServiceEntityRepository
             ->getQuery()
             ->execute());
 
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')
+        $deleted = (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')
             ->delete()
             ->where('m.id IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
             ->execute());
+        // 2.0: purged rows the manager held are forgotten, and forwards it holds drop the pointer the database dropped.
+        ChatKitManagedRows::forgetGone($this->getEntityManager(), [ChatMessage::class, ChatMessageRevision::class, ChatThreadRead::class, ChatReaction::class, ChatSavedMessage::class, ChatMessageLink::class, ChatMessageMention::class]);
+
+        return $deleted;
     }
 
     /**
@@ -424,7 +430,8 @@ class ChatMessageRepository extends ServiceEntityRepository
      */
     public function moveAll(ChatConversation $from, ChatConversation $to): int
     {
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')
+        $fromId = $from->getId();
+        $moved  = (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('m')
             ->update()
             ->set('m.conversation', ':to')
             ->where('m.conversation = :from')
@@ -432,6 +439,10 @@ class ChatMessageRepository extends ServiceEntityRepository
             ->setParameter('from', $from)
             ->getQuery()
             ->execute());
+        // 2.0: the moved messages the manager holds point at their new conversation.
+        ChatKitManagedRows::refreshManaged($this->getEntityManager(), ChatMessage::class, static fn (ChatMessage $message): bool => $message->getConversation()->getId() === $fromId);
+
+        return $moved;
     }
 
     /**

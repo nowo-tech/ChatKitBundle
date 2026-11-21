@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessageRevision;
@@ -55,6 +56,8 @@ class ChatMessageRevisionRepository extends ServiceEntityRepository
         $drop = array_slice($ids, max(0, $max - 1));
         if ($drop !== []) {
             ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('r')->delete()->where('r.id IN (:ids)')->setParameter('ids', $drop)->getQuery()->execute());
+            // 2.0: a dropped row the manager held is forgotten (the DQL delete bypassed it).
+            ChatKitManagedRows::forgetGone($this->getEntityManager(), [ChatMessageRevision::class]);
         }
         $revision = new ChatMessageRevision($message, $body, $editedAt);
         $this->getEntityManager()->persist($revision);
@@ -103,6 +106,9 @@ class ChatMessageRevisionRepository extends ServiceEntityRepository
      */
     public function deleteFor(array $messageIds): int
     {
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('r')->delete()->where('IDENTITY(r.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute());
+        $deleted = (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('r')->delete()->where('IDENTITY(r.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute());
+        ChatKitManagedRows::forgetGone($this->getEntityManager(), [ChatMessageRevision::class]);
+
+        return $deleted;
     }
 }

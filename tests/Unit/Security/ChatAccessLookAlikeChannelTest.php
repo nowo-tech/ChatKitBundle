@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Unit\Security;
 
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -41,7 +41,7 @@ final class ChatAccessLookAlikeChannelTest extends TestCase
     {
         $user = new TestUser('Ana');
         (new ReflectionProperty(TestUser::class, 'id'))->setValue($user, 3);
-        $provider = $this->createStub(ChatChannelProviderInterface::class);
+        $provider = $this->createStub(ChatChannelPort::class);
         $provider->method('find')->willReturn(new ChatChannel($returnedKey, 'Acme'));
         $provider->method('canUse')->willReturn(true);
         $conversation = ChatConversation::channel('project:acme');
@@ -68,7 +68,7 @@ final class ChatAccessLookAlikeChannelTest extends TestCase
 
     public function testTheExactKeyStillResolves(): void
     {
-        $provider = $this->createStub(ChatChannelProviderInterface::class);
+        $provider = $this->createStub(ChatChannelPort::class);
         $provider->method('find')->willReturnCallback(static fn (string $key): ChatChannel => new ChatChannel($key, 'Acme'));
         $access = new ChatAccess($this->createStub(ChatAccessPolicyInterface::class), $provider, $this->createStub(ChatDirectoryInterface::class));
 

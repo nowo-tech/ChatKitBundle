@@ -4,20 +4,19 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Port;
 
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
- * 1.27: asks a host ChatChannelSourceInterface where the bundle asks the deprecated ChatChannelProviderInterface. The
+ * 1.27: asks a host ChatChannelSourceInterface where the bundle asks its internal ChatChannelPort. The
  * optional companions (write and mention policies) are read on the source itself ({@see Ports::companion()}).
  * Exceptions propagate. Stateless.
  *
  * @internal built by {@see Ports}
  */
-final readonly class ChatChannelSourceGate implements ChatChannelProviderInterface
+final readonly class ChatChannelSourceGate implements ChatChannelPort
 {
     /**
      * @param ChatChannelSourceInterface $source The host's twin

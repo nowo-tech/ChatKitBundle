@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, 1.x]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, 1.x]
   # REQ-GH-008: weekly scheduled run (Monday 06:00 UTC) catches upstream dependency drift.
   schedule:
     - cron: '0 6 * * 1'
@@ -310,7 +310,10 @@ jobs:
 
   # GZ-M1: the channel row is written through DBAL, so it needs real databases and both id strategies and DBAL versions.
   # House rule LQ: ChatChannelLookalikeTest proves look-alike channel keys stay apart on the same databases.
-  # 1.27 (REQ-ARCH-001): the whole suite replayed with the host ports behind their framework-free twins only.
+  # 1.27 (REQ-ARCH-001): the whole suite replayed with the current-user port behind its framework-free twin too (2.0: the
+  # channel and realtime ports always are). 2.0: the private entity manager is the only mode, so every cell runs the whole
+  # suite with it; this job keeps its required name and runs the private-manager and cross-manager tests (group
+  # private-manager, none skipped).
   replay:
     name: Suite replay (${{ matrix.name }})
     runs-on: ubuntu-latest
@@ -323,7 +326,7 @@ jobs:
       matrix:
         include:
           - { name: 'twin ports', env: 'CHAT_KIT_PORTS=twin', args: '' }
-          - { name: 'private entity manager', env: 'CHAT_KIT_PRIVATE_EM=1', args: '--exclude-group application-manager' }
+          - { name: 'private entity manager', env: '', args: '--group private-manager --fail-on-skipped' }
 
     env:
       HEAVY: ${{ needs.changes.outputs.mode != 'light' }}

@@ -26,9 +26,13 @@ final class ChatMessageForwardingEvent
      * @param ChatUserInterface|null $recipient The other person of that new direct conversation (null otherwise)
      */
     public function __construct(
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this entity); removed in 3.0 */
         public readonly ChatMessage $source,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this user); removed in 3.0 */
         public readonly ChatUserInterface $actor,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this entity); removed in 3.0 */
         public readonly ?ChatConversation $target,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this user); removed in 3.0 */
         public readonly ?ChatUserInterface $recipient = null,
     ) {
     }
@@ -68,5 +72,85 @@ final class ChatMessageForwardingEvent
     public function sourceView(): ChatMessageView
     {
         return ChatMessageView::of($this->source);
+    }
+
+    /**
+     * 2.0: the source message uuid.
+     */
+    public function sourceUuid(): string
+    {
+        return $this->source->getUuid();
+    }
+
+    /**
+     * 2.0: the conversation uuid of the source message.
+     */
+    public function sourceConversationUuid(): string
+    {
+        return $this->source->getConversation()->getUuid();
+    }
+
+    /**
+     * 2.0: the target conversation uuid; null when the target is a recipient without a conversation yet.
+     */
+    public function targetConversationUuid(): ?string
+    {
+        return $this->target?->getUuid();
+    }
+
+    /**
+     * 2.0: The user who forwards. The key the chat stores for the user: the host user id as a string (`getReference()` / compare with your own id).
+     */
+    public function actorReference(): string
+    {
+        return EventRefs::user($this->actor);
+    }
+
+    /**
+     * 2.0: the user public id.
+     */
+    public function actorPublicId(): string
+    {
+        return $this->actor->getChatPublicId();
+    }
+
+    /**
+     * 2.0: The direct-message recipient. The key the chat stores for the user (the host user id as a string); null for none.
+     */
+    public function recipientReference(): ?string
+    {
+        return EventRefs::optional($this->recipient);
+    }
+
+    /**
+     * 2.0: the user public id.
+     */
+    public function recipientPublicId(): ?string
+    {
+        return $this->recipient?->getChatPublicId();
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function sourceId(): int
+    {
+        return EventRefs::id($this->source->getId());
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function sourceConversationId(): int
+    {
+        return EventRefs::id($this->source->getConversation()->getId());
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager; null when there is none.
+     */
+    public function targetConversationId(): ?int
+    {
+        return $this->target?->getId();
     }
 }

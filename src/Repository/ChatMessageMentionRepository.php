@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\ORM\QueryBuilder;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -84,7 +85,11 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             $qb->andWhere($this->refs->identity('mm', 'user') . ' NOT IN (:keep)')->setParameter('keep', $this->refs->ids($keepUserIds));
         }
 
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), static fn (): mixed => $qb->getQuery()->execute());
+        $removed = (int) ChatKitSavepoint::write($this->getEntityManager(), static fn (): mixed => $qb->getQuery()->execute());
+        // 2.0: removed rows the manager held are forgotten (the DQL delete bypassed it).
+        ChatKitManagedRows::forgetGone($this->getEntityManager(), [ChatMessageMention::class]);
+
+        return $removed;
     }
 
     /**
@@ -123,7 +128,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
                 }
             }
 
-            return $ids === [] ? 0 : (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
+            $marked = $ids === [] ? 0 : (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
                 ->update(ChatMessageMention::class, 'mm')
                 ->set('mm.readAt', ':now')
                 ->where('mm.id IN (:ids)')
@@ -131,9 +136,13 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
                 ->setParameter('ids', $ids)
                 ->getQuery()
                 ->execute());
+            // 2.0: the rows the manager holds show the stored read time (the DQL update bypassed them).
+            ChatKitManagedRows::refresh($this->getEntityManager(), ChatMessageMention::class, $ids);
+
+            return $marked;
         }
 
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
+        $marked = (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->update(ChatMessageMention::class, 'mm')
             ->set('mm.readAt', ':now')
             ->where($this->refs->field('mm', 'user') . ' = :user')
@@ -145,6 +154,16 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
             ->setParameter('upTo', $messageId)
             ->getQuery()
             ->execute());
+        // 2.0: the rows the manager holds show the stored read time (the DQL update bypassed them).
+        if ($marked > 0) {
+            $conversationId = $conversation->getId();
+            ChatKitManagedRows::refreshManaged($this->getEntityManager(), ChatMessageMention::class, static fn (ChatMessageMention $mention): bool => $mention->isUnread()
+                && ChatUserReferences::same($mention->getUser(), $user)
+                && $mention->getMessage()->getConversation()->getId() === $conversationId
+                && (int) $mention->getMessage()->getId() <= $messageId);
+        }
+
+        return $marked;
     }
 
     /**
@@ -153,7 +172,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
      * user owns (any thread for an agent). Deleted messages never count.
      *
      * @param ChatUserInterface $user The mentioned user
-     * @param list<string> $channelKeys Channels the user may use today (ChatChannelProviderInterface::channelsFor())
+     * @param list<string> $channelKeys Channels the user may use today (ChatChannelPort::channelsFor())
      * @param bool $supportAgent Whether the user answers the support inbox
      * @param int $limit Maximum rows
      * @param bool $unreadOnly Only unread mentions
@@ -267,6 +286,67 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
 
         // REQ-SEC-006 item 2: exactly this user's row.
         return $row instanceof ChatMessageMention && ChatUserReferences::same($row->getUser(), $user) ? $row : null;
+    }
+
+    /**
+     * 2.0: marks read the given mentions of exactly one user, by the user's key (ChatUserReferences::key(): the host user
+     * id as a string, or the string reference). The rows are selected by id and user column, then kept only when the
+     * stored user key is equal byte for byte (REQ-SEC-006 item 2: a folding collation may return a look-alike's row);
+     * another user's id and an unknown id are left out. Only unread rows are written (`read_at IS NULL`), so the first
+     * read time is kept and a repeated or concurrent call writes nothing more. A row the manager holds is refreshed.
+     *
+     * @param string $userKey The user's key
+     * @param list<int> $ids Mention ids
+     * @param DateTimeImmutable $now Read time
+     *
+     * @return array{owned: list<int>, marked: int} The ids that are exactly this user's mentions (read now or before),
+     *                                              and how many of them this call turned from unread to read
+     */
+    public function markReadByKey(string $userKey, array $ids, DateTimeImmutable $now): array
+    {
+        // Relation mode: the column is the host's integer id, so a key that is not a canonical id is nobody's.
+        if ($ids === [] || (!$this->refs->isIdMode() && !ChatUserReferences::isCanonicalId($userKey))) {
+            return ['owned' => [], 'marked' => 0];
+        }
+        /** @var list<array{id: int|string, ref: int|string|null, readAt: DateTimeImmutable|null}> $rows */
+        $rows = $this->createQueryBuilder('mm')
+            ->select('mm.id AS id', $this->refs->identity('mm', 'user') . ' AS ref', 'mm.readAt AS readAt')
+            ->where('mm.id IN (:ids)')
+            ->andWhere($this->refs->identity('mm', 'user') . ' = :user')
+            ->setParameter('ids', $ids)
+            ->setParameter('user', $this->refs->sqlValue($userKey))
+            ->getQuery()
+            ->getArrayResult();
+        $owned  = [];
+        $unread = [];
+        foreach ($rows as $row) {
+            // Exactly this user's row (a look-alike's row a folding collation returned is left out).
+            $exact = (string) $row['ref'] === $userKey;
+            if ($exact) {
+                $owned[] = (int) $row['id'];
+            }
+            if ($exact && $row['readAt'] === null) {
+                $unread[] = (int) $row['id'];
+            }
+        }
+        $marked = $unread === [] ? 0 : (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
+            ->update(ChatMessageMention::class, 'mm')
+            ->set('mm.readAt', ':now')
+            ->where('mm.id IN (:ids)')
+            ->andWhere('mm.readAt IS NULL')
+            ->setParameter('now', $now)
+            ->setParameter('ids', $unread)
+            ->getQuery()
+            ->execute());
+        $unitOfWork = $this->getEntityManager()->getUnitOfWork();
+        foreach ($unread as $id) {
+            $held = $unitOfWork->tryGetById($id, ChatMessageMention::class);
+            if ($held instanceof ChatMessageMention) {
+                $this->getEntityManager()->refresh($held);
+            }
+        }
+
+        return ['owned' => $owned, 'marked' => $marked];
     }
 
     /**

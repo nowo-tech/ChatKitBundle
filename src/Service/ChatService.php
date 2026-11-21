@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use LogicException;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitRows;
 use Nowo\ChatKitBundle\Doctrine\ChatUserLookAlikeException;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
@@ -392,7 +393,6 @@ final readonly class ChatService implements ChatServiceInterface
             $this->revisions?->deleteFor([(int) $message->getId()]);
             $root = $message->getThreadRoot();
             if ($root instanceof ChatMessage) {
-                ChatKitWrites::beforeFlush($this->transactions, $this->entityManager);
                 $this->entityManager->flush();
                 $this->messageRepository?->countReply($root, -1, null);
                 $this->entityManager->refresh($root);
@@ -439,9 +439,8 @@ final readonly class ChatService implements ChatServiceInterface
             }
             $this->entityManager->createQueryBuilder()->delete(ChatParticipant::class, 'p')->where('IDENTITY(p.conversation) = :id')->setParameter('id', $id)->getQuery()->execute();
             $this->entityManager->createQueryBuilder()->delete(ChatConversation::class, 'c')->where('c.id = :id')->setParameter('id', $id)->getQuery()->execute();
-            if ($this->entityManager->contains($conversation)) {
-                $this->entityManager->detach($conversation);
-            }
+            // 2.0: the conversation and its participant rows the manager held are forgotten (the DQL deletes bypassed it).
+            ChatKitManagedRows::forgetGone($this->entityManager, [ChatConversation::class, ChatParticipant::class]);
 
             return true;
         });
@@ -852,7 +851,6 @@ final readonly class ChatService implements ChatServiceInterface
      */
     private function storeReply(ChatMessage $reply, array $mentioned, DateTimeImmutable $now): void
     {
-        ChatKitWrites::beforeFlush($this->transactions, $this->entityManager);
         $this->entityManager->flush();
         $root = $reply->getThreadRoot();
         assert($root instanceof ChatMessage);
@@ -929,7 +927,6 @@ final readonly class ChatService implements ChatServiceInterface
     private function store(ChatMessage $message, ChatParticipant $participant): void
     {
         // The id of the new message (the author's read cursor points at it).
-        ChatKitWrites::beforeFlush($this->transactions, $this->entityManager);
         $this->entityManager->flush();
         // The author has read everything up to their own message (1.35: and the read time of what they had not read yet).
         if ($participant->markReadUpTo((int) $message->getId())) {

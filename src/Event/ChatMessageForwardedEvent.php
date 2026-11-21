@@ -19,8 +19,11 @@ final readonly class ChatMessageForwardedEvent
      * @param ChatUserInterface $actor Who forwarded it
      */
     public function __construct(
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this entity); removed in 3.0 */
         public ChatMessage $source,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this entity); removed in 3.0 */
         public ChatMessage $message,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this user); removed in 3.0 */
         public ChatUserInterface $actor,
     ) {
     }
@@ -47,5 +50,69 @@ final readonly class ChatMessageForwardedEvent
     public function actorPublicId(): string
     {
         return $this->actor->getChatPublicId();
+    }
+
+    /**
+     * 2.0: the message uuid (no entity needed).
+     */
+    public function messageUuid(): string
+    {
+        return $this->message->getUuid();
+    }
+
+    /**
+     * 2.0: the conversation uuid of the message (no entity needed).
+     */
+    public function conversationUuid(): string
+    {
+        return $this->message->getConversation()->getUuid();
+    }
+
+    /**
+     * 2.0: the conversation uuid of the source message.
+     */
+    public function sourceConversationUuid(): string
+    {
+        return $this->source->getConversation()->getUuid();
+    }
+
+    /**
+     * 2.0: The user who forwarded. The key the chat stores for the user: the host user id as a string (`getReference()` / compare with your own id).
+     */
+    public function actorReference(): string
+    {
+        return EventRefs::user($this->actor);
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function sourceId(): int
+    {
+        return EventRefs::id($this->source->getId());
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function messageId(): int
+    {
+        return EventRefs::id($this->message->getId());
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function conversationId(): int
+    {
+        return EventRefs::id($this->message->getConversation()->getId());
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function sourceConversationId(): int
+    {
+        return EventRefs::id($this->source->getConversation()->getId());
     }
 }

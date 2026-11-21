@@ -65,7 +65,7 @@ class ChatConversation
     /** 1.27: see `directUserLow`. */
     private ?string $directUserHigh = null;
 
-    /** Channel only: the application key (ChatChannelProviderInterface), e.g. `project:<uuid>`. */
+    /** Channel only: the application key (ChatChannelSourceInterface), e.g. `project:<uuid>`. */
     #[ORM\Column(name: 'channel_key', length: self::CHANNEL_KEY_MAX_LENGTH, nullable: true)]
     private ?string $channelKey = null;
 

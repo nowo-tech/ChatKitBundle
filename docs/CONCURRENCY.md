@@ -22,8 +22,8 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 - Side effects run after the commit, never inside the unit: realtime publishes, events, Web Push and digests.
 - After a failure the runner leaves no transaction open and repairs the nesting level (savepoint-aware), and the next
   request of the worker finds a healthy manager.
-- ChatKit never resets, clears or flushes the host's entity manager. With `doctrine.private_entity_manager: true` it
-  writes only through its own manager.
+- ChatKit never resets, clears or flushes the host's entity manager: it writes only through its own private manager
+  (2.0: the only mode).
 
 ## Write paths
 
@@ -46,6 +46,9 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | Ticket numbers | a dedicated counter row with an atomic update | — |
 | GDPR erasure | one unit for the whole erasure | — |
 | `nowo:chat:purge` | small batches, each in its own statement or unit | re-run safe |
+| 2.0 `deleteConversation()` / `purgeChannel()` | one unit on ChatKit's runner: the conversation row `FOR UPDATE` first, then children before parents; a concurrent purge of the same conversation waits on the lock and then finds no row (`false`, nothing written, no event). `ChatConversationDeletedEvent` follows ChatKit's unit; inside an outer host transaction it is a savepoint, so the deletion (and the event's facts) is durable only when the host commits | idempotent (`false` when gone) |
+| 2.0 bulk DQL writes and the private manager | after each bulk DELETE / UPDATE, the managed instances of deleted rows are detached and those of updated rows read again (`ChatKitManagedRows`); the manager is never cleared, so a worker without kernel reset never answers a deleted row | — |
+| 2.0 `markMentionRead()` / `markMentionsRead()` | one unit; `UPDATE … SET read_at WHERE id IN (…) AND read_at IS NULL` on the user's exact rows, so the first read time wins and a concurrent mark counts nothing twice | idempotent |
 | 1.37 message search (page, API, palette) | read-only: no write unit, no lock | — |
 | 1.37 `search_text` (audit VA2-1) | written by the entity with the text it derives from, in the same unit of work as send, edit, delete and GDPR erasure (no extra statement, no extra lock); the full-text index follows inside the database | — |
 | 1.37 `nowo:chat:search-backfill` | batches by id, one short connection-level transaction each (DBAL only: no entity manager flushed, cleared or reset); `UPDATE … WHERE search_text IS NULL`, so a concurrent send or edit always wins; a lock wait timeout, deadlock or `lock_timeout` rolls the batch back and stops with `CONFLICT_001` (exit 75), the batches before it kept | `--after-id` resumes; re-run safe |
@@ -88,6 +91,8 @@ request: the request's `CommitMark` (taken at `kernel.request` with `commit_dete
 - `tests/Integration/Service/ChatMessageActionsTest` covers saving the same message twice and repeated mark unread.
 - 1.36: `ConcurrentWritersTest` also sends one forward from two workers under one key (one copy), concurrent replies
   in one thread (the count matches the replies) and concurrent edits of one message (every previous text is kept once).
+- 2.0: `ConcurrentWritersTest` also purges the same channel conversations from two workers at once (every call
+  answers, nothing of them is left).
 - 1.37: `tests/Database/MessageSearchDatabaseTest` also runs the backfill while a second session holds a row of the
   batch: `CONFLICT_001` after the one-second wait, the first batch kept, the next run completes. It builds the search index while a second session holds a write lock on
   the message table (MySQL 8.4, MariaDB 11.4, PostgreSQL 16): the command answers `CONFLICT_001` after the one-second

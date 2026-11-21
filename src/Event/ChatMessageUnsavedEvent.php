@@ -18,7 +18,9 @@ final readonly class ChatMessageUnsavedEvent
      * @param ChatUserInterface $user Who did it
      */
     public function __construct(
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this entity); removed in 3.0 */
         public ChatMessage $message,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this user); removed in 3.0 */
         public ChatUserInterface $user,
     ) {
     }
@@ -41,5 +43,45 @@ final readonly class ChatMessageUnsavedEvent
     public function userPublicId(): string
     {
         return $this->user->getChatPublicId();
+    }
+
+    /**
+     * 2.0: the message uuid (no entity needed).
+     */
+    public function messageUuid(): string
+    {
+        return $this->message->getUuid();
+    }
+
+    /**
+     * 2.0: the conversation uuid of the message (no entity needed).
+     */
+    public function conversationUuid(): string
+    {
+        return $this->message->getConversation()->getUuid();
+    }
+
+    /**
+     * 2.0: The user who removed the message from the saved list. The key the chat stores for the user: the host user id as a string (`getReference()` / compare with your own id).
+     */
+    public function userReference(): string
+    {
+        return EventRefs::user($this->user);
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function messageId(): int
+    {
+        return EventRefs::id($this->message->getId());
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function conversationId(): int
+    {
+        return EventRefs::id($this->message->getConversation()->getId());
     }
 }

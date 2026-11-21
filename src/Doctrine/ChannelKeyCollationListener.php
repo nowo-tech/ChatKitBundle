@@ -13,7 +13,6 @@ use Doctrine\DBAL\Schema\ColumnEditor;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Schema\Table;
 use Doctrine\ORM\Tools\Event\GenerateSchemaEventArgs;
-use Doctrine\ORM\Tools\Event\GenerateSchemaTableEventArgs;
 use Doctrine\ORM\Tools\ToolEvents;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -146,18 +145,6 @@ final readonly class ChannelKeyCollationListener
             $schemaEditor->dropTableByUnquotedName($tableName)->addTable($table);
         }
         $args->setSchema($schemaEditor->create());
-    }
-
-    /**
-     * No longer subscribed (1.40.1, FK loss): replacing the table there lost its foreign keys. Kept for BC; does nothing.
-     *
-     * @deprecated since 1.40.1, the collation is applied on postGenerateSchema ({@see self::postGenerateSchema()})
-     *
-     * @param GenerateSchemaTableEventArgs $args Doctrine schema tool event
-     */
-    public function postGenerateSchemaTable(GenerateSchemaTableEventArgs $args): void
-    {
-        unset($args);
     }
 
     /**

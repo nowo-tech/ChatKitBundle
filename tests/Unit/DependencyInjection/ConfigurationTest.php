@@ -37,7 +37,6 @@ final class ConfigurationTest extends TestCase
             'doctrine'                  => ['table_name_prefix' => 'nowo_chat_', 'table_prefix' => '', 'user_reference' => 'relation', 'entity_manager' => 'default', 'private_entity_manager' => null],
             'digest'                    => ['enabled' => false, 'delay_minutes' => 15, 'interval_minutes' => 60],
             'web_ui'                    => ['layout_template' => null, 'assets' => true, 'channels_url' => null, 'message_context_menu' => null, 'page' => ['full_height' => false, 'open_recent' => false], 'dock' => ['sidebar_sections' => false, 'dialog_runtime' => false], 'templates' => ['page' => '@NowoChatKitBundle/page.html.twig']],
-            'page_layout'               => null,
             'cache_pool'                => 'cache.app',
             'reactions'                 => ['👍', '❤️', '😂', '😮', '😢', '🎉'],
             'icon_set'                  => 'ux_icon',
@@ -212,7 +211,8 @@ final class ConfigurationTest extends TestCase
         self::assertTrue($config['profiles']['support']['enabled']);
     }
 
-    public function testPageLayoutIsADeprecatedAliasOfWebUiLayout(): void
+    /** 2.0: `page_layout` (deprecated since 1.5) fails the build with a message naming its replacement, in any profile. */
+    public function testPageLayoutIsRemoved(): void
     {
         $root = (new Configuration())->getConfigTreeBuilder()->buildTree();
         self::assertInstanceOf(ArrayNode::class, $root);
@@ -220,16 +220,23 @@ final class ConfigurationTest extends TestCase
         self::assertInstanceOf(PrototypedArrayNode::class, $profiles);
         $prototype = $profiles->getPrototype();
         self::assertInstanceOf(ArrayNode::class, $prototype);
-        $pageLayout = $prototype->getChildren()['page_layout'];
-        $webUi      = $prototype->getChildren()['web_ui'];
-        self::assertInstanceOf(BaseNode::class, $pageLayout);
+        self::assertArrayNotHasKey('page_layout', $prototype->getChildren());
+        $webUi = $prototype->getChildren()['web_ui'];
         self::assertInstanceOf(BaseNode::class, $webUi);
-        self::assertTrue($pageLayout->isDeprecated());
         self::assertFalse($webUi->isDeprecated());
 
         $config = $this->process([['profiles' => ['default' => ['web_ui' => ['layout_template' => 'layouts/chat.html.twig']]]]]);
         self::assertSame('layouts/chat.html.twig', $config['profiles']['default']['web_ui']['layout_template']);
-        self::assertNull($config['profiles']['default']['page_layout']);
+
+        foreach ([['default' => ['page_layout' => 'base.html.twig']], ['default' => [], 'other' => ['page_layout' => null]]] as $profiles) {
+            try {
+                $this->process([['profiles' => $profiles]]);
+                self::fail('page_layout must fail the build');
+            } catch (InvalidConfigurationException $exception) {
+                self::assertSame(Configuration::PAGE_LAYOUT_REMOVED, $exception->getMessage());
+                self::assertStringContainsString('"web_ui.layout_template"', $exception->getMessage());
+            }
+        }
     }
 
     public function testStatusPresetsCanBeReplacedAndAreValidated(): void

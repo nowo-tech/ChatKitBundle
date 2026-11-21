@@ -17,7 +17,6 @@ use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
-use PHPUnit\Framework\Attributes\Group;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 
@@ -84,8 +83,7 @@ final class ChatNotifierTest extends DatabaseTestCase
         self::assertSame([], $this->get(ChatReactionRepository::class)->summaryFor([]));
     }
 
-    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
-    #[Group('application-manager')]
+    /** 2.0: users are compared by id across managers; a host row is refreshed by clearing the application's manager. */
     public function testRecipientsAreCachedUntilForgotten(): void
     {
         $chat       = $this->get(ChatService::class);
@@ -100,6 +98,7 @@ final class ChatNotifierTest extends DatabaseTestCase
         $this->em->createQuery('UPDATE ' . TestUser::class . ' u SET u.name = :name WHERE u.id = :id')
             ->setParameters(['name' => 'Disabled Luis', 'id' => $luis->getId()])->execute();
         $this->em->clear();
+        $this->hostManager()->clear();
         self::assertCount(2, $recipients->of($dm));
         $recipients->forget($dm);
         self::assertSame(['Ana'], $names($recipients->of($dm)));

@@ -8,7 +8,7 @@ use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
 /**
- * Optional (1.24), implemented by the application's channel provider (ChatChannelProviderInterface): who may mention
+ * Optional (1.24), implemented by the application's channel source (ChatChannelSourceInterface): who may mention
  * a whole channel with `@channel` (every member) or `@here` (every member online now). Without it nobody may: the
  * words stay plain text and nobody is notified. Even when allowed, group mentions are rate limited per writer
  * (`limits.mention_all_per_hour`); over the limit the message is sent without the group mention.

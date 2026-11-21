@@ -21,7 +21,6 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\ClassMetadataFactory;
 use Doctrine\ORM\Tools\Event\GenerateSchemaEventArgs;
-use Doctrine\ORM\Tools\Event\GenerateSchemaTableEventArgs;
 use Nowo\ChatKitBundle\Doctrine\ChannelKeyCollationListener;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -98,15 +97,6 @@ final class ChannelKeyCollationListenerTest extends TestCase
         self::assertSame('utf8mb4_0900_bin', $args->getSchema()->getTable('nowo_chat_conversation')->getColumn('support_owner_id')->getPlatformOptions()['collation'] ?? null);
         self::assertSame('utf8mb4_0900_bin', $args->getSchema()->getTable('nowo_chat_message')->getColumn('author_id')->getPlatformOptions()['collation'] ?? null);
         self::assertArrayNotHasKey('collation', $args->getSchema()->getTable('nowo_chat_message')->getColumn('channel_key')->getPlatformOptions());
-    }
-
-    public function testTheDeprecatedTableEventDoesNothing(): void
-    {
-        $table = $this->table('nowo_chat_conversation');
-        $args  = new GenerateSchemaTableEventArgs(new ClassMetadata(ChatConversation::class), new Schema([$table]), $table);
-        (new ChannelKeyCollationListener())->postGenerateSchemaTable($args);
-        self::assertArrayNotHasKey('collation', $table->getColumn('channel_key')->getPlatformOptions());
-        self::assertSame($table, $args->getClassTable());
     }
 
     public function testCollateInPlaceAndThroughTheEditor(): void

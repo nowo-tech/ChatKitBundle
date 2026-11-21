@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\SearchKit;
 
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\Security\Core\User\UserInterface;
@@ -30,12 +30,12 @@ final readonly class ChatSearchKitViewer
     /**
      * @param Security $security The signed-in user
      * @param ChatAccess $access Reachability
-     * @param CurrentChatUserResolverInterface|null $currentUser The participant of the signed-in user (null: the security user itself)
+     * @param ChatCurrentUserPort|null $currentUser The participant of the signed-in user (null: the security user itself)
      */
     public function __construct(
         private Security $security,
         private ChatAccess $access,
-        private ?CurrentChatUserResolverInterface $currentUser = null,
+        private ?ChatCurrentUserPort $currentUser = null,
     ) {
     }
 
@@ -83,7 +83,7 @@ final readonly class ChatSearchKitViewer
         if (!$user instanceof UserInterface || $user->getUserIdentifier() !== $userIdentifier) {
             return null;
         }
-        $viewer = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
+        $viewer = $this->currentUser instanceof ChatCurrentUserPort ? $this->currentUser->resolve($user) : $user;
 
         return $viewer instanceof ChatUserInterface && $this->access->isReachable($viewer) ? $viewer : null;
     }

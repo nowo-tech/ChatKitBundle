@@ -7,6 +7,7 @@ namespace Nowo\ChatKitBundle\Repository;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -94,12 +95,16 @@ class ChatConversationLinkRepository extends ServiceEntityRepository
             return 0;
         }
 
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('l')
+        $deleted = (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->createQueryBuilder('l')
             ->delete()
             ->where('l.id IN (:ids)')
             ->setParameter('ids', $ids)
             ->getQuery()
             ->execute());
+        // 2.0: purged rows the manager held are forgotten (the DQL delete bypassed it).
+        ChatKitManagedRows::forgetGone($this->getEntityManager(), [ChatConversationLink::class]);
+
+        return $deleted;
     }
 
     /**

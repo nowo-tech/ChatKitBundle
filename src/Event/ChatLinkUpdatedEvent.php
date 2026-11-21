@@ -21,7 +21,9 @@ final readonly class ChatLinkUpdatedEvent
      * @param string|null $previousTitle The title before the change
      */
     public function __construct(
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this entity); removed in 3.0 */
         public ChatConversationLink $link,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this user); removed in 3.0 */
         public ChatUserInterface $by,
         public string $previousUrl,
         public ?string $previousTitle,
@@ -46,5 +48,45 @@ final readonly class ChatLinkUpdatedEvent
     public function byPublicId(): string
     {
         return $this->by->getChatPublicId();
+    }
+
+    /**
+     * 2.0: the link uuid.
+     */
+    public function linkUuid(): string
+    {
+        return $this->link->getUuid();
+    }
+
+    /**
+     * 2.0: the conversation uuid (no entity needed).
+     */
+    public function conversationUuid(): string
+    {
+        return $this->link->getConversation()->getUuid();
+    }
+
+    /**
+     * 2.0: The user who changed the link. The key the chat stores for the user: the host user id as a string (`getReference()` / compare with your own id).
+     */
+    public function byReference(): string
+    {
+        return EventRefs::user($this->by);
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function linkId(): int
+    {
+        return EventRefs::id($this->link->getId());
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function conversationId(): int
+    {
+        return EventRefs::id($this->link->getConversation()->getId());
     }
 }

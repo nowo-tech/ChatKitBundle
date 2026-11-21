@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Realtime;
 
 use DateTimeImmutable;
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\Port\ChatRealtimePort;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
  * No realtime transport: the dock falls back to polling (catch-up on focus and on an interval).
  */
-final class NullChatRealtime implements ChatRealtimeInterface
+final class NullChatRealtime implements ChatRealtimePort
 {
     /**
      * Never enabled: the dock polls instead.

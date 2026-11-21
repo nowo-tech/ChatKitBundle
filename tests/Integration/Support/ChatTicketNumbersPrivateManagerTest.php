@@ -7,16 +7,18 @@ namespace Nowo\ChatKitBundle\Tests\Integration\Support;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\Support\ChatSupportTickets;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * 1.30: with the private entity manager the ticket number is written beside its unit of work, at the ticket's
  * transaction level, and the manager knows it (a rollback of that level makes its identity map stale).
  */
+#[Group('private-manager')]
 final class ChatTicketNumbersPrivateManagerTest extends DatabaseTestCase
 {
-    protected function chatKitConfig(): array
+    protected function hostFixtures(): bool
     {
-        return ['profiles' => ['default' => ['doctrine' => ['private_entity_manager' => true]]]];
+        return true;
     }
 
     public function testTheNumberIsWrittenThroughThePrivateManager(): void

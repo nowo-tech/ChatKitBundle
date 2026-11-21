@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Repository;
 
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
+use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -46,12 +47,16 @@ class ChatMessageLinkRepository extends ServiceEntityRepository
      */
     public function removeForMessageIds(array $messageIds): int
     {
-        return (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
+        $removed = (int) ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->delete(ChatMessageLink::class, 'ml')
             ->where('IDENTITY(ml.message) IN (:ids)')
             ->setParameter('ids', $messageIds)
             ->getQuery()
             ->execute());
+        // 2.0: a removed row the manager held is forgotten (the DQL delete bypassed it).
+        ChatKitManagedRows::forgetGone($this->getEntityManager(), [ChatMessageLink::class]);
+
+        return $removed;
     }
 
     /**

@@ -6,12 +6,15 @@ namespace Nowo\ChatKitBundle\Tests\Database;
 
 use Doctrine\DBAL\ParameterType;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Entity\ChatMessageMention;
+use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatThreads;
 use Nowo\ChatKitBundle\Tests\Database\Support\LoadDatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use RuntimeException;
 
+use function array_unique;
 use function is_resource;
 use function json_decode;
 use function microtime;
@@ -189,6 +192,29 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
     }
 
     /**
+     * 2.0 (REQ-RUNTIME-003): two workers purge the same channel conversations at the same moment
+     * (ChatMessagingInterface::purgeChannel()): every call answers (one deletes, the other finds nothing), nothing is
+     * left open, and nothing of the purged conversations is left behind.
+     */
+    public function testTheSameConversationsPurgedTwiceAtOnce(): void
+    {
+        $this->seed();
+        $this->rooms(self::CALLS);
+        [$a, $b] = $this->race('purge', 'purge');
+        $this->assertClean($a, $b);
+        $sql = $this->connection();
+        self::assertSame(0, (int) $sql->fetchOne("SELECT COUNT(*) FROM nowo_chat_conversation WHERE channel_key LIKE 'room:race-%'"));
+        self::assertSame(1, (int) $sql->fetchOne('SELECT COUNT(*) FROM nowo_chat_conversation'), 'the direct conversation stays');
+        foreach (['nowo_chat_message' => 'conversation_id', 'nowo_chat_participant' => 'conversation_id'] as $table => $column) {
+            self::assertSame(0, (int) $sql->fetchOne('SELECT COUNT(*) FROM ' . $table . ' WHERE ' . $column . ' NOT IN (SELECT id FROM nowo_chat_conversation)'), $table);
+        }
+        foreach (['nowo_chat_message_mention', 'nowo_chat_reaction'] as $table) {
+            self::assertSame(0, (int) $sql->fetchOne('SELECT COUNT(*) FROM ' . $table . ' WHERE message_id NOT IN (SELECT id FROM nowo_chat_message)'), $table);
+        }
+        self::assertSame(1, (int) $sql->fetchOne('SELECT COUNT(*) FROM nowo_chat_message'), 'the direct conversation keeps its message');
+    }
+
+    /**
      * @param array{ok: int, failures: array<string, int>, poisoned: int, closed: int} ...$writers
      */
     private function assertClean(array ...$writers): void
@@ -222,6 +248,28 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
         }
     }
 
+    /**
+     * Channel conversations `room:race-<n>` with both people, a message, a mention of Luis and his reaction.
+     */
+    private function rooms(int $count): void
+    {
+        $chat  = $this->get(ChatService::class);
+        $users = $this->em->getRepository(TestUser::class);
+        $ana   = $users->findOneBy(['name' => 'ana']) ?? self::fail('ana');
+        $luis  = $users->findOneBy(['name' => 'luis']) ?? self::fail('luis');
+        for ($i = 0; $i < $count; ++$i) {
+            $channel = new ChatChannel('room:race-' . $i, 'Room ' . $i);
+            $room    = $chat->openChannel($ana, $channel);
+            $chat->openChannel($luis, $channel);
+            $message = $chat->send($ana, $room, 'hi luis');
+            $chat->toggleReaction($luis, $message, '👍');
+            // The race kernel has no channel source, so the mention row is written directly.
+            $this->em->persist(new ChatMessageMention($message, $luis));
+        }
+        $this->em->flush();
+        self::assertSame($count, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message_mention'));
+    }
+
     private function seed(): void
     {
         $ana  = $this->user('ana');
@@ -235,6 +283,11 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
      */
     private function race(string $modeA, string $modeB = 'send'): array
     {
+        // YB-2: warm the shared kernel cache of each mode's config first, one process at a time.
+        foreach (array_unique([$modeA, $modeB]) as $mode) {
+            $this->finish($this->start(['warm-' . $mode, '0', 'w', '0']));
+        }
+
         $start = (string) (microtime(true) + 2.0);
         $a     = $this->start([$modeA, (string) self::CALLS, 'a', $start]);
         $b     = $this->start([$modeB, (string) self::CALLS, 'b', $start]);

@@ -61,7 +61,12 @@ final class ChatKitRows
         }
         foreach (array_filter($metadata->associationMappings, static fn (object $mapping): bool => $mapping instanceof ToOneOwningSideMapping) as $field => $mapping) {
             $target = $metadata->getFieldValue($entity, $field);
-            $ids    = is_object($target) ? $entityManager->getClassMetadata($target::class)->getIdentifierValues($target) : [];
+            if (is_object($target) && $entityManager instanceof ChatKitEntityManager && !ChatKitManagerRegistry::isBundleEntity($target::class) && !$entityManager->contains($target)) {
+                // 2.0 (W1-2): a host object (the user) is written by the id its manager knows; an unsaved one, or one
+                // whose row the private manager cannot see, fails before anything is written.
+                $target = $entityManager->foreignReference($target, $mapping->targetEntity, $metadata->getName() . '::$' . $field);
+            }
+            $ids = is_object($target) ? $entityManager->getClassMetadata($target::class)->getIdentifierValues($target) : [];
             foreach ($mapping->joinColumns as $joinColumn) {
                 $row[$joinColumn->name] = count($ids) === 1 ? reset($ids) : ($ids[$joinColumn->referencedColumnName] ?? null);
             }

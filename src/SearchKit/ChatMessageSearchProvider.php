@@ -53,14 +53,6 @@ final readonly class ChatMessageSearchProvider implements FilterableSearchProvid
     /** The author filter (`from:me`, `from:<public id>`). */
     public const string FILTER_FROM = ChatMessageSearchDefinition::FILTER_FROM;
 
-    /**
-     * Deepest results page served before 1.38 (keyset replay).
-     *
-     * @deprecated since 1.38: the results page goes as deep as `search_kit.messages.max_candidates` rows (SearchKit's
-     *             candidate window); kept for BC, unused
-     */
-    public const int MAX_PAGE = 3;
-
     private EntitySearchProvider $provider;
 
     /**

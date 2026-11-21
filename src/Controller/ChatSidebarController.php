@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Controller;
 
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Http\ChatApiException;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -31,14 +31,14 @@ final class ChatSidebarController extends AbstractController
      * @param ChatSidebar $sidebar The host sections
      * @param ChatAccess $access Reachability of the user
      * @param RateLimiterFactoryInterface $readLimiter Budget of the reads
-     * @param CurrentChatUserResolverInterface|null $currentUser The signed-in user's chat participant; null: the security user when it implements ChatUserInterface
+     * @param ChatCurrentUserPort|null $currentUser The signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      */
     public function __construct(
         private readonly ChatSidebar $sidebar,
         private readonly ChatAccess $access,
         #[Autowire(service: 'limiter.nowo_chat_read')]
         private readonly RateLimiterFactoryInterface $readLimiter,
-        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly ?ChatCurrentUserPort $currentUser = null,
     ) {
     }
 
@@ -53,7 +53,7 @@ final class ChatSidebarController extends AbstractController
     public function sections(Request $request): JsonResponse
     {
         $user = $this->getUser();
-        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
+        $user = $this->currentUser instanceof ChatCurrentUserPort ? $this->currentUser->resolve($user) : $user;
         if (!$user instanceof ChatUserInterface || !$this->access->isReachable($user)) {
             throw new ChatApiException('unauthorized', Response::HTTP_UNAUTHORIZED);
         }

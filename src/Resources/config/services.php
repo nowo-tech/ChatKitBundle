@@ -12,24 +12,21 @@ use Nowo\ChatKitBundle\Channel\NullChannelProvider;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
 use Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatForwardPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatHistoryPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatMentionInboxInterface;
 use Nowo\ChatKitBundle\Contract\ChatMessageActionsInterface;
 use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Contract\ChatSupportTopicProviderInterface;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerReferencesPass;
 use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Digest\NullChatDigestSender;
-use Nowo\ChatKitBundle\Doctrine\ChatHostFlushProbe;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
@@ -41,6 +38,9 @@ use Nowo\ChatKitBundle\Http\ChatConflictResponseFormatter;
 use Nowo\ChatKitBundle\Link\ChatLinks;
 use Nowo\ChatKitBundle\Link\ChatLinkUrls;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
+use Nowo\ChatKitBundle\Port\ChatRealtimePort;
 use Nowo\ChatKitBundle\Push\ChatPushDispatcher;
 use Nowo\ChatKitBundle\Push\NullChatPushSender;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
@@ -54,6 +54,7 @@ use Nowo\ChatKitBundle\Search\ChatMessageSearchSql;
 use Nowo\ChatKitBundle\Search\ChatSearchIndex;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
+use Nowo\ChatKitBundle\Service\ChatMentionInbox;
 use Nowo\ChatKitBundle\Service\ChatMentions;
 use Nowo\ChatKitBundle\Service\ChatMenuOptions;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
@@ -69,7 +70,6 @@ use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use Nowo\TransactionContract\TransactionRunnerInterface;
-use Nowo\TransactionDoctrine\HostFlushProbe;
 use Nowo\TransactionDoctrine\Symfony\Conflict\ConflictResponseFormatterInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\Mercure\HubInterface;
@@ -122,7 +122,7 @@ return static function (ContainerConfigurator $container): void {
             '../../Transaction',
             // 1.31: built per purge run by the command (a value object over the configured days), never autowired.
             '../../Support/ChatRetention.php',
-            // 1.27: registered by the extension only with doctrine.private_entity_manager: true.
+            // 1.30: a static helper of the row locks, never a service.
             '../../Doctrine/ChatKitRowLock.php',
             // 1.37: search value objects and pure helpers; the schema listener and the SearchKit provider are registered by
             // the extension only when their options are on (the provider also needs nowo-tech/search-kit-bundle).
@@ -173,8 +173,6 @@ return static function (ContainerConfigurator $container): void {
             service(StringReferenceSchemaGuard::class)->ignoreOnUninitialized(),
             // 1.30: a shared manager closed by a failed chat write is replaced at the boundary (never mid-request).
             service(ChatKitTransactionRunner::SERVICE_ID)->ignoreOnUninitialized(),
-            // 1.39: the classes the host-flush probe already reported in this request.
-            service(ChatHostFlushProbe::class)->ignoreOnUninitialized(),
         ]));
     // 1.34: the shared lock-conflict policy (409 by default); absent when the host did not register nowo-tech/transaction-doctrine's bundle (the listener then uses 409 + 1 s).
     $services->set(ChatApiExceptionListener::class)
@@ -182,23 +180,21 @@ return static function (ContainerConfigurator $container): void {
     if (interface_exists(ConflictResponseFormatterInterface::class)) {
         $services->set(ChatConflictResponseFormatter::class)->tag(ConflictResponseFormatterInterface::TAG);
     }
-    // 1.30: ChatKit's runner (the extension sets the private manager's name and mode).
+    // 1.30: ChatKit's runner. 2.0: always on ChatKit's private manager (PrivateEntityManagerReferencesPass moves the
+    // manager and the registry onto it; the registry resolves the source manager's name to it).
     $services->set(ChatKitTransactionRunner::SERVICE_ID, ChatKitTransactionRunner::class)
-        ->args([service(EntityManagerInterface::class), service('doctrine'), null, false, 1, service('logger')->nullOnInvalid(), service(ChatHostFlushProbe::class)]);
-    // 1.39 (REQ-ARCH-001 rule 6 deprecation layer): the host-flush probe of host mode (off with the private manager);
-    // transaction-doctrine's shared probe when its bundle is registered, else an own one. Reset at every boundary.
-    $services->set(ChatHostFlushProbe::class)
-        ->args([service(HostFlushProbe::SERVICE_ID)->nullOnInvalid(), param(PrivateEntityManagerReferencesPass::PARAMETER)])
-        ->tag('kernel.reset', ['method' => 'reset']);
-    $services->alias(ChatChannelProviderInterface::class, NullChannelProvider::class);
+        ->args([service(EntityManagerInterface::class), service('doctrine'), param(PrivateEntityManagerReferencesPass::SOURCE_PARAMETER), true, 1, service('logger')->nullOnInvalid()]);
+    $services->alias(ChatChannelPort::class, NullChannelProvider::class);
     // 1.24: the application service as a port (decorate or replace the interface).
     $services->alias(ChatServiceInterface::class, ChatService::class);
     // 1.27: the same service by public uuid, answering with views (REQ-ARCH-001 rule 1; DDD hosts).
     $services->alias(ChatMessagingInterface::class, ChatMessaging::class);
+    // 2.0: the host's Mentions page (list, count, mark read) through ChatKit's own manager.
+    $services->alias(ChatMentionInboxInterface::class, ChatMentionInbox::class);
     // 1.35: the message menu by public uuid (DDD hosts).
     $services->alias(ChatMessageActionsInterface::class, ChatMessageMenu::class);
     // 1.24: who the signed-in user is in the chat (default: the security user when it implements ChatUserInterface).
-    $services->alias(CurrentChatUserResolverInterface::class, SecurityChatUserResolver::class);
+    $services->alias(ChatCurrentUserPort::class, SecurityChatUserResolver::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);
     $services->alias(ChatLinkPreviewProviderInterface::class, NullLinkPreviewProvider::class);
     $services->alias(ChatDigestSenderInterface::class, NullChatDigestSender::class);
@@ -214,10 +210,10 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatHistoryPolicyInterface::class, NoChatHistoryReaders::class);
     $services->set(NullChatRealtime::class);
     if (interface_exists(HubInterface::class)) {
-        $services->alias(ChatRealtimeInterface::class, MercureChatRealtime::class);
+        $services->alias(ChatRealtimePort::class, MercureChatRealtime::class);
     } else {
         $services->remove(MercureChatRealtime::class);
-        $services->alias(ChatRealtimeInterface::class, NullChatRealtime::class);
+        $services->alias(ChatRealtimePort::class, NullChatRealtime::class);
     }
 
     $services->get(ChatPresence::class)
@@ -280,7 +276,6 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$iconSet', param('nowo_chat_kit.icon_set'))
         ->arg('$icons', param('nowo_chat_kit.icons'))
         ->arg('$iconRenderer', service(IconRendererInterface::class)->nullOnInvalid())
-        ->arg('$pageLayout', param('nowo_chat_kit.page_layout'))
         ->arg('$supportEmojis', param('nowo_chat_kit.support.emojis'))
         ->arg('$autoAwayMinutes', param('nowo_chat_kit.auto_away_minutes'))
         ->arg('$statusPresets', param('nowo_chat_kit.status_presets'))

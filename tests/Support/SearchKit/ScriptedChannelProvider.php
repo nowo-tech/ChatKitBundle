@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Support\SearchKit;
 
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
  * 1.38: channels a test scripts per person (SearchKit conversation group): `known` channels (find()), the keys listed
  * for each public id (channelsFor()) and the keys each public id may use (canUse()).
  */
-final class ScriptedChannelProvider implements ChatChannelProviderInterface
+final class ScriptedChannelProvider implements ChatChannelPort
 {
     /** @var array<string, ChatChannel> key => channel */
     public array $known = [];

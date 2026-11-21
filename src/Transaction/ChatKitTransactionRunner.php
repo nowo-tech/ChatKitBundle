@@ -7,7 +7,6 @@ namespace Nowo\ChatKitBundle\Transaction;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
-use Nowo\ChatKitBundle\Doctrine\ChatHostFlushProbe;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagerRegistry;
 use Nowo\TransactionContract\TransactionRunnerInterface;
 use Nowo\TransactionDoctrine\DoctrineTransactionRunner;
@@ -33,10 +32,11 @@ use function spl_object_id;
  *
  * The manager's pending work is flushed first, on its own, so a failed chat unit never rolls it back (PV-L6).
  *
- * - **Private entity manager** (`doctrine.private_entity_manager: true`): nowo-tech/transaction-doctrine 1.1's ORM runner
- *   on ChatKit's own manager. After a storage failure that manager is closed and replaced; after a refusal it is left
- *   alone, or only what the run touched is forgotten. The application's manager is never involved.
- * - **Shared manager** (the default): the chat unit runs in a connection-level transaction, because transaction-doctrine's
+ * - **Private entity manager** (how the bundle wires it; since 2.0 the only mode): nowo-tech/transaction-doctrine 1.1's
+ *   ORM runner on ChatKit's own manager. After a storage failure that manager is closed and replaced; after a refusal it
+ *   is left alone, or only what the run touched is forgotten. The application's manager is never involved.
+ * - **Any other manager** (`privateManager: false`, a runner built by hand): the chat unit runs in a connection-level
+ *   transaction, because transaction-doctrine's
  *   ORM runner would close and reset (or clear) the application's manager after a storage failure (audit QD-M1). After a
  *   failure only the ChatKit rows the unit added, wrote or changed are detached (and the rows that point at them); every
  *   other entity stays managed. A failed flush closes the manager (the ORM does): it stays closed for the rest of the
@@ -52,12 +52,12 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
 
     /**
      * @param EntityManagerInterface $entityManager The manager the chat rows are written through
-     * @param ManagerRegistry|null $registry Resets that manager (after a failure with the private manager; a closed shared manager at a boundary)
+     * @param ManagerRegistry|null $registry Resets that manager (after a failure with the private manager; another closed manager at a boundary)
      * @param string|null $managerName The registry name of that manager; null for the default one
      * @param bool $privateManager Whether it is ChatKit's private manager
      * @param int|null $retryAfterSeconds Retry-After hint of the TransientStorageFailure; null for none
      * @param LoggerInterface|null $logger Warns when a closed manager is replaced at a boundary
-     * @param ChatHostFlushProbe|null $hostFlushProbe 1.39: reports the application's pending changes each flush of the shared manager writes; null reports none
+     * @param object|null $hostFlushProbe @deprecated since 2.0, ignored (the 1.39 host-flush probe of the removed shared-manager mode); removed in 3.0
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -66,8 +66,9 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
         private bool $privateManager = false,
         private ?int $retryAfterSeconds = 1,
         private ?LoggerInterface $logger = null,
-        private ?ChatHostFlushProbe $hostFlushProbe = null,
+        ?object $hostFlushProbe = null,
     ) {
+        unset($hostFlushProbe);
     }
 
     /**
@@ -90,9 +91,7 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
     public function run(callable $operation): mixed
     {
         $manager = $this->entityManager;
-        // Pending work first, on its own: a failed chat unit never rolls it back (PV-L6, QD-M1). 1.39: on the shared
-        // manager that pending work is the application's; the probe reports its classes (2.0 no longer flushes them).
-        $this->beforeHostFlush($manager);
+        // Pending work first, on its own: a failed chat unit never rolls it back (PV-L6, QD-M1).
         $manager->flush();
         if ($this->privateManager) {
             // ChatKit's own manager: transaction-doctrine 1.1's runner (a storage failure closes and replaces it, a
@@ -104,9 +103,8 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
         // a connection-level transaction instead, and only the ChatKit rows it touched are forgotten.
         $before = $this->chatRows($manager);
         try {
-            return DoctrineTransactionRunner::forConnection($manager->getConnection(), $this->retryAfterSeconds)->run(function () use ($operation, $manager): mixed {
+            return DoctrineTransactionRunner::forConnection($manager->getConnection(), $this->retryAfterSeconds)->run(static function () use ($operation, $manager): mixed {
                 $result = $operation();
-                $this->beforeHostFlush($manager);
                 $manager->flush();
 
                 return $result;
@@ -122,22 +120,19 @@ final readonly class ChatKitTransactionRunner implements TransactionRunnerInterf
     }
 
     /**
-     * 1.39 (REQ-ARCH-001 rule 6 deprecation layer): called right before a flush of the manager the chat rows are
-     * written through. On the application's (shared) manager the host-flush probe reports every application entity
-     * class with pending changes that flush writes on ChatKit's behalf; with the private manager, or without a probe,
-     * nothing happens. Read-only.
+     * 1.39: reported the application's pending changes before a flush of the shared manager (host-flush probe).
+     *
+     * @deprecated since 2.0, does nothing (the bundle always writes through its private manager); removed in 3.0
      *
      * @param EntityManagerInterface $entityManager The manager about to be flushed
      */
     public function beforeHostFlush(EntityManagerInterface $entityManager): void
     {
-        if (!$this->privateManager) {
-            $this->hostFlushProbe?->beforeFlush($entityManager);
-        }
+        unset($entityManager);
     }
 
     /**
-     * At a request, message or command boundary: a shared manager that a failed chat flush closed is replaced, so the
+     * At a request, message or command boundary: a non-private manager that a failed chat flush closed is replaced, so the
      * next request of a long-running worker starts with an open one. Nothing happens to an open manager, or with the
      * private manager (ChatKit replaces its own).
      */

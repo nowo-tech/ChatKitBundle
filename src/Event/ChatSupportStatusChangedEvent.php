@@ -20,7 +20,9 @@ final readonly class ChatSupportStatusChangedEvent
      * @param ChatUserInterface|null $by The agent or owner who changed it; null when unknown
      */
     public function __construct(
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this entity); removed in 3.0 */
         public ChatConversation $conversation,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this user); removed in 3.0 */
         public ?ChatUserInterface $by,
     ) {
     }
@@ -43,5 +45,29 @@ final readonly class ChatSupportStatusChangedEvent
     public function byPublicId(): ?string
     {
         return $this->by?->getChatPublicId();
+    }
+
+    /**
+     * 2.0: the conversation uuid (no entity needed).
+     */
+    public function conversationUuid(): string
+    {
+        return $this->conversation->getUuid();
+    }
+
+    /**
+     * 2.0: The agent or owner who changed the status. The key the chat stores for the user (the host user id as a string); null for none.
+     */
+    public function byReference(): ?string
+    {
+        return EventRefs::optional($this->by);
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function conversationId(): int
+    {
+        return EventRefs::id($this->conversation->getId());
     }
 }
