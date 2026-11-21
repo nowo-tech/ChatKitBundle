@@ -12,6 +12,7 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatQuickReply;
 use Nowo\ChatKitBundle\Event\ChatMessageDeletedEvent;
+use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
 use Nowo\ChatKitBundle\Model\ErasedChatUser;
 use Nowo\ChatKitBundle\Service\ChatNotFoundException;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestHostTicketLink;
@@ -20,6 +21,7 @@ use Nowo\ChatKitBundle\Transaction\ChatKitWrites;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
+use function array_slice;
 use function assert;
 
 /**
@@ -273,6 +275,42 @@ trait HostEntitiesAcrossManagersCases
         self::assertTrue($host->contains($link));
         self::assertSame(1, $this->rows('test_host_ticket_link'));
         self::assertSame(1, $this->rows('nowo_chat_conversation'));
+    }
+
+    /**
+     * 2.0: a listener that keeps only ids from the event (`authorReference()`, `conversationId()`, `messageUuid()`) and
+     * points its own entity at them with `getReference()` on the application's manager: the flush writes the foreign
+     * keys, and no "new entity found through a relationship" comes from the private manager's instances.
+     */
+    public function testAListenerUsingOnlyEventIdsFlushesItsOwnEntityWithForeignKeys(): void
+    {
+        $host = $this->chatHostManager();
+        $ana  = $this->hostUser('Ana');
+        $luis = $this->hostUser('Luis');
+        $chat = $this->hostService(ChatServiceInterface::class);
+        /** @var list<array{string, int}> $seen */
+        $seen = [];
+        $this->hostService(EventDispatcherInterface::class)->addListener(ChatMessageSentEvent::class, static function (ChatMessageSentEvent $event) use ($host, &$seen): void {
+            $owner        = $host->getReference(TestUser::class, (int) $event->authorReference());
+            $conversation = $host->getReference(ChatConversation::class, $event->conversationId());
+            assert($owner instanceof TestUser && $conversation instanceof ChatConversation);
+            $host->persist(new TestHostTicketLink($owner, $conversation));
+            $host->flush();
+            $seen[] = [$event->messageUuid(), $event->messageId()];
+        });
+
+        $direct  = $chat->openDirect($ana, $luis);
+        $message = $chat->send($ana, $direct, 'hello');
+        $chat->send($luis, $direct, 'hi');
+
+        $sql = $host->getConnection();
+        self::assertSame([[$message->getUuid(), (int) $message->getId()]], array_slice($seen, 0, 1));
+        self::assertCount(2, $seen);
+        self::assertSame([(string) $ana->getId(), (string) $luis->getId()], array_map('strval', $sql->fetchFirstColumn('SELECT owner_id FROM test_host_ticket_link ORDER BY id')));
+        self::assertSame([(string) $direct->getId(), (string) $direct->getId()], array_map('strval', $sql->fetchFirstColumn('SELECT conversation_id FROM test_host_ticket_link ORDER BY id')));
+        self::assertSame(1, $this->rows('nowo_chat_conversation'), 'no duplicate conversation');
+        self::assertSame(2, $this->rows('test_user'), 'no duplicate user');
+        self::assertTrue($host->isOpen());
     }
 
     private function chatHostManager(): EntityManagerInterface

@@ -224,6 +224,15 @@ The 1.27 "Check after enabling it" list, now unconditional:
   did not flush yet, or never persisted, fails with a `LogicException` ("… is not saved yet … Flush your own entity
   manager first") before anything is written: flush your user first. With a single-table-inheritance `user_class`, a
   user whose row ChatKit cannot see (deleted, filtered or of another subclass) fails clearly too.
+- **Listeners: use the id getters, then `getReference()` with a private manager.** A listener that takes a user or a chat
+  row from an event (`$event->by`, `$event->message`, `$event->conversation`, …) and stores it in an entity of yours
+  fails with "A new entity was found through the relationship", because those objects belong to ChatKit's private
+  manager. Every event now has scalar getters: read `byReference()` / `userReference()` / `actorReference()` /
+  `requesterReference()` / `assigneeReference()` / `mentionedReferences()` (the host user id as a string) and
+  `messageId()`, `conversationId()`, `ticketId()`, `linkId()` (or the `*Uuid()` twins), then
+  `$entityManager->getReference(User::class, (int) $event->byReference())` on your own manager and flush it. The
+  entity and user properties of the events are deprecated since 2.0 (docblock only) and removed in 3.0 (table:
+  [USAGE: Events](USAGE.md#events)).
 - **Your entities pointing at chat rows** (a ManyToOne to `ChatConversation`, …): use
   `$entityManager->getReference(ChatConversation::class, $id)` (or a row your manager loaded) and flush your manager.
 - **Ports of yours that wrote through the shared manager** must commit their own change: a custom

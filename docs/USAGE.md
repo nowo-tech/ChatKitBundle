@@ -752,6 +752,35 @@ focus never moves to the wrong row.
 | `ChatLinkUpdatedEvent` | 1.19: a pinned link changed (`link`, `by`, `previousUrl`, `previousTitle`) | audit |
 | `ChatLinkRemovedEvent` | 1.19: a pinned link was removed (`conversation`, `uuid`, `url`, `title`, `by`) | audit |
 
+### Event id getters (2.0)
+
+Read ids, not objects: with the private entity manager the event's entities and users are ChatKit's instances, so a
+listener stores references by id (`$em->getReference(User::class, (int) $event->byReference())`,
+`$em->getReference(ChatConversation::class, $event->conversationId())`) and flushes its own manager. The `*Reference()`
+getters return the key the chat stores for the user (the host user id as a string; the `ChatUserReferenceInterface`
+reference in the string mode); the public id is the chat's own `getChatPublicId()`. The entity and user properties of
+the events are deprecated since 2.0 and removed in 3.0.
+
+| Event | Row ids | User keys (host user id) | Public ids |
+| --- | --- | --- | --- |
+| `ChatMessageSentEvent` | `messageId()`, `messageUuid()`, `conversationId()`, `conversationUuid()`, `threadRootUuid()` | `authorReference()` (nullable) | `authorPublicId()` (nullable) |
+| `ChatMessageEditedEvent` | `messageId()`, `messageUuid()`, `conversationId()`, `conversationUuid()` (`revisionId` property) | `authorReference()` (nullable) | via `messageView()` |
+| `ChatMessageDeletedEvent` | `messageId()`, `messageUuid()`, `conversationId()`, `conversationUuid()` | `byReference()` | `byPublicId()` |
+| `ChatMessageSavedEvent`, `ChatMessageUnsavedEvent` | `messageId()`, `messageUuid()`, `conversationId()`, `conversationUuid()` | `userReference()` | `userPublicId()` |
+| `ChatMentionEvent` | `messageId()`, `messageUuid()`, `conversationId()`, `conversationUuid()` | `mentionedReferences()` | `mentionedPublicIds()` |
+| `ChatThreadReplyEvent` | `rootId()`, `rootUuid()`, `replyId()`, `replyUuid()`, `conversationId()`, `conversationUuid()` | `replyAuthorReference()` (nullable) | via `replyView()` |
+| `ChatMessageForwardedEvent` | `sourceId()`, `sourceUuid()`, `sourceConversationId()`, `sourceConversationUuid()`, `messageId()`, `messageUuid()`, `conversationId()`, `conversationUuid()` | `actorReference()` | `actorPublicId()` |
+| `ChatMessageForwardingEvent` | `sourceId()`, `sourceUuid()`, `sourceConversationId()`, `sourceConversationUuid()`, `targetConversationId()`, `targetConversationUuid()` (nullable) | `actorReference()`, `recipientReference()` (nullable) | `actorPublicId()`, `recipientPublicId()` (nullable) |
+| `ChatConversationMarkedUnreadEvent` | `conversationId()`, `conversationUuid()`, `fromMessageUuid` | `userReference()` | `userPublicId()` |
+| `ChatSupportStatusChangedEvent` | `conversationId()`, `conversationUuid()` | `byReference()` (nullable) | `byPublicId()` (nullable) |
+| `SupportTicketCreatedEvent` | `ticketId()`, `ticketUuid()` | `requesterReference()` | `requesterPublicId()` |
+| `SupportTicketAssignedEvent` | `ticketId()`, `ticketUuid()` | `assigneeReference()` (nullable), `byReference()` | `assigneePublicId()` (nullable), `byPublicId()` |
+| `SupportTicketReopenedEvent`, `SupportTicketStatusChangedEvent` | `ticketId()`, `ticketUuid()` | `byReference()` | `byPublicId()` |
+| `ChatLinkAddedEvent`, `ChatLinkUpdatedEvent` | `linkId()`, `linkUuid()`, `conversationId()`, `conversationUuid()` | `byReference()` | `byPublicId()` |
+| `ChatLinkRemovedEvent` | `conversationId()`, `conversationUuid()`, `uuid` (the removed link) | `byReference()` | `byPublicId()` |
+| `ChatChannelOpeningEvent` | `channelKey`, `scope` | `userReference()` | `userPublicId()` |
+| `ChatMentionsErasedEvent` | `messageIds`, `skippedMessageIds` (scalars already) | `publicId` | `publicId` |
+
 ### Refusing to open a channel
 
 `ChatChannelOpeningEvent` (1.21) runs in `ChatService::openChannel()`, the only place a channel conversation is created,

@@ -26,8 +26,10 @@ final readonly class ChatMentionEvent
      * @param bool $edited True when an edit added the mentions
      */
     public function __construct(
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this entity); removed in 3.0 */
         public ChatMessage $message,
         public array $users,
+        /** @deprecated since 2.0, use the id getters (a private entity manager does not manage this entity); removed in 3.0 */
         public ChatConversation $conversation,
         public bool $edited = false,
     ) {
@@ -61,5 +63,47 @@ final readonly class ChatMentionEvent
     public function mentionedPublicIds(): array
     {
         return array_values(array_map(static fn (ChatUserInterface $user): string => $user->getChatPublicId(), $this->users));
+    }
+
+    /**
+     * 2.0: the message uuid (no entity needed).
+     */
+    public function messageUuid(): string
+    {
+        return $this->message->getUuid();
+    }
+
+    /**
+     * 2.0: the conversation uuid (no entity needed).
+     */
+    public function conversationUuid(): string
+    {
+        return $this->conversation->getUuid();
+    }
+
+    /**
+     * 2.0: the keys (host user ids as strings) of the mentioned users, in the order of `users`.
+     *
+     * @return list<string>
+     */
+    public function mentionedReferences(): array
+    {
+        return array_values(array_map(static fn (ChatUserInterface $user): string => EventRefs::user($user), $this->users));
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function messageId(): int
+    {
+        return EventRefs::id($this->message->getId());
+    }
+
+    /**
+     * 2.0: the primary key of the same row, for `getReference()` on your own manager.
+     */
+    public function conversationId(): int
+    {
+        return EventRefs::id($this->conversation->getId());
     }
 }
