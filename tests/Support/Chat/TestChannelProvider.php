@@ -6,10 +6,10 @@ namespace Nowo\ChatKitBundle\Tests\Support\Chat;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelMentionPolicyInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelWritePolicyInterface;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\Request;
  * 1.24: also `room:archive` (read only, with a subtitle and an icon; never listed, opened by key), and the optional
  * policies: names starting with "Reader" read but never write, names starting with "Lead" may use @channel / @here.
  */
-final class TestChannelProvider implements ChatChannelProviderInterface, ChatChannelWritePolicyInterface, ChatChannelMentionPolicyInterface
+final class TestChannelProvider implements ChatChannelPort, ChatChannelWritePolicyInterface, ChatChannelMentionPolicyInterface
 {
     public const string KEY = 'project:acme';
 

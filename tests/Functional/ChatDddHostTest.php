@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Event\ChatMentionEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
 use Nowo\ChatKitBundle\Model\ChatMessageView;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
@@ -27,7 +27,7 @@ use const JSON_THROW_ON_ERROR;
 
 /**
  * 1.24: a hexagonal host — `doctrine.user_reference: id`, chat participants that are plain objects (not Doctrine
- * entities, not the security user) behind ChatDirectoryInterface, and CurrentChatUserResolverInterface mapping the
+ * entities, not the security user) behind ChatDirectoryInterface, and ChatCurrentUserPort mapping the
  * signed-in security user to its participant. The dock, the voter and the API all go through the resolver; listeners
  * read the events' DTOs, never the entities.
  */
@@ -64,7 +64,7 @@ final class ChatDddHostTest extends DatabaseTestCase
         $ana  = $this->directory->add($this->user('Ana'));
         $luis = $this->directory->add($this->user('Luis'));
         self::assertInstanceOf(ChatService::class, $this->get(ChatServiceInterface::class), 'the application service behind its port');
-        self::assertSame($this->directory, $this->get(CurrentChatUserResolverInterface::class));
+        self::assertSame($this->directory, $this->get(ChatCurrentUserPort::class));
 
         /** @var list<object> $events */
         $events = [];

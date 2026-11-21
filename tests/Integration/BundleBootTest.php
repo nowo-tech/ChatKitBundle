@@ -157,19 +157,16 @@ final class BundleBootTest extends TestCase
         self::assertNull($container->getParameter('nowo_chat_kit.user_class'));
     }
 
-    public function testTheLegacyDefaultPageLayoutMeansTheUiKitLayout(): void
+    /** 2.0: the web UI defaults without the removed `page_layout` (no `nowo_chat_kit.page_layout` parameter). */
+    public function testTheWebUiDefaultsMeanTheUiKitLayout(): void
     {
         $container = new ContainerBuilder();
-        (new NowoChatKitExtension())->load([['profiles' => ['default' => ['page_layout' => '@NowoChatKitBundle/page_layout.html.twig']]]], $container);
-        self::assertNull($container->getParameter('nowo_chat_kit.page_layout'));
+        (new NowoChatKitExtension())->load([['profiles' => ['default' => []]]], $container);
+        self::assertFalse($container->hasParameter('nowo_chat_kit.page_layout'));
         self::assertNull($container->getParameter('nowo_chat_kit.web_ui.layout_template'));
         self::assertSame('@NowoChatKitBundle/page.html.twig', $container->getParameter('nowo_chat_kit.web_ui.templates.page'));
         self::assertTrue($container->getParameter('nowo_chat_kit.web_ui.assets'));
         self::assertFalse($container->getParameter('nowo_chat_kit.web_ui.page.full_height'));
-
-        $container = new ContainerBuilder();
-        (new NowoChatKitExtension())->load([['profiles' => ['default' => ['page_layout' => 'base.html.twig']]]], $container);
-        self::assertSame('base.html.twig', $container->getParameter('nowo_chat_kit.page_layout'));
     }
 
     public function testPrependIsNoopWithoutFrameworkExtension(): void

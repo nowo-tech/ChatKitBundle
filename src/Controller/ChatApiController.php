@@ -9,12 +9,9 @@ use DateInterval;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use JsonException;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -29,6 +26,9 @@ use Nowo\ChatKitBundle\Model\ChatContact;
 use Nowo\ChatKitBundle\Model\ChatLinkPreview;
 use Nowo\ChatKitBundle\Model\ChatReference;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
+use Nowo\ChatKitBundle\Port\ChatRealtimePort;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Realtime\ChatRecipients;
@@ -109,7 +109,7 @@ final class ChatApiController extends AbstractController
      * (send, action, typing, buzz per conversation, buzz per minute, read, reference search).
      *
      * @param ClockInterface $clock Clock for the realtime token expiry
-     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
+     * @param ChatCurrentUserPort|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      * @param ChatMessageActions|null $menu 1.35: save for later, mark unread, message info; null offers none
      * @param ChatForwarder|null $forwarder 1.36: forward; null offers none
      * @param ChatThreads|null $threads 1.36: threads; null offers none
@@ -121,7 +121,7 @@ final class ChatApiController extends AbstractController
         private readonly ChatPresenter $presenter,
         private readonly ChatAccess $access,
         private readonly ChatDirectoryInterface $directory,
-        private readonly ChatChannelProviderInterface $channels,
+        private readonly ChatChannelPort $channels,
         private readonly ChatConversationRepository $conversations,
         private readonly ChatMessageRepository $messages,
         private readonly ChatParticipantRepository $participants,
@@ -130,7 +130,7 @@ final class ChatApiController extends AbstractController
         private readonly ChatNotifier $notifier,
         private readonly ChatPresence $presence,
         private readonly ChatRecipients $recipients,
-        private readonly ChatRealtimeInterface $realtime,
+        private readonly ChatRealtimePort $realtime,
         private readonly ChatSupportInbox $supportInbox,
         private readonly ChatLinkPreviewProviderInterface $linkPreviews,
         private readonly ChatSupportTickets $tickets,
@@ -151,7 +151,7 @@ final class ChatApiController extends AbstractController
         private readonly ChatReferences $references,
         private readonly ClockInterface $clock = new Clock(),
         private readonly ?ChatQuickReplyRepository $quickReplies = null,
-        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly ?ChatCurrentUserPort $currentUser = null,
         private readonly ?ChatMessageActions $menu = null,
         private readonly ?ChatForwarder $forwarder = null,
         private readonly ?ChatThreads $threads = null,
@@ -1726,7 +1726,7 @@ final class ChatApiController extends AbstractController
     private function chatUser(): ChatUserInterface
     {
         $user = $this->getUser();
-        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
+        $user = $this->currentUser instanceof ChatCurrentUserPort ? $this->currentUser->resolve($user) : $user;
         $this->deny(!$user instanceof ChatUserInterface || !$this->access->isReachable($user), 'unauthorized', Response::HTTP_UNAUTHORIZED);
         assert($user instanceof ChatUserInterface);
 

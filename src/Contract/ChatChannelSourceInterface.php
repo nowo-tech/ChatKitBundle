@@ -9,11 +9,11 @@ use Nowo\ChatKitBundle\Model\ChatRequestContext;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
 /**
- * 1.27: framework-free twin of ChatChannelProviderInterface (REQ-ARCH-001 rules 1 and 3): the same questions, with the
- * page request as a ChatRequestContext instead of the HttpFoundation `Request`. Alias ChatChannelProviderInterface (or
- * this interface) to a service that implements it; the bundle asks it through an internal gate. A service that also
- * implements the deprecated ChatChannelProviderInterface is asked through that one, exactly as in 1.26. The optional
- * companions (ChatChannelWritePolicyInterface, ChatChannelMentionPolicyInterface) work on it as on the provider.
+ * 1.27: framework-free twin of the 1.x ChatChannelProviderInterface (REQ-ARCH-001 rules 1 and 3): the same questions,
+ * with the page request as a ChatRequestContext instead of the HttpFoundation `Request`. 2.0: the only host interface
+ * of the channel port (ChatChannelProviderInterface was removed). Alias this interface to a service that implements it;
+ * the bundle asks it through an internal gate. The optional companions (ChatChannelWritePolicyInterface,
+ * ChatChannelMentionPolicyInterface) are read on the same service.
  */
 interface ChatChannelSourceInterface
 {

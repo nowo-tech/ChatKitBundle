@@ -6,14 +6,13 @@ namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Port\ChatChannelSourceGate;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Port\ChatParticipantResolverGate;
+use Nowo\ChatKitBundle\Port\ChatRealtimePort;
 use Nowo\ChatKitBundle\Port\ChatRealtimeTransportGate;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
-use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
@@ -33,16 +32,17 @@ use const JSON_THROW_ON_ERROR;
 /**
  * 1.27 (REQ-ARCH-001 rules 1 and 3): the same host answers given through the framework-free twins
  * (tests/Support/TwinPorts: ChatChannelSourceInterface with its companions, ChatRealtimeTransportInterface,
- * ChatParticipantResolverInterface) produce exactly what the 1.26 ports produce: the dock configuration (page channel
- * included), the realtime endpoint, channel access and writes, the write and @channel policies, the voter, and the
- * guests and strangers refused. Each scenario runs once on a kernel with the 1.26 ports and once on a kernel with the
- * twins only; the observations are compared.
+ * ChatParticipantResolverInterface) produce exactly what the bundle's defaults and test implementations produce: the
+ * dock configuration (page channel included), the realtime endpoint, channel access and writes, the write and @channel
+ * policies, the voter, and the guests and strangers refused. Each scenario runs once on the default kernel (2.0: the
+ * channel source and the realtime transport through their twins, the bundle's default current-user resolver) and once
+ * on a kernel with the twin resolver too; the observations are compared.
  */
 final class ChatTwinPortsEquivalenceTest extends TestCase
 {
     private string $lastUuid = '';
 
-    public function testTheTwinsAnswerLikeTheDeprecatedPorts(): void
+    public function testTheTwinResolverAnswersLikeTheDefault(): void
     {
         $legacy = $this->scenario(false);
         $twin   = $this->scenario(true);
@@ -59,9 +59,9 @@ final class ChatTwinPortsEquivalenceTest extends TestCase
         try {
             $container = $kernel->getContainer()->get('test.service_container');
             assert($container instanceof ContainerInterface);
-            self::assertInstanceOf(ChatChannelSourceGate::class, $container->get(ChatChannelProviderInterface::class));
-            self::assertInstanceOf(ChatRealtimeTransportGate::class, $container->get(ChatRealtimeInterface::class));
-            self::assertInstanceOf(ChatParticipantResolverGate::class, $container->get(CurrentChatUserResolverInterface::class));
+            self::assertInstanceOf(ChatChannelSourceGate::class, $container->get(ChatChannelPort::class));
+            self::assertInstanceOf(ChatRealtimeTransportGate::class, $container->get(ChatRealtimePort::class));
+            self::assertInstanceOf(ChatParticipantResolverGate::class, $container->get(ChatCurrentUserPort::class));
         } finally {
             $kernel->shutdown();
         }
@@ -73,9 +73,10 @@ final class ChatTwinPortsEquivalenceTest extends TestCase
         try {
             $container = $legacy->getContainer()->get('test.service_container');
             assert($container instanceof ContainerInterface);
-            self::assertInstanceOf(TestChannelProvider::class, $container->get(ChatChannelProviderInterface::class));
-            self::assertInstanceOf(RecordingRealtime::class, $container->get(ChatRealtimeInterface::class));
-            self::assertInstanceOf(SecurityChatUserResolver::class, $container->get(CurrentChatUserResolverInterface::class));
+            // 2.0: the channel source and the realtime transport are always twins; the resolver is the bundle default.
+            self::assertInstanceOf(ChatChannelSourceGate::class, $container->get(ChatChannelPort::class));
+            self::assertInstanceOf(ChatRealtimeTransportGate::class, $container->get(ChatRealtimePort::class));
+            self::assertInstanceOf(SecurityChatUserResolver::class, $container->get(ChatCurrentUserPort::class));
         } finally {
             $legacy->shutdown();
         }

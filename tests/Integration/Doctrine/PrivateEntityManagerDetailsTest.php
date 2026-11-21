@@ -18,6 +18,7 @@ use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use PHPUnit\Framework\Attributes\Group;
 use RuntimeException;
 
 use function count;
@@ -27,11 +28,12 @@ use function count;
  * savepoint bookkeeping through the connection, mirrored SQL filters, a source that does not map the chat, the
  * registry's other managers, and a savepoint whose own rollback fails.
  */
+#[Group('private-manager')]
 final class PrivateEntityManagerDetailsTest extends DatabaseTestCase
 {
-    protected function chatKitConfig(): array
+    protected function hostFixtures(): bool
     {
-        return ['profiles' => ['default' => ['doctrine' => ['private_entity_manager' => true]]]];
+        return true;
     }
 
     public function testOnlyTheWrappedPropertyIsMagic(): void

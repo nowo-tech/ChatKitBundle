@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Unit\Security;
 
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -28,7 +28,7 @@ final class ChatAccessMemoTest extends TestCase
         $user = $this->createStub(ChatUserInterface::class);
         $user->method('getId')->willReturn(7);
         $requests = new RequestStack();
-        $access   = new ChatAccess($policy, $this->createStub(ChatChannelProviderInterface::class), $this->createStub(ChatDirectoryInterface::class), $requests);
+        $access   = new ChatAccess($policy, $this->createStub(ChatChannelPort::class), $this->createStub(ChatDirectoryInterface::class), $requests);
 
         $requests->push(Request::create('/a'));
         self::assertTrue($access->isSupportAgent($user));
@@ -55,7 +55,7 @@ final class ChatAccessMemoTest extends TestCase
         $directory->expects(self::exactly(4))->method('findByIds')
             ->willReturnCallback(static fn (array $ids): array => array_values(array_filter([$ana, $luis], static fn (ChatUserInterface $user): bool => in_array($user->getId(), $ids, true))));
         $requests = new RequestStack();
-        $access   = new ChatAccess($this->createStub(ChatAccessPolicyInterface::class), $this->createStub(ChatChannelProviderInterface::class), $directory, $requests);
+        $access   = new ChatAccess($this->createStub(ChatAccessPolicyInterface::class), $this->createStub(ChatChannelPort::class), $directory, $requests);
         $direct   = ChatConversation::direct($ana, $luis);
 
         $requests->push(Request::create('/a'));

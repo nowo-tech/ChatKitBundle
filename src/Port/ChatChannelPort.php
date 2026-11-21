@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Nowo\ChatKitBundle\Contract;
+namespace Nowo\ChatKitBundle\Port;
 
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
- * Group conversations defined by the application (e.g. one channel per project). Optional: the default
- * provider has no channels.
+ * 2.0: the channel provider as the bundle asks it inside (the 1.x `ChatChannelPort`, removed in 2.0). Not a host
+ * extension point: applications implement ChatChannelSourceInterface (the bundle wraps it in its gate, {@see Ports}); the bundle's
+ * own defaults implement this interface directly.
  *
- * @deprecated since 1.27, implement ChatChannelSourceInterface instead (no HttpFoundation / Security types, REQ-ARCH-001 rule 3); removed
- *             in 2.0. A service implementing this interface keeps working unchanged until then.
+ * @internal
  */
-interface ChatChannelProviderInterface
+interface ChatChannelPort
 {
     /**
      * Channels the user can use (listed in the dock).

@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Controller;
 
 use DateTimeImmutable;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Form\ChatMessageSearchType;
 use Nowo\ChatKitBundle\Http\ChatApiException;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Search\ChatMessageSearch;
 use Nowo\ChatKitBundle\Search\ChatMessageSearchHit;
 use Nowo\ChatKitBundle\Search\ChatMessageSearchPage;
@@ -55,11 +55,11 @@ final class ChatSearchController extends AbstractController
      * @param ChatAccess $access Reachability of the signed-in participant
      * @param RateLimiterFactoryInterface $searchLimiter `limits.searches_per_minute`
      * @param string|null $webUiLayout Layout of the page (`web_ui.layout_template`); null = nowo_ui_kit.layouts.admin
-     * @param string|null $layout Deprecated 1.x layout (`page_layout`)
+     * @param string|null $layout @deprecated since 2.0, ignored (the 1.x `page_layout`, removed in 2.0); removed in 3.0
      * @param bool $assets Whether the page prints the nowo-chat.css tag (`web_ui.assets`)
      * @param bool $fullHeight Whether the page fills the host content area (`web_ui.page.full_height`)
      * @param int $maxQueryLength `search.max_query_length` (the input's maxlength)
-     * @param CurrentChatUserResolverInterface|null $currentUser The signed-in user's chat participant
+     * @param ChatCurrentUserPort|null $currentUser The signed-in user's chat participant
      */
     public function __construct(
         private readonly ChatMessageSearch $search,
@@ -68,15 +68,14 @@ final class ChatSearchController extends AbstractController
         private readonly RateLimiterFactoryInterface $searchLimiter,
         #[Autowire(param: 'nowo_chat_kit.web_ui.layout_template')]
         private readonly ?string $webUiLayout = null,
-        #[Autowire(param: 'nowo_chat_kit.page_layout')]
-        private readonly ?string $layout = null,
+        ?string $layout = null,
         #[Autowire(param: 'nowo_chat_kit.web_ui.assets')]
         private readonly bool $assets = true,
         #[Autowire(param: 'nowo_chat_kit.web_ui.page.full_height')]
         private readonly bool $fullHeight = false,
         #[Autowire(param: 'nowo_chat_kit.search.max_query_length')]
         private readonly int $maxQueryLength = 200,
-        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly ?ChatCurrentUserPort $currentUser = null,
     ) {
     }
 
@@ -105,7 +104,7 @@ final class ChatSearchController extends AbstractController
         $back = $this->backHref($request);
 
         return $this->render('@NowoChatKitBundle/search.html.twig', [
-            'layout'                => $this->webUiLayout ?? $this->layout,
+            'layout'                => $this->webUiLayout,
             'header'                => ChatPage::searchHeader(new BackLink($back, new Label('chat_search.back', ChatPage::BUNDLE), 'chat-search-back')),
             'back'                  => $back,
             'filters_active'        => $this->filtersActive($request),
@@ -297,7 +296,7 @@ final class ChatSearchController extends AbstractController
     private function participant(): ?ChatUserInterface
     {
         $user = $this->getUser();
-        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
+        $user = $this->currentUser instanceof ChatCurrentUserPort ? $this->currentUser->resolve($user) : $user;
 
         return $user instanceof ChatUserInterface && $this->access->isReachable($user) ? $user : null;
     }

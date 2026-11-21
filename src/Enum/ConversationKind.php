@@ -12,7 +12,7 @@ enum ConversationKind: string
     /** 1:1 between two people allowed by the access policy. */
     case Direct = 'direct';
 
-    /** An application-defined group conversation (ChatChannelProviderInterface). */
+    /** An application-defined group conversation (ChatChannelSourceInterface). */
     case Channel = 'channel';
 
     /** One user's thread with the shared support inbox. */

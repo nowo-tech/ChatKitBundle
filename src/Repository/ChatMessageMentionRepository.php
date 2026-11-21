@@ -153,7 +153,7 @@ class ChatMessageMentionRepository extends ServiceEntityRepository
      * user owns (any thread for an agent). Deleted messages never count.
      *
      * @param ChatUserInterface $user The mentioned user
-     * @param list<string> $channelKeys Channels the user may use today (ChatChannelProviderInterface::channelsFor())
+     * @param list<string> $channelKeys Channels the user may use today (ChatChannelPort::channelsFor())
      * @param bool $supportAgent Whether the user answers the support inbox
      * @param int $limit Maximum rows
      * @param bool $unreadOnly Only unread mentions

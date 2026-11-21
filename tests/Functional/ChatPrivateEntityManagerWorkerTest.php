@@ -9,6 +9,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Doctrine\QueryCounter;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -30,6 +31,7 @@ use const JSON_THROW_ON_ERROR;
  * conversations, the private manager is dropped after every request, an application change left pending in the
  * application's manager is never flushed by a chat write, and memory stays within MEMORY_MARGIN after WARM_UP_ROUNDS.
  */
+#[Group('private-manager')]
 final class ChatPrivateEntityManagerWorkerTest extends DatabaseTestCase
 {
     private const int ROUNDS = 300;
@@ -44,9 +46,13 @@ final class ChatPrivateEntityManagerWorkerTest extends DatabaseTestCase
     protected function chatKitConfig(): array
     {
         return ['profiles' => ['default' => [
-            'limits'   => ['send_per_minute' => 10_000, 'actions_per_minute' => 10_000, 'reads_per_minute' => 10_000],
-            'doctrine' => ['private_entity_manager' => true],
+            'limits' => ['send_per_minute' => 10_000, 'actions_per_minute' => 10_000, 'reads_per_minute' => 10_000],
         ]]];
+    }
+
+    protected function hostFixtures(): bool
+    {
+        return true;
     }
 
     protected function setUp(): void

@@ -10,6 +10,7 @@ use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\ChatKitBundle\Tests\Support\Transaction\HostEntityManagerRunner;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * 1.30 (audit QD-M3, ported from the audit's PoC with the assertion inverted): with `doctrine.private_entity_manager:
@@ -17,6 +18,7 @@ use Nowo\ChatKitBundle\Tests\Support\Transaction\HostEntityManagerRunner;
  * `wrapInTransaction()` on it), a chat write still never flushes or commits the application's pending work
  * (REQ-ARCH-001 rule 6): ChatKit runs it on its own manager.
  */
+#[Group('private-manager')]
 final class HostRunnerPrivateManagerTest extends DatabaseTestCase
 {
     protected function hostTransactionRunner(): bool
@@ -24,9 +26,9 @@ final class HostRunnerPrivateManagerTest extends DatabaseTestCase
         return true;
     }
 
-    protected function chatKitConfig(): array
+    protected function hostFixtures(): bool
     {
-        return ['profiles' => ['default' => ['doctrine' => ['private_entity_manager' => true]]]];
+        return true;
     }
 
     public function testAChatWriteNeverCommitsTheApplicationsPendingWork(): void

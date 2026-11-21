@@ -657,7 +657,6 @@ final readonly class ChatPersonalData
                 }
             }
             if ($changed) {
-                ChatKitWrites::beforeFlush($this->transactions, $this->entityManager);
                 $this->entityManager->flush();
             }
             foreach ($loaded as $message) {

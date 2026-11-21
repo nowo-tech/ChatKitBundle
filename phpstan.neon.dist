@@ -17,6 +17,8 @@ parameters:
     excludePaths:
         - demo/*
         - vendor/*
+        # 2.0 (W1-1): host classes on the port interfaces removed in 2.0, for the kernel test of the build error.
+        - tests/Fixtures/RemovedPorts/*
     reportUnmatchedIgnoredErrors: false
     treatPhpDocTypesAsCertain: false
     # 1.30 (Beacon spec 239): PhpStanFrankenPhp 1.4 worker load-readiness rules (ruleset-worker.neon is already
@@ -26,4 +28,12 @@ parameters:
         flagFlushInHandWrittenTransaction: true
         flagUnboundedRecursion: true
         flagFlushWithoutClosedManagerRecovery: true
-    ignoreErrors: []
+    ignoreErrors:
+        # 2.0: the 1.x `page_layout` constructor arguments stay in the signatures, ignored, until 3.0 (removing a
+        # positional argument nobody announced would be a break).
+        -
+            identifier: constructor.unusedParameter
+            paths:
+                - src/Controller/ChatPageController.php
+                - src/Controller/ChatSearchController.php
+                - src/Twig/ChatDockExtension.php

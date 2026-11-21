@@ -26,6 +26,7 @@ use Throwable;
 
 use function array_keys;
 use function array_sum;
+use function get_debug_type;
 use function in_array;
 use function is_a;
 use function is_array;
@@ -36,8 +37,8 @@ use function ksort;
 use function sprintf;
 
 /**
- * ChatKit's private entity manager (1.27, REQ-ARCH-001 rule 6; opt-in with
- * `nowo_chat_kit.profiles.<profile>.doctrine.private_entity_manager: true` until 2.0). Adapted from TaskBoardBundle 2.15.0
+ * ChatKit's private entity manager (1.27, REQ-ARCH-001 rule 6; opt-in in 1.x, the only mode since 2.0). Adapted from
+ * TaskBoardBundle 2.15.0
  * and AuthKitBundle 1.46.0 (audits NV, NJ-2, NJV-1, NF-2, NF2-2, NF3-2, NF-7) with audit NZ's repository factory.
  *
  * Up to 1.26 the bundle wrote its rows through the application's default manager: every chat write flushed whatever the
@@ -311,8 +312,14 @@ final class ChatKitEntityManager extends EntityManagerDecorator implements Reset
     /**
      * Host objects on chat rows that the private manager does not hold become the private manager's reference to the
      * same id. Only to-one associations of ChatKit entities (new or managed) to classes outside the bundle are looked
-     * at (the chat entities declare no cascade-persist association); an object without an identifier (not saved yet) is
-     * left alone, so Doctrine reports it exactly as before.
+     * at (the chat entities declare no cascade-persist association). 2.0 (audit lesson W1-2, XS-I1 / XS-I2): the id is
+     * taken from the unit of work of the application's manager that holds the object (never by loading an uninitialised
+     * proxy), only an instance of the association's target is accepted, and an object that cannot be referenced fails
+     * before anything is flushed: one the application has not saved yet (scheduled for insert, or never persisted), or
+     * whose row the private manager cannot see (an STI row of another subclass, deleted or filtered). Doctrine's
+     * misleading "A new entity was found through the relationship" error is never reached.
+     *
+     * @throws LogicException When a host object on a chat row cannot be referenced by the private manager
      */
     private function adoptForeignReferences(EntityManagerInterface $manager): void
     {
@@ -336,13 +343,63 @@ final class ChatKitEntityManager extends EntityManagerDecorator implements Reset
                 if (!is_object($value) || $manager->contains($value)) {
                     continue;
                 }
-                $target = $manager->getClassMetadata($value::class);
-                $id     = $target->getIdentifierValues($value);
-                if ($id !== [] && !in_array(null, $id, true)) {
-                    $metadata->setFieldValue($entity, $field, $manager->getReference($target->getName(), $id));
-                }
+                $metadata->setFieldValue($entity, $field, $this->foreignReference($value, $mapping->targetEntity, $metadata->getName() . '::$' . $field));
             }
         }
+    }
+
+    /**
+     * The private manager's reference to the row of a host object on a chat row (before a flush, and for the rows
+     * {@see ChatKitRows} writes through DBAL).
+     *
+     * @param object $value The host object on the chat row
+     * @param string $targetEntity The association's target class
+     * @param string $where The chat field, for the message
+     *
+     * @throws LogicException When the object cannot be referenced (wrong class, not saved yet, row not visible)
+     *
+     * @return object The private manager's instance (a reference) of the same row
+     */
+    public function foreignReference(object $value, string $targetEntity, string $where): object
+    {
+        $manager = $this->live();
+        if (!$value instanceof $targetEntity) {
+            throw new LogicException(sprintf('ChatKit cannot write %s: it holds a %s, which is not a %s.', $where, get_debug_type($value), $targetEntity));
+        }
+        $target = $manager->getClassMetadata($value::class);
+        $id     = $this->hostIdentifier($value) ?? $target->getIdentifierValues($value);
+        if ($id === [] || in_array(null, $id, true)) {
+            throw new LogicException(sprintf('ChatKit cannot write %s: the %s it points at is not saved yet (persisted but not flushed, or never persisted). Flush your own entity manager first, then call the chat; ChatKit never flushes it.', $where, $target->getName()));
+        }
+        // The root of an inheritance hierarchy: Doctrine then reads the row (its subclass), and finds nothing when the
+        // row is gone or filtered, instead of a proxy of the subclass the host's object happens to have.
+        $reference = $manager->getReference($target->rootEntityName, $id);
+        if (!$reference instanceof $targetEntity) {
+            throw new LogicException(sprintf('ChatKit cannot write %s: no %s with that identifier is visible to its entity manager (deleted, filtered, or a row of another subclass).', $where, $target->getName()));
+        }
+
+        return $reference;
+    }
+
+    /**
+     * The identifier of a host object as the application's manager holding it knows it: its identity-map entry, an
+     * empty list when that manager has it scheduled for insert (not saved yet), null when no manager of the registry
+     * holds it (the mapped id fields are read then).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function hostIdentifier(object $value): ?array
+    {
+        $host = $this->registry->getManagerForClass($value::class);
+        if (!$host instanceof EntityManagerInterface || !$host->isOpen()) {
+            return null;
+        }
+        $unitOfWork = $host->getUnitOfWork();
+        if ($unitOfWork->isScheduledForInsert($value)) {
+            return [];
+        }
+
+        return $unitOfWork->isInIdentityMap($value) ? $unitOfWork->getEntityIdentifier($value) : null;
     }
 
     /**
@@ -413,7 +470,7 @@ final class ChatKitEntityManager extends EntityManagerDecorator implements Reset
     {
         $source = $this->registry->getManager($this->sourceManagerName);
         if (!$source instanceof EntityManagerInterface || $source->getMetadataFactory()->isTransient(ChatMessage::class)) {
-            throw new LogicException(sprintf('The Doctrine entity manager "%s" (nowo_chat_kit doctrine.entity_manager, the source of doctrine.private_entity_manager) does not map %s.', $this->sourceManagerName, ChatMessage::class));
+            throw new LogicException(sprintf('The Doctrine entity manager "%s" (nowo_chat_kit doctrine.entity_manager, the source of the bundle\'s private entity manager) does not map %s.', $this->sourceManagerName, ChatMessage::class));
         }
 
         return $source;

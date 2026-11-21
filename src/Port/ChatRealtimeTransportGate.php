@@ -5,17 +5,16 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Port;
 
 use DateTimeImmutable;
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeTransportInterface;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
- * 1.27: asks a host ChatRealtimeTransportInterface where the bundle asks the deprecated ChatRealtimeInterface.
+ * 1.27: asks a host ChatRealtimeTransportInterface where the bundle asks its internal ChatRealtimePort.
  * Exceptions propagate. Stateless.
  *
  * @internal built by {@see Ports}
  */
-final readonly class ChatRealtimeTransportGate implements ChatRealtimeInterface
+final readonly class ChatRealtimeTransportGate implements ChatRealtimePort
 {
     /**
      * @param ChatRealtimeTransportInterface $transport The host's twin

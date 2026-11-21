@@ -17,6 +17,7 @@ use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use PHPUnit\Framework\Attributes\Group;
 use Psr\Log\AbstractLogger;
 use RuntimeException;
 use Stringable;
@@ -29,11 +30,12 @@ use function assert;
  * dropped changes logged by class and count only), the rollback bookkeeping, the savepoints that rethrow the original
  * exception, and the repositories (the bundle's service repositories, others per manager).
  */
+#[Group('private-manager')]
 final class PrivateEntityManagerPartsTest extends DatabaseTestCase
 {
-    protected function chatKitConfig(): array
+    protected function hostFixtures(): bool
     {
-        return ['profiles' => ['default' => ['doctrine' => ['private_entity_manager' => true]]]];
+        return true;
     }
 
     public function testTheRegistryRoutesOnlyTheChatEntitiesAndTheSourceName(): void

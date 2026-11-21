@@ -20,21 +20,21 @@ use function sprintf;
 use function str_starts_with;
 
 /**
- * 1.27 (`doctrine.private_entity_manager: true`, REQ-ARCH-001 rule 6): every service of the bundle (a class of the
+ * 1.27 (REQ-ARCH-001 rule 6; since 2.0 always): every service of the bundle (a class of the
  * `Nowo\ChatKitBundle\` namespace, its inline definitions included) that was given the source entity manager
  * (`doctrine.entity_manager`, whether explicitly, through `doctrine.orm.entity_manager` or by autowiring
  * `EntityManagerInterface`) gets {@see ChatKitEntityManager} instead, and the Doctrine registry (`doctrine`,
  * `ManagerRegistry`) becomes {@see ChatKitManagerRegistry}. Host services are never touched: the application's manager
  * is still the one they get. Adapted from TaskBoardBundle 2.15.0.
  *
- * Runs after autowiring (before the removing passes), so autowired arguments are rewritten too. Without the option the
- * parameter is false and nothing changes.
+ * Runs after autowiring (before the removing passes), so autowired arguments are rewritten too. A container without the
+ * bundle's extension (no parameter) is left alone.
  *
  * @internal
  */
 final class PrivateEntityManagerReferencesPass implements CompilerPassInterface
 {
-    /** Whether `doctrine.private_entity_manager` is true. */
+    /** Whether the private manager is wired (always true since 2.0; kept for host code that reads it). */
     public const string PARAMETER = 'nowo_chat_kit.doctrine.private_entity_manager';
 
     /** `doctrine.entity_manager`: the source of the private manager. */

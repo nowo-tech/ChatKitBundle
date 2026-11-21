@@ -6,7 +6,6 @@ namespace Nowo\ChatKitBundle\Controller;
 
 use InvalidArgumentException;
 use JsonException;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
 use Nowo\ChatKitBundle\Entity\ChatMessageLink;
@@ -14,6 +13,7 @@ use Nowo\ChatKitBundle\Http\ChatApiException;
 use Nowo\ChatKitBundle\Link\ChatLinks;
 use Nowo\ChatKitBundle\Model\ChatLinkProvider;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Repository\ChatConversationLinkRepository;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
@@ -64,7 +64,7 @@ final class ChatLinksController extends AbstractController
      * @param ChatConversationLinkRepository $pinned Finds a pinned link of the conversation
      * @param RateLimiterFactoryInterface $actionLimiter Budget of the changes
      * @param RateLimiterFactoryInterface $readLimiter Budget of the reads
-     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
+     * @param ChatCurrentUserPort|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      */
     public function __construct(
         private readonly ChatLinks $links,
@@ -75,7 +75,7 @@ final class ChatLinksController extends AbstractController
         private readonly RateLimiterFactoryInterface $actionLimiter,
         #[Autowire(service: 'limiter.nowo_chat_read')]
         private readonly RateLimiterFactoryInterface $readLimiter,
-        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly ?ChatCurrentUserPort $currentUser = null,
     ) {
     }
 
@@ -245,7 +245,7 @@ final class ChatLinksController extends AbstractController
     private function chatUser(): ChatUserInterface
     {
         $user = $this->getUser();
-        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
+        $user = $this->currentUser instanceof ChatCurrentUserPort ? $this->currentUser->resolve($user) : $user;
         $this->deny(!$user instanceof ChatUserInterface || !$this->access->isReachable($user), 'unauthorized', Response::HTTP_UNAUTHORIZED);
         assert($user instanceof ChatUserInterface);
 

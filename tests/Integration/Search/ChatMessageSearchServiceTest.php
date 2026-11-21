@@ -6,7 +6,6 @@ namespace Nowo\ChatKitBundle\Tests\Integration\Search;
 
 use DateTimeImmutable;
 use Nowo\ChatKitBundle\Command\ChatSearchBackfillCommand;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Controller\ChatSearchController;
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
@@ -14,6 +13,7 @@ use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Search\ChatMessageSearch;
 use Nowo\ChatKitBundle\Search\ChatMessageSearchHit;
@@ -163,7 +163,7 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
         $make   = fn (ChatDirectoryInterface $directory, int $days): ChatMessageSearch => new ChatMessageSearch(
             $this->get(ChatMessageSearchSql::class),
             $this->get(ChatAccess::class),
-            $this->get(ChatChannelProviderInterface::class),
+            $this->get(ChatChannelPort::class),
             $directory,
             $this->get(ChatMessageRepository::class),
             $this->get(ChatPresenter::class),
@@ -279,7 +279,7 @@ final class ChatMessageSearchServiceTest extends DatabaseTestCase
         self::assertNull($provider->searchPage($this->searchQuery($ana, 'roadmap'), 3, 1));
         self::assertNull($provider->searchPage($this->searchQuery($ana, 'roadmap'), 0, 1));
         self::assertNull($provider->searchPage($this->searchQuery($ana, 'roadmap'), 2, 5), 'page 1 was not full: there is no page 2');
-        self::assertNull($provider->searchPage($this->searchQuery($ana, 'roadmap'), ChatMessageSearchProvider::MAX_PAGE + 1, 1));
+        self::assertNull($provider->searchPage($this->searchQuery($ana, 'roadmap'), 4, 1));
         self::assertCount(2, $provider->searchPage($this->searchQuery($ana, 'roadmap'), 1, 10)->items ?? []);
 
         // Recents: re-checked now, same URL only.

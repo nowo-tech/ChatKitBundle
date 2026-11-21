@@ -17,6 +17,6 @@ nowo_chat_kit:
                 threads: { enabled: true }
                 edit_history: { enabled: true }
             # The full-page chat (/chat/) renders in nowo_ui_kit.layouts.admin (web_ui.layout_template: null);
-            # REQ-UI-003 — the 1.x page_layout option is deprecated.
+            # REQ-UI-003 — the 1.x page_layout option was removed in 2.0.
             # web_ui:
             #     layout_template: null
