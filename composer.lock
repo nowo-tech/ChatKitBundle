@@ -1240,16 +1240,16 @@
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v2.58.1",
+            "version": "v2.61.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "1b4fc0130612c03de3313a879080165f9f76cd0f"
+                "reference": "d447ef040dfb7e52d221eb888735b9eb40a53bb8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/1b4fc0130612c03de3313a879080165f9f76cd0f",
-                "reference": "1b4fc0130612c03de3313a879080165f9f76cd0f",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/d447ef040dfb7e52d221eb888735b9eb40a53bb8",
+                "reference": "d447ef040dfb7e52d221eb888735b9eb40a53bb8",
                 "shasum": ""
             },
             "require": {
@@ -1296,7 +1296,8 @@
                 "symfony/validator": "Colour validation in the optional appearance forms"
             },
             "bin": [
-                "bin/nowo-ui-token-lint"
+                "bin/nowo-ui-token-lint",
+                "bin/nowo-ui-demo-style-lint"
             ],
             "type": "symfony-bundle",
             "autoload": {
@@ -1338,8 +1339,8 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-11-18T15:42:30+00:00",
-            "published-time": "2026-11-18T15:45:49+00:00"
+            "time": "2026-11-20T22:14:25+00:00",
+            "published-time": "2026-11-20T22:17:13+00:00"
         },
         {
             "name": "psr/cache",
