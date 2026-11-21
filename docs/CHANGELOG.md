@@ -224,9 +224,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+2.0.0 (REQ-ARCH-001, rules 3 and 6): only what 1.x announced as deprecated is removed. An application that runs 1.40 with
+no deprecation from `nowo-tech/chat-kit-bundle` and no "flushed by NowoChatKitBundle" entry upgrades without code
+changes. See [UPGRADING](UPGRADING.md#unreleased).
+
+### Removed
+
+- **BREAKING:** the 1.x shared-manager mode (`profiles.<name>.doctrine.private_entity_manager` unset or `false`; deprecated since 1.27 / 1.39). ChatKit always reads and writes its rows through its own private entity manager and never flushes, clears or closes the application's. `private_entity_manager: false` (in any profile) fails the container build; `true` is accepted as a deprecated no-op until 3.0.
+- **BREAKING:** the host-flush probe (`Doctrine\ChatHostFlushProbe`, 1.39) and the "Your pending changes to … were flushed by NowoChatKitBundle" deprecations: a change of yours that a chat write used to flush is no longer written by ChatKit. `ChatKitTransactionRunner` and `ChatMentions` keep their `$hostFlushProbe` constructor argument, ignored (deprecated, removed in 3.0); `ChatKitTransactionRunner::beforeHostFlush()` is a deprecated no-op. `NowoChatKitExtension::unsetPrivateEntityManagerMessage()` and the internal `ChatKitWrites::beforeFlush()` are gone.
+- **BREAKING:** `Contract\ChatChannelProviderInterface`, `Contract\ChatRealtimeInterface` and `Contract\CurrentChatUserResolverInterface` (deprecated since 1.27, notices since 1.39). Implement `ChatChannelSourceInterface`, `ChatRealtimeTransportInterface` and `ChatParticipantResolverInterface` and alias those ids. A service still on a removed interface fails the container build, naming it (an alias or a decorator of the removed id, `onInvalid: ignore` included, or a class implementing it, autodiscovered or not), instead of being dropped silently. The bundle's defaults (`NullChannelProvider`, `MercureChatRealtime`, `NullChatRealtime`, `SecurityChatUserResolver`) now implement internal port interfaces with the same methods.
+- **BREAKING:** `profiles.<name>.page_layout` (deprecated since 1.5), the templates `page_legacy.html.twig` and `page_layout.html.twig`, `Configuration::LEGACY_PAGE_LAYOUT`, `ChatPageController::LEGACY_TEMPLATE` and the Twig global `nowo_chat_kit_page_layout`. Setting `page_layout` fails the container build with a message naming `web_ui.layout_template`. The `$layout` / `$pageLayout` constructor arguments of `ChatPageController`, `ChatSearchController` and `ChatDockExtension` stay, ignored (deprecated, removed in 3.0).
+- **BREAKING:** `SearchKit\ChatMessageSearchProvider::MAX_PAGE` (deprecated since 1.38, unused): `search_kit.messages.max_candidates` bounds the results page.
+- `Doctrine\ChannelKeyCollationListener::postGenerateSchemaTable()` (a deprecated no-op since 1.40.1, no longer subscribed). The `postGenerateSchema` listener and its foreign-key regression test stay.
+
 ### Changed
 
-- Demo: runs in UiKit's demo platform shell (`nowo-tech/ui-kit-bundle` ^2.60; shared top bar, aside, page header and section cards; no demo stylesheet or `<style>`). Demo only, no bundle change.
+- **BREAKING:** the private entity manager is the default and only mode (was opt-in with `doctrine.private_entity_manager: true` since 1.27). Users read from chat rows are the private manager's instances (compare by id); chat rows you load through your own manager are re-loaded by id when you hand them to ChatKit; a chat row loaded through ChatKit's repositories and flushed with your manager is not saved.
+- A host object on a chat row (the user of a message, participant, reaction, support ticket…) is written as the private manager's reference to the id your manager knows, without loading an uninitialised proxy. A user you persisted but did not flush yet, or never persisted, now fails with a `LogicException` ("… is not saved yet … Flush your own entity manager first") before anything is written, also for the rows ChatKit writes through DBAL (participants), instead of Doctrine's "A new entity was found through the relationship" error or a NOT NULL violation; so does an object that is not an instance of the association's target, and, with a single-table-inheritance `user_class`, a user whose row ChatKit cannot see (deleted, filtered or of another subclass) instead of a silent null.
+- Demo: runs in UiKit's demo platform shell (`nowo-tech/ui-kit-bundle` ^2.60; shared top bar, aside, page header and section cards; no demo stylesheet or `<style>`); its channel provider implements `ChatChannelSourceInterface`.
+- CI: runs on the `1.x` maintenance branch too. The "Suite replay (private entity manager)" job (the 1.x replay of the whole suite with the option on) now runs the private-manager and cross-manager tests (group `private-manager`) with `--fail-on-skipped`; the whole suite runs with the private manager in every PHP cell.
+
+### Security
+
+- 1.x support: after 2.0.0 is released the 1.x line receives security fixes for 6 months (Moderate and above backported to the last 1.x minor; Low fixed in 2.x only). `.github/SECURITY.md` lists both lines.
 
 ## [1.40.2] - 2026-11-21
 

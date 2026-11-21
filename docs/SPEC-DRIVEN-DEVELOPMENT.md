@@ -29,7 +29,7 @@ The IDs match the user scenarios of the baseline spec ([`specs/001-baseline/spec
 | --- | --- | --- |
 | US-01 | **As an** integrator, **I want** to install the bundle, point it at my user entity and implement two contracts **so that** signed-in, reachable users get the dock. | [INSTALLATION](INSTALLATION.md#requirements) ([user entity](INSTALLATION.md#your-user-entity), [routes](INSTALLATION.md#routes), [database](INSTALLATION.md#database), [contracts](INSTALLATION.md#contracts-to-implement), [render the dock](INSTALLATION.md#render-the-dock)) · [CONFIGURATION — Profiles](CONFIGURATION.md#profiles) · [USAGE — Contracts](USAGE.md#contracts) |
 | US-02 | **As a** user, **I want** direct messages with the people I may reach (unread counts, reactions, receipts, edit / delete window) **so that** I can talk one to one. | [USAGE — Conversations and permissions](USAGE.md#conversations-and-permissions) · [USAGE — JSON API](USAGE.md#json-api) · [CONFIGURATION — Rate limits](CONFIGURATION.md#rate-limits) |
-| US-03 | **As a** project member, **I want** application channels (e.g. one per project) **so that** the whole team shares one conversation. | [USAGE — `ChatChannelProviderInterface`](USAGE.md#chatchannelproviderinterface-optional) · [USAGE — Conversations and permissions](USAGE.md#conversations-and-permissions) |
+| US-03 | **As a** project member, **I want** application channels (e.g. one per project) **so that** the whole team shares one conversation. | [USAGE — `ChatChannelSourceInterface`](USAGE.md#chatchannelsourceinterface-optional) · [USAGE — Conversations and permissions](USAGE.md#conversations-and-permissions) |
 | US-04 | **As a** user, **I want** to write to "Support" **so that** any agent can answer, resolve and reopen my thread from a shared inbox. | [USAGE — Support inbox](USAGE.md#support-inbox) · [USAGE — Opening conversations from your pages](USAGE.md#opening-conversations-from-your-pages) · [USAGE — Events](USAGE.md#events) |
 | US-05 | **As a** user, **I want** typing indicators, presence, read receipts, buzzes and sounds across tabs **so that** the chat feels live. | [INSTALLATION — Realtime (Mercure)](INSTALLATION.md#realtime-mercure) · [USAGE — User settings](USAGE.md#user-settings) · [USAGE — Timeouts](USAGE.md#timeouts) · [CONFIGURATION — Reference](CONFIGURATION.md#reference) (`realtime`, `cache_pool`, `presence_ttl`) |
 | US-06 | **As a** user, **I want** Web Push when no tab is visible and an email digest of what stays unread **so that** I do not miss messages nor get notified twice. | [USAGE — Web Push](USAGE.md#web-push) · [USAGE — Email digest](USAGE.md#email-digest) · [USAGE — Messenger](USAGE.md#messenger-retries-and-failures) · [CONFIGURATION — Reference](CONFIGURATION.md#reference) (`push`, `digest.*`) |
@@ -50,7 +50,7 @@ The IDs match the user scenarios of the baseline spec ([`specs/001-baseline/spec
 
 **In scope**
 
-- Direct messages, application channels (`ChatChannelProviderInterface`) and a support inbox (agents, resolve / reopen, context, events).
+- Direct messages, application channels (`ChatChannelSourceInterface`) and a support inbox (agents, resolve / reopen, context, events).
 - JSON API for the dock and a server-rendered full-page chat (Symfony Form, works without JavaScript).
 - Realtime through Mercure private topics (polling fallback), presence, typing, read receipts, buzz, reactions, edit / delete window.
 - Web Push and an unread-messages email digest through Messenger; link previews through the host's provider.

@@ -10,7 +10,7 @@
 - [Retention from the application (1.31)](#retention-from-the-application-131)
 - [Retention from a runtime setting (1.32)](#retention-from-a-runtime-setting-132)
 - [Rate limits](#rate-limits)
-- [Private entity manager (1.27)](#private-entity-manager-127)
+- [Private entity manager](#private-entity-manager)
 - [Container parameters](#container-parameters)
 - [Timeouts](#timeouts)
 - [CSRF token ids](#csrf-token-ids)
@@ -99,8 +99,8 @@ nowo_chat_kit:
 | `profiles.<name>.doctrine.table_name_prefix` | string | `nowo_chat_` | Replaces the `nowo_chat_` part of every bundle table, index and unique-constraint name (non-empty; lowercase letters, digits, `_`). `chat_` gives `chat_conversation`, `chat_message`, `idx_chat_message_created`, `uniq_chat_message_uuid`, …; the Doctrine-generated `IDX_*` / `FK_*` names follow the new table names. See [Table names](#table-names). |
 | `profiles.<name>.doctrine.table_prefix` | string | `''` | Prepended to every bundle table, index and unique-constraint name **after** `table_name_prefix` is applied (lowercase letters, digits, `_`). `app_` gives `app_nowo_chat_conversation`, `app_idx_nowo_chat_message_created`, … Generate a migration after changing it. |
 | `profiles.<name>.doctrine.user_reference` | `relation` \| `id` \| `string` | `relation` | 1.24: how the chat tables point at users. `relation` = Doctrine relations to `user_class` with foreign keys (`resolve_target_entities`). `id` = each user column holds the user's id as a string (`VARCHAR(64)`, no foreign key, indexed), users are loaded through `ChatDirectoryInterface::findByIds()` after the rows, `user_class` is not needed and need not be an entity. Global like the table names. Switching needs a migration ([User references](#user-references-124)). |
-| `profiles.<name>.doctrine.entity_manager` | string | `default` | 1.27: the Doctrine entity manager that maps the chat entities: the source of `private_entity_manager` (connection, mapping, caches, events). |
-| `profiles.<name>.doctrine.private_entity_manager` | ?bool | `null` | 1.27 (REQ-ARCH-001 rule 6): `true` = the bundle reads and writes its rows through its own private entity manager, so a chat write never flushes, clears or closes yours ([Private entity manager](#private-entity-manager-127)). `null` (default) = 1.26 behaviour: the chat flushes your default manager (1.39: deprecated, with the host-flush probe listing your pending changes it flushes). `false` = the same, deprecated: `true` becomes the only mode in 2.0. |
+| `profiles.<name>.doctrine.entity_manager` | string | `default` | 1.27: the Doctrine entity manager that maps the chat entities: the source of the bundle's private entity manager (connection, mapping, caches, events). |
+| `profiles.<name>.doctrine.private_entity_manager` | ?bool | `null` | **Deprecated, no effect** (2.0): the bundle always reads and writes its rows through its own private entity manager ([Private entity manager](#private-entity-manager)). `true` is accepted until 3.0 (with a deprecation; remove it); `false` fails the container build. |
 | `profiles.<name>.web_ui.layout_template` | ?string | `null` | Layout the full-page chat extends (REQ-UI-003); `null` = `nowo_ui_kit.layouts.admin`. It must render the UiKit canonical blocks. |
 | `profiles.<name>.web_ui.templates.page` | string | `@NowoChatKitBundle/page.html.twig` | Template of the full-page chat (a host template extending `@!NowoChatKitBundle/page.html.twig` and overriding one block). |
 | `profiles.<name>.web_ui.assets` | bool | `true` | 1.21: `false` = the full-page chat leaves out the `nowo-chat.css` and `nowo-chat.js` tags (your bundler ships them). The dock on your other pages takes its own `nowo_chat_assets: false` ([USAGE](USAGE.md#front-end-iife-or-your-bundler)). |
@@ -110,7 +110,6 @@ nowo_chat_kit:
 | `profiles.<name>.web_ui.message_context_menu` | ?bool | `null` | 1.33: the message context menu (UiKit 2.54): right-click, Shift+F10, the ContextMenu key or a long press on a message opens the items of its **More actions** kebab (Reply, Edit, Copy link, Pin / Unpin, Delete — only those the viewer may use). `null` = follow UiKit's `nowo_ui_kit.theme.context_menus` (your layout's UiKit `scripts` partial then loads the runtime); `true` = always on: the dock loads UiKit's `js/nowo-ui-context-menu.js` itself (UiKit's `nowo_ui_kit` asset package, same origin, CSP nonce of the page's scripts) unless the runtime already runs or the page has a `<script>` for it; `false` = always off (messages keep the browser's menu, even under the theme flag). The kebab is there in every mode. |
 | `profiles.<name>.web_ui.dock.dialog_runtime` | bool | `false` | 1.26: `true` = the dock loads UiKit's remote-dialog runtime (`js/nowo-ui-dialog.js`, UiKit's `nowo_ui_kit` asset package) itself, so the sidebar actions (`dialogUrl`) open as dialogs on every page. Skipped when the runtime already runs or the page has a `<script>` for it (never two copies); the script gets the CSP nonce of the page's own scripts. Needs `symfony/asset` and UiKit's asset package (otherwise nothing is added), served from the same origin (a CDN `base_url` is not loaded). Do not combine it with a layout that appends its own `nowo-ui-dialog.js` after the dock has rendered (two copies would bind the openers twice). `false` = your layout loads it (UiKit document layout or its `scripts` partial). |
 | `profiles.<name>.web_ui.page.full_height` | bool | `false` | 1.21: `true` = the full-page chat fills what is left of the host content area under the page header (class `nowo-chat-page--fill`) instead of the viewport-based `--nowo-chat-page-height`. The content area needs a bounded height ([USAGE](USAGE.md#full-page-chat)). |
-| `profiles.<name>.page_layout` | ?string | `null` | **Deprecated** (use `web_ui.layout_template`): a 1.x layout with the `title`, `stylesheets`, `javascripts` and `body` blocks; while it is the only layout set, the page keeps its 1.x template. |
 | `profiles.<name>.cache_pool` | string | `cache.app` | PSR-6 pool for presence and recipient lists. Share it between workers / replicas. |
 | `profiles.<name>.reactions` | list | `👍 ❤️ 😂 😮 😢 🎉` | Emojis offered as reactions (anything else is refused). |
 | `profiles.<name>.icon_set` | `ux_icon` \| `svg_inline` | `ux_icon` | Dock icons from Symfony UX Icons, or the built-in SVG only. |
@@ -340,19 +339,19 @@ collation: the bundle checks it once per request and refuses to work until the `
 [UPGRADING](UPGRADING.md#to-1280) has run. Integer-id users are refused in this mode (and reference users in `id`
 mode). The `relation` and `id` modes are unchanged.
 
-## Private entity manager (1.27)
+## Private entity manager
 
 ```yaml
 nowo_chat_kit:
     profiles:
         default:
             doctrine:
-                private_entity_manager: true   # default: null (1.26 behaviour)
                 entity_manager: default        # the manager that maps the chat entities
 ```
 
-Up to 1.26 every chat write flushed your default entity manager, so it also wrote whatever your application had left
-pending there, and a failed chat write closed your manager. With `private_entity_manager: true`:
+Opt-in from 1.27 (`private_entity_manager: true`), the only mode since 2.0. Up to 1.26 (and in 1.x without the option)
+every chat write flushed your default entity manager, so it also wrote whatever your application had left pending
+there, and a failed chat write closed your manager. Now:
 
 - every ChatKit service reads and writes through `ChatKitEntityManager`, a private manager created on the connection,
   mapping, caches, proxies and event manager of `entity_manager`. The tables do not move and the Doctrine listeners
@@ -370,18 +369,29 @@ pending there, and a failed chat write closed your manager. With `private_entity
 - the SQL filters enabled on your manager are mirrored on the private one on every call;
 - in `relation` mode, your user objects on chat rows (the security user, a user your code loaded) are replaced on the
   row by the private manager's reference to the same id before each flush; your instance is never written. Users read
-  back from chat rows are the private manager's instances: compare users by id, never with `===`.
+  back from chat rows are the private manager's instances: compare users by id, never with `===`. 2.0: the id is taken
+  from your manager's unit of work (an uninitialised proxy is never loaded for it); a user you persisted but did not
+  flush yet, or never persisted, fails with a `LogicException` ("… is not saved yet … Flush your own entity manager
+  first") before anything is written, and so does one whose row ChatKit cannot see (with a single-table-inheritance
+  `user_class`: deleted, filtered or of another subclass);
+- chat rows you load through **your** manager and hand to the chat services (a route value resolver, your own query)
+  are loaded again by id in the private manager (`ChatNotFoundException` when the row is gone), never inserted again.
+  Your copy is not updated by the chat write;
+- the reverse is not saved: a chat row loaded through ChatKit's repository services (which use the private manager)
+  that you change and then flush with **your** manager is not written (the private manager drops it at the next
+  boundary, with a warning in the log). Change chat rows through the ChatKit services (`ChatServiceInterface`,
+  `ChatMessagingInterface`, …);
+- your own entities may point at chat rows: use `$yourManager->getReference(ChatConversation::class, $id)` (or a row
+  your manager loaded) and flush your manager.
 
-1.39: leaving the option unset is deprecated (it becomes the only mode in 2.0). Until you set it, the host-flush probe
-reports, right before each chat write flushes your manager, every entity class of yours with pending changes in that
-flush (one deprecation per class and request: "Your pending changes to App\X were flushed by NowoChatKitBundle; 2.0 no
-longer does."). The probe only reads, and is off with `private_entity_manager: true`. See
-[UPGRADING](UPGRADING.md#to-1390).
+`private_entity_manager: false` fails the container build since 2.0; `true` is accepted as a deprecated no-op until
+3.0. The 1.39 host-flush probe ("Your pending changes to App\X were flushed by NowoChatKitBundle; 2.0 no longer does.")
+is gone with the mode it reported on; its entries on 1.x are your migration list (see UPGRADING).
 
 ## Container parameters
 
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
-key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `page_layout`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `web_ui.assets`, `web_ui.page.full_height`, `web_ui.page.open_recent` and `web_ui.dock.sidebar_sections` (1.25), `web_ui.dock.dialog_runtime` (1.26), `web_ui.message_context_menu` (1.33), `doctrine.table_prefix`, `doctrine.table_name_prefix`, `doctrine.tables`, `doctrine.table.<key>`,
+key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `web_ui.assets`, `web_ui.page.full_height`, `web_ui.page.open_recent` and `web_ui.dock.sidebar_sections` (1.25), `web_ui.dock.dialog_runtime` (1.26), `web_ui.message_context_menu` (1.33), `doctrine.table_prefix`, `doctrine.table_name_prefix`, `doctrine.tables`, `doctrine.table.<key>`,
 `reactions`, `icon_set`, `icons`, `presence_ttl`, `auto_away_minutes`, `status_presets`, `max_pins`, `auto_reply_interval_hours`, `limits`, `digest`, `support`, `dock`, and `support.<key>` for each support key).
 Since 1.32, `nowo_chat_kit.runtime.retention_days` holds the `runtime.retention_days` setting id (null when not set).
 

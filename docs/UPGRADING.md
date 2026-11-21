@@ -93,6 +93,148 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+```bash
+composer require nowo-tech/chat-kit-bundle:^2.0 -W
+```
+
+2.0 contains only changes that 1.x announced through deprecation notices: an application that runs the last 1.x minor
+without deprecation notices from this bundle upgrades without code changes. After 2.0.0 is released, the 1.x line
+receives security fixes for 6 months: fixes rated Moderate and above are backported to the last 1.x minor; Low ones are
+fixed in 2.x only.
+
+### Before you upgrade
+
+Run your application (or its test suite) on the last 1.x (1.40) and clear every deprecation from
+`nowo-tech/chat-kit-bundle` in your log (the profiler, `var/log/*.deprecations.log`, the container's build log):
+
+- > Not setting "nowo_chat_kit.profiles.default.doctrine.private_entity_manager" is deprecated: chat writes then flush
+  > the application's entity manager, including its pending changes. In 2.0 the private entity manager is the only
+  > mode (as if true). [...]
+
+  and
+
+  > "nowo_chat_kit ... doctrine.private_entity_manager: false" is deprecated: chat writes then flush the application's
+  > entity manager, including its pending changes; the private entity manager becomes the only mode in 2.0. Set it to
+  > true (see UPGRADING.md).
+
+  Set `private_entity_manager: true` on 1.x first (it is accepted in 2.x too) and check the list under "Private manager
+  only" below.
+- > Your pending changes to App\Entity\Order were flushed by NowoChatKitBundle; 2.0 no longer does.
+
+  Every entry is your migration list: a place where your code changed or persisted that class and relied on a chat
+  write to save it. Add your own `flush()` after that change. The entries stop once `private_entity_manager: true` is
+  on (see [To 1.39.0](#to-1390)).
+- > App\Chat\ProjectChannels implements the deprecated Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface,
+  > which is removed in 2.0. Implement Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface instead [...]
+
+  (the same for `ChatRealtimeInterface` and `CurrentChatUserResolverInterface`): move the service to the twin, see
+  "Port interfaces" below.
+- > The "nowo_chat_kit.profiles.default.page_layout" option is deprecated and removed in 2.0 [...]
+
+  Use `web_ui.layout_template` (a layout rendering the UiKit canonical blocks; `null` = `nowo_ui_kit.layouts.admin`).
+- `ChatMessageSearchProvider::MAX_PAGE` has no notice (a constant): search your code for it.
+
+### Default flip: the private entity manager is the only mode
+
+| | 1.x default (option unset) | 2.0 |
+|---|---|---|
+| Entity manager of the chat rows | your default manager (`doctrine.entity_manager`) | ChatKit's private manager, created on the connection, mapping and events of `doctrine.entity_manager` |
+| A chat write flushes your pending changes | yes (with the 1.39 probe notice) | never |
+| A failed chat write closes your manager | yes (replaced at the next request boundary) | never (only the private manager, replaced on the next call) |
+| `private_entity_manager: true` | opt-in | accepted, no effect, deprecated (removed in 3.0) |
+| `private_entity_manager: false` | deprecated | container build error naming the profile |
+
+There is no option to keep the 1.x behaviour. No schema change; the tables stay where they are.
+
+### Removed
+
+| Removed | Deprecated since | Replacement |
+|---|---|---|
+| `profiles.<name>.doctrine.private_entity_manager: false` (and the unset 1.x behaviour) | 1.27 (`false`), 1.39 (unset) | nothing to set: the private manager is the only mode (`true` stays valid until 3.0, with a deprecation) |
+| The host-flush probe (`Doctrine\ChatHostFlushProbe`, internal) and its notices | 1.39 (deprecation layer) | your own `flush()` |
+| `ChatKitTransactionRunner::beforeHostFlush()` (now a no-op) and the `$hostFlushProbe` argument of `ChatKitTransactionRunner` / `ChatMentions` (ignored) | 2.0 (deprecated, removed in 3.0) | nothing |
+| `Contract\ChatChannelProviderInterface` | 1.27 | `Contract\ChatChannelSourceInterface` |
+| `Contract\ChatRealtimeInterface` | 1.27 | `Contract\ChatRealtimeTransportInterface` |
+| `Contract\CurrentChatUserResolverInterface` | 1.27 | `Contract\ChatParticipantResolverInterface` |
+| `profiles.<name>.page_layout` (build error) | 1.5 | `profiles.<name>.web_ui.layout_template` |
+| `page_legacy.html.twig`, `page_layout.html.twig` | 1.5 | `page.html.twig` (override one block through `web_ui.templates.page`) |
+| Twig global `nowo_chat_kit_page_layout` | 1.5 | `web_ui.layout_template` |
+| `Configuration::LEGACY_PAGE_LAYOUT`, `ChatPageController::LEGACY_TEMPLATE` | 1.5 | none |
+| The `$layout` / `$pageLayout` arguments of `ChatPageController`, `ChatSearchController`, `ChatDockExtension` (ignored) | 2.0 (deprecated, removed in 3.0) | none |
+| `SearchKit\ChatMessageSearchProvider::MAX_PAGE` | 1.38 | `search_kit.messages.max_candidates` |
+| `Doctrine\ChannelKeyCollationListener::postGenerateSchemaTable()` | 1.40.1 | none (the listener works on `postGenerateSchema`) |
+
+### Port interfaces
+
+The three ports typed with Symfony classes keep only their 1.27 twins:
+
+| Removed | Implement and alias instead | Change |
+|---|---|---|
+| `ChatChannelProviderInterface` | `ChatChannelSourceInterface` | `contextChannel(ChatUserInterface $user, ChatRequestContext $page)`: read `$page->path`, `$page->route`, `$page->routeParam('slug')`, `$page->query` instead of the `Request` |
+| `ChatRealtimeInterface` | `ChatRealtimeTransportInterface` | `browserHubUrl(ChatRequestContext $request)`: `$request->origin()` is `Request::getSchemeAndHttpHost()` |
+| `CurrentChatUserResolverInterface` | `ChatParticipantResolverInterface` | `resolve(?ChatSecurityUser $user)`: map `$user->identifier` (or `$user->id`) to the participant; the security user object is not passed |
+
+```yaml
+# config/services.yaml
+Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface: '@App\Chat\ProjectChannels'
+```
+
+Keep the write and mention policies (`ChatChannelWritePolicyInterface`, `ChatChannelMentionPolicyInterface`) on the
+same class. The container build fails, naming the service and the interface to implement, when a service still uses a
+removed interface: an alias or a service under the removed id (`#[AsAlias]` included), a decorator of the removed id
+(`#[AsDecorator]`, `decorates:`, also with `onInvalid: ignore`), or a class that implements it (autodiscovered, or behind
+a twin's alias). Symfony would otherwise drop such a service silently, and the chat would fall back to its default (no
+channels, no realtime transport of yours, no participant mapping). **A decorator of a removed id has no replacement
+hook of that id:** decorate your own twin service instead (or the twin's id, which you alias). The bundle's defaults
+(`NullChannelProvider`, `MercureChatRealtime`, `NullChatRealtime`, `SecurityChatUserResolver`) are no longer instances
+of the removed interfaces; decorate your twin rather than them.
+
+### Configuration, templates and the Twig global
+
+- `profiles.<name>.page_layout` fails the container build. Move the layout to `profiles.<name>.web_ui.layout_template`
+  (a layout rendering the UiKit canonical blocks); the 1.x template `page_legacy.html.twig` and its default document
+  `page_layout.html.twig` are gone, and so is the Twig global `nowo_chat_kit_page_layout`. A host override of
+  `templates/bundles/NowoChatKitBundle/page_legacy.html.twig` is no longer rendered: port it to a one-block override of
+  `page.html.twig` ([TEMPLATES](TEMPLATES.md)).
+
+### Private manager only
+
+The 1.27 "Check after enabling it" list, now unconditional:
+
+- **Your pending changes are no longer flushed by ChatKit.** A change of yours that was only stored because a ChatKit
+  write flushed your manager is no longer stored: typically in a listener of a ChatKit event, a port of yours (a channel
+  source, a directory, a policy that writes), or code that changes an entity and then calls a ChatKit service. Flush it
+  yourself. The 1.39 probe entries are the list.
+- **The reverse is not saved either.** Host code that loads a chat row through a ChatKit repository service (it uses
+  the private manager), changes it and flushes its own manager saves nothing: the private manager drops the change at
+  the next boundary with only a warning in the log. Change chat rows through the ChatKit services
+  (`ChatServiceInterface`, `ChatMessagingInterface`, …).
+- **Chat rows you load through your own manager** (a route value resolver, your own query) are loaded again by id when
+  you hand them to ChatKit, never inserted again; a row deleted meanwhile throws `ChatNotFoundException`. Your copy is
+  not updated by the chat write.
+- **Users read from chat rows are the private manager's instances**: compare users by id (`getId()`), never with
+  `===`. Events that take a user from your call (`ChatMessageDeletedEvent::$by`, …) still hand you your own instance.
+- **Your user on a chat row** (the security user, a user your code loaded, an uninitialised proxy) is written as the
+  private manager's reference to the id your manager knows; your instance is never written. A user you persisted but
+  did not flush yet, or never persisted, fails with a `LogicException` ("… is not saved yet … Flush your own entity
+  manager first") before anything is written: flush your user first. With a single-table-inheritance `user_class`, a
+  user whose row ChatKit cannot see (deleted, filtered or of another subclass) fails clearly too.
+- **Your entities pointing at chat rows** (a ManyToOne to `ChatConversation`, …): use
+  `$entityManager->getReference(ChatConversation::class, $id)` (or a row your manager loaded) and flush your manager.
+- **Ports of yours that wrote through the shared manager** must commit their own change: a custom
+  `ChatDirectoryInterface`, policy or listener that only changed a managed entity of yours and relied on the chat's
+  flush now has to flush (or run its own unit of work).
+- Inside your own transaction the chat rows are part of it (shared connection); the bundle's own writes run in
+  savepoints.
+
+`doctrine.entity_manager` keeps its meaning: the manager that maps the chat entities, the source of the private one.
+
+### Unchanged
+
+Retention and the purge, GDPR export and erasure, search visibility (page, API, SearchKit palette), Web Push, the
+Mercure topics, the realtime resync, the conflict answers (409 + `Retry-After`, `CONFLICT_001` / `CONFLICT_002`), the
+tables and their names.
+
 ## To 1.40.2
 
 From **1.40.0**:

@@ -106,8 +106,9 @@ php bin/console doctrine:migrations:migrate
 | --- | --- | --- | --- |
 | `ChatDirectoryInterface` | yes | — | Find users by public id / ids, the people picker contacts, the support agents |
 | `ChatAccessPolicyInterface` | yes | — | Reachable accounts, support agents, who may message whom |
-| `ChatChannelProviderInterface` | no | no channels | Group conversations of your application (e.g. one per project) |
-| `ChatRealtimeInterface` | no | Mercure when a hub is configured, else polling only | Realtime transport |
+| `ChatChannelSourceInterface` | no | no channels | Group conversations of your application (e.g. one per project) |
+| `ChatRealtimeTransportInterface` | no | Mercure when a hub is configured, else polling only | Realtime transport |
+| `ChatParticipantResolverInterface` | no | the security user when it implements `ChatUserInterface` | Maps the signed-in user to the chat participant |
 | `ChatPushSenderInterface` | no | no push | Web Push delivery |
 | `ChatLinkPreviewProviderInterface` | no | no cards | Previews of links to your application, checked per viewer |
 | `ChatDigestSenderInterface` | no | no email | Email of the conversations still unread |

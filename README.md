@@ -110,7 +110,8 @@ Full guide: [docs/INSTALLATION.md](docs/INSTALLATION.md) · options: [docs/CONFI
 
 | Version | PHP | Symfony | Status |
 | --- | --- | --- | --- |
-| 1.x | 8.3 – 8.5 | 7.4, 8.0, 8.1+ | Supported (bug and security fixes) |
+| 2.x | 8.3 – 8.5 | 7.4, 8.0, 8.1+ | Supported (bug and security fixes) |
+| 1.x | 8.3 – 8.5 | 7.4, 8.0, 8.1+ | Security fixes (Moderate and above) until 6 months after 2.0.0 |
 
 ## Demo
 

@@ -31,7 +31,7 @@ business chat is expected to offer. It is a plan, not a commitment: every item b
 
 ## Where we are (1.34.1, 1.35 merged, 1.36 planned)
 
-- **Conversations:** direct (1:1, access policy), application channels from `ChatChannelProviderInterface` (title,
+- **Conversations:** direct (1:1, access policy), application channels from `ChatChannelSourceInterface` (title,
   subtitle, icon, read-only), support tickets; archive / close in one's own list, archive all read, deep links,
   floating dock and full-page chat (no JavaScript needed), grouped sidebar with host sections.
 - **Messages:** Markdown subset (bold, italic, strikethrough, code and fenced code, links, quotes, lists) with a
