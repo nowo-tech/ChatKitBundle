@@ -124,6 +124,9 @@ final class BundleBootTest extends TestCase
         foreach ($deprecations as $message) {
             self::assertDoesNotMatchRegularExpression('/NowoChatKitBundle\.alias\b.*deprecated/i', $message);
         }
+        // 2.0: the default configuration raises no deprecation of this bundle at all (1.39 announced the unset
+        // private_entity_manager here; this assertion also keeps the test from being risky without any deprecation).
+        self::assertSame([], array_values(array_filter($deprecations, static fn (string $message): bool => str_contains($message, 'nowo-tech/chat-kit-bundle') || str_contains($message, 'nowo_chat_kit'))));
     }
 
     public function testPrependIgnoresEnvValuesItDoesNotNeed(): void
