@@ -8,106 +8,77 @@ use Doctrine\ORM\EntityManagerInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerReferencesPass;
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
-use Nowo\ChatKitBundle\Doctrine\ChatHostFlushProbe;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\PrivateEntityManagerMiddleware;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Deprecation\DeprecationRecorder;
 use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
-use Nowo\TransactionDoctrine\HostFlushProbe;
-use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\Argument\IteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
-use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 
 /**
- * 1.27: `doctrine.private_entity_manager` — the services it registers, the deprecation of an explicit false, the
- * references pass (bundle services only) and the middleware's connection.
+ * 1.27: the private entity manager — the services it registers, the references pass (bundle services only) and the
+ * middleware's connection. 2.0: the only mode; `doctrine.private_entity_manager: false` fails the build, `true` is a
+ * deprecated no-op.
  */
 final class PrivateEntityManagerConfigTest extends TestCase
 {
-    private const string SINCE = 'Since nowo-tech/chat-kit-bundle 1.39: ';
-
-    #[IgnoreDeprecations]
-    public function testTheDefaultRegistersNothing(): void
+    /** 2.0: without the option the private manager is registered (the only mode), with no notice. */
+    public function testTheDefaultRegistersThePrivateManager(): void
     {
-        $this->expectUserDeprecationMessage(self::SINCE . NowoChatKitExtension::unsetPrivateEntityManagerMessage('default'));
-        $container = $this->load([]);
+        [$container, $messages] = DeprecationRecorder::record('nowo-tech/chat-kit-bundle', fn (): ContainerBuilder => $this->load([]));
 
-        self::assertFalse($container->getParameter(PrivateEntityManagerReferencesPass::PARAMETER));
+        self::assertSame([], $messages);
+        self::assertTrue($container->getParameter(PrivateEntityManagerReferencesPass::PARAMETER));
         self::assertSame('default', $container->getParameter(PrivateEntityManagerReferencesPass::SOURCE_PARAMETER));
-        self::assertFalse($this->registered($container, ChatKitEntityManager::class));
-        self::assertFalse($this->registered($container, ChatKitManagerRegistry::class));
+        self::assertTrue($this->registered($container, ChatKitEntityManager::class));
+        self::assertTrue($this->registered($container, ChatKitManagerRegistry::class));
+        $runner = $container->getDefinition(ChatKitTransactionRunner::SERVICE_ID);
+        self::assertSame('%' . PrivateEntityManagerReferencesPass::SOURCE_PARAMETER . '%', $runner->getArgument(2));
+        self::assertTrue($runner->getArgument(3));
+        self::assertCount(6, $runner->getArguments(), 'no host-flush probe');
+        $memos = $container->getDefinition('Nowo\\ChatKitBundle\\Worker\\ChatRequestBoundaryListener')->getArgument('$memos');
+        self::assertInstanceOf(IteratorArgument::class, $memos);
+        self::assertNotContains('Nowo\\ChatKitBundle\\Doctrine\\ChatHostFlushProbe', array_map(strval(...), $memos->getValues()));
+        self::assertFalse($container->hasDefinition('Nowo\\ChatKitBundle\\Doctrine\\ChatHostFlushProbe'));
     }
 
-    #[IgnoreDeprecations]
-    public function testAnExplicitFalseIsDeprecated(): void
+    /** 2.0: an explicit false fails the build, naming the profile, in any profile (not only the default one). */
+    public function testAnExplicitFalseFailsTheBuildNamingTheProfile(): void
     {
-        $this->expectUserDeprecationMessageMatches('/private_entity_manager: false" is deprecated/');
-        $container = $this->load(['private_entity_manager' => false]);
-        self::assertFalse($this->registered($container, ChatKitEntityManager::class));
-    }
-
-    /** 1.39: unset is deprecated (once per container build), with the option, the 2.0 default and the line to set. */
-    #[IgnoreDeprecations]
-    public function testUnsetIsDeprecated(): void
-    {
-        [, $messages] = DeprecationRecorder::record('private_entity_manager', fn (): ContainerBuilder => $this->load([]));
-
-        self::assertSame([self::SINCE . NowoChatKitExtension::unsetPrivateEntityManagerMessage('default')], $messages);
-        self::assertStringContainsString('Not setting "nowo_chat_kit.profiles.default.doctrine.private_entity_manager" is deprecated', $messages[0]);
-        self::assertStringContainsString('In 2.0 the private entity manager is the only mode', $messages[0]);
-        self::assertStringContainsString('"nowo_chat_kit: { profiles: { default: { doctrine: { private_entity_manager: true } } } }"', $messages[0]);
-
-        $container = new ContainerBuilder();
-        $container->setParameter('kernel.secret', 'x');
-        [, $named] = DeprecationRecorder::record('private_entity_manager', static fn () => (new NowoChatKitExtension())->load([['default_profile' => 'chat', 'profiles' => ['chat' => ['user_class' => 'App\\User']]]], $container));
-        self::assertSame([self::SINCE . NowoChatKitExtension::unsetPrivateEntityManagerMessage('chat')], $named, 'the default profile is named');
-    }
-
-    /** 1.39: an explicit true triggers no deprecation; an explicit false only its 1.27 one. */
-    #[IgnoreDeprecations]
-    public function testExplicitValuesKeepTheirNotices(): void
-    {
-        [, $true]  = DeprecationRecorder::record('private_entity_manager', fn (): ContainerBuilder => $this->load(['private_entity_manager' => true]));
-        [, $false] = DeprecationRecorder::record('private_entity_manager', fn (): ContainerBuilder => $this->load(['private_entity_manager' => false]));
-
-        self::assertSame([], $true);
-        self::assertCount(1, $false);
-        self::assertStringContainsString('private_entity_manager: false" is deprecated', $false[0]);
-    }
-
-    /** 1.39: the host-flush probe service, its boundary reset and the runner's use of it; off with the private manager. */
-    #[IgnoreDeprecations]
-    public function testTheHostFlushProbeIsWiredAndResetAtEveryBoundary(): void
-    {
-        foreach ([[], ['private_entity_manager' => true]] as $doctrine) {
-            $container = $this->load($doctrine);
-            $probe     = $container->getDefinition(ChatHostFlushProbe::class);
-            $shared    = $probe->getArgument(0);
-            self::assertInstanceOf(Reference::class, $shared);
-            self::assertSame(HostFlushProbe::SERVICE_ID, (string) $shared);
-            self::assertSame(ContainerInterface::NULL_ON_INVALID_REFERENCE, $shared->getInvalidBehavior());
-            self::assertSame('%' . PrivateEntityManagerReferencesPass::PARAMETER . '%', $probe->getArgument(1));
-            self::assertSame(($doctrine['private_entity_manager'] ?? null) === true, $container->getParameter(PrivateEntityManagerReferencesPass::PARAMETER));
-            self::assertTrue($probe->hasTag('kernel.reset'));
-            $runner = $container->getDefinition(ChatKitTransactionRunner::SERVICE_ID)->getArgument(6);
-            self::assertInstanceOf(Reference::class, $runner);
-            self::assertSame(ChatHostFlushProbe::class, (string) $runner);
-            $memos = $container->getDefinition('Nowo\\ChatKitBundle\\Worker\\ChatRequestBoundaryListener')->getArgument('$memos');
-            self::assertInstanceOf(IteratorArgument::class, $memos);
-            self::assertContains(ChatHostFlushProbe::class, array_map(strval(...), $memos->getValues()));
+        foreach (['default' => [['profiles' => ['default' => ['user_class' => 'App\\User', 'doctrine' => ['private_entity_manager' => false]]]]], 'second' => [['profiles' => ['default' => ['user_class' => 'App\\User'], 'second' => ['user_class' => 'App\\User', 'doctrine' => ['private_entity_manager' => false]]]]]] as $profile => $configs) {
+            $container = new ContainerBuilder();
+            $container->setParameter('kernel.secret', 'x');
+            try {
+                DeprecationRecorder::record('private_entity_manager', static fn () => (new NowoChatKitExtension())->load($configs, $container));
+                self::fail('false must fail the build');
+            } catch (InvalidConfigurationException $failure) {
+                self::assertSame(NowoChatKitExtension::privateEntityManagerFalseMessage($profile), $failure->getMessage());
+                self::assertStringContainsString('"nowo_chat_kit.profiles.' . $profile . '.doctrine.private_entity_manager: false" is no longer supported', $failure->getMessage());
+                self::assertStringContainsString('UPGRADING.md, "To 2.0.0"', $failure->getMessage());
+            }
         }
     }
 
-    public function testTrueRegistersThePrivateManagerAndTheBoundaryDropsItLast(): void
+    /** 2.0 (owner answer Q4): an explicit true is accepted as a deprecated no-op until 3.0. */
+    public function testAnExplicitTrueIsADeprecatedNoOp(): void
     {
-        $container = $this->load(['private_entity_manager' => true, 'entity_manager' => 'chat']);
+        [$container, $messages] = DeprecationRecorder::record('private_entity_manager', fn (): ContainerBuilder => $this->load(['private_entity_manager' => true]));
+
+        self::assertSame(['Since nowo-tech/chat-kit-bundle 2.0: The "nowo_chat_kit.profiles.default.doctrine.private_entity_manager" option has no effect since 2.0 (the private entity manager is the only mode); remove it.'], $messages);
+        self::assertTrue($container->getParameter(PrivateEntityManagerReferencesPass::PARAMETER));
+        self::assertTrue($this->registered($container, ChatKitEntityManager::class));
+    }
+
+    public function testThePrivateManagerIsCreatedOnTheSourceAndTheBoundaryDropsItLast(): void
+    {
+        $container = $this->load(['entity_manager' => 'chat']);
 
         self::assertTrue($container->getParameter(PrivateEntityManagerReferencesPass::PARAMETER));
         self::assertSame('chat', $container->getParameter(PrivateEntityManagerReferencesPass::SOURCE_PARAMETER));

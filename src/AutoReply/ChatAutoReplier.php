@@ -134,7 +134,6 @@ final readonly class ChatAutoReplier
         if (!$stored instanceof DateTimeImmutable || $now > $stored) {
             $conversation->touch($now);
         }
-        ChatKitWrites::beforeFlush($this->transactions, $this->entityManager);
         $this->entityManager->flush();
         // The replier has read up to their own automatic reply.
         $participant->markReadUpTo((int) $reply->getId());

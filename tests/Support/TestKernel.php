@@ -9,12 +9,12 @@ use Doctrine\DBAL\Driver\Connection;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatParticipantResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\Contract\ChatRealtimeTransportInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Nowo\ChatKitBundle\Tests\Support\Chat\CountingAvatarResolver;
@@ -61,10 +61,8 @@ use Symfony\UX\Icons\UXIconsBundle;
 use Twig\Environment;
 use Twig\Extra\TwigExtraBundle\TwigExtraBundle;
 
-use function array_key_exists;
 use function class_exists;
 use function dirname;
-use function is_array;
 use function is_string;
 use function str_repeat;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
@@ -103,10 +101,13 @@ final class TestKernel extends Kernel
         private readonly bool $scriptedRunner = false,
         private readonly bool $runtimeSettings = false,
         private readonly bool $uiKitContextMenus = false,
+        private readonly bool $hostFixtures = false,
+        private readonly ?string $removedPortsFixture = null,
     ) {
         // Own environment for the routing.controllers-only host: its container class must not collide with the
-        // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir).
-        parent::__construct($hostControllersRoutesOnly ? 'test_controllers' : 'test', false);
+        // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir). 2.0: likewise
+        // for the hosts that autodiscover a removed-port fixture (tests/Fixtures/RemovedPorts).
+        parent::__construct($removedPortsFixture !== null ? 'test_removed_ports' : ($hostControllersRoutesOnly ? 'test_controllers' : 'test'), false);
     }
 
     public function registerBundles(): iterable
@@ -143,28 +144,18 @@ final class TestKernel extends Kernel
     }
 
     /**
-     * 1.27: `CHAT_KIT_PRIVATE_EM=1` runs the suite with `doctrine.private_entity_manager: true` (a test's own config wins).
+     * 2.0: whether this kernel writes its fixtures through the application's manager; otherwise through ChatKit's
+     * private manager, as a host using the chat services would write chat rows.
      */
-    public static function privateEntityManager(): bool
+    public function usesHostFixtures(): bool
     {
-        return getenv('CHAT_KIT_PRIVATE_EM') === '1';
+        return $this->hostFixtures;
     }
 
     /**
-     * Whether the replay writes this kernel's fixtures through the private manager.
-     */
-    private function privateEntityManagerConfigured(): bool
-    {
-        $doctrine = $this->chatKitConfig['profiles']['default']['doctrine'] ?? [];
-
-        // A test that sets the option itself (the private-manager tests) keeps the application's manager for its fixtures.
-        return !is_array($doctrine) || !array_key_exists('private_entity_manager', $doctrine);
-    }
-
-    /**
-     * 1.27: `CHAT_KIT_PORTS=twin` runs the suite with the host ports behind their framework-free twins ONLY
-     * (tests/Support/TwinPorts): the channel provider and the realtime transport through the deprecated ids, the
-     * current-user resolver through the twin's own id.
+     * 1.27: `CHAT_KIT_PORTS=twin` runs the suite with the current-user resolver behind its framework-free twin too
+     * (tests/Support/TwinPorts; 2.0: the channel source and the realtime transport always are, the twins being their
+     * only host interfaces).
      */
     public static function twinPorts(): bool
     {
@@ -195,7 +186,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), self::privateEntityManager(), $this->authorBadges, $this->scriptedRunner, $this->runtimeSettings, $this->uiKitContextMenus])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), $this->usesHostFixtures(), $this->authorBadges, $this->scriptedRunner, $this->runtimeSettings, $this->uiKitContextMenus, $this->removedPortsFixture])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -253,7 +244,7 @@ final class TestKernel extends Kernel
             $container->extension('nowo_ui_kit', ['theme' => ['context_menus' => true]]);
         }
         $container->extension('nowo_chat_kit', array_replace_recursive(
-            ['profiles' => ['default' => ['user_class' => TestUser::class, 'doctrine' => (self::userReference() === null ? [] : ['user_reference' => self::userReference()]) + (self::privateEntityManager() ? ['private_entity_manager' => true] : [])]]],
+            ['profiles' => ['default' => ['user_class' => TestUser::class, 'doctrine' => self::userReference() === null ? [] : ['user_reference' => self::userReference()]]]],
             $this->chatKitConfig,
         ));
 
@@ -295,22 +286,22 @@ final class TestKernel extends Kernel
         }
         $services->alias(ChatDirectoryInterface::class, TestDirectory::class);
         $services->alias(ChatAccessPolicyInterface::class, TestAccessPolicy::class);
-        $services->alias(ChatChannelProviderInterface::class, TestChannelProvider::class);
-        $services->alias(ChatRealtimeInterface::class, RecordingRealtime::class);
+        // 2.0: the host ports through their framework-free twins (the only host interfaces), over the recording test
+        // implementations the tests read.
+        $services->set(TwinChannelSource::class);
+        $services->set(TwinRealtime::class);
+        $services->alias(ChatChannelSourceInterface::class, TwinChannelSource::class);
+        $services->alias(ChatRealtimeTransportInterface::class, TwinRealtime::class);
         $services->alias(ChatPushSenderInterface::class, RecordingPushSender::class);
         $services->alias(ChatLinkPreviewProviderInterface::class, TestLinkPreviewProvider::class);
         // 1.16: records the picture batches; answers nothing (like the null default) until a test fills `urls`.
         $services->alias(ChatAvatarUrlResolverInterface::class, CountingAvatarResolver::class);
         $services->alias(self::ASSET_PACKAGES_ALIAS, 'assets.packages');
-        // 1.27 private-manager replay: the fixtures are written through the bundle's private manager, as a host using the
-        // chat services would write chat rows.
-        $services->alias(self::ENTITY_MANAGER_ALIAS, self::privateEntityManager() && $this->privateEntityManagerConfigured() ? ChatKitEntityManager::class : 'doctrine.orm.entity_manager');
+        // 2.0: the fixtures are written through ChatKit's private manager (as a host using the chat services would write
+        // chat rows), or through the application's manager for the tests and the replay that ask for it.
+        $services->alias(self::ENTITY_MANAGER_ALIAS, $this->usesHostFixtures() ? 'doctrine.orm.entity_manager' : ChatKitEntityManager::class);
         if ($this->usesTwinPorts()) {
-            $services->set(TwinChannelSource::class);
-            $services->set(TwinRealtime::class);
             $services->set(TwinParticipantResolver::class);
-            $services->alias(ChatChannelProviderInterface::class, TwinChannelSource::class);
-            $services->alias(ChatRealtimeInterface::class, TwinRealtime::class);
             $services->alias(ChatParticipantResolverInterface::class, TwinParticipantResolver::class);
         }
         // 1.32: the contract's in-memory reference store as the host's source and writer (commands enabled).
@@ -324,6 +315,18 @@ final class TestKernel extends Kernel
                 'command'         => ['enabled' => true],
             ]);
             $services->set(InMemoryRuntimeSettingStore::class);
+        }
+        // 2.0 (W1-1): an application that autodiscovers its services (`App\: resource: ../src/`) from one directory of
+        // tests/Fixtures/RemovedPorts; AliasedToTheTwin registers its class explicitly and aliases the twin's id to it.
+        if ($this->removedPortsFixture !== null) {
+            $namespace = 'Nowo\\ChatKitBundle\\Tests\\Fixtures\\RemovedPorts\\' . $this->removedPortsFixture . '\\';
+            $directory = dirname(__DIR__) . '/Fixtures/RemovedPorts/' . $this->removedPortsFixture . '/';
+            if ($this->removedPortsFixture === 'AliasedToTheTwin') {
+                $container->services()->set($namespace . 'OldChannels');
+                $container->services()->alias(ChatChannelSourceInterface::class, $namespace . 'OldChannels');
+            } else {
+                $container->services()->defaults()->autowire()->autoconfigure()->load($namespace, $directory);
+            }
         }
         $services->set(self::TRANSLATOR_COLLECTOR, DataCollectorTranslator::class)->decorate('translator')->args([service('.inner')]);
     }
@@ -373,7 +376,8 @@ final class TestKernel extends Kernel
             {
                 $tags = [];
                 foreach ($container->getDefinitions() as $id => $definition) {
-                    if (str_starts_with($id, 'Nowo\\ChatKitBundle\\') || str_starts_with($id, 'limiter.nowo_chat')) {
+                    // 2.0: the removed-port fixtures stay private (an unused one is removed as in an application).
+                    if ((str_starts_with($id, 'Nowo\\ChatKitBundle\\') && !str_starts_with($id, 'Nowo\\ChatKitBundle\\Tests\\Fixtures\\')) || str_starts_with($id, 'limiter.nowo_chat')) {
                         $definition->setPublic(true);
                     }
                     foreach (['messenger.message_handler', 'doctrine.event_listener'] as $tag) {

@@ -17,7 +17,6 @@ use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
-use PHPUnit\Framework\Attributes\Group;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 use function sprintf;
@@ -99,8 +98,7 @@ final class ChatMentionsTest extends DatabaseTestCase
         self::assertSame('Hi @Luis and @Eve ops, @Sam,…', $this->get(ChatMarkdownRenderer::class)->plainText($message->getBody(), 29));
     }
 
-    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
-    #[Group('application-manager')]
+    /** 2.0: users are compared by id across managers; a host row is refreshed by clearing the application's manager. */
     public function testEditUpdatesRowsAndNotifiesOnlyNewPeople(): void
     {
         $chat    = $this->get(ChatService::class);
@@ -114,7 +112,7 @@ final class ChatMentionsTest extends DatabaseTestCase
         $chat->edit($message, 'ping ' . $this->token('Luis', $luis) . ' ' . $this->token('Eve', $eve));
         self::assertCount(2, $this->events);
         self::assertTrue($this->events[1]->edited);
-        self::assertSame([$eve], $this->events[1]->users, 'Luis was already notified');
+        self::assertSame([$eve->getId()], self::userIds($this->events[1]->users), 'Luis was already notified');
         self::assertSame([(int) $luis->getId(), (int) $eve->getId()], $this->mentionedIds($message));
 
         $chat->edit($message, 'only ' . $this->token('Eve', $eve));

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Realtime;
 
 use DateTimeImmutable;
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
+use Nowo\ChatKitBundle\Port\ChatRealtimePort;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Jwt\Grant;
@@ -19,7 +19,7 @@ use const JSON_THROW_ON_ERROR;
 /**
  * Default transport when symfony/mercure-bundle is installed: private updates on the default hub.
  */
-final readonly class MercureChatRealtime implements ChatRealtimeInterface
+final readonly class MercureChatRealtime implements ChatRealtimePort
 {
     /**
      * Builds the transport on top of the default Mercure hub.

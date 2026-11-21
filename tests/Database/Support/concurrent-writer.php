@@ -37,6 +37,8 @@ use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 require dirname(__DIR__, 3) . '/vendor/autoload.php';
 
 [, $mode, $calls, $tag, $start] = $argv + [null, 'send', '50', 'a', '0'];
+$warm                           = str_starts_with((string) $mode, 'warm-');
+$mode                           = $warm ? substr((string) $mode, 5) : $mode;
 $menuModes                      = ['menu', 'savecap', 'unread', 'readonly', 'optout'];
 $threadModes                    = ['forward', 'thread', 'edit', 'delreply', 'delroot'];
 $kernel                         = new TestKernel(match (true) {
@@ -66,6 +68,17 @@ $em = static function () use ($registry): EntityManagerInterface {
 
     return $manager;
 };
+// YB-2: `warm-<mode>` boots this kernel config and writes every Doctrine proxy class to the shared cache, so the racing writers
+// never generate proxies concurrently on a cold cache (a half-written proxy file fails the other process's require).
+if ($warm) {
+    foreach ($registry->getManagers() as $manager) {
+        assert($manager instanceof EntityManagerInterface);
+        $manager->getProxyFactory()->generateProxyClasses($manager->getMetadataFactory()->getAllMetadata());
+    }
+    echo json_encode(['ok' => 0, 'failures' => [], 'poisoned' => 0, 'closed' => 0]);
+
+    return;
+}
 while (microtime(true) < (float) $start) {
     usleep(1000);
 }

@@ -12,6 +12,7 @@ use Nowo\ChatKitBundle\Search\ChatSearchIndex;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 
 use function array_diff;
 use function array_filter;
@@ -39,8 +40,8 @@ final class Configuration implements ConfigurationInterface
 
     public const DEFAULT_PROFILE = 'default';
 
-    /** 1.x default of `page_layout`: the bundle's own document, replaced by the UiKit layout (REQ-UI-003). */
-    public const string LEGACY_PAGE_LAYOUT = '@NowoChatKitBundle/page_layout.html.twig';
+    /** 2.0: the build error for the `page_layout` key removed in 2.0 (deprecated since 1.5). */
+    public const string PAGE_LAYOUT_REMOVED = 'nowo_chat_kit: "profiles.<name>.page_layout" was deprecated in 1.5 and removed in 2.0, with the 1.x page template page_legacy.html.twig and the Twig global nowo_chat_kit_page_layout. Use "web_ui.layout_template" (a layout rendering the UiKit canonical blocks; null = nowo_ui_kit.layouts.admin) instead; see UPGRADING.md, "To 2.0.0".';
 
     /** 1.24: `web_ui.channels_url`: a path (one leading slash, no backslash) or an absolute http(s) URL, without spaces or control characters. */
     public const string CHANNELS_URL_PATTERN = '~^(?:/(?![/\\\\])|https?://[^/\\\\\s\x00-\x1F\x7F]+(?:/|\z))[^\s\\\\\x00-\x1F\x7F]*\z~';
@@ -212,6 +213,13 @@ final class Configuration implements ConfigurationInterface
                     ->useAttributeAsKey('name')
                     ->requiresAtLeastOneElement()
                     ->arrayPrototype()
+                        // 2.0: `page_layout` (deprecated since 1.5) is gone; a clear build error instead of "unrecognized option".
+                        ->beforeNormalization()
+                            ->ifTrue(static fn (mixed $profile): bool => is_array($profile) && array_key_exists('page_layout', $profile))
+                            ->then(static function (): never {
+                                throw new InvalidConfigurationException(self::PAGE_LAYOUT_REMOVED);
+                            })
+                        ->end()
                         ->children()
                             ->booleanNode('enabled')
                                 ->info('Render the floating chat dock for this profile.')
@@ -261,7 +269,7 @@ final class Configuration implements ConfigurationInterface
                                 ->end()
                             ->end()
                             ->booleanNode('realtime')
-                                ->info('Push messages, typing, presence and receipts live (needs a ChatRealtimeInterface; Mercure by default).')
+                                ->info('Push messages, typing, presence and receipts live (needs a ChatRealtimeTransportInterface; Mercure by default).')
                                 ->defaultTrue()
                             ->end()
                             ->booleanNode('push')
@@ -306,13 +314,14 @@ final class Configuration implements ConfigurationInterface
                                         ->defaultValue(ChatUserReferences::RELATION)
                                     ->end()
                                     ->scalarNode('entity_manager')
-                                        ->info('1.27: the Doctrine entity manager that maps the chat entities, the source of private_entity_manager (default: "default").')
+                                        ->info('1.27: the Doctrine entity manager that maps the chat entities, the source of the bundle\'s private entity manager (default: "default").')
                                         ->defaultValue('default')
                                         ->cannotBeEmpty()
                                     ->end()
                                     ->booleanNode('private_entity_manager')
-                                        ->info('1.27 (REQ-ARCH-001 rule 6): true = the bundle reads and writes its rows through a private entity manager created on the connection, mapping and events of entity_manager, so a chat write never flushes, clears or closes the application\'s manager. null (default) keeps the 1.26 behaviour (the chat flushes the default manager), deprecated since 1.39; false too, deprecated: true becomes the only mode in 2.0.')
+                                        ->info('2.0: no effect. The bundle always reads and writes its rows through a private entity manager created on the connection, mapping and events of entity_manager, so a chat write never flushes, clears or closes the application\'s manager. false fails the build; true is accepted until 3.0 (deprecated).')
                                         ->defaultNull()
+                                        ->setDeprecated('nowo-tech/chat-kit-bundle', '2.0', 'The "%path%.%node%" option has no effect since 2.0 (the private entity manager is the only mode); remove it.')
                                     ->end()
                                 ->end()
                             ->end()
@@ -390,11 +399,6 @@ final class Configuration implements ConfigurationInterface
                                         ->end()
                                     ->end()
                                 ->end()
-                            ->end()
-                            ->scalarNode('page_layout')
-                                ->info('Deprecated: 1.x layout with the `title`, `stylesheets`, `javascripts` and `body` blocks; when set (and web_ui.layout_template is not), the chat page keeps its 1.x template (page_legacy.html.twig).')
-                                ->defaultNull()
-                                ->setDeprecated('nowo-tech/chat-kit-bundle', '1.5', 'The "%path%.%node%" option is deprecated and removed in 2.0 (with the 1.x page template page_legacy.html.twig and the Twig global nowo_chat_kit_page_layout), use "web_ui.layout_template" (a layout rendering the UiKit canonical blocks; null = nowo_ui_kit.layouts.admin) instead.')
                             ->end()
                             ->scalarNode('cache_pool')
                                 ->info('PSR-6 pool for presence and recipient lists (shared between workers, e.g. Redis).')

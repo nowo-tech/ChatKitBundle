@@ -22,8 +22,8 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 - Side effects run after the commit, never inside the unit: realtime publishes, events, Web Push and digests.
 - After a failure the runner leaves no transaction open and repairs the nesting level (savepoint-aware), and the next
   request of the worker finds a healthy manager.
-- ChatKit never resets, clears or flushes the host's entity manager. With `doctrine.private_entity_manager: true` it
-  writes only through its own manager.
+- ChatKit never resets, clears or flushes the host's entity manager: it writes only through its own private manager
+  (2.0: the only mode).
 
 ## Write paths
 

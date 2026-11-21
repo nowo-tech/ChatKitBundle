@@ -6,7 +6,6 @@ namespace Nowo\ChatKitBundle\Search;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\Query\QueryBuilder;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
 use Nowo\ChatKitBundle\Controller\ChatApiController;
@@ -14,6 +13,7 @@ use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatChannelKey;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
@@ -62,7 +62,7 @@ final readonly class ChatMessageSearch
     /**
      * @param ChatMessageSearchSql $sql The SQL of the search
      * @param ChatAccess $access Reachability, support agents, channels and the final per-row check
-     * @param ChatChannelProviderInterface $channels The channels the viewer belongs to (`channelsFor()`)
+     * @param ChatChannelPort $channels The channels the viewer belongs to (`channelsFor()`)
      * @param ChatDirectoryInterface $directory Resolves the author filter (a public id)
      * @param ChatMessageRepository $messages Loads the matching messages
      * @param ChatPresenter $presenter Conversation titles as the viewer's list shows them
@@ -81,7 +81,7 @@ final readonly class ChatMessageSearch
     public function __construct(
         private ChatMessageSearchSql $sql,
         private ChatAccess $access,
-        private ChatChannelProviderInterface $channels,
+        private ChatChannelPort $channels,
         private ChatDirectoryInterface $directory,
         private ChatMessageRepository $messages,
         private ChatPresenter $presenter,

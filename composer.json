@@ -158,9 +158,6 @@
     "minimum-stability": "stable",
     "prefer-stable": true,
     "extra": {
-        "nowo-package-version": "1.0.0",
-        "branch-alias": {
-            "dev-main": "1.0.x-dev"
-        }
+        "nowo-package-version": "1.0.0"
     }
 }

@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Unit\Security;
 
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelWritePolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\TestCase;
@@ -47,19 +47,19 @@ final class ChatAccessWriteTest extends TestCase
         self::assertFalse($access->canManageLinks($conversation, $user));
         self::assertTrue($access->canView($conversation, $user), 'still readable');
 
-        $writers = $this->createStubForIntersectionOfInterfaces([ChatChannelProviderInterface::class, ChatChannelWritePolicyInterface::class]);
+        $writers = $this->createStubForIntersectionOfInterfaces([ChatChannelPort::class, ChatChannelWritePolicyInterface::class]);
         $writers->method('find')->willReturn(new ChatChannel('project:acme', 'Acme'));
         $writers->method('canUse')->willReturn(true);
         $writers->method('canWrite')->willReturnOnConsecutiveCalls(false, true);
-        assert($writers instanceof ChatChannelProviderInterface);
+        assert($writers instanceof ChatChannelPort);
         $access = new ChatAccess($policy, $writers, $this->createStub(ChatDirectoryInterface::class));
         self::assertFalse($access->canWriteChannel($user, 'project:acme'), 'the provider says no');
         self::assertTrue($access->canWriteChannel($user, 'project:acme'));
     }
 
-    private function provider(ChatChannel $channel): ChatChannelProviderInterface
+    private function provider(ChatChannel $channel): ChatChannelPort
     {
-        $provider = $this->createStub(ChatChannelProviderInterface::class);
+        $provider = $this->createStub(ChatChannelPort::class);
         $provider->method('find')->willReturnCallback(static fn (string $key): ?ChatChannel => $key === $channel->key ? $channel : null);
         $provider->method('canUse')->willReturn(true);
 

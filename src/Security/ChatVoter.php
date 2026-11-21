@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Security;
 
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Service\ChatEditHistory;
 use Nowo\ChatKitBundle\Service\ChatMenuOptions;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
@@ -66,7 +66,7 @@ final class ChatVoter extends Voter
      * @param ChatAccess $access Reachability, agent and channel checks
      * @param ClockInterface $clock Clock used for the edit / delete window
      * @param ChatSupportPolicy|null $support Read-only rule of support tickets; null: tickets never turn read-only
-     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: maps the token's user to the chat participant; null: the user itself when it implements ChatUserInterface
+     * @param ChatCurrentUserPort|null $currentUser 1.24: maps the token's user to the chat participant; null: the user itself when it implements ChatUserInterface
      * @param ChatMessageActions|null $menu 1.35: which message menu items are offered; null: SAVE, MARK_UNREAD and INFO are never granted
      * @param ChatMenuOptions|null $options 1.36: whether forward, threads and edit history are offered; null: FORWARD, THREAD and HISTORY are never granted
      * @param ChatEditHistory|null $history 1.36: who reads previous texts (author, moderators, the application's policy)
@@ -75,7 +75,7 @@ final class ChatVoter extends Voter
         private readonly ChatAccess $access,
         private readonly ClockInterface $clock = new Clock(),
         private readonly ?ChatSupportPolicy $support = null,
-        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly ?ChatCurrentUserPort $currentUser = null,
         private readonly ?ChatMessageActions $menu = null,
         private readonly ?ChatMenuOptions $options = null,
         private readonly ?ChatEditHistory $history = null,
@@ -91,7 +91,7 @@ final class ChatVoter extends Voter
     protected function voteOnAttribute(string $attribute, mixed $subject, TokenInterface $token, ?Vote $vote = null): bool
     {
         $user = $token->getUser();
-        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
+        $user = $this->currentUser instanceof ChatCurrentUserPort ? $this->currentUser->resolve($user) : $user;
 
         return $user instanceof ChatUserInterface && ($subject instanceof ChatConversation || $subject instanceof ChatMessage)
             && $this->decide($attribute, $subject, $user);

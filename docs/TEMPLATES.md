@@ -71,9 +71,9 @@ needs an override.
 ## Layout
 
 `web_ui.layout_template` — default `null` = `nowo_ui_kit.layouts.admin` (the host layout or bridge that renders the
-UiKit canonical blocks). The deprecated `page_layout` (a 1.x layout with `title` / `stylesheets` / `javascripts` /
-`body` blocks) keeps working until 2.0: when it is set and `web_ui.layout_template` is not, the page renders the 1.x
-template `page_legacy.html.twig` (deprecated) in that layout.
+UiKit canonical blocks). 2.0: the 1.x `page_layout` option (deprecated since 1.5), its template
+`page_legacy.html.twig`, `page_layout.html.twig` and the Twig global `nowo_chat_kit_page_layout` were removed; a host
+override of `page_legacy.html.twig` is no longer rendered.
 
 ## Tokens
 

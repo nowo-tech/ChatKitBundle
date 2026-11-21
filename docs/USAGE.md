@@ -73,15 +73,23 @@ public function canMessage(ChatUserInterface $actor, ChatUserInterface $other): 
 
 Evaluated on every request (memoize per request and implement `ResetInterface` for FrankenPHP workers).
 
-### `ChatChannelProviderInterface` (optional)
+### `ChatChannelSourceInterface` (optional)
 
 ```php
 public function channelsFor(ChatUserInterface $user): array;        // list<ChatChannel>
 public function find(string $key): ?ChatChannel;
-public function contextChannel(ChatUserInterface $user, Request $request): ?ChatChannel; // the current page's channel
+public function contextChannel(ChatUserInterface $user, ChatRequestContext $page): ?ChatChannel; // the current page's channel
 public function canUse(ChatUserInterface $user, ChatChannel $channel): bool;
 public function members(ChatChannel $channel): array;               // realtime recipients
 ```
+
+```yaml
+# config/services.yaml
+Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface: '@App\Chat\ProjectChannels'
+```
+
+2.0: the only interface of the channel port (the 1.x `ChatChannelProviderInterface`, deprecated since 1.27, was removed).
+`ChatRequestContext` carries the page's path, route, route parameters and query instead of the `Request`.
 
 `ChatChannel($key, $label)`: a stable key up to 120 characters, e.g. `project:<uuid>`. The channel of the page being
 viewed is offered first in the people picker.
@@ -102,12 +110,12 @@ The dock writes the subtitle and the icon with `textContent`; the API also trims
 separators, bidirectional overrides and zero-width spaces, and cuts them to `ChatChannel::SUBTITLE_MAX_LENGTH` (160) /
 `ICON_MAX_LENGTH` (8) characters.
 
-Two optional interfaces, implemented **by your channel provider** (the class aliased to `ChatChannelProviderInterface`):
+Two optional interfaces, implemented **by your channel source** (the class aliased to `ChatChannelSourceInterface`):
 
 ```php
 // Who may write in a channel they can read (e.g. only admins in an announcements room). Asked on the server for every
 // send, edit, reaction, typing ping, pin and link change; read-only channels never ask it.
-final class RoomChannels implements ChatChannelProviderInterface, ChatChannelWritePolicyInterface, ChatChannelMentionPolicyInterface
+final class RoomChannels implements ChatChannelSourceInterface, ChatChannelWritePolicyInterface, ChatChannelMentionPolicyInterface
 {
     public function canWrite(ChatUserInterface $user, ChatChannel $channel): bool { /* … */ }
 
@@ -144,10 +152,12 @@ sends no Web Push. **No API route creates one**: call it from your own use cases
 $this->chat->postSystemLine($conversation, 'rooms.line.renamed', 'messages', ['actor' => $actor->getName(), 'name' => $room->getName()]);
 ```
 
-### `ChatRealtimeInterface` (optional)
+### `ChatRealtimeTransportInterface` (optional)
 
 `MercureChatRealtime` is used when `symfony/mercure-bundle` has a hub; otherwise `NullChatRealtime` (polling). Implement
-it to reuse your own hub configuration (dynamic URLs, same-origin hub URL…).
+`ChatRealtimeTransportInterface` and alias it to reuse your own hub configuration (dynamic URLs, same-origin hub URL…):
+`browserHubUrl(ChatRequestContext $request)` builds a same-origin URL from `$request->origin()`. 2.0: the only interface
+of the realtime port (the 1.x `ChatRealtimeInterface`, deprecated since 1.27, was removed).
 
 ### `ChatPushSenderInterface` (optional)
 
@@ -279,11 +289,12 @@ message, command, loop iteration): otherwise a long-running process keeps servin
 
 The zero-config path (REQ-ARCH-001): your Doctrine user entity implements `ChatUserInterface` and is mapped through
 `user_class` (`doctrine.user_reference: relation`, the default: real foreign keys to your user table), your security
-user is the chat participant, and your services implement the ports below (`ChatChannelProviderInterface`,
-`ChatRealtimeInterface`, `CurrentChatUserResolverInterface` keep working unchanged in 1.x; their 1.27 twins are
-optional). Call the chat through `ChatServiceInterface` with the bundle's entities, and listen to the events. The
-bundle writes through your default entity manager unless you opt in to its private one
-([CONFIGURATION](CONFIGURATION.md)).
+user is the chat participant, and your services implement the ports below (since 2.0 the channel source, the realtime
+transport and the current-user resolver through their framework-free interfaces only: `ChatChannelSourceInterface`,
+`ChatRealtimeTransportInterface`, `ChatParticipantResolverInterface`). Call the chat through `ChatServiceInterface`
+with the bundle's entities, and listen to the events. The bundle reads and writes its rows through its own private
+entity manager and never flushes yours ([CONFIGURATION](CONFIGURATION.md#private-entity-manager)): flush your own
+changes yourself, and compare users read from chat rows by id.
 
 ## Using it from a DDD / hexagonal application
 
@@ -297,10 +308,11 @@ context, not as part of your domain model.
 
 - Implement the ports in your infrastructure layer, never in domain classes:
   `ChatDirectoryInterface` and `ChatAccessPolicyInterface` (required), and optionally
-  `ChatChannelProviderInterface`, `ChatLinkPolicyInterface`, `ChatPinPolicyInterface`,
+  `ChatChannelSourceInterface`, `ChatLinkPolicyInterface`, `ChatPinPolicyInterface`,
   `ChatPushSenderInterface`, `ChatLinkPreviewProviderInterface`, `ChatDigestSenderInterface`,
   `ChatSupportTopicProviderInterface`, `ChatAvatarUrlResolverInterface`, `ChatReferenceProviderInterface`, and (1.24)
-  `CurrentChatUserResolverInterface`, `ChatChannelWritePolicyInterface`, `ChatChannelMentionPolicyInterface`.
+  `ChatParticipantResolverInterface`, `ChatRealtimeTransportInterface`, `ChatChannelWritePolicyInterface`,
+  `ChatChannelMentionPolicyInterface`.
   They take `ChatUserInterface` and the value objects in `Nowo\ChatKitBundle\Model` (`ChatContact`,
   `ChatChannel`, `ChatReference`, `ChatReferenceScope`, ...), so the adapter translates from your own
   repositories and policies.
@@ -322,23 +334,24 @@ context, not as part of your domain model.
   rules (view, send, pin, edit and delete own messages within the window, resolve for agents); a forbidden conversation
   or message throws the same `ChatNotFoundException` as an unknown one. `can($actor, $conversationUuid, $action,
   $messageUuid)` answers the same question without acting, so you can authorize by uuid without loading entities.
-- 1.27: **framework-free port twins** (REQ-ARCH-001 rule 3). Three ports were typed with Symfony classes; each has a
-  twin that takes a bundle value object instead, and the old interface is deprecated (removed in 2.0):
+- 1.27: **framework-free port twins** (REQ-ARCH-001 rule 3). Three ports were typed with Symfony classes; each got a
+  twin that takes a bundle value object instead. 2.0 removed the old interfaces (deprecated since 1.27); the twins are
+  the only host interfaces of these ports:
 
-  | Deprecated (1.x) | 1.27 twin | Value object instead of |
+  | Removed in 2.0 | Interface to implement | Value object instead of |
   |---|---|---|
   | `ChatChannelProviderInterface` | `ChatChannelSourceInterface` | `ChatRequestContext` (method, scheme, host, port, base path, path, route and its scalar parameters, scalar query parameters, locale; never a header, cookie, session or body) instead of `Request` in `contextChannel()` |
   | `ChatRealtimeInterface` | `ChatRealtimeTransportInterface` | `ChatRequestContext` instead of `Request` in `browserHubUrl()` (`$request->origin()` builds a same-origin URL) |
   | `CurrentChatUserResolverInterface` | `ChatParticipantResolverInterface` | `ChatSecurityUser` (class, id, identifier, roles) instead of `UserInterface` |
 
-  Alias either the old interface id or the twin's id to a service that implements the twin. A service that implements
-  the old interface is asked exactly as before (also when it implements the twin too); a service that implements only
-  the twin is asked through an internal gate; a service that implements neither fails the container build. The
-  optional `ChatChannelWritePolicyInterface` and `ChatChannelMentionPolicyInterface` go on the twin as they went on the
-  provider.
+  Alias the twin's id to a service that implements it; the bundle asks it through an internal gate. A service that does
+  not implement the twin fails the container build, and so does any service still on a removed interface (an alias or
+  a decorator of the removed id, or a class implementing it: Symfony would otherwise drop it silently). The optional
+  `ChatChannelWritePolicyInterface` and `ChatChannelMentionPolicyInterface` go on the channel source.
 - 1.24: when your Symfony security user is not the chat participant (a DTO, a wrapper around your domain user), alias
-  **`CurrentChatUserResolverInterface`** to an adapter that maps one to the other; the voter, the dock and every chat
-  controller ask it (default: the security user when it implements `ChatUserInterface`).
+  **`ChatParticipantResolverInterface`** (2.0; 1.x also had `CurrentChatUserResolverInterface`) to an adapter that maps
+  one to the other; the voter, the dock and every chat controller ask it (default: the security user when it implements
+  `ChatUserInterface`).
 - 1.24: with **`doctrine.user_reference: id`** the chat tables keep the user id as a string, without foreign keys or
   `resolve_target_entities`: the class implementing `ChatUserInterface` can be a plain object of your infrastructure
   layer, loaded by your `ChatDirectoryInterface::findByIds()` ([CONFIGURATION](CONFIGURATION.md#user-references-124),
@@ -346,7 +359,8 @@ context, not as part of your domain model.
   string (UUID, IdP subject) implement `ChatUserReferenceInterface` too, and the directory
   `ChatUserReferenceDirectoryInterface::findByReferences()` (exact answers only); the references are compared byte for
   byte (REQ-SEC-006) and the chat refuses to run on folding columns.
-- 1.27: turn on `doctrine.private_entity_manager: true` so the chat never flushes your entity manager.
+- 2.0: the chat always writes through its own private entity manager, so it never flushes your entity manager
+  (1.27 to 1.x: opt-in with `doctrine.private_entity_manager: true`).
 - Call `ChatPersonalData::export()` / `erase()` from your account-deletion use case, before the account is deleted
   (in id mode nothing cascades: `erase()` is how the rows go). For an account already gone, call
   `eraseFormerAccount($userId, $publicId, $displayName)` with what you kept of it: the public id scrubs the mention
@@ -355,25 +369,6 @@ context, not as part of your domain model.
 
 ```php
 // src/Infrastructure/Chat/CurrentParticipant.php — the security user is a DTO, the participant comes from the directory.
-final readonly class CurrentParticipant implements CurrentChatUserResolverInterface
-{
-    public function __construct(private ChatDirectoryInterface $directory) {}
-
-    public function resolve(?UserInterface $user): ?ChatUserInterface
-    {
-        return $user instanceof SecurityAccount ? $this->directory->findByPublicId($user->accountUuid()) : null;
-    }
-}
-```
-
-```yaml
-# config/services.yaml
-Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface: '@App\Infrastructure\Chat\CurrentParticipant'
-```
-
-The same adapter without Symfony types (1.27):
-
-```php
 final readonly class CurrentParticipant implements ChatParticipantResolverInterface
 {
     public function __construct(private ChatDirectoryInterface $directory) {}
@@ -547,8 +542,9 @@ nowo_chat_kit:
                 layout_template: null      # null = nowo_ui_kit.layouts.admin
 ```
 
-The 1.x `page_layout` option (a layout with `title`, `stylesheets`, `javascripts` and `body` blocks) is deprecated:
-while it is the only layout set, the page keeps its 1.x template (`page_legacy.html.twig`).
+2.0: the 1.x `page_layout` option (deprecated since 1.5), its template `page_legacy.html.twig` and the Twig global
+`nowo_chat_kit_page_layout` were removed; setting `page_layout` fails the container build. Use
+`web_ui.layout_template`.
 
 Opening `/chat/{uuid}` is a plain GET that changes nothing. With JavaScript, `nowo-chat.js` marks the conversation read
 through the CSRF-protected `POST /api/conversations/{uuid}/read` (the page carries the URL, the newest message id and the
@@ -827,7 +823,7 @@ public function __invoke(ChatMentionEvent $event): void
 
 For an inbox of "messages that mention me", `ChatMessageMentionRepository::findForUser($user, $channelKeys,
 $isSupportAgent, $limit, $unreadOnly, $since, $channelsOnly)` and `countForUser()` return only mentions in direct
-threads, the channels you pass (`ChatChannelProviderInterface::channelsFor()` keys) and the support threads the user may
+threads, the channels you pass (`ChatChannelSourceInterface::channelsFor()` keys) and the support threads the user may
 read; `read_at` is set when the user reads the conversation past the message (or you call `markRead()` and flush).
 `countUnreadByConversation()` gives an "@" count per conversation.
 
@@ -1016,7 +1012,7 @@ final readonly class AgentBadges implements ChatAuthorBadgeProviderInterface
 
 **Markup.** Full page: `_author_badges.html.twig`, block `nowo_chat_author_badges`, prints
 `<span class="nowo-chat-author-badge nowo-chat-author-badge--<variant>" data-variant title>label</span>` after the
-name (`page.html.twig` and `page_legacy.html.twig`). Dock: the `<template data-nowo-chat-template="author-badge">` of
+name (`page.html.twig`). Dock: the `<template data-nowo-chat-template="author-badge">` of
 block `nowo_chat_template_author_badge` in `_templates.html.twig` (rendered only when a provider is aliased; the
 script puts the label in its `data-part="label"` element, or the element itself, with `textContent`, and adds the
 variant class and the title). In a direct thread, where the dock normally hides the author line, it appears for an
@@ -1086,8 +1082,6 @@ application's copy always wins.
 | `_templates.html.twig` | Every `<template>` the dock clones | `nowo_chat_template_dock`, `_row`, `_list_state`, `_picker`, `_overflow_item`, `_window`, `_messages`, `_author_badge` (1.29, only with a badge provider), `_sidebar` (1.25), `nowo_chat_icons` |
 | `_author_badges.html.twig` | 1.29: the author badges after a name on the full page | `nowo_chat_author_badges` |
 | `page.html.twig` | Full-page chat (list + thread + composer form), UiKit layout | `nowo_ui_document_title`, `nowo_ui_styles`, `nowo_ui_scripts`, `nowo_chat_page_script` (the `nowo-chat.js` tag), `nowo_ui_page_header`, `nowo_ui_content`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
-| `page_legacy.html.twig` | Deprecated 1.x page (only with the deprecated `page_layout`) | `title`, `stylesheets`, `javascripts`, `body`, `nowo_chat_page_list`, `nowo_chat_page_thread` |
-| `page_layout.html.twig` | Deprecated 1.x default layout of `page_legacy.html.twig` | `title`, `stylesheets`, `javascripts`, `body` |
 
 **Procedure.** Create the file under `templates/bundles/NowoChatKitBundle/`, start it with
 `{% extends '@!NowoChatKitBundle/<subpath>' %}` and override only the blocks you need, then
@@ -1952,14 +1946,13 @@ inline.
   (`nowo_chat_kit.transaction_runner`; the services type-hint nowo-tech/transaction-contract's
   `TransactionRunnerInterface`). Side effects (Mercure, events, push, automatic replies) follow the commit. After a
   failure no transaction is left open (the connection is closed only when the rollback fails, as after a MySQL deadlock
-  inside a nested flush), only the ChatKit rows the failed unit wrote are detached, and a transient failure surfaces as
+  inside a nested flush), ChatKit's private manager is replaced (or forgets only what the run touched after a refusal),
+  and a transient failure surfaces as
   `TransientStorageFailure`.
 - **Your entity manager is yours.** ChatKit never runs its writes on a runner you bind to `TransactionRunnerInterface`
   (DoctrineDeadlockRetryBundle's adapter, your own): it drives your manager, would commit your pending work with a chat
-  write and reset your manager after a chat failure. With `doctrine.private_entity_manager: true` a chat write never
-  flushes, clears or closes your manager (REQ-ARCH-001 rule 6). Without it, ChatKit flushes your pending work on its
-  own before its unit, never resets or clears your manager, and replaces it only at a request boundary when a failed
-  chat flush closed it.
+  write and reset your manager after a chat failure. A chat write runs on ChatKit's own private manager and never
+  flushes, clears or closes yours (REQ-ARCH-001 rule 6; since 2.0 the only mode).
 - **No retries inside ChatKit.** Transient failures answer `409 Conflict` with `Retry-After` (1 s; 503 with the `nowo_transaction_doctrine.conflict_response.status: 503` opt-in) on
   ChatKit's routes, a unique-key conflict `409 Conflict` too, as `{ok: false, error: "unavailable" | "conflict"}` on the API. Your own
   controllers that call the ChatKit services map failures themselves (or enable DoctrineDeadlockRetryBundle's

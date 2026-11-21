@@ -6,22 +6,20 @@ namespace Nowo\ChatKitBundle\Tests\Unit\Port;
 
 use DateTimeImmutable;
 use LogicException;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface;
 use Nowo\ChatKitBundle\Contract\ChatParticipantResolverInterface;
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeTransportInterface;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Model\ChatRequestContext;
 use Nowo\ChatKitBundle\Model\ChatSecurityUser;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Model\ErasedChatUser;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Port\ChatChannelSourceGate;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Port\ChatParticipantResolverGate;
+use Nowo\ChatKitBundle\Port\ChatRealtimePort;
 use Nowo\ChatKitBundle\Port\ChatRealtimeTransportGate;
 use Nowo\ChatKitBundle\Port\Ports;
-use Nowo\ChatKitBundle\Tests\Support\Deprecation\DeprecationRecorder;
-use PHPUnit\Framework\Attributes\IgnoreDeprecations;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Symfony\Component\HttpFoundation\Request;
@@ -29,57 +27,29 @@ use Symfony\Component\Security\Core\User\InMemoryUser;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
- * 1.27: the selection rule of the three ports (deprecated, both, twin only, neither) and the gates passing the values
- * through.
+ * 1.27: the three ports' gates passing the values through; 2.0: the twin is the only accepted interface.
  */
 final class PortsTest extends TestCase
 {
-    /** 1.39: asked as is, with a deprecation each (the interfaces are removed in 2.0). */
-    #[IgnoreDeprecations]
-    public function testADeprecatedImplementationIsAskedAsIs(): void
+    /**
+     * 2.0: the twin is the only host interface; an object implementing only the bundle's internal port (the 1.x
+     * signature) is refused like any other (fail closed), and a port the bundle holds itself is its own companion.
+     */
+    public function testOnlyTheTwinIsAccepted(): void
     {
-        $provider = $this->createStub(ChatChannelProviderInterface::class);
-        $realtime = $this->createStub(ChatRealtimeInterface::class);
-        $resolver = $this->createStub(CurrentChatUserResolverInterface::class);
+        $provider = $this->createStub(ChatChannelPort::class);
+        $realtime = $this->createStub(ChatRealtimePort::class);
+        $resolver = $this->createStub(ChatCurrentUserPort::class);
 
-        [, $messages] = DeprecationRecorder::record('removed in 2.0', static function () use ($provider, $realtime, $resolver): void {
-            self::assertSame($provider, Ports::channelProvider($provider));
-            self::assertSame($realtime, Ports::realtime($realtime));
-            self::assertSame($resolver, Ports::currentUser($resolver));
-        });
+        foreach ([[$provider, Ports::channelProvider(...), ChatChannelSourceInterface::class], [$realtime, Ports::realtime(...), ChatRealtimeTransportInterface::class], [$resolver, Ports::currentUser(...), ChatParticipantResolverInterface::class]] as [$service, $factory, $twin]) {
+            try {
+                $factory($service);
+                self::fail('the internal port is not a host interface');
+            } catch (LogicException $exception) {
+                self::assertStringContainsString('must implement "' . $twin . '" (since 2.0 the only interface of this port', $exception->getMessage());
+            }
+        }
         self::assertSame($provider, Ports::companion($provider));
-        self::assertCount(3, $messages);
-        self::assertStringContainsString('the deprecated ' . ChatChannelProviderInterface::class . ', which is removed in 2.0. Implement ' . ChatChannelSourceInterface::class, $messages[0]);
-        self::assertStringContainsString('the deprecated ' . ChatRealtimeInterface::class . ', which is removed in 2.0. Implement ' . ChatRealtimeTransportInterface::class, $messages[1]);
-        self::assertStringContainsString('the deprecated ' . CurrentChatUserResolverInterface::class . ', which is removed in 2.0. Implement ' . ChatParticipantResolverInterface::class, $messages[2]);
-    }
-
-    #[IgnoreDeprecations]
-    public function testAServiceImplementingBothIsAskedThroughTheDeprecatedInterface(): void
-    {
-        $both = new class implements ChatRealtimeInterface, ChatRealtimeTransportInterface {
-            public function isEnabled(): bool
-            {
-                return true;
-            }
-
-            public function publish(array $topics, array $payload): void
-            {
-            }
-
-            public function browserHubUrl(Request|ChatRequestContext $request): string
-            {
-                return $request instanceof Request ? 'legacy' : 'twin';
-            }
-
-            public function subscriberToken(array $topics, DateTimeImmutable $expiresAt): ?string
-            {
-                return null;
-            }
-        };
-
-        self::assertSame($both, Ports::realtime($both));
-        self::assertSame('legacy', Ports::realtime($both)->browserHubUrl(Request::create('/')));
     }
 
     public function testATwinOnlyChannelSourceIsGatedAndKeepsItsCompanions(): void
@@ -177,7 +147,7 @@ final class PortsTest extends TestCase
         foreach ($calls as $factory => $call) {
             try {
                 $call();
-                self::fail($factory . ' accepted a service implementing neither interface');
+                self::fail($factory . ' accepted a service that does not implement the twin');
             } catch (LogicException $exception) {
                 self::assertStringContainsString('must implement', $exception->getMessage());
             }

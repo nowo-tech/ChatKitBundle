@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Tests\Support;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
+use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\TestCase;
 use Psr\Cache\CacheItemPoolInterface;
@@ -30,7 +31,7 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function setUp(): void
     {
-        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges(), $this->hostTransactionRunner(), $this->runtimeSettings(), $this->uiKitContextMenus());
+        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges(), $this->hostTransactionRunner(), $this->runtimeSettings(), $this->uiKitContextMenus(), $this->hostFixtures());
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
@@ -77,6 +78,15 @@ abstract class DatabaseTestCase extends TestCase
      * 1.33: whether the kernel turns on UiKit's `theme.context_menus` (the message kebab follows it by default).
      */
     protected function uiKitContextMenus(): bool
+    {
+        return false;
+    }
+
+    /**
+     * 2.0: whether the fixtures (`$this->em`) are written through the application's manager instead of ChatKit's private
+     * one (chat rows loaded by the host manager handed to the chat services).
+     */
+    protected function hostFixtures(): bool
     {
         return false;
     }
@@ -155,6 +165,34 @@ abstract class DatabaseTestCase extends TestCase
         if (isset($this->kernel)) {
             $this->kernel->shutdown();
         }
+    }
+
+    /**
+     * 2.0: the application's own entity manager (the test acting as the host; the chat writes through its private one).
+     */
+    protected function hostManager(): EntityManagerInterface
+    {
+        $manager = $this->kernel->getContainer()->get('doctrine.orm.entity_manager');
+        assert($manager instanceof EntityManagerInterface);
+
+        return $manager;
+    }
+
+    /**
+     * 2.0: the ids of chat users, to compare users across managers (chat rows hold the private manager's instances).
+     *
+     * @param iterable<ChatUserInterface> $users
+     *
+     * @return list<int|string|null>
+     */
+    protected static function userIds(iterable $users): array
+    {
+        $ids = [];
+        foreach ($users as $user) {
+            $ids[] = $user->getId();
+        }
+
+        return $ids;
     }
 
     protected function user(string $name): TestUser

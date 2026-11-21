@@ -2,18 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Nowo\ChatKitBundle\Contract;
+namespace Nowo\ChatKitBundle\Port;
 
 use DateTimeImmutable;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
- * Realtime transport (Mercure by default). Topics are private and per user; the bundle decides recipients.
+ * 2.0: the realtime transport as the bundle asks it inside (the 1.x `ChatRealtimePort`, removed in 2.0). Not a host
+ * extension point: applications implement ChatRealtimeTransportInterface (the bundle wraps it in its gate, {@see Ports}); the bundle's
+ * own defaults implement this interface directly.
  *
- * @deprecated since 1.27, implement ChatRealtimeTransportInterface instead (no HttpFoundation / Security types, REQ-ARCH-001 rule 3); removed
- *             in 2.0. A service implementing this interface keeps working unchanged until then.
+ * @internal
  */
-interface ChatRealtimeInterface
+interface ChatRealtimePort
 {
     /**
      * Whether a realtime transport is available (false: the dock polls).

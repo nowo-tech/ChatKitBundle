@@ -25,7 +25,6 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
-use PHPUnit\Framework\Attributes\Group;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
@@ -63,8 +62,7 @@ final class ChatDigestTest extends DatabaseTestCase
         (new NullChatDigestSender())->send($ana, []);
     }
 
-    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
-    #[Group('application-manager')]
+    /** 2.0: users are compared by id across managers; a host row is refreshed by clearing the application's manager. */
     public function testEmailsStillUnreadConversations(): void
     {
         $chat  = $this->get(ChatService::class);
@@ -88,7 +86,7 @@ final class ChatDigestTest extends DatabaseTestCase
         $dispatcher(new SendChatDigestMessage((int) $ana->getId()));
 
         self::assertCount(1, $sender->sent);
-        self::assertSame($ana, $sender->sent[0]['user']);
+        self::assertSame($ana->getId(), $sender->sent[0]['user']->getId());
         $items = array_map(static fn ($item): array => [$item->title, $item->unread, $item->preview], $sender->sent[0]['items']);
         self::assertEqualsCanonicalizing([['Luis', 2, ''], ['#Acme', 1, 'Release at 5'], ['Support', 1, 'Fixed']], $items);
         self::assertStringStartsWith('/inbox?chat=', $sender->sent[0]['items'][0]->url);
@@ -117,8 +115,7 @@ final class ChatDigestTest extends DatabaseTestCase
         self::assertTrue($this->em->getRepository(ChatUserSettings::class)->forUser($ana)->isEmailDigest());
     }
 
-    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
-    #[Group('application-manager')]
+    /** 2.0: users are compared by id across managers; a host row is refreshed by clearing the application's manager. */
     public function testNoSnippetsFromConversationsTheUserCanNoLongerRead(): void
     {
         $chat    = $this->get(ChatService::class);
@@ -131,6 +128,7 @@ final class ChatDigestTest extends DatabaseTestCase
         $this->em->createQuery('UPDATE ' . TestUser::class . ' u SET u.name = :name WHERE u.id = :id')
             ->setParameters(['name' => 'Stranger Ana', 'id' => $ana->getId()])->execute();
         $this->em->clear();
+        $this->hostManager()->clear();
         $this->get(ChatAccess::class)->reset();
 
         $sender = new RecordingDigestSender();

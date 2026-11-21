@@ -18,7 +18,6 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestBrokenReferenceProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestReferenceProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
-use PHPUnit\Framework\Attributes\Group;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 use function str_repeat;
@@ -55,8 +54,7 @@ final class ChatReferencesTest extends DatabaseTestCase
         self::assertStringEndsWith('#t `#[t](task:1)`', $body);
     }
 
-    /** 1.27: compares user objects across managers or clears the application's manager to refresh a host row (skipped by the private-manager replay). */
-    #[Group('application-manager')]
+    /** 2.0: users are compared by id across managers; a host row is refreshed by clearing the application's manager. */
     public function testFillPrimePlainTextAndScopes(): void
     {
         $references = $this->get(ChatReferences::class);
@@ -68,11 +66,11 @@ final class ChatReferencesTest extends DatabaseTestCase
 
         $direct = $chat->openDirect($ana, $luis);
         $scope  = $references->scopeFor($direct, $ana);
-        self::assertSame([$ana, $luis], $scope->audience);
+        self::assertSame([$ana->getId(), $luis->getId()], self::userIds($scope->audience));
         self::assertNull($scope->channelKey());
         $channel = $chat->openChannel($ana, new ChatChannel(TestChannelProvider::KEY, 'Acme'));
         self::assertSame(TestChannelProvider::KEY, $references->scopeFor($channel, $ana)->channelKey());
-        self::assertSame([$ana], $references->scopeFor($channel, $ana)->audience);
+        self::assertSame([$ana->getId()], self::userIds($references->scopeFor($channel, $ana)->audience));
         self::assertSame([$nora], ChatReferenceScope::reader($nora)->audience);
 
         // A slot without its token (HTML and body out of step) shows the neutral chip.

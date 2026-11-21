@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Unit\Twig;
 
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Twig\ChatDockExtension;
@@ -52,8 +52,8 @@ final class ChatDockExtensionContextMenuRuntimeTest extends TestCase
             $this->createStub(CsrfTokenManagerInterface::class),
             $this->createStub(TranslatorInterface::class),
             new RequestStack(),
-            new ChatAccess($this->createStub(ChatAccessPolicyInterface::class), $this->createStub(ChatChannelProviderInterface::class), $this->createStub(ChatDirectoryInterface::class)),
-            $this->createStub(ChatChannelProviderInterface::class),
+            new ChatAccess($this->createStub(ChatAccessPolicyInterface::class), $this->createStub(ChatChannelPort::class), $this->createStub(ChatDirectoryInterface::class)),
+            $this->createStub(ChatChannelPort::class),
             $this->createStub(ChatUserSettingsRepository::class),
             new NullLinkPreviewProvider(),
             $this->createStub(FormFactoryInterface::class),

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Realtime;
 
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatRealtimePort;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Throwable;
@@ -19,11 +19,11 @@ final readonly class ChatPublisher
     /**
      * Builds the publisher from the realtime transport and a logger for failed publishes.
      *
-     * @param ChatRealtimeInterface $realtime The transport (Mercure or null)
+     * @param ChatRealtimePort $realtime The transport (Mercure or null)
      * @param LoggerInterface $logger Receives a warning when a publish fails
      */
     public function __construct(
-        private ChatRealtimeInterface $realtime,
+        private ChatRealtimePort $realtime,
         private LoggerInterface $logger = new NullLogger(),
     ) {
     }

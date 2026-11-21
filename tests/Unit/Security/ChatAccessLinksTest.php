@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Unit\Security;
 
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatPinPolicyInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\TestCase;
@@ -56,7 +56,7 @@ final class ChatAccessLinksTest extends TestCase
 
     public function testAChannelThatDisappearsIsDenied(): void
     {
-        $provider = $this->createStub(ChatChannelProviderInterface::class);
+        $provider = $this->createStub(ChatChannelPort::class);
         // Read access, then (1.24) the write check (use + channel), then gone.
         $channel = new ChatChannel('project:acme', 'Acme');
         $provider->method('find')->willReturnOnConsecutiveCalls($channel, $channel, $channel, null);
@@ -90,9 +90,9 @@ final class ChatAccessLinksTest extends TestCase
         return $user;
     }
 
-    private function provider(): ChatChannelProviderInterface
+    private function provider(): ChatChannelPort
     {
-        $provider = $this->createStub(ChatChannelProviderInterface::class);
+        $provider = $this->createStub(ChatChannelPort::class);
         $provider->method('find')->willReturn(new ChatChannel('project:acme', 'Acme'));
         $provider->method('canUse')->willReturn(true);
 

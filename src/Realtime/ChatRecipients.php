@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Realtime;
 
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Psr\Cache\CacheItemPoolInterface;
 
@@ -34,7 +34,7 @@ final readonly class ChatRecipients
     public function __construct(
         private CacheItemPoolInterface $cache,
         private ChatDirectoryInterface $directory,
-        private ChatChannelProviderInterface $channels,
+        private ChatChannelPort $channels,
         private ChatAccess $access,
     ) {
     }

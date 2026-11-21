@@ -61,9 +61,14 @@ final class ChatStringReferenceHostTest extends DatabaseTestCase
     {
         return ['profiles' => ['default' => [
             'user_class' => null,
-            'doctrine'   => ['user_reference' => 'string', 'private_entity_manager' => true],
+            'doctrine'   => ['user_reference' => 'string'],
             'limits'     => ['send_per_minute' => 10_000, 'actions_per_minute' => 10_000, 'reads_per_minute' => 10_000],
         ]]];
+    }
+
+    protected function hostFixtures(): bool
+    {
+        return true;
     }
 
     protected function setUp(): void

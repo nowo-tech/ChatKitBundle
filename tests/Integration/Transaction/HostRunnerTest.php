@@ -11,12 +11,14 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Transaction\HostEntityManagerRunner;
 use Nowo\TransactionContract\TransactionRunnerInterface;
+use PHPUnit\Framework\Attributes\Group;
 
 /**
  * 1.30 (Beacon spec 239, audits QD-M1 / QD-M3, ARCH-001): an application that binds TransactionRunnerInterface to its
  * own runner (a DDD host; DoctrineDeadlockRetryBundle's adapter) keeps it for its own code, and ChatKit never runs a
  * chat write through it: such a runner drives the application's manager.
  */
+#[Group('private-manager')]
 final class HostRunnerTest extends DatabaseTestCase
 {
     protected function hostTransactionRunner(): bool

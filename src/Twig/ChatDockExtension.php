@@ -6,9 +6,7 @@ namespace Nowo\ChatKitBundle\Twig;
 
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Badge\ChatAuthorBadges;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Controller\ChatApiController;
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
@@ -23,6 +21,8 @@ use Nowo\ChatKitBundle\LinkPreview\NullLinkPreviewProvider;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatLinkProvider;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
@@ -55,7 +55,6 @@ use function strlen;
  * `nowo_chat_dock_config()`: what the dock needs (endpoints, CSRF token, settings, UI strings, the channel of
  * the current page). Null for guests and unreachable accounts, so the dock template renders nothing.
  * `nowo_chat_dock_forms()`: the Form views of the dock's search boxes, composer and inline editor.
- * Global `nowo_chat_kit_page_layout` (deprecated): the 1.x layout of `page_legacy.html.twig` (`page_layout`).
  */
 final class ChatDockExtension extends AbstractExtension implements GlobalsInterface
 {
@@ -100,7 +99,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param string $iconSet `ux_icon` or `svg_inline`
      * @param array<string, string> $icons dock icon → UX Icons name (icon_set: ux_icon)
      * @param IconRendererInterface|null $iconRenderer UX Icons renderer; null when symfony/ux-icons is not installed
-     * @param string|null $pageLayout Deprecated 1.x layout (`page_layout`); null = the bundle's 1.x default document
+     * @param string|null $pageLayout @deprecated since 2.0, ignored (the 1.x `page_layout`, removed in 2.0); removed in 3.0
      * @param ChatReferences|null $references #references (whether `/` commands and `#` are offered)
      * @param bool $supportEmojis Decorative emojis of the support assistant (`support.emojis`)
      * @param int $autoAwayMinutes Minutes without input before the dock reports the user idle (away); 0 = never
@@ -110,7 +109,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param array{overlay?: string, watch_aria_modal?: bool} $dock 1.17: dock reaction to modal overlays (`dock`)
      * @param ChatLinks|null $links 1.19: pinned links, link cards and the Links panel (`links`); null or disabled hides them
      * @param string|null $channelsUrl 1.24: host page to browse or create channels (`web_ui.channels_url`); null: no link
-     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
+     * @param ChatCurrentUserPort|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      * @param bool $openRecent 1.25: the full-page chat opens the most recent conversation (`web_ui.page.open_recent`)
      * @param bool $dockSidebar 1.25: the dock shows the grouped sidebar (`web_ui.dock.sidebar_sections`)
      * @param ChatSidebar|null $sidebar 1.25: the host sections (the full-page chat is grouped when a provider exists)
@@ -129,7 +128,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly TranslatorInterface $translator,
         private readonly RequestStack $requestStack,
         private readonly ChatAccess $access,
-        private readonly ChatChannelProviderInterface $channels,
+        private readonly ChatChannelPort $channels,
         private readonly ChatUserSettingsRepository $settings,
         private readonly ChatLinkPreviewProviderInterface $linkPreviews,
         private readonly FormFactoryInterface $forms,
@@ -138,7 +137,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly string $iconSet = 'ux_icon',
         private readonly array $icons = [],
         private readonly ?IconRendererInterface $iconRenderer = null,
-        private readonly ?string $pageLayout = null,
+        ?string $pageLayout = null,
         private readonly ?ChatReferences $references = null,
         private readonly bool $supportEmojis = true,
         private readonly int $autoAwayMinutes = 10,
@@ -148,7 +147,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly array $dock = ['overlay' => 'hide', 'watch_aria_modal' => false],
         private readonly ?ChatLinks $links = null,
         private readonly ?string $channelsUrl = null,
-        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly ?ChatCurrentUserPort $currentUser = null,
         private readonly bool $openRecent = false,
         private readonly bool $dockSidebar = false,
         private readonly ?ChatSidebar $sidebar = null,
@@ -177,8 +176,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
     }
 
     /**
-     * Twig globals: `nowo_chat_kit_page_layout` (deprecated), the layout the 1.x chat page (`page_legacy.html.twig`)
-     * extends; the 1.5 page extends the UiKit layout (`web_ui.layout_template`). 1.29: `nowo_chat_author_badges`, true
+     * Twig globals (2.0: `nowo_chat_kit_page_layout`, deprecated since 1.5, is gone; the page extends the UiKit layout,
+     * `web_ui.layout_template`). 1.29: `nowo_chat_author_badges`, true
      * when the application aliased ChatAuthorBadgeProviderInterface (the dock's `author-badge` template is rendered only
      * then, so the dock markup of a host without badges is unchanged). 1.33: `nowo_chat_message_context_menu`, the
      * `context_menu` option of each message's kebab (null: UiKit's `theme.context_menus` decides). 1.37:
@@ -190,7 +189,6 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
     public function getGlobals(): array
     {
         return [
-            'nowo_chat_kit_page_layout' => $this->pageLayout ?? Configuration::LEGACY_PAGE_LAYOUT,
             // 1.29: whether the application gives author badges (the dock template of a badge is rendered only then).
             'nowo_chat_author_badges' => $this->authorBadges?->enabled() ?? false,
             // 1.33: the message context menu (null: UiKit's theme flag; true / false: forced by web_ui.message_context_menu).
@@ -233,7 +231,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
     public function config(): ?array
     {
         $user = $this->security->getUser();
-        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
+        $user = $this->currentUser instanceof ChatCurrentUserPort ? $this->currentUser->resolve($user) : $user;
         if (!$user instanceof ChatUserInterface || !$this->access->isReachable($user)) {
             return null;
         }

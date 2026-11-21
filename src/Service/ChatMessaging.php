@@ -66,7 +66,7 @@ final readonly class ChatMessaging implements ChatMessagingInterface
      * @param ChatConversationRepository $conversations Conversations by uuid
      * @param ChatMessageRepository $messages Messages by uuid
      * @param EntityManagerInterface $entityManager Saves a participant row created by join() (the bundle's private
-     *                                              entity manager with `doctrine.private_entity_manager: true`)
+     *                                              entity manager)
      * @param ChatVoter $voter The API's authorization rules
      * @param ChatAccess $access Reachability, channels, direct peers and pins
      * @param TransactionRunnerInterface|null $transactions 1.30: ChatKit's runner (join()); null builds the default

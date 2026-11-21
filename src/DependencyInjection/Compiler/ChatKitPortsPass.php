@@ -5,118 +5,93 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\DependencyInjection\Compiler;
 
 use LogicException;
-use Nowo\ChatKitBundle\Channel\NullChannelProvider;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatChannelSourceInterface;
 use Nowo\ChatKitBundle\Contract\ChatParticipantResolverInterface;
-use Nowo\ChatKitBundle\Contract\ChatRealtimeInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeTransportInterface;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
+use Nowo\ChatKitBundle\Port\ChatRealtimePort;
 use Nowo\ChatKitBundle\Port\Ports;
-use Nowo\ChatKitBundle\Realtime\MercureChatRealtime;
-use Nowo\ChatKitBundle\Realtime\NullChatRealtime;
-use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 
 use function class_exists;
-use function in_array;
 use function is_a;
 use function is_string;
 use function sprintf;
 
 /**
- * 1.27 (REQ-ARCH-001 rules 1 and 3): wires the framework-free twins of the three host ports typed with HttpFoundation or
- * Security types, and refuses a port service that implements neither interface.
+ * 1.27 (REQ-ARCH-001 rules 1 and 3): puts an application's framework-free port twin behind the bundle's internal port.
  *
- * The bundle asks each port through the deprecated interface's service id (ChatChannelProviderInterface,
- * ChatRealtimeInterface, CurrentChatUserResolverInterface). The application aliases either that id or the twin's id
- * (ChatChannelSourceInterface, ChatRealtimeTransportInterface, ChatParticipantResolverInterface) to its service:
+ * The bundle asks each port through an internal id ({@see ChatChannelPort}, {@see ChatRealtimePort},
+ * {@see ChatCurrentUserPort}), which points at the bundle's default (no channels, Mercure or the null transport, the
+ * security user itself). The application aliases the twin's id (ChatChannelSourceInterface,
+ * ChatRealtimeTransportInterface, ChatParticipantResolverInterface) to its service:
  *
- * - an alias of the twin id is used when the deprecated id still points at the bundle's default (an explicit alias of
- *   the deprecated id wins);
- * - the service implements the deprecated interface: nothing changes (asked exactly as in 1.26, also when it implements
- *   the twin too);
- * - it implements only the twin: the deprecated id becomes the twin's internal gate over it ({@see Ports});
- * - the class is not known before compilation (a factory service): the id becomes the {@see Ports} factory, which
- *   decides per object and fails closed (`LogicException`) when the object implements neither;
- * - it implements neither: the build fails.
+ * - the service implements the twin: the internal id becomes the twin's gate over it ({@see Ports});
+ * - the class is not known before compilation (a factory service): the same factory, which decides per object and
+ *   fails closed (`LogicException`) when the object does not implement the twin;
+ * - it does not implement the twin: the build fails.
  *
- * 1.39: an application service asked through a deprecated interface triggers a deprecation at the container build (the
- * interfaces are removed in 2.0); the bundle's own defaults do not.
+ * 2.0: the 1.x interfaces of these ports (ChatChannelProviderInterface, ChatRealtimeInterface,
+ * CurrentChatUserResolverInterface) are gone; a service still configured on one of them fails the build in
+ * {@see RemovedPortsPass}, which runs first.
  *
- * Runs after RealtimeTransportPass (which may point ChatRealtimeInterface at the null transport).
+ * Runs after RealtimeTransportPass (which may point the realtime port at the null transport).
  *
  * @internal
  */
 final class ChatKitPortsPass implements CompilerPassInterface
 {
     /**
-     * @var array<string, array{twin: class-string, factory: string, defaults: list<class-string>}>
+     * Internal port id => the application's interface and the {@see Ports} factory of its gate.
+     *
+     * @var array<class-string, array{twin: class-string, factory: string}>
      */
     public const array PORTS = [
-        ChatChannelProviderInterface::class     => ['twin' => ChatChannelSourceInterface::class, 'factory' => 'channelProvider', 'defaults' => [NullChannelProvider::class]],
-        ChatRealtimeInterface::class            => ['twin' => ChatRealtimeTransportInterface::class, 'factory' => 'realtime', 'defaults' => [MercureChatRealtime::class, NullChatRealtime::class]],
-        CurrentChatUserResolverInterface::class => ['twin' => ChatParticipantResolverInterface::class, 'factory' => 'currentUser', 'defaults' => [SecurityChatUserResolver::class]],
+        ChatChannelPort::class     => ['twin' => ChatChannelSourceInterface::class, 'factory' => 'channelProvider'],
+        ChatRealtimePort::class    => ['twin' => ChatRealtimeTransportInterface::class, 'factory' => 'realtime'],
+        ChatCurrentUserPort::class => ['twin' => ChatParticipantResolverInterface::class, 'factory' => 'currentUser'],
     ];
 
     /**
      * @param ContainerBuilder $container The container being compiled
      *
-     * @throws LogicException when a port service implements neither interface
+     * @throws LogicException when the service of a twin does not implement it
      */
     public function process(ContainerBuilder $container): void
     {
-        foreach (self::PORTS as $legacy => $port) {
-            if (!$container->hasAlias($legacy) && !$container->hasDefinition($legacy)) {
+        foreach (self::PORTS as $internal => $port) {
+            $twin = $port['twin'];
+            if (!$container->hasAlias($twin) && !$container->hasDefinition($twin)) {
                 continue;
             }
-            $target = $this->resolve($container, $legacy);
-            if (in_array($target, $port['defaults'], true) && ($container->hasAlias($port['twin']) || $container->hasDefinition($port['twin']))) {
-                $twinTarget = $this->resolve($container, $port['twin']);
-                if (!in_array($twinTarget, $port['defaults'], true)) {
-                    $target = $twinTarget;
-                }
+            $target = $this->resolve($container, $twin);
+            $class  = $this->classOf($container, $target);
+            if ($class !== null && !is_a($class, $twin, true)) {
+                throw new LogicException(sprintf('nowo_chat_kit: the service "%s" (%s) of %s must implement it.', $target, $class, $twin));
             }
 
-            $class = $this->classOf($container, $target);
-            if ($class !== null && is_a($class, $legacy, true)) {
-                // 1.39: an application service on the deprecated interface is announced (the interface goes in 2.0).
-                if (!in_array($class, $port['defaults'], true)) {
-                    trigger_deprecation('nowo-tech/chat-kit-bundle', '1.39', Ports::legacyPortMessage($class, $legacy, $port['twin']));
-                }
-                if ($target !== $this->resolve($container, $legacy)) {
-                    $container->setAlias($legacy, $target)->setPublic($this->isPublic($container, $legacy));
-                }
-
-                continue; // Asked through the deprecated interface, exactly as in 1.26.
+            $public = $this->isPublic($container, $internal);
+            if ($container->hasAlias($internal)) {
+                $container->removeAlias($internal);
             }
-            if ($class !== null && !is_a($class, $port['twin'], true)) {
-                throw new LogicException(sprintf('nowo_chat_kit: the service "%s" (%s) of %s must implement "%s" (or the deprecated "%s").', $target, $class, $legacy, $port['twin'], $legacy));
-            }
-
-            $public = $this->isPublic($container, $legacy);
-            if ($target === $legacy) {
-                // The service is defined under the port id itself: keep it under an inner id.
-                $container->setDefinition($legacy . '.inner', $container->getDefinition($legacy));
-                $container->removeDefinition($legacy);
-                $target = $legacy . '.inner';
-            }
-            if ($container->hasAlias($legacy)) {
-                $container->removeAlias($legacy);
-            }
-            $container->setDefinition($legacy, (new Definition($legacy))
+            $container->setDefinition($internal, (new Definition($internal))
                 ->setFactory([Ports::class, $port['factory']])
-                ->setArguments([new Reference($target)])
+                ->setArguments([new Reference($twin)])
                 ->setPublic($public));
         }
     }
 
     private function isPublic(ContainerBuilder $container, string $id): bool
     {
-        return $container->hasAlias($id) ? $container->getAlias($id)->isPublic() : $container->getDefinition($id)->isPublic();
+        return match (true) {
+            $container->hasAlias($id)      => $container->getAlias($id)->isPublic(),
+            $container->hasDefinition($id) => $container->getDefinition($id)->isPublic(),
+            default                        => false,
+        };
     }
 
     private function resolve(ContainerBuilder $container, string $id): string

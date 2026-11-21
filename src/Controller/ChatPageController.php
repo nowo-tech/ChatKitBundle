@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Controller;
 
 use InvalidArgumentException;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -16,6 +14,8 @@ use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
 use Nowo\ChatKitBundle\Form\ChatPageMessageType;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
@@ -47,17 +47,14 @@ final class ChatPageController extends AbstractController
 {
     public const string CSRF_ID = 'nowo_chat_page';
 
-    /** Deprecated 1.x template of the page, used while only the deprecated `page_layout` is configured. */
-    public const string LEGACY_TEMPLATE = '@NowoChatKitBundle/page_legacy.html.twig';
-    private const int LIST_LIMIT        = 50;
-    private const int PAGE_SIZE         = 50;
+    private const int LIST_LIMIT = 50;
+    private const int PAGE_SIZE  = 50;
 
     /**
      * Builds the page controller from the chat services, repositories, the send rate limiter, the CSRF token
      * manager (header token of the mark-read call) and the layout.
      *
-     * @param string|null $layout Deprecated 1.x layout (`page_layout`): when set and `web_ui.layout_template` is not,
-     *                            the page keeps its 1.x template (`page_legacy.html.twig`)
+     * @param string|null $layout @deprecated since 2.0, ignored (the 1.x `page_layout`, removed in 2.0); removed in 3.0
      * @param string|null $webUiLayout Layout of the page (`web_ui.layout_template`); null = nowo_ui_kit.layouts.admin
      * @param string $pageTemplate Template of the page (`web_ui.templates.page`)
      * @param ChatUserSettingsRepository|null $settings The viewer's own status (the page's status button)
@@ -66,21 +63,20 @@ final class ChatPageController extends AbstractController
      * @param ChatParticipantRepository|null $participants Conversations the viewer closed (1.10)
      * @param bool $assets Whether the page prints the nowo-chat.css and nowo-chat.js tags (`web_ui.assets`, 1.21)
      * @param bool $fullHeight Whether the page fills the host content area (`web_ui.page.full_height`, 1.21)
-     * @param CurrentChatUserResolverInterface|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
+     * @param ChatCurrentUserPort|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
      * @param ChatMessageActions|null $menu 1.35: the Saved list (`message_menu.save`); null: no Saved page
      */
     public function __construct(
         private readonly ChatServiceInterface $chat,
         private readonly ChatPresenter $presenter,
         private readonly ChatAccess $access,
-        private readonly ChatChannelProviderInterface $channels,
+        private readonly ChatChannelPort $channels,
         private readonly ChatConversationRepository $conversations,
         private readonly ChatMessageRepository $messages,
         #[Autowire(service: 'limiter.nowo_chat_send')]
         private readonly RateLimiterFactoryInterface $sendLimiter,
         private readonly CsrfTokenManagerInterface $csrf,
-        #[Autowire(param: 'nowo_chat_kit.page_layout')]
-        private readonly ?string $layout = null,
+        ?string $layout = null,
         #[Autowire(param: 'nowo_chat_kit.web_ui.layout_template')]
         private readonly ?string $webUiLayout = null,
         #[Autowire(param: 'nowo_chat_kit.web_ui.templates.page')]
@@ -94,7 +90,7 @@ final class ChatPageController extends AbstractController
         private readonly bool $assets = true,
         #[Autowire(param: 'nowo_chat_kit.web_ui.page.full_height')]
         private readonly bool $fullHeight = false,
-        private readonly ?CurrentChatUserResolverInterface $currentUser = null,
+        private readonly ?ChatCurrentUserPort $currentUser = null,
         private readonly ?ChatMessageActions $menu = null,
     ) {
     }
@@ -109,7 +105,7 @@ final class ChatPageController extends AbstractController
     {
         $user = $this->chatUser();
 
-        return $this->render($this->template(), $this->context($user, null, $request->query->getBoolean('archived')));
+        return $this->render($this->pageTemplate, $this->context($user, null, $request->query->getBoolean('archived')));
     }
 
     /**
@@ -150,7 +146,7 @@ final class ChatPageController extends AbstractController
         }
 
         return $this->render('@NowoChatKitBundle/saved.html.twig', [
-            'layout'                => $this->webUiLayout ?? $this->layout,
+            'layout'                => $this->webUiLayout,
             'header'                => ChatPage::savedHeader(),
             'bundle'                => ChatPage::BUNDLE,
             'items'                 => $items,
@@ -182,7 +178,7 @@ final class ChatPageController extends AbstractController
         // 1.16: the list's and the page's pictures in one resolver call (context() primes them before presenting).
         $context = $this->context($user, $conversation, false, $page);
 
-        return $this->render($this->template(), [
+        return $this->render($this->pageTemplate, [
             'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $page),
             'read'     => $last instanceof ChatMessage ? [
                 'url'       => $this->generateUrl('nowo_chat_api_read', ['uuid' => $uuid]),
@@ -242,15 +238,6 @@ final class ChatPageController extends AbstractController
     }
 
     /**
-     * The 1.x template while a deprecated `page_layout` is the only layout configured (its layout renders the 1.x
-     * `title` / `stylesheets` / `javascripts` / `body` blocks, not the UiKit canonical ones).
-     */
-    private function template(): string
-    {
-        return $this->layout !== null && $this->webUiLayout === null ? self::LEGACY_TEMPLATE : $this->pageTemplate;
-    }
-
-    /**
      * @param list<ChatMessage> $page Messages of the open conversation (their authors' pictures are primed with the list's)
      *
      * @return array<string, mixed>
@@ -293,8 +280,8 @@ final class ChatPageController extends AbstractController
         $summary = $current instanceof ChatConversation ? $this->summary($current, $user, 0, null, true) : null;
 
         return [
-            // `layout`: the page layout (web_ui.layout_template, else the deprecated page_layout); null = UiKit layout.
-            'layout'        => $this->webUiLayout ?? $this->layout,
+            // `layout`: the page layout (web_ui.layout_template); null = UiKit layout.
+            'layout'        => $this->webUiLayout,
             'header'        => ChatPage::header(),
             'bundle'        => ChatPage::BUNDLE,
             'conversations' => $rows,
@@ -342,7 +329,7 @@ final class ChatPageController extends AbstractController
     private function chatUser(): ChatUserInterface
     {
         $user = $this->getUser();
-        $user = $this->currentUser instanceof CurrentChatUserResolverInterface ? $this->currentUser->resolve($user) : $user;
+        $user = $this->currentUser instanceof ChatCurrentUserPort ? $this->currentUser->resolve($user) : $user;
         if (!$user instanceof ChatUserInterface || !$this->access->isReachable($user)) {
             throw $this->createAccessDeniedException();
         }

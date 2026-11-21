@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Support\Ddd;
 
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
-use Nowo\ChatKitBundle\Contract\CurrentChatUserResolverInterface;
 use Nowo\ChatKitBundle\Model\ChatContact;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
+use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Symfony\Component\Security\Core\User\UserInterface;
 
@@ -15,9 +15,9 @@ use function in_array;
 
 /**
  * 1.24: a hexagonal host's adapter — its own participants (DomainChatUser, ids from 1000) behind ChatDirectoryInterface,
- * and CurrentChatUserResolverInterface mapping the security user (a TestUser) to its participant by public id.
+ * and ChatCurrentUserPort mapping the security user (a TestUser) to its participant by public id.
  */
-final class DomainDirectory implements ChatDirectoryInterface, CurrentChatUserResolverInterface
+final class DomainDirectory implements ChatDirectoryInterface, ChatCurrentUserPort
 {
     /** @var array<int, DomainChatUser> */
     private array $users = [];

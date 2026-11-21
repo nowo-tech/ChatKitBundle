@@ -8,6 +8,7 @@ use Nowo\ChatKitBundle\DependencyInjection\Compiler\ChatKitPortsPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerReferencesPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\RealtimeTransportPass;
+use Nowo\ChatKitBundle\DependencyInjection\Compiler\RemovedPortsPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\RuntimeRetentionPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\SearchKitRecentsPass;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\TwigPathsPass;
@@ -42,10 +43,14 @@ final class NowoChatKitBundle extends Bundle
     public function build(ContainerBuilder $container): void
     {
         parent::build($container);
+        // 2.0: a service still on a port interface removed in 2.0 fails the build (before Symfony drops it silently):
+        // first while the loader errors are there, then again once #[AsDecorator] is read (AutowireAsDecoratorPass, 100).
+        $container->addCompilerPass(new RemovedPortsPass(), PassConfig::TYPE_BEFORE_OPTIMIZATION, 1000);
+        $container->addCompilerPass(new RemovedPortsPass(), PassConfig::TYPE_BEFORE_OPTIMIZATION, 99);
         $container->addCompilerPass(new RealtimeTransportPass());
         // 1.27: the framework-free port twins (after the realtime transport is chosen).
         $container->addCompilerPass(new ChatKitPortsPass());
-        // 1.27 (doctrine.private_entity_manager): the rollback middleware before DoctrineBundle's MiddlewaresPass, and
+        // 1.27 (the private entity manager): the rollback middleware before DoctrineBundle's MiddlewaresPass, and
         // the bundle services moved onto the private manager after autowiring.
         $container->addCompilerPass(new PrivateEntityManagerPass(), PassConfig::TYPE_BEFORE_OPTIMIZATION, 10);
         $container->addCompilerPass(new PrivateEntityManagerReferencesPass(), PassConfig::TYPE_BEFORE_REMOVING);

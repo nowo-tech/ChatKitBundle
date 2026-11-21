@@ -172,7 +172,8 @@ interface ChatServiceInterface
      * @throws ChatUserLookAlikeException 1.28, `string` user references only: the participant row would go
      *                                    into a user column that folds onto a look-alike's row (refused before the flush)
      *
-     * @return ChatParticipant The existing or newly persisted (not flushed) row
+     * @return ChatParticipant The existing row, or a newly persisted one: it lives in ChatKit's private entity manager (since 2.0),
+     *                         so flushing your own manager does not save it; ChatKit's next write or boundary does
      */
     public function participant(ChatConversation $conversation, ChatUserInterface $user): ChatParticipant;
 

@@ -7,7 +7,6 @@ namespace Nowo\ChatKitBundle\SearchKit;
 use Doctrine\DBAL\Query\QueryBuilder as DbalQueryBuilder;
 use Doctrine\ORM\QueryBuilder as OrmQueryBuilder;
 use LogicException;
-use Nowo\ChatKitBundle\Contract\ChatChannelProviderInterface;
 use Nowo\ChatKitBundle\Controller\ChatApiController;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Enum\ConversationKind;
@@ -15,6 +14,7 @@ use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatChannelKey;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\Port\ChatChannelPort;
 use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
 use Nowo\ChatKitBundle\Search\ChatSearchText;
 use Nowo\ChatKitBundle\Security\ChatAccess;
@@ -125,7 +125,7 @@ final class ChatConversationSearchDefinition extends EntitySearchDefinition
      * @param ChatConversationRepository $conversations The conversations
      * @param ChatSearchKitViewer $viewers The signed-in participant
      * @param ChatAccess $access Access, support agents, channels and people (request-scoped answers)
-     * @param ChatChannelProviderInterface $channels The channels the viewer belongs to (`channelsFor()`)
+     * @param ChatChannelPort $channels The channels the viewer belongs to (`channelsFor()`)
      * @param ChatPresenter $presenter Titles as the viewer's list shows them
      * @param ChatSupportTopics $topics Topic labels of tickets
      * @param ChatSupportPolicy $policy Readable ticket numbers
@@ -140,7 +140,7 @@ final class ChatConversationSearchDefinition extends EntitySearchDefinition
         private readonly ChatConversationRepository $conversations,
         private readonly ChatSearchKitViewer $viewers,
         private readonly ChatAccess $access,
-        private readonly ChatChannelProviderInterface $channels,
+        private readonly ChatChannelPort $channels,
         private readonly ChatPresenter $presenter,
         private readonly ChatSupportTopics $topics,
         private readonly ChatSupportPolicy $policy,
