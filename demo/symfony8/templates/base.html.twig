@@ -1,9 +1,37 @@
-{#
-  Demo pages (home, login) on the same host layout as the bundle page: `title` → nowo_ui_document_title,
-  `body` → nowo_ui_content.
-#}
-{% extends 'layouts/admin.html.twig' %}
+{#- REQ-DEMO-014: the demo runs inside UiKit's shared demo platform shell (@NowoUiKit/demo_platform/layout.html.twig):
+    the same top bar, aside, content width, theme and footer as every other nowo-tech bundle demo. This file only
+    declares the demo (nowo_ui_demo_platform); the full-page chat (/chat/) renders through it too (nowo_ui_kit.layouts). -#}
+{% extends '@NowoUiKit/demo_platform/layout.html.twig' %}
+{% set _route = app.request.attributes.get('_route') %}
+{% set _locale_route = _route starts with 'nowo_chat_' ? 'homepage' : _route %}
+{% set _locale_params = _locale_route == 'homepage' ? {} : app.request.attributes.get('_route_params')|default({}) %}
+{% set nowo_ui_demo_platform = {
+    bundle: 'Chat Kit',
+    home_href: path('homepage', {_locale: app.request.locale}),
+    repository: 'https://github.com/nowo-tech/ChatKitBundle',
+    translation_domain: 'messages',
+    locales: [
+        {code: 'en', href: path(_locale_route, _locale_params|merge({_locale: 'en'}))},
+        {code: 'es', href: path(_locale_route, _locale_params|merge({_locale: 'es'}))},
+    ],
+    auth: {login_href: path('demo_login', {_locale: app.request.locale}), logout_route: 'demo_logout'},
+    nav: [
+        {label: 'demo.nav.home', route: 'homepage', params: {_locale: app.request.locale}, active: ['homepage', 'demo_room_new']},
+    ]|merge(app.user ? [
+        {label: 'demo.nav.chat', route: 'nowo_chat_page', active: ['nowo_chat_*']},
+    ] : [
+        {label: 'demo.login.nav', route: 'demo_login', params: {_locale: app.request.locale}},
+    ]),
+} %}
+{% block nowo_ui_document_title %}{% block title %}{{ 'demo.title'|trans }}{% endblock %} — Symfony 8{% endblock %}
 
-{% block nowo_ui_document_title %}{% block title %}{{ 'demo.title'|trans }}{% endblock %}{% endblock %}
+{% block nowo_ui_modals %}
+    {{ parent() }}
+    {# The floating chat dock: renders nothing for guests. #}
+    {{ include('@NowoChatKitBundle/dock.html.twig') }}
+{% endblock %}
 
-{% block nowo_ui_content %}{% block body %}{% endblock %}{% endblock %}
+{% block nowo_ui_scripts %}
+    {{ parent() }}
+    {{ vite_entry_script_tags('app') }}
+{% endblock %}
