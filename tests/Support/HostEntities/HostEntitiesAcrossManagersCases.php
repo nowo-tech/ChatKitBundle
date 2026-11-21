@@ -364,6 +364,38 @@ trait HostEntitiesAcrossManagersCases
         self::assertSame(3, $this->rows('test_user'));
     }
 
+    /**
+     * 2.0 (audit YB2-L1): a host entity the private manager holds (here loaded through it) with a to-one to a chat
+     * conversation: after the conversation is purged, the host instance (ON DELETE CASCADE) is forgotten too, so the
+     * next ChatKit write in the same unit of work flushes without "A new entity was found through the relationship".
+     */
+    public function testAHostEntityOnThePrivateManagerPointingAtAPurgedConversation(): void
+    {
+        $host    = $this->chatHostManager();
+        $ana     = $this->hostUser('Ana');
+        $luis    = $this->hostUser('Luis');
+        $chat    = $this->hostService(ChatServiceInterface::class);
+        $support = $chat->openSupport($ana);
+        $direct  = $chat->openDirect($ana, $luis);
+        $ticket  = $host->getReference(ChatConversation::class, $support->getId());
+        assert($ticket instanceof ChatConversation);
+        $link = new TestHostTicketLink($ana, $ticket);
+        $host->persist($link);
+        $host->flush();
+
+        $private = $this->hostService(ChatKitEntityManager::class);
+        $held    = $private->find(TestHostTicketLink::class, $link->getId());
+        self::assertInstanceOf(TestHostTicketLink::class, $held);
+        self::assertTrue($private->contains($held));
+
+        self::assertTrue($this->hostService(ChatMessagingInterface::class)->deleteConversation($support->getUuid()));
+        self::assertFalse($private->contains($held), 'the host row that pointed at the purged conversation is forgotten');
+        // A later ChatKit write in the same unit (its flush computes every managed instance) works.
+        $chat->send($ana, $direct, 'still writing');
+        self::assertSame(1, (int) $host->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE conversation_id = ?', [$direct->getId()]));
+        self::assertTrue($host->isOpen() && $private->isOpen());
+    }
+
     private function chatHostManager(): EntityManagerInterface
     {
         $manager = $this->kernel->getContainer()->get('doctrine.orm.entity_manager');

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Doctrine;
 
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\Mapping\JoinColumnMapping;
 use Doctrine\ORM\Mapping\ToOneOwningSideMapping;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
@@ -26,10 +25,9 @@ use function array_chunk;
 use function array_diff;
 use function array_keys;
 use function array_map;
-use function in_array;
 use function is_object;
 use function spl_object_id;
-use function str_starts_with;
+use function strtoupper;
 
 /**
  * 2.0: keeps ChatKit's private entity manager in step with its own DQL bulk writes. A bulk DELETE or UPDATE bypasses
@@ -39,8 +37,10 @@ use function str_starts_with;
  *
  * - {@see self::forgetGone()}: detaches the managed instances whose rows no longer exist (one `SELECT id … IN` per class
  *   that has managed instances; nothing when the manager holds none), and releases the managed rows that point at them:
- *   a nullable pointer becomes null in memory and in the unit of work's original data (the database set it to null
- *   already: SET NULL or the statement did it), a row whose required pointer leads to a gone row is gone too.
+ *   a pointer whose join column is `ON DELETE SET NULL` becomes null in memory and in the unit of work's original data
+ *   (the database set it to null), and a row whose pointer is CASCADE, required or without an action is forgotten too.
+ *   Every root of the identity map is scanned (a host entity the private manager holds may point at a chat row), but
+ *   only its pointers to ChatKit rows.
  * - {@see self::refresh()} / {@see self::refreshManaged()}: read again the managed instances a bulk UPDATE changed.
  *
  * Never clears the manager: unrelated managed rows (and any pending change of theirs) stay. Stateless.
@@ -141,28 +141,27 @@ final class ChatKitManagedRows
                 }
             }
             $gone = [];
+            // Every root (a host entity the private manager holds may point at a chat row too), but only the pointers
+            // to ChatKit rows.
             foreach ($unitOfWork->getIdentityMap() as $root => $entities) {
-                if (!str_starts_with($root, 'Nowo\\ChatKitBundle\\Entity\\')) {
-                    continue;
-                }
                 $metadata = $entityManager->getClassMetadata($root);
                 foreach ($entities as $entity) {
                     if ($unitOfWork->isUninitializedObject($entity)) {
                         continue;
                     }
                     foreach ($metadata->associationMappings as $field => $mapping) {
-                        // ChatKit's associations are all owning to-one sides (no collections).
-                        $target = $mapping instanceof ToOneOwningSideMapping ? $metadata->getFieldValue($entity, $field) : null;
+                        $target = $mapping instanceof ToOneOwningSideMapping && ChatKitManagerRegistry::isBundleEntity($mapping->targetEntity) ? $metadata->getFieldValue($entity, $field) : null;
                         if (!$mapping instanceof ToOneOwningSideMapping || !is_object($target) || !isset($ids[spl_object_id($target)])) {
                             continue;
                         }
-                        $nullable = !in_array(false, array_map(static fn (JoinColumnMapping $column): bool => $column->nullable !== false, $mapping->joinColumns), true);
-                        if (!$nullable) {
-                            // A required pointer to a gone row: this row went with it (FK cascade or the same statement).
+                        if (!self::setsNull($mapping)) {
+                            // CASCADE, no action or a required column: this row went with the gone one (or must be read
+                            // again from the database): it is forgotten too.
                             $gone[] = $entity;
 
                             break;
                         }
+                        // ON DELETE SET NULL: the database dropped the pointer; so does the managed instance.
                         $metadata->setFieldValue($entity, $field, null);
                         $unitOfWork->setOriginalEntityProperty(spl_object_id($entity), $field, null);
                     }
@@ -171,6 +170,21 @@ final class ChatKitManagedRows
         }
 
         return $detached;
+    }
+
+    /**
+     * Whether the database sets the pointer to null when its target row is deleted: every join column nullable and
+     * `ON DELETE SET NULL`.
+     */
+    private static function setsNull(ToOneOwningSideMapping $mapping): bool
+    {
+        foreach ($mapping->joinColumns as $column) {
+            if ($column->nullable === false || strtoupper((string) $column->onDelete) !== 'SET NULL') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

@@ -125,6 +125,27 @@ final class ChatKitManagedRowsTest extends DatabaseTestCase
     }
 
     /**
+     * Audit YB2-L2: forget() with the root alone. A thread reply (`thread_root_id` nullable, ON DELETE CASCADE) went
+     * with its root and is forgotten; a forward elsewhere (`forwarded_from_message_id` ON DELETE SET NULL) keeps its row
+     * and drops the pointer.
+     */
+    public function testForgetFollowsTheJoinColumnsOnDelete(): void
+    {
+        [$ana, , $direct, $root, , $forward] = $this->seed();
+        $reply                               = new ChatMessage($direct, $ana, 'in the thread', '<p>in the thread</p>');
+        $reply->replyIn($root);
+        $this->em->persist($reply);
+        $this->em->flush();
+
+        self::assertGreaterThanOrEqual(2, ChatKitManagedRows::forget($this->em, [$root]));
+        self::assertFalse($this->em->contains($root));
+        self::assertFalse($this->em->contains($reply), 'CASCADE: the reply went with its root');
+        self::assertTrue($this->em->contains($forward), 'SET NULL: the forward stays');
+        self::assertNull($forward->getForwardedFrom());
+        self::assertSame($direct, $forward->getForwardedFromConversation(), 'a pointer to a row that is not gone stays');
+    }
+
+    /**
      * A direct conversation with a mention and a reaction on its first message, and a forward of it in another
      * conversation, all held by ChatKit's manager.
      *

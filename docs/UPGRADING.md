@@ -252,7 +252,7 @@ ChatKit's private manager ([USAGE](USAGE.md#host-patterns-under-the-private-em))
   `ChatMessagingInterface::deleteConversation($conversationUuid)` or `purgeChannel($channelKey)` instead of
   `remove()`-ing the `ChatConversation` (with your manager, or ChatKit's fetched by service id). It deletes every row
   that hangs on the conversation, returns `false` when nothing matched, never throws on a concurrent repeat and
-  dispatches `ChatConversationDeletedEvent` (ids only).
+  dispatches `ChatConversationDeletedEvent` (ids only) after ChatKit's unit of work (inside a transaction of yours, durable only when yours commits).
 - **Marking mentions read**: call `ChatMentionInboxInterface::markMentionRead($user, $mentionId)` /
   `markMentionsRead($user, $ids)` instead of `ChatMessageMentionRepository::findOneForUser()` + `markRead()` inside a
   runner. List them with `ChatMentionInboxInterface::mentions()` / `countMentions()` (read-only `ChatMentionView`s)

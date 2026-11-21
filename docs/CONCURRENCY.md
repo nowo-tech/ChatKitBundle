@@ -46,7 +46,7 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | Ticket numbers | a dedicated counter row with an atomic update | — |
 | GDPR erasure | one unit for the whole erasure | — |
 | `nowo:chat:purge` | small batches, each in its own statement or unit | re-run safe |
-| 2.0 `deleteConversation()` / `purgeChannel()` | one unit on ChatKit's runner: the conversation row `FOR UPDATE` first, then children before parents; a concurrent purge of the same conversation waits on the lock and then finds no row (`false`, nothing written, no event) | idempotent (`false` when gone) |
+| 2.0 `deleteConversation()` / `purgeChannel()` | one unit on ChatKit's runner: the conversation row `FOR UPDATE` first, then children before parents; a concurrent purge of the same conversation waits on the lock and then finds no row (`false`, nothing written, no event). `ChatConversationDeletedEvent` follows ChatKit's unit; inside an outer host transaction it is a savepoint, so the deletion (and the event's facts) is durable only when the host commits | idempotent (`false` when gone) |
 | 2.0 bulk DQL writes and the private manager | after each bulk DELETE / UPDATE, the managed instances of deleted rows are detached and those of updated rows read again (`ChatKitManagedRows`); the manager is never cleared, so a worker without kernel reset never answers a deleted row | — |
 | 2.0 `markMentionRead()` / `markMentionsRead()` | one unit; `UPDATE … SET read_at WHERE id IN (…) AND read_at IS NULL` on the user's exact rows, so the first read time wins and a concurrent mark counts nothing twice | idempotent |
 | 1.37 message search (page, API, palette) | read-only: no write unit, no lock | — |

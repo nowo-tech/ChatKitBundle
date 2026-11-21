@@ -449,8 +449,8 @@ these public methods, which run in one transaction on ChatKit's runner and flush
   call without a user: check access in your own use case first. The uuid and the channel key are matched exactly (SQL,
   then a byte-for-byte re-check: a look-alike finds nothing). It returns `false` when nothing matched, and it is
   idempotent under concurrency: two purges of the same conversation at once never throw (the second waits on the row
-  lock, then finds it gone). After the commit, `ChatConversationDeletedEvent` (ids only: `conversationId`,
-  `conversationUuid`, `kind`, `channelKey`, `messageIds`) tells your listeners, once. Your own rows that point at the
+  lock, then finds it gone). Then `ChatConversationDeletedEvent` (ids only: `conversationId`,
+  `conversationUuid`, `kind`, `channelKey`, `messageIds`) tells your listeners, once. It fires once ChatKit's unit of work is done: that is the commit when you call outside a transaction of yours; inside an outer host transaction (ChatKit's unit is then a savepoint of it) the deletion, and so the event's facts, are durable only when your outer transaction commits. Your own rows that point at the
   conversation (a foreign key of yours) are yours: delete them first, or give the key `ON DELETE CASCADE`.
 - **Marking mentions read** applies only to mentions of exactly that user: pass the user, or its key (the host user id
   as a string; the `ChatUserReferenceInterface` reference in the `string` mode). Another user's mention id, an unknown
@@ -808,7 +808,7 @@ focus never moves to the wrong row.
 | `ChatLinkAddedEvent` | 1.19: a link was pinned to a conversation (`link`, `by`) | notify, audit |
 | `ChatLinkUpdatedEvent` | 1.19: a pinned link changed (`link`, `by`, `previousUrl`, `previousTitle`) | audit |
 | `ChatLinkRemovedEvent` | 1.19: a pinned link was removed (`conversation`, `uuid`, `url`, `title`, `by`) | audit |
-| `ChatConversationDeletedEvent` | 2.0: a conversation was deleted for good by `deleteConversation()` / `purgeChannel()` (ids only: `conversationId`, `conversationUuid`, `kind`, `channelKey`, `messageIds`), after the commit, once | drop your references (search index, projections) |
+| `ChatConversationDeletedEvent` | 2.0: a conversation was deleted for good by `deleteConversation()` / `purgeChannel()` (ids only: `conversationId`, `conversationUuid`, `kind`, `channelKey`, `messageIds`), once, after ChatKit's unit of work (durable only when an outer transaction of yours commits) | drop your references (search index, projections) |
 
 ### Event id getters (2.0)
 
