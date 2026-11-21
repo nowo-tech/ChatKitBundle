@@ -18,6 +18,10 @@ declare(strict_types=1);
  * history on); `delreply` deletes the first message's replies one by one (both workers the same ones); `delroot`
  * deletes the first message halfway through.
  *
+ * 2.0: `purge` deletes the seeded channel conversations `room:race-<n>` one by one through
+ * ChatMessagingInterface::purgeChannel() (both workers the same ones, at the same moment: one deletes, the other finds
+ * nothing; neither throws).
+ *
  * Prints one JSON line: {ok, failures, poisoned, closed}.
  */
 
@@ -28,6 +32,7 @@ use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Service\ChatForwarder;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
+use Nowo\ChatKitBundle\Service\ChatMessaging;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatThreads;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
@@ -62,6 +67,8 @@ $settings = $container->get(ChatUserSettingsRepository::class);
 assert($settings instanceof ChatUserSettingsRepository);
 $boundary = $container->get(ChatRequestBoundaryListener::class);
 assert($boundary instanceof ChatRequestBoundaryListener);
+$messaging = $container->get(ChatMessaging::class);
+assert($messaging instanceof ChatMessaging);
 $em = static function () use ($registry): EntityManagerInterface {
     $manager = $registry->getManager();
     assert($manager instanceof EntityManagerInterface);
@@ -102,7 +109,9 @@ for ($i = 0; $i < (int) $calls; ++$i) {
         // 1.36 (audit UB-4): both workers delete the same replies; one deletes the root while the other replies.
         'delreply' => 'delreply',
         'delroot'  => $i === intdiv((int) $calls, 2) ? 'delroot' : 'idle',
-        default    => 'send',
+        // 2.0: both workers purge the same channel conversations in the same order.
+        'purge' => 'purge',
+        default => 'send',
     };
     try {
         $ana   = $em()->getRepository(TestUser::class)->findOneBy(['name' => 'ana']) ?? throw new RuntimeException('ana');
@@ -126,7 +135,9 @@ for ($i = 0; $i < (int) $calls; ++$i) {
             'delreply' => $chat->delete($ana, $em()->getRepository(ChatMessage::class)->findBy(['threadRoot' => $first()], ['id' => 'ASC'])[$i] ?? throw new RuntimeException('reply')),
             'delroot'  => $chat->delete($ana, $first()),
             'idle'     => usleep(2000),
-            'optout'   => (static function () use ($settings, $luis, $i): void {
+            // True for the worker that deleted it, false for the one that found it gone: both are success.
+            'purge'  => $messaging->purgeChannel('room:race-' . $i),
+            'optout' => (static function () use ($settings, $luis, $i): void {
                 $mine = $settings->forUser($luis);
                 $mine->setShareReadTimes($i % 2 === 0);
                 $settings->save($mine);

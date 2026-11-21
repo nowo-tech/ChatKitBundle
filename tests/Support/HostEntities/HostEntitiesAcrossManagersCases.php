@@ -6,6 +6,8 @@ namespace Nowo\ChatKitBundle\Tests\Support\HostEntities;
 
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
+use Nowo\ChatKitBundle\Contract\ChatMentionInboxInterface;
+use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -311,6 +313,50 @@ trait HostEntitiesAcrossManagersCases
         self::assertSame(1, $this->rows('nowo_chat_conversation'), 'no duplicate conversation');
         self::assertSame(2, $this->rows('test_user'), 'no duplicate user');
         self::assertTrue($host->isOpen());
+    }
+
+    /**
+     * 2.0: the host APIs for work a host used to do through its own manager: deleting a conversation
+     * (ChatMessagingInterface::deleteConversation() / purgeChannel()) and marking mentions read (ChatMentionInboxInterface)
+     * write through ChatKit's private manager only. The application's manager stays open with its pending work pending,
+     * a repeat changes nothing, and another user's mention id is ignored.
+     */
+    public function testTheHostDeletesAConversationAndMarksMentionsReadThroughChatKit(): void
+    {
+        $host    = $this->chatHostManager();
+        $ana     = $this->hostUser('Ana');
+        $luis    = $this->hostUser('Luis');
+        $chat    = $this->hostService(ChatServiceInterface::class);
+        $pending = new TestUser('Pending', 'pending@example.test');
+        $host->persist($pending);
+        $luis->setChatLocale('fr');
+
+        $direct = $chat->openDirect($ana, $luis);
+        $chat->send($ana, $direct, 'hi @[Luis](' . $luis->getChatPublicId() . ')');
+        $chat->send($luis, $direct, 'hi @[Ana](' . $ana->getChatPublicId() . ')');
+        $inbox   = $this->hostService(ChatMentionInboxInterface::class);
+        $forLuis = $inbox->mentions($luis, [], false, 10)[0]->id;
+        $forAna  = $inbox->mentions($ana, [], false, 10)[0]->id;
+
+        self::assertFalse($inbox->markMentionRead($ana, $forLuis), 'another user\'s mention is ignored');
+        self::assertSame(1, $inbox->markMentionsRead($luis, [$forLuis, $forAna]));
+        self::assertSame(0, $inbox->markMentionsRead($luis, [$forLuis]));
+        $sql = $host->getConnection();
+        self::assertNotNull($sql->fetchOne('SELECT read_at FROM nowo_chat_message_mention WHERE id = ?', [$forLuis]));
+        self::assertNull($sql->fetchOne('SELECT read_at FROM nowo_chat_message_mention WHERE id = ?', [$forAna]));
+
+        $messaging = $this->hostService(ChatMessagingInterface::class);
+        self::assertTrue($messaging->deleteConversation($direct->getUuid()));
+        self::assertFalse($messaging->deleteConversation($direct->getUuid()));
+        foreach (['nowo_chat_conversation', 'nowo_chat_message', 'nowo_chat_message_mention', 'nowo_chat_participant'] as $table) {
+            self::assertSame(0, $this->rows($table), $table);
+        }
+
+        self::assertTrue($host->isOpen());
+        self::assertTrue($host->getUnitOfWork()->isScheduledForInsert($pending), 'the host\'s pending insert is still pending');
+        self::assertNull($sql->fetchOne('SELECT locale FROM test_user WHERE id = ?', [$luis->getId()]), 'not flushed by the chat');
+        $host->flush();
+        self::assertSame(3, $this->rows('test_user'));
     }
 
     private function chatHostManager(): EntityManagerInterface

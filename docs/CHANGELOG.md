@@ -228,6 +228,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 no deprecation from `nowo-tech/chat-kit-bundle` and no "flushed by NowoChatKitBundle" entry upgrades without code
 changes. See [UPGRADING](UPGRADING.md#unreleased).
 
+### Added
+
+- Host APIs for work a host can no longer do through its own entity manager (Beacon census): `ChatMessagingInterface::deleteConversation(string $conversationUuid): bool` and `purgeChannel(string $channelKey): bool` delete a conversation for good through ChatKit's private manager, in one transaction on ChatKit's runner (row lock first): its messages and every row that hangs on them (mentions, reactions, saved rows, link index, previous texts, thread reads, read times, participants, pinned links; forwards elsewhere keep a neutral marker). Exact uuid / channel key only (SQL plus a byte-for-byte re-check), `false` when nothing matched, idempotent under concurrency (a second purge waits on the row lock and answers `false`). New ids-only `ChatConversationDeletedEvent` after the commit. A host that implements or decorates `ChatMessagingInterface` adds the two methods.
+- `ChatMentionInboxInterface` (default `ChatMentionInbox`): `mentions()` / `countMentions()` list a user's mentions as read-only `ChatMentionView`s (the repository is not public API), and `markMentionRead(ChatUserInterface|string $user, int|string $mentionId): bool` / `markMentionsRead(ChatUserInterface|string $user, array $mentionIds): int` mark exactly that user's mentions read through ChatKit's manager (another user's or an unknown id is skipped silently; idempotent, the first read time is kept). Internal: `ChatMessageMentionRepository::markReadByKey()`, `Service\ChatConversationPurger`.
+- USAGE / UPGRADING: "Host patterns under the private EM".
+
 ### Removed
 
 - **BREAKING:** the 1.x shared-manager mode (`profiles.<name>.doctrine.private_entity_manager` unset or `false`; deprecated since 1.27 / 1.39). ChatKit always reads and writes its rows through its own private entity manager and never flushes, clears or closes the application's. `private_entity_manager: false` (in any profile) fails the container build; `true` is accepted as a deprecated no-op until 3.0.

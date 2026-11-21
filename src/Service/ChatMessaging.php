@@ -42,6 +42,8 @@ final readonly class ChatMessaging implements ChatMessagingInterface
 {
     private TransactionRunnerInterface $transactions;
 
+    private ChatConversationPurger $purger;
+
     /** Interface actions => voter attributes. */
     private const array ATTRIBUTES = [
         self::VIEW     => ChatVoter::VIEW,
@@ -72,6 +74,8 @@ final readonly class ChatMessaging implements ChatMessagingInterface
      * @param TransactionRunnerInterface|null $transactions 1.30: ChatKit's runner (join()); null builds the default
      * @param ChatParticipantRepository|null $participantRows 1.30: participant rows of join(); null asks the manager
      * @param ClockInterface $clock 1.30: join time of a new participant row
+     * @param ChatMarkdownRenderer|null $markdown Renders the HTML of the views; null keeps the stored render
+     * @param ChatConversationPurger|null $purger 2.0: deleteConversation() and purgeChannel(); null builds one without events
      */
     public function __construct(
         private ChatServiceInterface $chat,
@@ -84,8 +88,10 @@ final readonly class ChatMessaging implements ChatMessagingInterface
         private ?ChatParticipantRepository $participantRows = null,
         private ClockInterface $clock = new Clock(),
         private ?ChatMarkdownRenderer $markdown = null,
+        ?ChatConversationPurger $purger = null,
     ) {
         $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
+        $this->purger       = $purger ?? new ChatConversationPurger($entityManager, $conversations, $this->transactions);
     }
 
     /**
@@ -280,6 +286,22 @@ final readonly class ChatMessaging implements ChatMessagingInterface
         if ($found !== []) {
             $this->chat->archive($user, $found, $archived);
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function deleteConversation(string $conversationUuid): bool
+    {
+        return $this->purger->purgeConversation($conversationUuid);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function purgeChannel(string $channelKey): bool
+    {
+        return $this->purger->purgeChannel($channelKey);
     }
 
     private function find(string $uuid): ?ChatConversation

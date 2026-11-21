@@ -9,6 +9,7 @@ use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
 use LogicException;
+use Nowo\ChatKitBundle\Contract\ChatMentionInboxInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Doctrine\ChannelKeyCollationListener;
 use Nowo\ChatKitBundle\Doctrine\StringReferenceSchemaGuard;
@@ -215,6 +216,11 @@ final class ChatUserReferenceLookalikeTest extends TestCase
         self::assertSame([$withBob->getId()], array_map(static fn (ChatConversation $c): ?int => $c->getId(), $this->get(ChatConversationRepository::class)->findParticipating($bob, 10)));
         self::assertSame(['ana'], $this->get(ChatConversationRepository::class)->findDirectPeerIds($bob));
         self::assertSame([(int) $withBob->getId()], array_keys($this->get(ChatParticipantRepository::class)->findForUser($bob, $ids)));
+        // 2.0: the host's mark-read by user or key never reaches Bob's mention through bob.
+        $bigMention = (int) $mentions->findForUser($bigB, [], false, 10)[0]->getId();
+        $inbox      = $this->get(ChatMentionInboxInterface::class);
+        self::assertFalse($inbox->markMentionRead($bob, $bigMention));
+        self::assertSame(0, $inbox->markMentionsRead('bob', [$bigMention]));
         self::assertSame(1, $mentions->markReadUpTo($bob, $withBob, PHP_INT_MAX, new DateTimeImmutable()));
         self::assertSame(1, $mentions->countForUser($bigB, [], false), 'Bob\'s mention stays unread');
     }

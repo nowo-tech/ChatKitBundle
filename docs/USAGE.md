@@ -6,6 +6,7 @@
 - [Contracts](#contracts)
 - [Standard Symfony host](#standard-symfony-host)
 - [Using it from a DDD / hexagonal application](#using-it-from-a-ddd--hexagonal-application)
+- [Host patterns under the private EM](#host-patterns-under-the-private-em)
 - [Conversations and permissions](#conversations-and-permissions)
 - [Opening conversations from your pages](#opening-conversations-from-your-pages)
 - [Support inbox](#support-inbox)
@@ -428,6 +429,62 @@ final readonly class DirectoryAdapter implements ChatDirectoryInterface
   views and `ChatMessagingInterface`).
 - There are no events yet for message edits, reactions, pins, read cursors or conversations being opened.
 
+## Host patterns under the private EM
+
+Since 2.0 ChatKit reads and writes its rows through its own entity manager (`ChatKitEntityManager` /
+`ChatKitManagerRegistry`, both `@internal`). Work a host used to do on chat rows through its own manager goes through
+these public methods, which run in one transaction on ChatKit's runner and flush ChatKit's manager themselves:
+
+| Task | Method |
+| --- | --- |
+| Delete a conversation for good (e.g. purge deleted rooms after N days) | `ChatMessagingInterface::deleteConversation(string $conversationUuid): bool` |
+| The same, by application channel key | `ChatMessagingInterface::purgeChannel(string $channelKey): bool` |
+| List / count a user's mentions | `ChatMentionInboxInterface::mentions(...)`, `countMentions(...)` |
+| Mark one / several mentions read | `ChatMentionInboxInterface::markMentionRead(ChatUserInterface\|string $user, int\|string $mentionId): bool`, `markMentionsRead(ChatUserInterface\|string $user, array $mentionIds): int` |
+
+- **Deleting a conversation** removes its messages and every row that hangs on them: mentions, reactions, saved rows,
+  the link index, previous texts, thread reads, read times, participants and pinned links (thread replies before their
+  roots, children before parents, no database cascade relied on). Forwards of its messages in other conversations keep
+  a neutral "Forwarded" marker. ChatKit stores no files, so there is nothing to remove in a file store. It is a system
+  call without a user: check access in your own use case first. The uuid and the channel key are matched exactly (SQL,
+  then a byte-for-byte re-check: a look-alike finds nothing). It returns `false` when nothing matched, and it is
+  idempotent under concurrency: two purges of the same conversation at once never throw (the second waits on the row
+  lock, then finds it gone). After the commit, `ChatConversationDeletedEvent` (ids only: `conversationId`,
+  `conversationUuid`, `kind`, `channelKey`, `messageIds`) tells your listeners, once. Your own rows that point at the
+  conversation (a foreign key of yours) are yours: delete them first, or give the key `ON DELETE CASCADE`.
+- **Marking mentions read** applies only to mentions of exactly that user: pass the user, or its key (the host user id
+  as a string; the `ChatUserReferenceInterface` reference in the `string` mode). Another user's mention id, an unknown
+  id and a malformed one are skipped silently. Both methods are idempotent and keep the first read time:
+  `markMentionRead()` is true while the id is one of the user's mentions (read now or before), `markMentionsRead()`
+  counts the mentions this call turned from unread to read.
+
+```php
+final class PurgeDeletedRooms
+{
+    public function __construct(private ChatMessagingInterface $chat, private RoomRepository $rooms, private EntityManagerInterface $em) {}
+
+    public function __invoke(): int
+    {
+        $purged = 0;
+        foreach ($this->rooms->deletedBefore(new DateTimeImmutable('-30 days')) as $room) {
+            $this->chat->purgeChannel($room->channelKey()); // ChatKit's own transaction; false when already gone
+            $this->em->remove($room);
+            ++$purged;
+        }
+        $this->em->flush(); // your own rows, your own manager
+
+        return $purged;
+    }
+}
+```
+
+Do not:
+
+- autowire `ChatKitEntityManager` or `ChatKitManagerRegistry`, or fetch ChatKit's manager by its service id;
+- load chat entities (or ChatKit's repositories) and `remove()` / change them, then flush any manager;
+- wrap chat entities in your transaction runner (or ChatKit's runner `nowo_chat_kit.transaction_runner`) to write them
+  yourself. Call the methods above outside your own unit of work: they commit on their own.
+
 ## Conversations and permissions
 
 | Kind | Who | Notes |
@@ -751,6 +808,7 @@ focus never moves to the wrong row.
 | `ChatLinkAddedEvent` | 1.19: a link was pinned to a conversation (`link`, `by`) | notify, audit |
 | `ChatLinkUpdatedEvent` | 1.19: a pinned link changed (`link`, `by`, `previousUrl`, `previousTitle`) | audit |
 | `ChatLinkRemovedEvent` | 1.19: a pinned link was removed (`conversation`, `uuid`, `url`, `title`, `by`) | audit |
+| `ChatConversationDeletedEvent` | 2.0: a conversation was deleted for good by `deleteConversation()` / `purgeChannel()` (ids only: `conversationId`, `conversationUuid`, `kind`, `channelKey`, `messageIds`), after the commit, once | drop your references (search index, projections) |
 
 ### Event id getters (2.0)
 
@@ -780,6 +838,7 @@ the events are deprecated since 2.0 and removed in 3.0.
 | `ChatLinkRemovedEvent` | `conversationId()`, `conversationUuid()`, `uuid` (the removed link) | `byReference()` | `byPublicId()` |
 | `ChatChannelOpeningEvent` | `channelKey`, `scope` | `userReference()` | `userPublicId()` |
 | `ChatMentionsErasedEvent` | `messageIds`, `skippedMessageIds` (scalars already) | `publicId` | `publicId` |
+| `ChatConversationDeletedEvent` | `conversationId()`, `conversationUuid()`, `messageIds` (scalars already; the rows are gone) | — | — |
 
 ### Refusing to open a channel
 
@@ -850,11 +909,21 @@ public function __invoke(ChatMentionEvent $event): void
 }
 ```
 
-For an inbox of "messages that mention me", `ChatMessageMentionRepository::findForUser($user, $channelKeys,
-$isSupportAgent, $limit, $unreadOnly, $since, $channelsOnly)` and `countForUser()` return only mentions in direct
-threads, the channels you pass (`ChatChannelSourceInterface::channelsFor()` keys) and the support threads the user may
-read; `read_at` is set when the user reads the conversation past the message (or you call `markRead()` and flush).
-`countUnreadByConversation()` gives an "@" count per conversation.
+For an inbox of "messages that mention me" use `ChatMentionInboxInterface` (2.0; the repository is not public API):
+`mentions($user, $channelKeys, $isSupportAgent, $limit, $unreadOnly, $since, $channelsOnly)` and `countMentions()`
+return only mentions in direct threads, the channels you pass (`ChatChannelSourceInterface::channelsFor()` keys) and the
+support threads the user may read, as read-only `ChatMentionView`s (`id`, `unread`, `createdAt`, `readAt`, the
+`ChatMessageView` with the conversation uuid, kind and channel key, `authorDisplayName`, and `peerReference`: the other
+person's user key in a direct thread). `read_at` is set when the user reads the conversation past the message, or with
+`markMentionRead($user, $mentionId)` / `markMentionsRead($user, $ids)` (see
+[Host patterns under the private EM](#host-patterns-under-the-private-em)).
+
+```php
+public function __construct(private ChatMentionInboxInterface $mentions) {}
+
+$rows   = $this->mentions->mentions($user, $channelKeys, $isAgent, 20, unreadOnly: true);
+$marked = $this->mentions->markMentionsRead($user, array_map(static fn (ChatMentionView $row): int => $row->id, $rows));
+```
 
 ## References
 

@@ -16,6 +16,7 @@ use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatForwardPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatHistoryPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatMentionInboxInterface;
 use Nowo\ChatKitBundle\Contract\ChatMessageActionsInterface;
 use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
@@ -53,6 +54,7 @@ use Nowo\ChatKitBundle\Search\ChatMessageSearchSql;
 use Nowo\ChatKitBundle\Search\ChatSearchIndex;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
+use Nowo\ChatKitBundle\Service\ChatMentionInbox;
 use Nowo\ChatKitBundle\Service\ChatMentions;
 use Nowo\ChatKitBundle\Service\ChatMenuOptions;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
@@ -187,6 +189,8 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatServiceInterface::class, ChatService::class);
     // 1.27: the same service by public uuid, answering with views (REQ-ARCH-001 rule 1; DDD hosts).
     $services->alias(ChatMessagingInterface::class, ChatMessaging::class);
+    // 2.0: the host's Mentions page (list, count, mark read) through ChatKit's own manager.
+    $services->alias(ChatMentionInboxInterface::class, ChatMentionInbox::class);
     // 1.35: the message menu by public uuid (DDD hosts).
     $services->alias(ChatMessageActionsInterface::class, ChatMessageMenu::class);
     // 1.24: who the signed-in user is in the chat (default: the security user when it implements ChatUserInterface).

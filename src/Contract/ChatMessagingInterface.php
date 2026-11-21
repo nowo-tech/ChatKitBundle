@@ -286,4 +286,30 @@ interface ChatMessagingInterface
      * @param bool $archived True to close, false to reopen
      */
     public function archive(ChatUserInterface $user, array $conversationUuids, bool $archived): void;
+
+    /**
+     * 2.0: deletes the conversation for good, with its messages and every row that hangs on them (mentions, reactions,
+     * saved rows, link index, previous texts, thread reads, read times, participants, pinned links). Forwards of its
+     * messages elsewhere keep a neutral "Forwarded" marker. A host / system call without an actor: check access in your
+     * own use case first (e.g. a purge of deleted rooms after N days). Runs in one transaction on ChatKit's own entity
+     * manager; never wrap it in your runner. Idempotent: a call for a conversation that is gone (or that another call is
+     * deleting at the same moment) returns false and throws nothing. ChatConversationDeletedEvent (ids only) follows the
+     * commit.
+     *
+     * @param string $conversationUuid Public uuid of the conversation (compared byte for byte)
+     *
+     * @return bool True when this call deleted it; false when no conversation has exactly this uuid
+     */
+    public function deleteConversation(string $conversationUuid): bool;
+
+    /**
+     * 2.0: deleteConversation() for the conversation of an application channel, by its channel key (house rule LQ: the
+     * SQL lookup is re-checked byte for byte; a look-alike key or one that breaks the ChatChannelKey rule finds nothing).
+     * Channel keys are unique, so no scope is needed. Opening the channel again later starts a new, empty conversation.
+     *
+     * @param string $channelKey The application channel key (ChatChannel::$key)
+     *
+     * @return bool True when this call deleted it; false when no channel conversation has exactly this key
+     */
+    public function purgeChannel(string $channelKey): bool;
 }

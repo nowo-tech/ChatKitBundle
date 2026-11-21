@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Tools\SchemaTool;
 use LogicException;
+use Nowo\ChatKitBundle\Contract\ChatMentionInboxInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\UnresolvedChatUser;
 use Nowo\ChatKitBundle\Doctrine\UserReferenceListener;
@@ -207,6 +208,33 @@ final class UserReferenceIdModeTest extends DatabaseTestCase
         self::assertNull($conversations->findSupportFor($ana));
         self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_participant WHERE user_id = ?', [(string) $ana->getId()]));
         self::assertNull($this->em->getRepository(ChatMessageMention::class)->findOneBy(['message' => $mention->getId()]));
+    }
+
+    /**
+     * 2.0: ChatMentionInboxInterface on the reference columns: the user's key (the id as a string) marks exactly that
+     * user's mentions; another user's id is skipped; a repeat writes nothing; the views carry the direct peer's key.
+     */
+    public function testTheMentionInboxOnTheReferenceColumns(): void
+    {
+        $chat  = $this->get(ChatService::class);
+        $inbox = $this->get(ChatMentionInboxInterface::class);
+        $ana   = $this->user('Ana');
+        $luis  = $this->user('Luis');
+        $dm    = $chat->openDirect($ana, $luis);
+        $chat->send($ana, $dm, 'hi @[Luis](' . $luis->getChatPublicId() . ')');
+        $chat->send($luis, $dm, 'hi @[Ana](' . $ana->getChatPublicId() . ')');
+        $this->em->clear();
+        [$forLuis] = $inbox->mentions($luis, [], false, 10);
+        [$forAna]  = $inbox->mentions($ana, [], false, 10);
+        self::assertSame([(string) $ana->getId(), 'Ana'], [$forLuis->peerReference, $forLuis->authorDisplayName]);
+
+        self::assertFalse($inbox->markMentionRead((string) $ana->getId(), $forLuis->id), 'another user\'s mention');
+        self::assertFalse($inbox->markMentionRead((string) $luis->getId() . ' ', $forLuis->id));
+        self::assertSame(1, $inbox->markMentionsRead((string) $luis->getId(), [$forLuis->id, $forAna->id]));
+        self::assertSame(0, $inbox->markMentionsRead($luis, [$forLuis->id]));
+        self::assertTrue($inbox->markMentionRead($ana, $forAna->id));
+        self::assertSame(0, $inbox->countMentions($luis, [], false, unreadOnly: true));
+        self::assertSame(0, $inbox->countMentions($ana, [], false, unreadOnly: true));
     }
 
     public function testErasingAnAccountThatIsAlreadyGone(): void

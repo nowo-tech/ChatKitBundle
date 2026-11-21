@@ -243,6 +243,25 @@ The 1.27 "Check after enabling it" list, now unconditional:
 
 `doctrine.entity_manager` keeps its meaning: the manager that maps the chat entities, the source of the private one.
 
+### Host patterns under the private EM
+
+Two things a host used to do on chat rows through its own entity manager now have public methods that write through
+ChatKit's private manager ([USAGE](USAGE.md#host-patterns-under-the-private-em)):
+
+- **Deleting a conversation** (e.g. purging deleted rooms after N days): call
+  `ChatMessagingInterface::deleteConversation($conversationUuid)` or `purgeChannel($channelKey)` instead of
+  `remove()`-ing the `ChatConversation` (with your manager, or ChatKit's fetched by service id). It deletes every row
+  that hangs on the conversation, returns `false` when nothing matched, never throws on a concurrent repeat and
+  dispatches `ChatConversationDeletedEvent` (ids only).
+- **Marking mentions read**: call `ChatMentionInboxInterface::markMentionRead($user, $mentionId)` /
+  `markMentionsRead($user, $ids)` instead of `ChatMessageMentionRepository::findOneForUser()` + `markRead()` inside a
+  runner. List them with `ChatMentionInboxInterface::mentions()` / `countMentions()` (read-only `ChatMentionView`s)
+  instead of the repository, which is not public API.
+
+Do not autowire `ChatKitEntityManager` / `ChatKitManagerRegistry` (internal), and do not wrap chat entities in your
+transaction runner or in `nowo_chat_kit.transaction_runner` to write them yourself: the methods above run their own unit
+of work. If you decorate or implement `ChatMessagingInterface`, add the two new methods.
+
 ### Unchanged
 
 Retention and the purge, GDPR export and erasure, search visibility (page, API, SearchKit palette), Web Push, the
