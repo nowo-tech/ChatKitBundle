@@ -5,6 +5,15 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 2.0.0](#to-200)
+  - [Before you upgrade](#before-you-upgrade)
+  - [Default flip: the private entity manager is the only mode](#default-flip-the-private-entity-manager-is-the-only-mode)
+  - [Removed](#removed)
+  - [Port interfaces](#port-interfaces)
+  - [Configuration, templates and the Twig global](#configuration-templates-and-the-twig-global)
+  - [Private manager only](#private-manager-only)
+  - [Host patterns under the private EM](#host-patterns-under-the-private-em)
+  - [Unchanged](#unchanged)
 - [To 1.40.2](#to-1402)
 - [To 1.40.1](#to-1401)
 - [To 1.40.1](#to-1401-1)
@@ -92,6 +101,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 2.0.0
+
+From **1.40.2**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 ```bash
 composer require nowo-tech/chat-kit-bundle:^2.0 -W
