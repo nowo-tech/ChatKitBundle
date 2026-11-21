@@ -43,8 +43,8 @@ use const PHP_URL_PATH;
  * 1.40.0 created none of the foreign keys starting on a collated table on MySQL / MariaDB with doctrine/orm 3.7 / 3.8
  * and doctrine/dbal 4.5+.
  *
- * Every test drops and creates the schema in its own mode; the next LoadDatabaseTestCase test creates its default
- * schema again.
+ * Every test drops and creates the schema in its own mode, then leaves the default schema behind (1.40.2: the
+ * suite's other tests only update what they find).
  */
 final class SchemaForeignKeysDatabaseTest extends LoadDatabaseTestCase
 {
@@ -125,8 +125,32 @@ final class SchemaForeignKeysDatabaseTest extends LoadDatabaseTestCase
     protected function tearDown(): void
     {
         parent::tearDown();
-        // The schema of this test's mode is left behind: the next load test creates its own again.
+        if (TestKernel::databaseUrl() !== null) {
+            $this->restoreDefaultSchema();
+        }
+        // The next load test creates its own schema (and its ballast table) again.
         self::$schema = false; // @phpstan-ignore frankenphp.worker.noMutableStaticProperty
+    }
+
+    /**
+     * Leaves the default schema behind (the suite's default `doctrine.user_reference`), whatever mode the test created:
+     * the suite's other tests only update the schema they find, and on PostgreSQL a `string` mode user column
+     * (VARCHAR) cannot be altered to the default mode's INT ("cannot be cast automatically to type integer").
+     */
+    private function restoreDefaultSchema(): void
+    {
+        $kernel = new TestKernel();
+        $kernel->boot();
+
+        try {
+            $em = $kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
+            assert($em instanceof EntityManagerInterface);
+            $tool = new SchemaTool($em);
+            $tool->dropDatabase();
+            $tool->createSchema($em->getMetadataFactory()->getAllMetadata());
+        } finally {
+            $kernel->shutdown();
+        }
     }
 
     #[DataProvider('modes')]
