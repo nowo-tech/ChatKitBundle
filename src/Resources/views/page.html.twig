@@ -76,7 +76,7 @@
                 {% set _archived = archived ?? false %}
                 <a class="{{ nowo_ui_class('btn_link', _b) }} nowo-chat-page__archived-link" href="{{ path('nowo_chat_page', _archived ? {} : {archived: 1}) }}" data-testid="chat-page-archived-link">{{ (_archived ? 'chat.filter_all' : 'chat.filter_archived')|trans }}</a>
                 {% if conversations is empty %}
-                    <p class="{{ nowo_ui_class('empty', _b) }} nowo-chat-page__empty">{{ 'chat.empty_title'|trans }}</p>
+                    <div class="nowo-chat-page__empty">{{ include(nowo_ui_partial('empty', _b), {empty: {title: null, message: 'chat.empty_title'|trans, action: null}, bundle: _b, region: 'empty'}, false) }}</div>
                 {% endif %}
                 <ul role="list">
                     {% for conversation in conversations %}
@@ -126,7 +126,7 @@
                                 </div>
                             </li>
                         {% else %}
-                            <li class="{{ nowo_ui_class('empty', _b) }} nowo-chat-page__empty">{{ 'chat.start_chat'|trans }}</li>
+                            <li class="nowo-chat-page__empty">{{ include(nowo_ui_partial('empty', _b), {empty: {title: null, message: 'chat.start_chat'|trans, action: null}, bundle: _b, region: 'empty'}, false) }}</li>
                         {% endfor %}
                     </ol>
                     {% if can_send %}
@@ -143,7 +143,7 @@
                         <p class="{{ nowo_ui_class('muted', _b) }} nowo-chat-notice">{{ 'chat.read_only'|trans }}</p>
                     {% endif %}
                 {% else %}
-                    <p class="{{ nowo_ui_class('empty', _b) }} nowo-chat-page__empty">{{ 'chat.page_select'|trans }}</p>
+                    <div class="nowo-chat-page__empty">{{ include(nowo_ui_partial('empty', _b), {empty: {title: null, message: 'chat.page_select'|trans, action: null}, bundle: _b, region: 'empty'}, false) }}</div>
                 {% endif %}
             </section>
         {% endblock %}

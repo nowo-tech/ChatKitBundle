@@ -1645,7 +1645,8 @@ Separators go between groups. On phones (below 40rem) the kebab and the context 
 2.58). In the row, Left / Right move between the emoji and Up / Down leave it.
 
 **Saved list.** `GET /chat/saved` (route `nowo_chat_page_saved`) lists the viewer's saved messages, newest save first,
-and works without JavaScript: each entry links to its message. With `save.dock_entry` the dock header links to it.
+and works without JavaScript: each entry links to its message. With nothing saved the page shows UiKit's `empty` state:
+one sentence and a link back to the conversations. With `save.dock_entry` the dock header links to it.
 `GET /chat/api/saved?before=<next>` returns the same list as JSON:
 `{items: [{savedAt, conversation: {uuid, kind, title}, message}], next}`. A saved message of a conversation the viewer
 may no longer read is hidden, not removed: it comes back with the access. Deleted messages are not listed.

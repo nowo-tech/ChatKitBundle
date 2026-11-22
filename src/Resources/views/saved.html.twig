@@ -44,7 +44,10 @@
     <section class="{{ nowo_ui_class('section', _b) }} nowo-chat-saved{{ (nowo_chat_full_height ?? false) ? ' nowo-chat-page--fill' }}" data-testid="chat-saved" data-nowo-chat-saved-page data-nowo-chat-csrf="{{ csrf }}" data-nowo-chat-removed="{{ 'chat.saved_removed'|trans }}" aria-label="{{ 'chat.saved_title'|trans }}"{{ nowo_ui_attrs('section', _b) }}>
         {% block nowo_chat_saved_list %}
             {% if items is empty %}
-                <p class="{{ nowo_ui_class('empty', _b) }} nowo-chat-saved__empty" data-testid="chat-saved-empty">{{ 'chat.saved_empty'|trans }}</p>
+                {# 2.1: UiKit `empty` (one sentence + a link to the conversations); the controller passes `empty_state`. #}
+                <div class="nowo-chat-saved__empty" data-testid="chat-saved-empty">
+                    {{ include(nowo_ui_partial('empty', _b), {empty: empty_state ?? {title: null, message: 'chat.saved_empty'|trans, action: null}, bundle: _b, region: 'empty'}, false) }}
+                </div>
             {% else %}
                 <ul class="nowo-chat-saved__list" role="list">
                     {% for item in items %}

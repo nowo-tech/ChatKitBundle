@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\View;
 
+use Nowo\UiKitBundle\View\Action;
 use Nowo\UiKitBundle\View\BackLink;
+use Nowo\UiKitBundle\View\EmptyState;
 use Nowo\UiKitBundle\View\Label;
 use Nowo\UiKitBundle\View\PageHeader;
 
@@ -38,6 +40,20 @@ final class ChatPage
     public static function savedHeader(): PageHeader
     {
         return new PageHeader(new Label('chat.saved_title', self::BUNDLE), new Label('chat.saved_intro', self::BUNDLE));
+    }
+
+    /**
+     * 2.1: empty state of the Saved page through UiKit's `empty` partial: one sentence (`chat.saved_empty`) and a link
+     * to the conversations (`nowo_chat_page`, `chat.saved_back`).
+     *
+     * @return EmptyState The empty state view model
+     */
+    public static function savedEmpty(): EmptyState
+    {
+        return new EmptyState(
+            message: new Label('chat.saved_empty', self::BUNDLE),
+            action: new Action('view', new Label('chat.saved_back', self::BUNDLE), route: 'nowo_chat_page', variant: 'link', attributes: ['data-testid' => 'chat-saved-back']),
+        );
     }
 
     /**

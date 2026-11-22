@@ -46,6 +46,43 @@ final class PageContractTest extends PageContractTestCase
         ]));
     }
 
+    public function testTheEmptyPagesUseTheUiKitEmptyState(): void
+    {
+        $page = $this->renderPage(new PageFixture('@NowoChatKitBundle/page.html.twig', self::context()))->html;
+        self::assertStringContainsString('nowo-ui-empty__message">No conversations yet</p>', $page);
+        self::assertStringContainsString('nowo-ui-empty__message">Pick a conversation.</p>', $page);
+        self::assertStringNotContainsString('nowo-ui-empty__title', $page, 'One sentence, no title line.');
+        self::assertStringNotContainsString('No items found', $page, 'No default second line.');
+
+        $thread = $this->renderPage(new PageFixture('@NowoChatKitBundle/page.html.twig', self::context([
+            'conversations' => [self::conversation('1c9e5b0a-3f2d-4b7a-8e61-5a4d2c1b0f22', '#ops', 'Channel', 0, 'x')],
+            'current'       => self::conversation('1c9e5b0a-3f2d-4b7a-8e61-5a4d2c1b0f22', '#ops', 'Channel', 0, 'x'),
+            'messages'      => [],
+        ])))->html;
+        self::assertStringContainsString('nowo-ui-empty__message">Start a conversation</p>', $thread);
+    }
+
+    public function testTheSavedPageEmptyStateIsOneSentenceAndALinkBackToTheConversations(): void
+    {
+        $html = $this->renderPage(new PageFixture('@NowoChatKitBundle/saved.html.twig', self::savedContext()))->html;
+
+        self::assertStringContainsString('data-testid="chat-saved-empty"', $html);
+        self::assertSame(1, substr_count($html, 'nowo-ui-empty__message'));
+        self::assertStringContainsString('Nothing saved yet.', $html);
+        self::assertStringNotContainsString('nowo-ui-empty__title', $html);
+        self::assertStringNotContainsString('No items found', $html);
+        self::assertMatchesRegularExpression('#nowo-ui-empty__action.*data-testid="chat-saved-back"#s', $html);
+        self::assertStringContainsString('Go to your conversations', $html);
+    }
+
+    public function testTheSavedPageKeepsAnEmptyStateWithoutTheControllerViewModel(): void
+    {
+        $html = $this->renderPage(new PageFixture('@NowoChatKitBundle/saved.html.twig', ['empty_state' => null] + self::savedContext()))->html;
+
+        self::assertStringContainsString('Nothing saved yet.', $html);
+        self::assertStringNotContainsString('nowo-ui-empty__action', $html);
+    }
+
     protected static function templatePaths(): array
     {
         return ['NowoChatKitBundle' => dirname(__DIR__, 2) . '/src/Resources/views'];
@@ -77,6 +114,22 @@ final class PageContractTest extends PageContractTestCase
             'messages'      => [],
             'read'          => null,
             'can_send'      => false,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function savedContext(): array
+    {
+        return [
+            'layout'      => null,
+            'header'      => ChatPage::savedHeader(),
+            'empty_state' => ChatPage::savedEmpty(),
+            'bundle'      => ChatPage::BUNDLE,
+            'items'       => [],
+            'next'        => null,
+            'csrf'        => 'tok',
         ];
     }
 

@@ -193,6 +193,7 @@ chat:
   saved_title: 'Bewaard'
   saved_intro: 'Berichten die je voor later hebt bewaard. Alleen berichten die je nog kunt lezen staan hier.'
   saved_empty: 'Nog niets bewaard. Gebruik „Bewaren voor later” in het menu van een bericht.'
+  saved_back: 'Naar je gesprekken'
   saved_open: 'Openen'
   saved_remove: 'Verwijderen'
   saved_more: 'Oudere bewaarde berichten'

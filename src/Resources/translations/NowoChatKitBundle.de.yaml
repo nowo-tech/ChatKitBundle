@@ -193,6 +193,7 @@ chat:
   saved_title: 'Gespeichert'
   saved_intro: 'Nachrichten, die du für später gespeichert hast. Nur die, die du noch lesen kannst, werden angezeigt.'
   saved_empty: 'Noch nichts gespeichert. Nutze „Für später speichern“ im Menü einer Nachricht.'
+  saved_back: 'Zu deinen Unterhaltungen'
   saved_open: 'Öffnen'
   saved_remove: 'Entfernen'
   saved_more: 'Ältere gespeicherte Nachrichten'

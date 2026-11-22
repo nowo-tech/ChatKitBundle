@@ -193,6 +193,7 @@ chat:
   saved_title: 'Salvati'
   saved_intro: 'Messaggi salvati per dopo. Sono elencati solo quelli che puoi ancora leggere.'
   saved_empty: 'Ancora niente di salvato. Usa «Salva per dopo» nel menu di un messaggio.'
+  saved_back: 'Vai alle tue conversazioni'
   saved_open: 'Apri'
   saved_remove: 'Rimuovi'
   saved_more: 'Salvati meno recenti'

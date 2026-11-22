@@ -148,6 +148,7 @@ final class ChatPageController extends AbstractController
         return $this->render('@NowoChatKitBundle/saved.html.twig', [
             'layout'                => $this->webUiLayout,
             'header'                => ChatPage::savedHeader(),
+            'empty_state'           => ChatPage::savedEmpty(),
             'bundle'                => ChatPage::BUNDLE,
             'items'                 => $items,
             'next'                  => $page['next'] === null ? null : $this->generateUrl('nowo_chat_page_saved', ['before' => $page['next']]),

@@ -224,7 +224,11 @@ final class ChatMessageMenu135ApiTest extends DatabaseTestCase
         $csrf = $this->login($this->user('Bea'))['csrf'];
         $this->send(Request::METHOD_PUT, '/chat/api/conversations/' . $dm->getUuid() . '/messages/' . $three->getUuid() . '/save', $csrf, 404);
         $this->client->request(Request::METHOD_GET, '/chat/saved');
-        self::assertStringContainsString('data-testid="chat-saved-empty"', (string) $this->client->getResponse()->getContent());
+        $content = (string) $this->client->getResponse()->getContent();
+        self::assertStringContainsString('data-testid="chat-saved-empty"', $content);
+        self::assertStringContainsString('nowo-ui-empty__message', $content, 'UiKit empty state.');
+        self::assertStringContainsString('data-testid="chat-saved-back"', $content, 'Link back to the conversations.');
+        self::assertStringNotContainsString('No items found', $content);
     }
 
     public function testSavedItemsHideWhileAccessIsLost(): void
