@@ -235,6 +235,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- **Look-alike user ids in the API (audit YP-I2).** `POST /api/support/{uuid}/assign` (`assignee`), `POST /api/direct` (`userUuid`) and `GET /api/support/tickets?owner=` kept whatever user `ChatDirectoryInterface::findByPublicId()` answered; a directory over a case-, accent- or padding-folding collation (MySQL / MariaDB `_ci`, PAD SPACE) could hand back a look-alike user (e.g. an agent's id in another case). The answer is now kept only when its public id is exactly the one asked for (house rule LQ, as the 2.2 host ports and the forwarder already did); a look-alike gets the same response as an unknown id (422 `assignee`, 404 `not_found`). The same byte-for-byte re-check now applies to a support topic's configured default `assignee` and to the conversation uuids the API looks up (including the `draft` of `/api/support/{uuid}/resume`). Hosts: keep `findByPublicId()` an exact compare (binary collation on MySQL / MariaDB); ChatKit no longer relies on it.
+- **`ChatSupportInboxInterface::ticket()` checks the support kind itself (audit YP-I1).** A direct or channel conversation uuid is "not found" (null), the same answer as an unknown uuid, without relying on the voter alone. The documented intake draft (listed in the inbox with *No topic*) is still returned.
+
 ## [2.2.0] - 2026-11-22
 
 ### Added

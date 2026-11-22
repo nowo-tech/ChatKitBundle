@@ -218,6 +218,11 @@ trait ChatQueryPortsCases
         foreach ($this->lookAlikes($uuid) as $lookAlike) {
             self::assertNull($inbox->ticket($agent, $lookAlike));
         }
+        // 2.2.1 (audit YP-I1): a conversation that is not a support thread is "not found", like an unknown uuid —
+        // even a direct conversation the agent takes part in.
+        $direct = $this->port(ChatMessagingInterface::class)->openDirect($agent, $ana)->uuid;
+        self::assertNull($inbox->ticket($agent, $direct));
+        self::assertNull($inbox->ticket($agent->getChatPublicId(), $direct));
 
         // Assign: to an agent by public id, then unassign; an unknown, look-alike or non-agent assignee is one refusal.
         $assigned = $inbox->assign($agent, $uuid, $other->getChatPublicId());

@@ -11,9 +11,14 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 
 use function array_slice;
+use function rtrim;
+use function strtolower;
 
 /**
  * Directory over the test user table: everyone is a contact; names starting with "Agent" answer support.
+ *
+ * findByPublicId() folds case and trailing spaces the way a MySQL / MariaDB `_ci` PAD SPACE collation does (2.2.1, audit
+ * YP-I2): the bundle must keep the directory's answer only when its public id is exactly the one asked for (house rule LQ).
  */
 final readonly class TestDirectory implements ChatDirectoryInterface
 {
@@ -24,7 +29,16 @@ final readonly class TestDirectory implements ChatDirectoryInterface
 
     public function findByPublicId(string $publicId): ?ChatUserInterface
     {
-        return $this->entityManager->getRepository(TestUser::class)->findOneBy(['publicId' => $publicId]);
+        $exact = $this->entityManager->getRepository(TestUser::class)->findOneBy(['publicId' => $publicId]);
+        if ($exact instanceof TestUser) {
+            return $exact;
+        }
+        $folded = $this->entityManager->createQueryBuilder()
+            ->select('u')->from(TestUser::class, 'u')
+            ->where('LOWER(u.publicId) = :folded')->setParameter('folded', strtolower(rtrim($publicId, ' ')))
+            ->setMaxResults(1)->getQuery()->getOneOrNullResult();
+
+        return $folded instanceof TestUser ? $folded : null;
     }
 
     public function findByIds(array $ids): array
