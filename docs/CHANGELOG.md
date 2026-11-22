@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+  - [Tests](#tests)
+  - [Documentation](#documentation)
 - [[2.2.2] - 2026-11-22](#222---2026-11-22)
   - [Fixed](#fixed)
 - [[2.2.1] - 2026-11-22](#221---2026-11-22)
@@ -62,14 +64,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - [Added](#added-9)
   - [Security](#security-2)
   - [Changed](#changed-9)
-  - [Documentation](#documentation)
+  - [Documentation](#documentation-1)
   - [Demo](#demo)
 - [[1.32.0] - 2026-11-16](#1320---2026-11-16)
   - [Added](#added-10)
   - [Changed](#changed-10)
 - [[1.31.1] - 2026-11-15](#1311---2026-11-15)
   - [Fixed](#fixed-9)
-  - [Documentation](#documentation-1)
+  - [Documentation](#documentation-2)
 - [[1.31.0] - 2026-11-15](#1310---2026-11-15)
   - [Fixed](#fixed-10)
   - [Added](#added-11)
@@ -88,20 +90,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.27.0] - 2026-11-13](#1270---2026-11-13)
   - [Added](#added-15)
   - [Deprecated](#deprecated-2)
-  - [Tests](#tests)
+  - [Tests](#tests-1)
 - [[1.26.4] - 2026-11-13](#1264---2026-11-13)
   - [Security](#security-4)
 - [[1.26.3] - 2026-11-11](#1263---2026-11-11)
   - [Security](#security-5)
 - [[1.26.2] - 2026-11-11](#1262---2026-11-11)
   - [Fixed](#fixed-13)
-  - [Tests](#tests-1)
+  - [Tests](#tests-2)
   - [CI](#ci)
 - [[1.26.1] - 2026-11-11](#1261---2026-11-11)
   - [Fixed](#fixed-14)
   - [Added](#added-16)
-  - [Tests](#tests-2)
-  - [Documentation](#documentation-2)
+  - [Tests](#tests-3)
+  - [Documentation](#documentation-3)
 - [[1.26.0] - 2026-11-10](#1260---2026-11-10)
   - [Added](#added-17)
   - [Fixed](#fixed-15)
@@ -116,7 +118,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.24.0] - 2026-11-10](#1240---2026-11-10)
   - [Added](#added-19)
   - [Security / privacy (audit KC, before the tag)](#security--privacy-audit-kc-before-the-tag)
-  - [Documentation](#documentation-3)
+  - [Documentation](#documentation-4)
 - [[1.23.0] - 2026-11-09](#1230---2026-11-09)
   - [Added](#added-20)
   - [Fixed](#fixed-17)
@@ -138,7 +140,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.17.0] - 2026-11-04](#1170---2026-11-04)
   - [Added](#added-24)
   - [Changed](#changed-19)
-  - [Documentation](#documentation-4)
+  - [Documentation](#documentation-5)
 - [[1.16.1] - 2026-11-04](#1161---2026-11-04)
   - [Fixed](#fixed-20)
 - [[1.16.0] - 2026-11-04](#1160---2026-11-04)
@@ -165,7 +167,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - [[1.13.0] - 2026-10-30](#1130---2026-10-30)
   - [Added](#added-27)
   - [Changed](#changed-24)
-  - [Tests](#tests-3)
+  - [Tests](#tests-4)
 - [[1.12.0] - 2026-10-30](#1120---2026-10-30)
   - [Added](#added-28)
   - [Changed](#changed-25)
@@ -238,6 +240,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - [Added](#added-43)
 
 ## [Unreleased]
+
+### Tests
+
+- **`ChatSupportInboxInterface::ticket()`: the intake draft and a channel conversation (audit YR-C-I1).** The port's two documented answers that no test pinned are asserted now: an agent reading a channel conversation's uuid gets `null` (as for a direct one), and the requester's intake draft — no topic chosen, `ticketNumber` null — is read as a view, while `ChatAccessInterface::canViewTicket()` refuses it and the writes still answer `ChatNotFoundException`. No behaviour change; a later tightening of the draft case can no longer pass CI unnoticed.
+
+### Documentation
+
+- **`ticket()` vs `canViewTicket()` (audit YR-C-I2).** `docs/USAGE.md` ("Host query ports") now states that the two answer different questions: `ChatSupportInboxInterface::ticket()` is the agents' inbox read and answers for any support thread the agent may handle, the requester's intake draft included, while `ChatAccessInterface::canViewTicket()` is the requester-or-agent read of a *numbered* ticket and is `false` for a draft. Gate a ticket page on `canViewTicket()` and the inbox's own thread view on `ticket()`; do not read one as the other. The behaviour is unchanged and intended (the inbox lists the draft) — only undocumented outside the interfaces' docblocks.
 
 ## [2.2.2] - 2026-11-22
 
