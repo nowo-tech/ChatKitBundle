@@ -1,8 +1,8 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-11-17  
-**Production units**: **243/243** mapped below (the audit command counts more files: units added since 1.34 without an inventory row are listed in their feature specs)  
+**Last audited**: 2026-11-22  
+**Production units**: **297/297** table rows below; **all 308 files** the audit command returns (2026-11-22) are named in this file (some rows group several files or repeat one file under two sections)  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -43,7 +43,8 @@
 | Retention policy | 7 |
 | Browser (TypeScript) — feature modules | 15 |
 | Message search (1.37) | 16 |
-| **Total** | **243** |
+| Sources added 1.34–2.2 (sweep 2026-11-22) | 54 |
+| **Total** | **297** |
 
 ## Bundle, configuration & DI
 
@@ -415,3 +416,64 @@ Spec: [`../002-message-search/spec.md`](../002-message-search/spec.md).
 | `src/Resources/views/search.html.twig` | 002 US-01 | FR-001, FR-008 |
 | `src/SearchKit/ChatMessageSearchProvider.php` | 002 US-05 | FR-009 |
 | `src/DependencyInjection/Compiler/SearchKitRecentsPass.php` | 002 US-05 | FR-009 |
+
+## Sources added 1.34–2.2 (sweep 2026-11-22)
+
+The 54 files below were added by releases 1.34–2.2 without an inventory row. The second column is the class docblock summary; the requirement ids are defined in the matching sections of `spec.md` (new: FR-QUERY-001, FR-FWD-001, FR-IDEM-001, FR-THREAD-001, FR-HIST-001, FR-SEARCHKIT-001, FR-ARCH-002, FR-PRIV-002, FR-MENU-004).
+
+| Source path | Spec section | Requirement ID(s) |
+| --- | --- | --- |
+| `src/Contract/ChatAccessInterface.php` | 2.2 (DDD-host checklist B1/B8, REQ-ARCH-001): whether a user may view, post in, pin in or manage the links of a conversation, and view or handle a support ticke | FR-ARCH-002 |
+| `src/Contract/ChatForwardPolicyInterface.php` | 1.36: the application's veto on forwards (`message_menu.forward`), asked once per target after ChatKit's own checks (VIEW on the source, SEND on the target) and | FR-FWD-001 |
+| `src/Contract/ChatHistoryPolicyInterface.php` | 1.36: who else may read the previous texts of an edited message (`message_menu.edit_history`) — e.g. | FR-HIST-001 |
+| `src/Contract/ChatMentionInboxInterface.php` | 2.0: "messages that mention me" for a host page (a dashboard Mentions list), read and marked read through ChatKit's own (private) entity manager. | FR-QUERY-001 |
+| `src/Contract/ChatQueryInterface.php` | 2.2 (DDD-host checklist B7, REQ-ARCH-001): what a host lists and counts in the chat, as read models — so it neither injects ChatKit's repositories nor writes DQ | FR-QUERY-001 |
+| `src/Contract/ChatSupportInboxInterface.php` | 2.2 (DDD-host checklist B1/B7): the support agents' inbox by ids — list, count, assign and change the status of support tickets without injecting the concrete S | FR-QUERY-001 |
+| `src/DependencyInjection/Compiler/RemovedPortsPass.php` | 2.0 (REQ-ARCH-001 rule 3, audit lesson XR-WF-M1): fails the container build on every service that still uses one of the port interfaces deprecated in 1.27 and r | FR-ARCH-002 |
+| `src/Doctrine/ChatKitManagedRows.php` | 2.0: keeps ChatKit's private entity manager in step with its own DQL bulk writes. | FR-PRIV-002 |
+| `src/Doctrine/ChatReadTimesOptOutListener.php` | 1.35 (audit TK-2): turning "Share read times" off deletes the user's stored read times in the same flush (and so the same transaction), whatever wrote the setti | FR-PRIV-002 |
+| `src/Entity/ChatIdempotencyKey.php` | 1.36 (REQ-RUNTIME-003 rule 7): an `Idempotency-Key` a user sent with a write (forward, thread reply, send), the hash of that request and what it created, writte | FR-IDEM-001 |
+| `src/Entity/ChatMessageRevision.php` | 1.36: a previous text of an edited message (`message_menu.edit_history`): the text it had before the edit and when it was replaced. | FR-HIST-001 |
+| `src/Entity/ChatThreadRead.php` | 1.36: a user's place in a thread (`message_menu.threads`): the newest reply they read, and whether they follow it. | FR-THREAD-001 |
+| `src/Event/ChatConversationDeletedEvent.php` | 2.0: a conversation was deleted for good by a host call (ChatMessagingInterface::deleteConversation() or purgeChannel()), with its messages and every row that h | FR-PRIV-002 |
+| `src/Event/ChatMessageEditedEvent.php` | 1.36: a message was edited, dispatched after the commit. | FR-HIST-001 |
+| `src/Event/ChatMessageForwardedEvent.php` | 1.36: a message was forwarded to one conversation, dispatched after the commit (once per target). | FR-FWD-001 |
+| `src/Event/ChatMessageForwardingEvent.php` | 1.36: a message is about to be forwarded to one target, dispatched once per target before anything is written. | FR-FWD-001 |
+| `src/Event/ChatThreadReplyEvent.php` | 1.36: a reply was posted in a thread, dispatched after the commit (besides ChatMessageSentEvent). | FR-THREAD-001 |
+| `src/Event/EventRefs.php` | 2.0: how the events turn a user into the scalar the host stores (internal). | FR-ARCH-002 |
+| `src/Forward/AllowAllChatForwardPolicy.php` | 1.36: the default `ChatForwardPolicyInterface`: ChatKit's own checks decide. | FR-FWD-001 |
+| `src/History/NoChatHistoryReaders.php` | 1.36: the default `ChatHistoryPolicyInterface`: only the author and moderators read previous texts. | FR-HIST-001 |
+| `src/Http/ChatConflictResponseFormatter.php` | 1.34: shapes the lock-conflict answer of nowo-tech/transaction-doctrine's responder for ChatKit's own JSON API routes. | FR-IDEM-001 |
+| `src/Model/ChatConversationListItem.php` | 2.2: one row of a user's conversation list (ChatQueryInterface::conversationsFor()): the conversation's view plus what is the user's own about it. | FR-QUERY-001 |
+| `src/Model/ChatForwardRequest.php` | 1.36 (REQ-ARCH-001 rule 3): one target of a forward as ChatForwardPolicyInterface sees it — public ids and keys, never an entity. | FR-FWD-001 |
+| `src/Model/ChatHistoryRequest.php` | 1.36 (REQ-ARCH-001 rule 3): a request to read the previous texts of a message as ChatHistoryPolicyInterface sees it — public ids and keys, never an entity. | FR-HIST-001 |
+| `src/Model/ChatMentionView.php` | 2.0: read-only snapshot of one @mention of a user, for a host "Mentions" page (ChatMentionInboxInterface): scalars, public ids and the message view, no Doctrine | FR-QUERY-001 |
+| `src/Model/ChatSupportTicketItem.php` | 2.2: one row of the support inbox (ChatSupportInboxInterface::tickets()): the support thread's view plus what the agent sees about it. | FR-QUERY-001 |
+| `src/Port/ChatChannelPort.php` | 2.0: the channel provider as the bundle asks it inside (the 1.x `ChatChannelPort`, removed in 2.0). | FR-ARCH-002 |
+| `src/Port/ChatCurrentUserPort.php` | 2.0: the current-user resolver as the bundle asks it inside (the 1.x `CurrentChatUserResolverInterface`, removed in 2.0). | FR-ARCH-002 |
+| `src/Port/ChatRealtimePort.php` | 2.0: the realtime transport as the bundle asks it inside (the 1.x `ChatRealtimePort`, removed in 2.0). | FR-ARCH-002 |
+| `src/Query/ChatQuery.php` | 2.2: default ChatQueryInterface (aliased to it). | FR-QUERY-001 |
+| `src/Repository/ChatIdempotencyKeyRepository.php` | 1.36 (REQ-RUNTIME-003 rule 7): the `Idempotency-Key`s of forwards, thread replies and sends. | FR-IDEM-001 |
+| `src/Repository/ChatMessageRevisionRepository.php` | 1.36: the previous texts of edited messages (`message_menu.edit_history`). | FR-HIST-001 |
+| `src/Repository/ChatThreadReadRepository.php` | 1.36: who follows a thread and how far they read it. | FR-THREAD-001 |
+| `src/Resources/assets/src/forward-dialog.ts` | Forward dialog of the message menu (target picker, `message_menu.forward`, 1.36) | FR-FWD-001 |
+| `src/Resources/assets/src/search-dialog.ts` | Search dialog of the dock (message search and SearchKit groups, 1.37–1.38) | FR-SEARCHKIT-001 |
+| `src/Resources/assets/src/thread-panel.ts` | Thread panel of the dock (one-level threads, `message_menu.threads`, 1.36) | FR-THREAD-001 |
+| `src/Resources/views/_search_results.html.twig` | Server-rendered result rows shared by the search page and the dialog (1.37–1.38) | FR-SEARCHKIT-001 |
+| `src/SearchKit/ChatConversationSearchDefinition.php` | 1.38: the SearchKit "Conversations" group (`chat_channels`): the conversations the viewer can open on ChatKit's own pages, found by their name — a direct conver | FR-SEARCHKIT-001 |
+| `src/SearchKit/ChatConversationSearchProvider.php` | 1.38: the "Conversations" group (`chat_channels`) of the SearchKit palette and results page, registered only with `search_kit.enabled`, `search_kit.channels.ena | FR-SEARCHKIT-001 |
+| `src/SearchKit/ChatMessageSearchDefinition.php` | 1.38: the SearchKit "Messages" group (1.37) on SearchKit's provider base (nowo-tech/search-kit-bundle ^1.10): the hooks of `EntitySearchDefinition`, built  | FR-SEARCHKIT-001 |
+| `src/SearchKit/ChatSearchKitViewer.php` | 1.38: the viewer of a SearchKit search, for both chat groups (ChatMessageSearchDefinition and ChatConversationSearchDefinition): the chat participant of the sig | FR-SEARCHKIT-001 |
+| `src/Security/ChatActorResolver.php` | 2.2 (DDD-host checklist B7/B8): turns the user a host query port receives — a ChatUserInterface, or the user's public id (ChatUserInterface::getChatPublicId())  | FR-ARCH-002 |
+| `src/Security/ChatUuidAccess.php` | 2.2: default ChatAccessInterface (aliased to it): loads the conversation by its public uuid through ChatKit's own entity manager, compared in SQL and again byte | FR-ARCH-002 |
+| `src/Service/ChatConversationPurger.php` | 2.0: deletes a whole conversation through ChatKit's own (private) entity manager, for ChatMessagingInterface::deleteConversation() and purgeChannel(). | FR-PRIV-002 |
+| `src/Service/ChatDraft.php` | 1.36: one message ChatService::post() is to write — in the main timeline, as a thread reply, or as a forward. | FR-MENU-004 |
+| `src/Service/ChatEditHistory.php` | 1.36 (Beacon, D-20261118-02): edit history (`message_menu.edit_history`). | FR-HIST-001 |
+| `src/Service/ChatForwardRefused.php` | 1.36: a forward was refused for one of its targets (no SEND there, a ticket for a non-agent, a person one may not write to, the application's veto). | FR-FWD-001 |
+| `src/Service/ChatForwarder.php` | 1.36 (Beacon, D-20261118-02): "Forward" (`message_menu.forward`) — copies a text message to up to `max_targets` conversations (or new direct conversations), all | FR-FWD-001 |
+| `src/Service/ChatIdempotency.php` | 1.36 (REQ-RUNTIME-003 rule 7): `Idempotency-Key` for writes a client may send again after a lost answer (forward, thread reply; optional on send). | FR-IDEM-001 |
+| `src/Service/ChatIdempotencyConflict.php` | 1.36: a write unit of work was refused by its `Idempotency-Key` claim (another request used the key first). | FR-IDEM-001 |
+| `src/Service/ChatMentionInbox.php` | 2.0: default ChatMentionInboxInterface (aliased to it): the mention repository's queries answered as views, and the mark-read writes by user key on ChatKit's ru | FR-QUERY-001 |
+| `src/Service/ChatMenuOptions.php` | 1.36: which of the message menu's data items are offered — forward, threads, edit history — and their limits (`message_menu.forward`, `message_menu.threads`, `m | FR-MENU-004 |
+| `src/Service/ChatSupportDesk.php` | 2.2: default ChatSupportInboxInterface (aliased to it): the agent is resolved (ChatActorResolver) and must be a reachable support agent; the threads come from C | FR-QUERY-001 |
+| `src/Service/ChatThreads.php` | 1.36 (Beacon, D-20261118-02): one-level threads (`message_menu.threads`). | FR-THREAD-001 |
