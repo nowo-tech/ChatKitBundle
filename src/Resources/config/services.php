@@ -10,6 +10,7 @@ use Nowo\ChatKitBundle\Badge\ChatAuthorBadges;
 use Nowo\ChatKitBundle\Badge\NoChatAuthorBadges;
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
+use Nowo\ChatKitBundle\Contract\ChatAccessInterface;
 use Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
@@ -20,7 +21,9 @@ use Nowo\ChatKitBundle\Contract\ChatMentionInboxInterface;
 use Nowo\ChatKitBundle\Contract\ChatMessageActionsInterface;
 use Nowo\ChatKitBundle\Contract\ChatMessagingInterface;
 use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
+use Nowo\ChatKitBundle\Contract\ChatQueryInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
+use Nowo\ChatKitBundle\Contract\ChatSupportInboxInterface;
 use Nowo\ChatKitBundle\Contract\ChatSupportTopicProviderInterface;
 use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerReferencesPass;
@@ -43,6 +46,7 @@ use Nowo\ChatKitBundle\Port\ChatCurrentUserPort;
 use Nowo\ChatKitBundle\Port\ChatRealtimePort;
 use Nowo\ChatKitBundle\Push\ChatPushDispatcher;
 use Nowo\ChatKitBundle\Push\NullChatPushSender;
+use Nowo\ChatKitBundle\Query\ChatQuery;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Realtime\ChatPresence;
 use Nowo\ChatKitBundle\Realtime\ChatRecipients;
@@ -53,6 +57,7 @@ use Nowo\ChatKitBundle\Search\ChatMessageSearch;
 use Nowo\ChatKitBundle\Search\ChatMessageSearchSql;
 use Nowo\ChatKitBundle\Search\ChatSearchIndex;
 use Nowo\ChatKitBundle\Security\ChatAccess;
+use Nowo\ChatKitBundle\Security\ChatUuidAccess;
 use Nowo\ChatKitBundle\Security\SecurityChatUserResolver;
 use Nowo\ChatKitBundle\Service\ChatMentionInbox;
 use Nowo\ChatKitBundle\Service\ChatMentions;
@@ -63,6 +68,7 @@ use Nowo\ChatKitBundle\Service\ChatMessaging;
 use Nowo\ChatKitBundle\Service\ChatReadTimes;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
+use Nowo\ChatKitBundle\Service\ChatSupportDesk;
 use Nowo\ChatKitBundle\Sidebar\ChatSidebar;
 use Nowo\ChatKitBundle\Support\ConfiguredSupportTopicProvider;
 use Nowo\ChatKitBundle\Support\NullRetentionPolicyProvider;
@@ -189,6 +195,13 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatServiceInterface::class, ChatService::class);
     // 1.27: the same service by public uuid, answering with views (REQ-ARCH-001 rule 1; DDD hosts).
     $services->alias(ChatMessagingInterface::class, ChatMessaging::class);
+    // 2.2 (DDD-host checklist B1/B7/B8): host query ports — read models, access by uuid and the support inbox by id.
+    $services->alias(ChatQueryInterface::class, ChatQuery::class);
+    $services->alias(ChatAccessInterface::class, ChatUuidAccess::class);
+    $services->alias(ChatSupportInboxInterface::class, ChatSupportDesk::class);
+    $services->get(ChatUuidAccess::class)
+        ->arg('$linkChannelMembers', param('nowo_chat_kit.links.channel_members'))
+        ->arg('$logger', service('logger')->nullOnInvalid());
     // 2.0: the host's Mentions page (list, count, mark read) through ChatKit's own manager.
     $services->alias(ChatMentionInboxInterface::class, ChatMentionInbox::class);
     // 1.35: the message menu by public uuid (DDD hosts).

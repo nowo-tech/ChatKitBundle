@@ -21,6 +21,7 @@ use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Entity\ChatSavedMessage;
 use Nowo\ChatKitBundle\Entity\ChatThreadRead;
+use Nowo\ChatKitBundle\Enum\ConversationKind;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 
 use function array_reverse;
@@ -466,5 +467,68 @@ class ChatMessageRepository extends ServiceEntityRepository
             ->getResult();
 
         return $rows;
+    }
+
+    /**
+     * 2.2 (ChatQueryInterface usage counts): the summed `LENGTH()` of the message bodies per channel key, every message of
+     * the channel conversations of these keys (thread replies and tombstones included). The SQL `IN` runs on the column
+     * collation, so the caller keeps only the exact keys it asked for (house rule LQ).
+     *
+     * @param list<string> $channelKeys Channel keys
+     *
+     * @return array<string, int> stored channel key => total length
+     */
+    public function bodyLengthByChannelKey(array $channelKeys): array
+    {
+        if ($channelKeys === []) {
+            return [];
+        }
+        /** @var list<array{channel: string, total: int|string|null}> $rows */
+        $rows = $this->createQueryBuilder('m')
+            ->select('c.channelKey AS channel, SUM(LENGTH(m.body)) AS total')
+            ->innerJoin('m.conversation', 'c')
+            ->where('c.kind = :channel AND c.channelKey IN (:keys)')
+            ->setParameter('channel', ConversationKind::Channel)
+            ->setParameter('keys', $channelKeys)
+            ->groupBy('c.channelKey')
+            ->getQuery()
+            ->getArrayResult();
+        $totals = [];
+        foreach ($rows as $row) {
+            $totals[$row['channel']] = (int) $row['total'];
+        }
+
+        return $totals;
+    }
+
+    /**
+     * 2.2 (ChatQueryInterface usage counts): the summed `LENGTH()` of the message bodies per author key, messages of
+     * direct conversations only. The caller keeps only the exact keys it asked for (house rule LQ).
+     *
+     * @param list<string> $authorKeys User keys (ChatUserReferences::key())
+     *
+     * @return array<string, int> stored author key => total length
+     */
+    public function bodyLengthByDirectAuthor(array $authorKeys): array
+    {
+        if ($authorKeys === []) {
+            return [];
+        }
+        /** @var list<array{author: int|string, total: int|string|null}> $rows */
+        $rows = $this->createQueryBuilder('m')
+            ->select($this->refs->identity('m', 'author') . ' AS author, SUM(LENGTH(m.body)) AS total')
+            ->innerJoin('m.conversation', 'c')
+            ->where('c.kind = :direct AND ' . $this->refs->field('m', 'author') . ' IN (:authors)')
+            ->setParameter('direct', ConversationKind::Direct)
+            ->setParameter('authors', $this->refs->ids($authorKeys))
+            ->groupBy($this->refs->field('m', 'author'))
+            ->getQuery()
+            ->getArrayResult();
+        $totals = [];
+        foreach ($rows as $row) {
+            $totals[(string) $row['author']] = (int) $row['total'];
+        }
+
+        return $totals;
     }
 }

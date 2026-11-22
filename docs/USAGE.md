@@ -7,6 +7,7 @@
 - [Standard Symfony host](#standard-symfony-host)
 - [Using it from a DDD / hexagonal application](#using-it-from-a-ddd--hexagonal-application)
 - [Host patterns under the private EM](#host-patterns-under-the-private-em)
+- [Host query ports](#host-query-ports)
 - [Conversations and permissions](#conversations-and-permissions)
 - [Opening conversations from your pages](#opening-conversations-from-your-pages)
 - [Support inbox](#support-inbox)
@@ -425,8 +426,9 @@ final readonly class DirectoryAdapter implements ChatDirectoryInterface
 - The default `relation` mode still maps `user_class` through `resolve_target_entities` with foreign keys to your user
   table (choose `doctrine.user_reference: id` to avoid it).
 - `ChatServiceInterface` methods still take and return the bundle's entities; 1.27's `ChatMessagingInterface` is the
-  same service by uuid with views. `ChatSupportTickets` and `ChatLinks` have no id-based interface yet (use the events'
-  views and `ChatMessagingInterface`).
+  same service by uuid with views. 2.2 adds `ChatQueryInterface`, `ChatAccessInterface` and
+  `ChatSupportInboxInterface` (see [Host query ports](#host-query-ports)); `ChatLinks` has no id-based interface yet
+  (use the events' views and `ChatMessagingInterface`).
 - There are no events yet for message edits, reactions, pins, read cursors or conversations being opened.
 
 ## Host patterns under the private EM
@@ -440,6 +442,7 @@ these public methods, which run in one transaction on ChatKit's runner and flush
 | Delete a conversation for good (e.g. purge deleted rooms after N days) | `ChatMessagingInterface::deleteConversation(string $conversationUuid): bool` |
 | The same, by application channel key | `ChatMessagingInterface::purgeChannel(string $channelKey): bool` |
 | List / count a user's mentions | `ChatMentionInboxInterface::mentions(...)`, `countMentions(...)` |
+| List, count and check access by ids (2.2) | `ChatQueryInterface`, `ChatAccessInterface`, `ChatSupportInboxInterface` ([Host query ports](#host-query-ports)) |
 | Mark one / several mentions read | `ChatMentionInboxInterface::markMentionRead(ChatUserInterface\|string $user, int\|string $mentionId): bool`, `markMentionsRead(ChatUserInterface\|string $user, array $mentionIds): int` |
 
 - **Deleting a conversation** removes its messages and every row that hangs on them: mentions, reactions, saved rows,
@@ -484,6 +487,107 @@ Do not:
 - load chat entities (or ChatKit's repositories) and `remove()` / change them, then flush any manager;
 - wrap chat entities in your transaction runner (or ChatKit's runner `nowo_chat_kit.transaction_runner`) to write them
   yourself. Call the methods above outside your own unit of work: they commit on their own.
+
+## Host query ports
+
+Since 2.2 (DDD-host checklist B1/B7/B8) a host reads, counts and checks the chat by ids, through three interfaces, instead
+of injecting ChatKit's repositories, `Security\ChatAccess` or `Service\ChatSupportInbox`, or writing DQL over its
+entities. They answer with views (`ChatConversationView`, `ChatMessageView`, `ChatConversationListItem`,
+`ChatSupportTicketItem`), uuids, booleans and numbers; the rows are read through ChatKit's own entity manager and never
+leave it.
+
+| Interface (alias of) | What for |
+| --- | --- |
+| `Contract\ChatQueryInterface` (`Query\ChatQuery`) | a user's conversation list (unread, closed, muted, last message), one conversation, a message page, unread counts; system reads by uuids and channel keys; usage counts for billing |
+| `Contract\ChatAccessInterface` (`Security\ChatUuidAccess`) | can user X view / post in / pin in / manage the links of conversation uuid Y; view or handle ticket uuid Y; which of these uuids may X read |
+| `Contract\ChatSupportInboxInterface` (`Service\ChatSupportDesk`) | the agents' inbox (filters, topic, requester search), open and per-topic counts, assign a ticket, change its status |
+
+**The user** is a `ChatUserInterface`, or the user's public id (`getChatPublicId()`, the id the views carry), looked up
+through `ChatDirectoryInterface::findByPublicId()`. The directory's answer counts only when its public id is exactly the
+one asked for, so a directory that folds case or padding never hands back a look-alike user. A string that cannot be a
+public id (empty, over 255 bytes, invalid UTF-8, control or format characters, whitespace at either end) is not looked up.
+
+**The rules are the JSON API's**: `ChatVoter` and `ChatAccess`, on top of your `ChatAccessPolicyInterface`, the channel
+provider (and its `ChatChannelWritePolicyInterface`), `ChatPinPolicyInterface` / `ChatLinkPolicyInterface` and
+`links.channel_managers`. Those ports can only narrow an answer: each check first needs the conversation's own rule (one
+of the two people of a direct conversation, the requester or an agent for a support thread, a channel the provider lets
+the user use), so a policy never grants a conversation outside that scope, and a participant row alone grants nothing.
+`ChatAccessInterface::canView()` / `canPost()` / `canPin()` answer exactly as `ChatMessagingInterface::can()` with
+`VIEW` / `SEND` / `PIN`.
+
+**No oracle.** Uuids, channel keys and user keys compare exactly — in SQL, then again byte for byte in PHP (house rule
+LQ) — so a look-alike never stands for another row. An unknown uuid, a look-alike, an unusable user id and a
+conversation the user may not read give the same answer: `false`, `null`, an empty list, or a key left out. The support
+inbox answers only a reachable support agent (anybody else: an empty list, `0`, or `ChatNotFoundException` on a write).
+`ChatAccessInterface` logs a failure of the store, the directory or a host port with its class only and answers it as the
+same refusal.
+
+**Worker mode and concurrency** (FrankenPHP, kernel reset false; REQ-RUNTIME-003). The three services are stateless; the
+host ports' answers are memoized on the current main request only. Every call reads again, so an answer is a check at that
+moment: never cache it across requests or messages. The writes of `ChatSupportInboxInterface` (`assign()`,
+`changeStatus()`) are `ChatSupportTickets`' own unit of work on ChatKit's manager, the ticket row locked first: two agents
+changing one ticket queue, and the second one's call sees the first's result. Call them outside your own transaction
+runner; they return the ticket as stored after the write.
+
+```php
+use Nowo\ChatKitBundle\Contract\ChatAccessInterface;
+use Nowo\ChatKitBundle\Contract\ChatQueryInterface;
+use Nowo\ChatKitBundle\Contract\ChatSupportInboxInterface;
+
+final readonly class ChatSidebar
+{
+    public function __construct(
+        private ChatQueryInterface $chat,
+        private ChatAccessInterface $access,
+        private ChatSupportInboxInterface $inbox,
+    ) {}
+
+    /** @return list<array{uuid: string, kind: string, unread: int, last: ?string}> */
+    public function rows(string $userUuid): array
+    {
+        $rows = [];
+        foreach ($this->chat->conversationsFor($userUuid, limit: 30, kinds: ['direct', 'channel']) as $item) {
+            $rows[] = ['uuid' => $item->conversation->uuid, 'kind' => $item->conversation->kind, 'unread' => $item->unread, 'last' => $item->lastMessage?->body];
+        }
+
+        return $rows;
+    }
+
+    public function mayPost(string $userUuid, string $conversationUuid): bool
+    {
+        return $this->access->canPost($userUuid, $conversationUuid);
+    }
+
+    public function takeTicket(string $agentUuid, string $ticketUuid): void
+    {
+        $this->inbox->assign($agentUuid, $ticketUuid, $agentUuid); // ChatNotFoundException: not an agent, or no such ticket
+    }
+}
+```
+
+`ChatQueryInterface`:
+
+| Method | Answer |
+| --- | --- |
+| `conversationsFor($user, $limit = 50, ?$before = null, $archived = false, $kinds = [])` | `list<ChatConversationListItem>`, newest activity first, what the user may read now; next page: the last row's `conversation->lastMessageAt` as `$before` (a page may be short: continue until one is empty) |
+| `conversation($user, $uuid)` | `?ChatConversationView` |
+| `messages($user, $uuid, $limit = 50, ?$beforeId = null, ?$afterId = null)` | `list<ChatMessageView>` of the main timeline, oldest first (`$afterId` wins: a catch-up) |
+| `unreadCounts($user, $uuids)` | `array<uuid, int>`, readable conversations only (0 included) |
+| `conversationsByUuids($uuids)` | system read: `array<uuid, ChatConversationView>` |
+| `channelConversations($channelKeys)` | system read: `array<channelKey, ChatConversationView>` |
+| `countChannelConversations($channelKeys)` | system read: channel conversations of these keys |
+| `channelBodyLength($channelKeys)` | system read: summed `LENGTH()` of the bodies of every message of those channels |
+| `directBodyLengthByAuthors($authorPublicIds)` | system read: summed `LENGTH()` of the bodies these users wrote in direct conversations |
+
+Limits are clamped to 1–100; at most 500 uuids, keys or public ids are read per call. `LENGTH()` is the database's: bytes
+on MySQL / MariaDB, characters on PostgreSQL and SQLite. The system reads have no actor: check access in your own use case
+first (a billing job, a back-office page).
+
+`ChatSupportInboxInterface::tickets($agent, $filter = 'open', ?$topic = null, ?$search = null, $limit = 50)` takes the
+inbox filters (`open`, `waiting`, `resolved`, `closed`, `mine`, `unassigned`, `all`); `assign()` takes the new assignee's
+public id (`null` unassigns; an unknown, look-alike or non-agent assignee is `InvalidArgumentException('assignee')`), and
+`changeStatus()` a `SupportStatus` value (anything else is `InvalidArgumentException('status')`). Both post the bot line
+and dispatch the ticket events as the JSON API does.
 
 ## Conversations and permissions
 

@@ -104,6 +104,31 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+From **2.1.0** (minor, no BC break):
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+Nothing to change. New, optional: the host query ports `ChatQueryInterface`, `ChatAccessInterface` and
+`ChatSupportInboxInterface` (USAGE "Host query ports"). A host that injects `ChatConversationRepository`,
+`ChatMessageRepository`, `ChatParticipantRepository`, `Security\ChatAccess` or `Service\ChatSupportInbox`, or writes DQL over
+`ChatConversation` / `ChatMessage` (lists, unread counts, usage counts for billing, ticket lookups), can move to them:
+
+| Before | Now |
+| --- | --- |
+| `ChatConversationRepository::findListForUser()` + `countUnreadByConversation()` | `ChatQueryInterface::conversationsFor()` |
+| `ChatConversationRepository::findOneByUuid()` + a voter / `ChatAccess::canView()` | `ChatQueryInterface::conversation()`, `ChatAccessInterface::canView()` |
+| `ChatMessageRepository::findPage()` | `ChatQueryInterface::messages()` |
+| `findBy(['channelKey' => $keys])` | `ChatQueryInterface::channelConversations()` |
+| DQL `COUNT(c.id)` / `SUM(LENGTH(m.body))` for billing | `countChannelConversations()`, `channelBodyLength()`, `directBodyLengthByAuthors()` |
+| `ChatAccess::canPin()` / `canManageLinks()` with an entity | `ChatAccessInterface::canPin()` / `canManageLinks()` by uuid |
+| `ChatSupportInbox::list()` / `countOpen()` / `countByTopic()` | `ChatSupportInboxInterface::tickets()` / `countOpen()` / `countByTopic()` |
+| `ChatSupportTickets::assign()` / `changeStatus()` with entities | `ChatSupportInboxInterface::assign()` / `changeStatus()` by uuid |
+
+The repositories and the concrete services keep working. The new methods take the user (or the agent) as a
+`ChatUserInterface` or its public id, and answer for that user only.
+
 ## To 2.1.0
 
 From **2.0.1**:
