@@ -252,8 +252,18 @@ trait ChatQueryPortsCases
             self::assertSame('status', $refused->getMessage());
         }
 
-        // Not an agent, an unknown or look-alike uuid, a draft: the same "not found", before anything is written.
+        // 2.2.3 (audit YR-C-I1): the two answers of ticket() that only the docblock stated. A channel conversation is
+        // "not found" like the direct one above (not a support thread), while the requester's intake draft is one: it is
+        // read (no ticket number yet) although canViewTicket() is false for it, since that one needs a numbered ticket.
+        // See docs/USAGE.md, "Host query ports".
+        $channel = $this->port(ChatMessagingInterface::class)->openChannel($agent, new ChatChannel(TestChannelProvider::KEY, 'Acme'))->uuid;
+        self::assertNull($inbox->ticket($agent, $channel));
+        self::assertNull($inbox->ticket($agent->getChatPublicId(), $channel));
         $draft = $this->port(ChatSupportTickets::class)->open($luis)->getUuid();
+        self::assertSame([$draft, null], [$inbox->ticket($agent, $draft)?->uuid, $inbox->ticket($agent, $draft)?->ticketNumber], 'the intake draft is read');
+        self::assertFalse($this->port(ChatAccessInterface::class)->canViewTicket($agent, $draft), 'canViewTicket() needs a numbered ticket');
+
+        // Not an agent, an unknown or look-alike uuid, a draft: the same "not found", before anything is written.
         $calls = [];
         foreach ([...$this->lookAlikes($uuid), $draft] as $wrong) {
             $calls[] = static fn () => $inbox->assign($agent, $wrong, null);

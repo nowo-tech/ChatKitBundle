@@ -589,6 +589,15 @@ public id (`null` unassigns; an unknown, look-alike or non-agent assignee is `In
 `changeStatus()` a `SupportStatus` value (anything else is `InvalidArgumentException('status')`). Both post the bot line
 and dispatch the ticket events as the JSON API does.
 
+**`ChatSupportInboxInterface::ticket()` and `ChatAccessInterface::canViewTicket()` answer different questions, so do not
+read one as the other.** `ticket()` is the agents' inbox read: it answers for any support thread the agent may handle —
+a numbered ticket *and* the requester's intake draft (no topic chosen yet, `ticketNumber` null), which the inbox lists
+too — and `null` for everything else (not an agent, unknown or look-alike uuid, or a conversation that is not a support
+thread, a direct or channel one included). `canViewTicket()` is the requester-or-agent read of a *numbered* ticket, so
+it is `false` for an intake draft. A draft is therefore read by `ticket()` while `canViewTicket()` refuses it, and the
+writes (`assign()`, `changeStatus()`, like `canHandleTicket()`) refuse it as well with `ChatNotFoundException`: gate a
+ticket page on `canViewTicket()`, and the inbox's own thread view on `ticket()`.
+
 ## Conversations and permissions
 
 | Kind | Who | Notes |
