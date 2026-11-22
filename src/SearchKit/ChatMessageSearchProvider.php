@@ -74,21 +74,35 @@ final readonly class ChatMessageSearchProvider implements FilterableSearchProvid
         $this->provider = new EntitySearchProvider($definition, $dispatcher, $translator, $groups ?? new SearchGroupSettings(), $recentsSafe, $notice);
     }
 
+    /**
+     * Returns the search filters this provider supports.
+     *
+     * @return list<string>
+     */
     public function supportedFilters(): array
     {
         return [self::FILTER_FROM];
     }
 
+    /**
+     * Returns the key of the search group this provider fills.
+     */
     public function groupKey(): string
     {
         return self::GROUP;
     }
 
+    /**
+     * Runs the search for the given query and returns the matching group, or null when there is nothing to show.
+     */
     public function search(SearchQuery $query): ?SearchGroup
     {
         return $this->searchPage($query, 1, $query->limit);
     }
 
+    /**
+     * Returns one page of results for the given query, or null when there is nothing to show.
+     */
     public function searchPage(SearchQuery $query, int $page, int $perPage): ?SearchGroup
     {
         $from = $query->filtersOf(self::FILTER_FROM);
@@ -99,6 +113,9 @@ final readonly class ChatMessageSearchProvider implements FilterableSearchProvid
         return $this->provider->searchPage($query, $page, $perPage);
     }
 
+    /**
+     * Resolves a stored search reference back into a result item for the given user, or null when it is no longer visible.
+     */
     public function resolve(SearchReference $reference, string $userIdentifier, ?string $locale): ?SearchItem
     {
         return $this->provider->resolve($reference, $userIdentifier, $locale);

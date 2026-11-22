@@ -62,11 +62,17 @@ final readonly class ChatConversationSearchProvider implements PaginatedSearchPr
         $this->provider   = new EntitySearchProvider($definition, $dispatcher, $translator, $groups ?? new SearchGroupSettings(), $recentsSafe, $notice);
     }
 
+    /**
+     * Returns the key of the search group this provider fills.
+     */
     public function groupKey(): string
     {
         return self::GROUP;
     }
 
+    /**
+     * Runs the search for the given query and returns the matching group, or null when there is nothing to show.
+     */
     public function search(SearchQuery $query): ?SearchGroup
     {
         return $this->searchPage($query, 1, $query->limit);
@@ -88,6 +94,9 @@ final readonly class ChatConversationSearchProvider implements PaginatedSearchPr
         return new SearchGroup($group->key, $group->label, $group->items, $group->total, $group->moreUrl, $group->moreLabel, false);
     }
 
+    /**
+     * Resolves a stored search reference back into a result item for the given user, or null when it is no longer visible.
+     */
     public function resolve(SearchReference $reference, string $userIdentifier, ?string $locale): ?SearchItem
     {
         return $this->provider->resolve($reference, $userIdentifier, $locale);

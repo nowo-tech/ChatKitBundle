@@ -14,6 +14,9 @@ use function sprintf;
  */
 final class InvalidRetentionConfigurationException extends RuntimeException
 {
+    /**
+     * Creates the InvalidRetentionConfigurationException with its collaborators.
+     */
     public function __construct(public readonly int $days)
     {
         parent::__construct(sprintf('The configured retention_days (%d) must be a positive number of days.', $days));

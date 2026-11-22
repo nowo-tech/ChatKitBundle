@@ -100,37 +100,60 @@ final class ChatMessageSearchDefinition extends EntitySearchDefinition
     ) {
     }
 
+    /**
+     * Returns the key of the search group.
+     */
     public function group(): string
     {
         return self::GROUP;
     }
 
+    /**
+     * Returns the translated label of the group for the given query.
+     */
     public function label(SearchQuery $query): string
     {
         return $this->translator->trans('chat_search.group', [], NowoChatKitBundle::TRANSLATION_DOMAIN, $query->locale);
     }
 
+    /**
+     * Returns the subject type this definition searches.
+     */
     public function subjectType(): string
     {
         return self::KIND;
     }
 
+    /**
+     * Returns the tenant the query runs for, or null when the query carries none.
+     */
     public function tenant(SearchQuery $query): ?string
     {
         return $this->search->enabled() ? $this->viewers->tenant($query->userIdentifier) : null;
     }
 
+    /**
+     * Tells whether the search is enabled for the given tenant.
+     */
     public function featureEnabled(int|string $tenant, SearchQuery $query): bool
     {
         return $this->search->enabled() && $this->viewers->forTenant($tenant, $query->userIdentifier) instanceof ChatUserInterface;
     }
 
+    /**
+     * Returns the columns the full-text match applies to.
+     *
+     * @return list<string>
+     */
     public function searchableFields(): array
     {
         // Not used: applyFullText() always applies message search's own match on the viewer-neutral search text.
         return ['m.search_text'];
     }
 
+    /**
+     * Builds the base query for the given tenant and search query.
+     */
     public function baseQuery(int|string $tenant, SearchQuery $query): DbalQueryBuilder
     {
         $viewer = $this->viewers->forTenant($tenant, $query->userIdentifier);
@@ -161,6 +184,11 @@ final class ChatMessageSearchDefinition extends EntitySearchDefinition
         return true;
     }
 
+    /**
+     * Keeps only the candidate rows the searching user may see.
+     *
+     * @return list<array<string, mixed>|object> the rows the user may see
+     */
     public function filterVisible(array $rows, int|string $tenant, SearchQuery $query): array
     {
         $viewer = $this->viewers->forTenant($tenant, $query->userIdentifier);
@@ -244,21 +272,33 @@ final class ChatMessageSearchDefinition extends EntitySearchDefinition
         return $this->toPreparedItem($row, $query, $context);
     }
 
+    /**
+     * Returns the URL of the full results page for the query, or null when there is none.
+     */
     public function seeAllUrl(SearchQuery $query): string
     {
         return $this->urls->generate('nowo_chat_page_search', ['q' => $query->text]);
     }
 
+    /**
+     * Returns the maximum number of candidate rows read before the visibility filter.
+     */
     public function maxCandidates(): int
     {
         return max(1, min(SearchWindow::MAX_CANDIDATES, $this->maxCandidates));
     }
 
+    /**
+     * Tells whether the results are sensitive and must not be stored in recents.
+     */
     public function sensitive(): bool
     {
         return true;
     }
 
+    /**
+     * Returns the identifier column of the searched rows.
+     */
     public function idField(): string
     {
         return 'm.uuid';
