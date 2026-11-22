@@ -99,7 +99,9 @@ final readonly class ChatSupportDesk implements ChatSupportInboxInterface
         $actor  = $this->agent($agent);
         $thread = $actor instanceof ChatUserInterface ? $this->find($ticketUuid) : null;
 
-        return $thread instanceof ChatConversation && $actor instanceof ChatUserInterface && $this->voter->decide(ChatVoter::RESOLVE, $thread, $actor)
+        // YP-I1: a direct or channel conversation is "not found", the same answer as an unknown uuid — checked here, not
+        // left to the voter alone. The intake draft stays (the inbox lists it; see ChatSupportInboxInterface::ticket()).
+        return $thread instanceof ChatConversation && $thread->isSupport() && $actor instanceof ChatUserInterface && $this->voter->decide(ChatVoter::RESOLVE, $thread, $actor)
             ? ChatConversationView::of($thread) : null;
     }
 

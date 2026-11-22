@@ -13,6 +13,8 @@ use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Component\HttpFoundation\Request;
 
 use function assert;
+use function rawurlencode;
+use function strtoupper;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -85,6 +87,21 @@ final class ChatSupportTicketsApiTest extends DatabaseTestCase
         self::assertSame(['SUP-000001'], array_column($this->getJson('/chat/api/support/tickets?owner=' . $ana->getChatPublicId())['tickets'], 'number'));
         $this->client->request(Request::METHOD_GET, '/chat/api/support/tickets?owner=unknown');
         $this->assertStatus(404);
+        $unknown = $this->decode();
+        // 2.2.1 (audit YP-I2): the directory folds case and padding; a look-alike id is the unknown id (house rule LQ).
+        foreach ([strtoupper($ana->getChatPublicId()), $ana->getChatPublicId() . ' '] as $lookAlike) {
+            $this->client->request(Request::METHOD_GET, '/chat/api/support/tickets?owner=' . rawurlencode($lookAlike));
+            $this->assertStatus(404, 'look-alike owner');
+            self::assertSame($unknown, $this->decode());
+        }
+        $this->postJson('/chat/api/support/' . $ticketUuid . '/assign', ['assignee' => 'unknown'], $agentCsrf);
+        $this->assertStatus(422);
+        $unknownAssignee = $this->decode();
+        foreach ([strtoupper($agent->getChatPublicId()), $agent->getChatPublicId() . ' '] as $lookAlike) {
+            $this->postJson('/chat/api/support/' . $ticketUuid . '/assign', ['assignee' => $lookAlike], $agentCsrf);
+            $this->assertStatus(422, 'look-alike assignee');
+            self::assertSame($unknownAssignee, $this->decode());
+        }
 
         // Outsider: nothing of Ana's ticket is reachable.
         $outsiderCsrf = $this->login($outsider)['csrf'];
@@ -94,6 +111,14 @@ final class ChatSupportTicketsApiTest extends DatabaseTestCase
         }
         $this->client->request(Request::METHOD_GET, '/chat/api/support/inbox');
         $this->assertStatus(404);
+        $this->postJson('/chat/api/direct', ['userUuid' => 'unknown'], $outsiderCsrf);
+        $this->assertStatus(404);
+        $unknownPeer = $this->decode();
+        foreach ([strtoupper($ana->getChatPublicId()), $ana->getChatPublicId() . ' '] as $lookAlike) {
+            $this->postJson('/chat/api/direct', ['userUuid' => $lookAlike], $outsiderCsrf);
+            $this->assertStatus(404, 'look-alike peer (audit YP-I2)');
+            self::assertSame($unknownPeer, $this->decode());
+        }
         $channelUuid = $this->postJson('/chat/api/direct', ['userUuid' => $ana->getChatPublicId()], $outsiderCsrf)['conversation']['uuid'];
         $this->postJson('/chat/api/support/' . $channelUuid . '/status', ['status' => 'open'], $outsiderCsrf);
         $this->assertStatus(404, 'not a support conversation');

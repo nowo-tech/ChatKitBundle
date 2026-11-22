@@ -405,7 +405,8 @@ final readonly class ChatSupportTickets
     {
         $assignee = $topic->assignee === null ? null : $this->directory->findByPublicId($topic->assignee);
 
-        return $assignee instanceof ChatUserInterface && $this->access->isSupportAgent($assignee) ? $assignee : null;
+        // House rule LQ: a directory that folds case, accents or padding must not hand back a look-alike agent.
+        return $assignee instanceof ChatUserInterface && $assignee->getChatPublicId() === $topic->assignee && $this->access->isSupportAgent($assignee) ? $assignee : null;
     }
 
     /**

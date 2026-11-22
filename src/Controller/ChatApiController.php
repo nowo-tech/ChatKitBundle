@@ -376,7 +376,7 @@ final class ChatApiController extends AbstractController
     public function openDirect(Request $request): JsonResponse
     {
         $user  = $this->writer($request);
-        $other = $this->directory->findByPublicId((string) ($this->payload($request)['userUuid'] ?? ''));
+        $other = $this->userByPublicId((string) ($this->payload($request)['userUuid'] ?? ''));
         if (!$other instanceof ChatUserInterface || !$this->access->canOpenDirect($user, $other)) {
             throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
         }
@@ -444,7 +444,7 @@ final class ChatApiController extends AbstractController
         $owner = $user;
         $asked = (string) $request->query->get('owner', '');
         if ($asked !== '' && $asked !== $user->getChatPublicId()) {
-            $owner = $this->access->isSupportAgent($user) ? $this->directory->findByPublicId($asked) : null;
+            $owner = $this->access->isSupportAgent($user) ? $this->userByPublicId($asked) : null;
             $this->deny(!$owner instanceof ChatUserInterface, 'not_found', Response::HTTP_NOT_FOUND);
             assert($owner instanceof ChatUserInterface);
         }
@@ -505,7 +505,7 @@ final class ChatApiController extends AbstractController
         $user   = $this->writer($request);
         $ticket = $this->findSupport($uuid);
         $this->deny(!$ticket->isTicket() || !$this->owns($ticket, $user), 'not_found', Response::HTTP_NOT_FOUND);
-        $draft = $this->conversations->findOneByUuid((string) ($this->payload($request)['draft'] ?? ''));
+        $draft = $this->conversationByUuid((string) ($this->payload($request)['draft'] ?? ''));
         try {
             $this->tickets->resume($user, $ticket, $draft instanceof ChatConversation && $this->owns($draft, $user) ? $draft : null);
         } catch (InvalidArgumentException $exception) {
@@ -558,7 +558,7 @@ final class ChatApiController extends AbstractController
         $ticket = $this->findSupport($uuid);
         $this->deny(!$ticket->isTicket() || !$this->access->isSupportAgent($user), 'not_found', Response::HTTP_NOT_FOUND);
         $given    = $this->payload($request)['assignee'] ?? null;
-        $assignee = is_string($given) && $given !== '' ? $this->directory->findByPublicId($given) : null;
+        $assignee = is_string($given) && $given !== '' ? $this->userByPublicId($given) : null;
         $this->deny(is_string($given) && $given !== '' && !$assignee instanceof ChatUserInterface, 'assignee', Response::HTTP_UNPROCESSABLE_ENTITY);
         try {
             $this->tickets->assign($user, $ticket, $assignee);
@@ -1774,10 +1774,33 @@ final class ChatApiController extends AbstractController
         );
     }
 
+    /**
+     * The conversation whose uuid is exactly `$uuid` (house rule LQ: looked up in SQL, re-checked byte for byte in PHP, so
+     * a folding collation never hands back a look-alike); null when unknown or answered with a look-alike.
+     */
+    private function conversationByUuid(string $uuid): ?ChatConversation
+    {
+        $conversation = $uuid === '' ? null : $this->conversations->findOneByUuid($uuid);
+
+        return $conversation instanceof ChatConversation && $conversation->getUuid() === $uuid ? $conversation : null;
+    }
+
+    /**
+     * The user whose public id is exactly `$publicId` (house rule LQ: the directory's answer is kept only when its public
+     * id is the one asked for, byte for byte, so a directory that folds case, accents or padding never hands back a
+     * look-alike); null when empty, unknown or answered with a look-alike — one answer for all of them.
+     */
+    private function userByPublicId(string $publicId): ?ChatUserInterface
+    {
+        $user = $publicId === '' ? null : $this->directory->findByPublicId($publicId);
+
+        return $user instanceof ChatUserInterface && $user->getChatPublicId() === $publicId ? $user : null;
+    }
+
     /** Unknown, foreign or forbidden → 404 (never 403, so UUIDs cannot be probed). */
     private function find(string $uuid, string $attribute): ChatConversation
     {
-        $conversation = $this->conversations->findOneByUuid($uuid);
+        $conversation = $this->conversationByUuid($uuid);
         if (!$conversation instanceof ChatConversation || !$this->isGranted($attribute, $conversation)) {
             throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
         }

@@ -27,6 +27,7 @@ final class ChatSupportDefaultAssigneeTest extends DatabaseTestCase
         return ['profiles' => ['default' => ['support' => ['ticket_prefix' => 'T-', 'ticket_digits' => 3, 'topics' => [
             ['key' => 'sales', 'assignee' => self::AGENT, 'reply' => ''],
             ['key' => 'misc', 'assignee' => 'nobody'],
+            ['key' => 'padded', 'assignee' => self::AGENT . ' '],
         ]]]]];
     }
 
@@ -54,6 +55,11 @@ final class ChatSupportDefaultAssigneeTest extends DatabaseTestCase
         $other = $tickets->open($this->user('Bob'));
         $tickets->chooseTopic($other->getSupportOwner() ?? $ana, $other, 'misc');
         self::assertNull($other->getAssignee(), 'an unknown assignee is ignored');
+
+        // 2.2.1 (audit YP-I2): the directory folds padding; a look-alike of the agent's id is an unknown assignee.
+        $third = $tickets->open($this->user('Carla'));
+        $tickets->chooseTopic($third->getSupportOwner() ?? $ana, $third, 'padded');
+        self::assertNull($third->getAssignee(), 'a look-alike assignee is ignored');
     }
 
     public function testTheEntityRefusesInvalidTicketData(): void
