@@ -229,6 +229,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- The Dutch `status_preset_training` label was left in English (now "In opleiding"). A new `TranslationCatalogueTest` fails on missing keys and on non-en values identical to English of any length unless allow-listed per locale (brands, loanwords, true cognates), and on stale allow-list entries.
+
 ## [2.0.0] - 2026-11-22
 
 2.0.0 (REQ-ARCH-001, rules 3 and 6): only what 1.x announced as deprecated is removed. An application that runs 1.40 with
