@@ -328,7 +328,7 @@ chat:
   cancel: 'Annuleren'
   # 1.19: pinned links, link cards and the links panel.
   links_attach: 'Link toevoegen aan bericht'
-  links_panel: 'Links'
+  links_panel: 'Koppelingen'
   links_bar: 'Vastgezette links'
   links_pinned: 'Vastgezet'
   links_shared: 'Gedeeld in berichten'
