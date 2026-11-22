@@ -57,17 +57,7 @@ final readonly class ChatSupportInbox
      */
     public function list(ChatUserInterface $agent, string $filter, ?string $query, int $limit = 50, ?string $topic = null): array
     {
-        $filter  = in_array($filter, self::FILTERS, true) ? $filter : 'open';
-        $query   = $query === null ? '' : mb_strtolower(trim($query));
-        $threads = array_values(array_filter(
-            $this->conversations->findSupportInbox($filter === 'all' ? null : $filter, $agent, self::SCAN, $topic === '' ? null : $topic, $this->policy->closeCutoff()),
-            static function (ChatConversation $conversation) use ($query): bool {
-                $owner = $conversation->getSupportOwner();
-
-                return $query === '' || ($owner instanceof ChatUserInterface && (str_contains(mb_strtolower($owner->getChatDisplayName()), $query) || str_contains(mb_strtolower((string) $owner->getChatEmail()), $query)));
-            },
-        ));
-        $threads = array_slice($threads, 0, $limit);
+        $threads = $this->threads($agent, $filter, $query, $limit, $topic);
         // 1.16: the requesters' pictures in one resolver call (only threads the agent sees).
         $this->presenter->primeAvatars(array_map(fn (ChatConversation $conversation): ?ChatUserInterface => $this->presenter->avatarPerson($conversation, $agent, null, true), $threads));
         $ids    = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $threads);
@@ -87,6 +77,34 @@ final readonly class ChatSupportInbox
                 'ownerTickets' => $counts[$owner instanceof ChatUserInterface ? (string) ChatUserReferences::key($owner) : ''] ?? 0,
             ];
         }, $threads);
+    }
+
+    /**
+     * 2.2: the support threads of list(), without the presentation: filtered by status, topic and the requester's name or
+     * email, newest activity first (ChatSupportInboxInterface reads them as views).
+     *
+     * @param ChatUserInterface $agent The support agent (used by `mine`)
+     * @param string $filter One of FILTERS (anything else: `open`)
+     * @param string|null $query Search text matched against the requester's name and email; null for none
+     * @param int $limit Maximum number of threads
+     * @param string|null $topic Topic key (`none`: without a topic); null for every topic
+     *
+     * @return list<ChatConversation> The support threads
+     */
+    public function threads(ChatUserInterface $agent, string $filter, ?string $query, int $limit = 50, ?string $topic = null): array
+    {
+        $filter  = in_array($filter, self::FILTERS, true) ? $filter : 'open';
+        $query   = $query === null ? '' : mb_strtolower(trim($query));
+        $threads = array_values(array_filter(
+            $this->conversations->findSupportInbox($filter === 'all' ? null : $filter, $agent, self::SCAN, $topic === '' ? null : $topic, $this->policy->closeCutoff()),
+            static function (ChatConversation $conversation) use ($query): bool {
+                $owner = $conversation->getSupportOwner();
+
+                return $query === '' || ($owner instanceof ChatUserInterface && (str_contains(mb_strtolower($owner->getChatDisplayName()), $query) || str_contains(mb_strtolower((string) $owner->getChatEmail()), $query)));
+            },
+        ));
+
+        return array_slice($threads, 0, $limit);
     }
 
     /**
