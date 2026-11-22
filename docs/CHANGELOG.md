@@ -237,6 +237,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Translations: `chat.links_panel` is now "Koppelingen" (nl; "Links" means "left" in Dutch). The existing `TranslationCatalogueTest` now also fails on a non-es value identical to the Spanish one (longer than 12 characters, different from English) unless allow-listed per locale as genuinely shared, and on stale entries of that allow-list.
+
 ## [2.2.1] - 2026-11-22
 
 ### Fixed
