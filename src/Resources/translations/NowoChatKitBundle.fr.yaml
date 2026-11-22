@@ -193,6 +193,7 @@ chat:
   saved_title: 'Enregistrés'
   saved_intro: 'Messages enregistrés pour plus tard. Seuls ceux que vous pouvez encore lire sont listés.'
   saved_empty: 'Rien d''enregistré pour l''instant. Utilisez « Enregistrer pour plus tard » dans le menu d''un message.'
+  saved_back: 'Aller à vos conversations'
   saved_open: 'Ouvrir'
   saved_remove: 'Retirer'
   saved_more: 'Enregistrés plus anciens'

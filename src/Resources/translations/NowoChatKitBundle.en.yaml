@@ -193,6 +193,7 @@ chat:
   saved_title: 'Saved'
   saved_intro: 'Messages you saved for later. Only those you can still read are listed.'
   saved_empty: 'Nothing saved yet. Use “Save for later” in a message''s menu.'
+  saved_back: 'Go to your conversations'
   saved_open: 'Open'
   saved_remove: 'Remove'
   saved_more: 'Older saved messages'

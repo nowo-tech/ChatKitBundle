@@ -193,6 +193,7 @@ chat:
   saved_title: 'Guardados'
   saved_intro: 'Mensajes que guardaste para después. Solo aparecen los que aún puedes leer.'
   saved_empty: 'Aún no hay nada guardado. Usa «Guardar para después» en el menú de un mensaje.'
+  saved_back: 'Ir a tus conversaciones'
   saved_open: 'Abrir'
   saved_remove: 'Quitar'
   saved_more: 'Guardados anteriores'

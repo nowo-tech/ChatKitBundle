@@ -231,6 +231,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Empty states of the full-page chat and the Saved page go through UiKit's `empty` partial (one sentence): no more bordered paragraphs. The Saved page's empty state also links back to the conversations (`chat.saved_back`, translated in the seven shipped locales; the controller passes the view model as `empty_state`, `ChatPage::savedEmpty()`, and the template falls back to the sentence alone without it). The test hooks (`data-testid="chat-saved-empty"`, `.nowo-chat-page__empty`) and the texts are unchanged.
+
 ## [2.0.1] - 2026-11-22
 
 ### Fixed
