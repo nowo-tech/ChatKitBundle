@@ -142,7 +142,7 @@ chat:
   status_preset_commuting: 'Onderweg'
   status_preset_remote: 'Op afstand'
   status_preset_office: 'Op kantoor'
-  status_preset_training: 'In training'
+  status_preset_training: 'In opleiding'
   status_preset_support: 'Supportdienst'
   status_preset_trip: 'Op zakenreis'
   status_preset_coffee: 'Koffiepauze'
