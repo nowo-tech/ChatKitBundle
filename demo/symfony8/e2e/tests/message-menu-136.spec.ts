@@ -19,6 +19,9 @@ const menu = (page: Page) => page.locator('.nowo-ui-context-menu:not(.nowo-ui-co
 
 async function mine(page: Page, prefix: string): Promise<Locator> {
   await page.route('**/.well-known/mercure**', (route) => route.abort());
+  // The Symfony debug toolbar sits over the bottom of the page and intercepts the click on the thread summary of the
+  // last message ("subtree intercepts pointer events"): the phone specs drop it too.
+  await page.route('**/_wdt/**', (route) => route.abort());
   await signIn(page, 'alice');
   await page.goto('/chat/');
   await page.locator('.nowo-chat-row, .nowo-chat-sidebar__item', { hasText: 'Bob Lee' }).first().click();

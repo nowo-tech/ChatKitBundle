@@ -16,7 +16,7 @@ async function signIn(page: Page, username: string): Promise<void> {
 async function openBob(page: Page): Promise<Locator> {
   await signIn(page, 'alice');
   await page.locator('.nowo-chat-launcher').click();
-  await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+  await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee', hasNotText: 'General' }).click();
   const window = page.locator('.nowo-chat-window', { hasText: 'Bob Lee' });
   await expect(window).toBeVisible();
   return window;
@@ -28,7 +28,7 @@ async function bobWrites(browser: Browser, text: string): Promise<void> {
   const page = await context.newPage();
   await signIn(page, 'bob');
   await page.locator('.nowo-chat-launcher').click();
-  await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin' }).click();
+  await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin', hasNotText: 'General' }).click();
   const window = page.locator('.nowo-chat-window', { hasText: 'Alice Martin' });
   await window.locator('.nowo-chat-composer__input').fill(text);
   await window.locator('.nowo-chat-composer__input').press('Enter');

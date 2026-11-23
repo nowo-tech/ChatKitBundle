@@ -37,7 +37,7 @@ test.describe('chat kit demo profile pictures (1.16)', () => {
     await expect(page.locator('.nowo-chat-me .nowo-chat-avatar.has-image img.nowo-chat-avatar__image')).toBeVisible();
 
     await page.locator('.nowo-chat-launcher').click();
-    const row = page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' });
+    const row = page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee', hasNotText: 'General' });
     const rowImage = row.locator('img.nowo-chat-avatar__image');
     await expect(rowImage).toBeVisible();
     await expect(rowImage).toHaveAttribute('src', '/avatars/bob.svg');

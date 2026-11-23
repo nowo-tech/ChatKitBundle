@@ -1,6 +1,9 @@
 # Prefer Compose V2 plugin (GitHub Actions / modern Docker Desktop); fall back to docker-compose V1 (REQ-MAKE-010).
 COMPOSE_BIN := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 dc = $(SHELL) -c '$(COMPOSE_BIN) $(1)'
+# Wait until the entrypoint (its own composer install / cache:clear) is done and FrankenPHP runs, so the Makefile's
+# composer never overlaps it on the shared var/cache. Scripts (cache:clear) are skipped: the entrypoint clears the cache.
+WAIT_SERVER := i=0; until $(COMPOSE_BIN) exec -T php pgrep -x frankenphp >/dev/null 2>&1; do i=$$((i+1)); [ $$i -gt 180 ] && { echo "FrankenPHP did not start in time"; exit 1; }; sleep 2; done
 
 .PHONY: help up down build install shell logs test test-coverage cache-clear update-bundle ensure-up restart setup setup-db verify assets-install assets test-e2e test-e2e-resync test-e2e-context-menu demo-screenshots
 
@@ -34,9 +37,9 @@ up:
 	@if [ ! -f .env ]; then cp .env.example .env 2>/dev/null || true; fi
 	@$(call dc,up -d)
 	@echo "Waiting for container to be ready..."
-	@sleep 5
+	@$(WAIT_SERVER)
 	@echo "Installing dependencies..."
-	@$(call dc,exec -T -e COMPOSER_MEMORY_LIMIT=-1 php composer install --no-interaction)
+	@$(call dc,exec -T -e COMPOSER_MEMORY_LIMIT=-1 php composer install --no-interaction --no-scripts)
 	@$(MAKE) assets-install
 	@$(MAKE) assets
 	@$(MAKE) setup-db
@@ -57,14 +60,14 @@ ensure-up:
 	@if ! $(call dc,exec -T php true) >/dev/null 2>&1; then \
 		echo "Starting container..."; \
 		$(call dc,up -d --build); \
-		sleep 8; \
-		$(call dc,exec -T -e COMPOSER_MEMORY_LIMIT=-1 php composer install --no-interaction); \
+		$(WAIT_SERVER); \
+		$(call dc,exec -T -e COMPOSER_MEMORY_LIMIT=-1 php composer install --no-interaction --no-scripts); \
 		$(MAKE) assets-install; \
 		$(MAKE) assets; \
 	fi
 
 install: ensure-up
-	@$(call dc,exec -T -e COMPOSER_MEMORY_LIMIT=-1 php composer install --no-interaction)
+	@$(call dc,exec -T -e COMPOSER_MEMORY_LIMIT=-1 php composer install --no-interaction --no-scripts)
 	@$(MAKE) assets-install
 	@$(MAKE) assets
 

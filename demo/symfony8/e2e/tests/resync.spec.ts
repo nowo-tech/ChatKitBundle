@@ -55,7 +55,7 @@ test.describe('realtime resync (1.26.1)', () => {
     const alice = await aliceContext.newPage();
     await signIn(alice, 'alice');
     await alice.locator('.nowo-chat-launcher').click();
-    await alice.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    await alice.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee', hasNotText: 'General' }).click();
     const thread = alice.locator('.nowo-chat-window', { hasText: 'Bob Lee' });
     await expect(thread).toBeVisible();
     await expect(alice.locator('.is-live')).toHaveCount(1);
@@ -65,7 +65,7 @@ test.describe('realtime resync (1.26.1)', () => {
     const bob = await bobContext.newPage();
     await signIn(bob, 'bob');
     await bob.locator('.nowo-chat-launcher').click();
-    await bob.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin' }).click();
+    await bob.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin', hasNotText: 'General' }).click();
     const bobWindow = bob.locator('.nowo-chat-window', { hasText: 'Alice Martin' });
     const text = `Missed while offline ${Date.now()}`;
     await bobWindow.locator('.nowo-chat-composer__input').fill(text);
@@ -100,7 +100,7 @@ test.describe('realtime resync (1.26.1)', () => {
     const bob = await bobContext.newPage();
     await signIn(bob, 'bob');
     await bob.locator('.nowo-chat-launcher').click();
-    await bob.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin' }).click();
+    await bob.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin', hasNotText: 'General' }).click();
     const bobWindow = bob.locator('.nowo-chat-window', { hasText: 'Alice Martin' });
     for (const line of [toEdit, toDelete]) {
       await bobWindow.locator('.nowo-chat-composer__input').fill(line);
@@ -113,7 +113,7 @@ test.describe('realtime resync (1.26.1)', () => {
     const alice = await aliceContext.newPage();
     await signIn(alice, 'alice');
     await alice.locator('.nowo-chat-launcher').click();
-    await alice.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    await alice.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee', hasNotText: 'General' }).click();
     const thread = alice.locator('.nowo-chat-window', { hasText: 'Bob Lee' });
     await expect(thread.locator('.nowo-chat-bubble', { hasText: toEdit })).toHaveCount(1);
     await expect(thread.locator('.nowo-chat-bubble', { hasText: toDelete })).toHaveCount(1);

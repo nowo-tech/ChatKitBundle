@@ -1205,7 +1205,7 @@
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__header {
   min-height: 0;
   padding: 0;
-  /* The folded launcher can sit next to the Search action: keep it off the round button. */
+  /* Spacing between the folded header items (only the round launcher shows; Saved and Search are hidden). */
   gap: 8px;
 }
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-launcher {
@@ -1231,6 +1231,7 @@
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__compose,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__tuck,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__saved,
+.nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__search,
 .nowo-chat.is-mobile .nowo-chat-panel:not(.is-open) .nowo-chat-panel__close {
   display: none;
 }
@@ -2482,6 +2483,14 @@
   }
   .nowo-chat-sidebar__mode {
     min-height: 32px;
+  }
+  /* The full-page chat: the status button and the Close / Reopen action of a row are touch targets too. */
+  .nowo-chat-page__status,
+  .nowo-chat-page__row-archive {
+    min-height: 44px;
+  }
+  .nowo-chat-page__row-archive {
+    min-width: 44px;
   }
 }
 

@@ -18,7 +18,7 @@ test.describe('links', () => {
   test('alice pins a Teams link, attaches a link card and finds both in the Links panel', async ({ page }) => {
     await signIn(page, 'alice');
     await page.locator('.nowo-chat-launcher').click();
-    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee', hasNotText: 'General' }).click();
     const window = page.locator('.nowo-chat-window', { hasText: 'Bob Lee' });
     await expect(window).toBeVisible();
     const title = `Daily ${Date.now()}`;
@@ -71,7 +71,7 @@ test.describe('links', () => {
     const bob = await (await page.context().browser()!.newContext()).newPage();
     await signIn(bob, 'bob');
     await bob.locator('.nowo-chat-launcher').click();
-    await bob.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin' }).click();
+    await bob.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin', hasNotText: 'General' }).click();
     await expect(bob.getByTestId('nowo-chat-link-chip').filter({ hasText: title })).toBeVisible();
 
     await window.getByTestId('nowo-chat-links-bar').locator('[data-part="link-edit"]').last().click();
