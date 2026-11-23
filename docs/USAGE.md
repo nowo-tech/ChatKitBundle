@@ -43,6 +43,7 @@
 - [Privacy](#privacy)
 - [JSON API](#json-api)
 - [Naming conventions](#naming-conventions)
+- [Browser console](#browser-console)
 
 ## How it fits together
 
@@ -2329,3 +2330,7 @@ authors and reactions in batch (no per-row queries).
 | Route names | `nowo_chat_api_*` |
 | CSS classes / tokens | `.nowo-chat-*` / `--nowo-chat-*` |
 | Tables | `nowo_chat_*` (`doctrine.table_name_prefix` replaces `nowo_chat_`) |
+
+## Browser console
+
+The bundle's script logs one line when it loads (`📦 [chat-kit] script loaded, build: 2026-11-23 14:05 UTC`) so a developer can tell which build a page runs. To silence it, set `<html data-nowo-console="quiet">` or `globalThis.NOWO_CONSOLE = 'quiet'` before the script loads; nothing is printed then. The default is unchanged.
