@@ -245,6 +245,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- Phone dock: the folded launcher is the round button alone again; the message-search link added in 1.37 (`.nowo-chat-panel__search`) was left visible next to it (the folded panel measured 106 px wide instead of 56 px). Saved and Search are hidden while the dock is folded on a phone.
+- Touch targets on the full-page chat: the status button and the Close / Reopen action of a conversation row are at least 44 px high (the Close / Reopen action 44 px wide) on phones and coarse pointers.
+
+### Tests
+
+- Demo e2e: the direct-conversation row is picked with `hasNotText: 'General'` (the General channel's last-message preview names the author, so `Alice Martin` matched two rows); the thread spec drops the debug toolbar that covered the thread summary; the phone message-menu spec waits until the sheet rests at the bottom edge; the phone dock spec accounts for the dock's lift over an avoided bar (the reserve excludes it since 1.39.1).
+
 ## [2.3.0] - 2026-11-23
 
 ### Fixed

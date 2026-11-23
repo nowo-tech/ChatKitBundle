@@ -23,7 +23,7 @@ test.describe('chat kit demo', () => {
   test('alice opens the conversation with Bob and sends a message', async ({ page }) => {
     await signIn(page, 'alice');
     await page.locator('.nowo-chat-launcher').click();
-    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee', hasNotText: 'General' }).click();
     const window = page.locator('.nowo-chat-window', { hasText: 'Bob Lee' });
     await expect(window).toBeVisible();
     const text = `Hello from e2e ${Date.now()}`;
@@ -47,7 +47,7 @@ test.describe('chat kit demo', () => {
     const bob = await (await browser.newContext()).newPage();
     await signIn(bob, 'bob');
     await bob.locator('.nowo-chat-launcher').click();
-    const row = bob.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin' });
+    const row = bob.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Alice Martin', hasNotText: 'General' });
     await expect(row).toHaveAttribute('data-peer-status', 'busy');
     await expect(row.locator('.nowo-chat-row__status')).toHaveText('In a meeting');
 
@@ -94,7 +94,7 @@ test.describe('chat kit demo', () => {
   test('alice formats a message and inserts a quick reply', async ({ page }) => {
     await signIn(page, 'alice');
     await page.locator('.nowo-chat-launcher').click();
-    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee', hasNotText: 'General' }).click();
     const window = page.locator('.nowo-chat-window', { hasText: 'Bob Lee' });
     const input = window.locator('.nowo-chat-composer__input');
     const word = `bold${Date.now()}`;

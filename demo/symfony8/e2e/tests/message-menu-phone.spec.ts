@@ -32,11 +32,16 @@ test('the message menu is a bottom sheet; a quick reaction reacts; the backdrop 
 
   const sheet = page.locator('.nowo-ui-context-menu--sheet');
   await expect(sheet).toBeVisible();
-  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))));
-  const box = (await sheet.boundingBox())!;
   const viewport = page.viewportSize()!;
-  expect(Math.round(box.width)).toBe(viewport.width);
-  expect(Math.abs(box.y + box.height - viewport.height)).toBeLessThan(2);
+  // The sheet slides up from the bottom edge: wait until it rests there (the animation may not have started yet when
+  // document.getAnimations() is read, so waiting for the animations alone is not enough on a slow runner).
+  await expect
+    .poll(async () => {
+      const box = await sheet.boundingBox();
+      return box === null ? Number.POSITIVE_INFINITY : Math.abs(box.y + box.height - viewport.height);
+    })
+    .toBeLessThan(2);
+  expect(Math.round((await sheet.boundingBox())!.width)).toBe(viewport.width);
   await expect(sheet.getByRole('group', { name: 'Quick reactions' })).toBeVisible();
   expect((await sheet.getByRole('menuitem', { name: 'Reply', exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(43);
 

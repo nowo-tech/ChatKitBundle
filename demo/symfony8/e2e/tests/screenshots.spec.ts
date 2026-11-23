@@ -32,7 +32,7 @@ test.describe('feature screenshots', () => {
     await page.getByLabel('Password').fill('password');
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.locator('.nowo-chat-launcher').click();
-    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee', hasNotText: 'General' }).click();
     await expect(page.locator('.nowo-chat-window', { hasText: 'Bob Lee' })).toBeVisible();
     await page.waitForTimeout(400); // window entrance animation
     await page.screenshot({ path: resolve(outDir, 'overview.png') });

@@ -40,11 +40,19 @@ test.describe('chat dock on a phone (1.23)', () => {
       value: parseFloat(document.documentElement.style.getPropertyValue('--nowo-chat-dock-reserve')),
       top: (document.querySelector('.nowo-chat-panel') as HTMLElement).getBoundingClientRect().top,
       height: window.innerHeight,
+      // The dock's lift over an avoided bar (the demo shell's bottom bar) is not space it covers in the page (1.39.1).
+      lift: (() => {
+        const root = document.querySelector('.nowo-chat') as HTMLElement;
+        const toolbar = parseFloat(root.style.getPropertyValue('--nowo-chat-toolbar-offset')) || 0;
+        const bottom = parseFloat(getComputedStyle(root).getPropertyValue('--nowo-chat-bottom-offset')) || 0;
+        return Math.max(0, toolbar - bottom);
+      })(),
     }));
     expect(reserve.shown).toBe(true);
-    // Viewport bottom minus the launcher's top, plus the 8px gap.
-    expect(reserve.value).toBeGreaterThanOrEqual(Math.round(reserve.height - reserve.top));
-    expect(reserve.value).toBeLessThanOrEqual(Math.round(reserve.height - reserve.top) + 9);
+    // Viewport bottom minus the launcher's top and its lift over avoided bars, plus the 8px gap.
+    const covered = Math.round(reserve.height - reserve.top - reserve.lift);
+    expect(reserve.value).toBeGreaterThanOrEqual(covered);
+    expect(reserve.value).toBeLessThanOrEqual(covered + 9);
 
     // A host scroller marked data-nowo-chat-dock-reserve is padded by the token.
     const padding = await page.evaluate(() => {

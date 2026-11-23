@@ -111,7 +111,7 @@ test.describe('message menu (1.35)', () => {
     await rightClick(page, message);
     await menu(page).getByRole('menuitem', { name: 'Mark unread from here' }).click();
     await expect(window.locator('[data-part="notice"]')).toHaveText('Marked unread');
-    await expect(page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).locator('.nowo-chat-badge')).toBeVisible();
+    await expect(page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee', hasNotText: 'General' }).locator('.nowo-chat-badge')).toBeVisible();
   });
 
   test('Message info on my own message says who read it', async ({ page, browser }) => {

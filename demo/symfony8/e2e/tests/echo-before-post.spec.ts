@@ -55,7 +55,7 @@ test.describe('echo before the send response (1.34.1)', () => {
     await withScriptedHub(page);
     await signIn(page, 'alice');
     await page.locator('.nowo-chat-launcher').click();
-    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee' }).click();
+    await page.locator('.nowo-chat-list .nowo-chat-row', { hasText: 'Bob Lee', hasNotText: 'General' }).click();
     const thread = page.locator('.nowo-chat-window', { hasText: 'Bob Lee' });
     await expect(thread).toBeVisible();
     await expect(page.locator('.is-live')).toHaveCount(1);
