@@ -15,6 +15,7 @@ business chat is expected to offer. It is a plan, not a commitment: every item b
 - [Considering](#considering)
 - [Non-goals](#non-goals)
 - [Decided](#decided)
+- [Requested for CrmKit (Beacon spec 254, 2026-11-23)](#requested-for-crmkit-beacon-spec-254-2026-11-23)
 
 ## Ground rules
 
@@ -244,3 +245,18 @@ Owner decisions of 2026-11-18 on the questions this review raised.
 4. **Calls:** only an integration port that posts the meeting link. Real-time media stays under Considering, as a
    separate package.
 5. **Guests and cross-organisation channels** wait for a tenancy contract and stay under Considering.
+
+## Requested for CrmKit (Beacon spec 254, 2026-11-23)
+
+Beacon spec 254 "CRM HubSpot parity" (owner decision D-20261123-11) and the owner's reuse rule of 2026-11-23 ("if a
+nowo bundle already does, or nearly does, a CRM capability, use it or extend it") send these pieces here instead of
+building CRM-only copies in CrmKitBundle. Each piece is opt-in, generic (no CRM dependency) and gets its own contract
+revision before it is built. Versions are planned next minors and move if this bundle releases something else first.
+Plan and reuse matrix: [CrmKitBundle docs/ROADMAP.md](https://github.com/nowo-tech/CrmKitBundle/blob/main/docs/ROADMAP.md#reuse-matrix).
+
+| Version | Piece | Used by |
+| --- | --- | --- |
+| later | **Customer channel option**: conversations of signed-in customers (CrmKit portal contacts, not platform users) that open or continue a CRM ticket; no anonymous website chat. Waits for CrmKit phase F (portal) and a tenancy contract, since this roadmap keeps guest / external accounts under *Considering* (Q-254-8: deferred) | CrmKit D-3 |
+
+Not reused for CrmKit tickets: the support inbox (platform users ↔ operator, no company, contact or deal, no SLA, no
+e-mail channel).
