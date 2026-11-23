@@ -28,6 +28,9 @@ final readonly class ChatConflictResponseFormatter implements ConflictResponseFo
     /** Route names of ChatKit's JSON API. */
     private const string API_ROUTE_PREFIX = 'nowo_chat_api_';
 
+    /**
+     * Builds the conflict response for the given request and context, or null when this formatter does not apply.
+     */
     public function format(Request $request, ConflictResponseContext $context): ?Response
     {
         $route = $request->attributes->get('_route');

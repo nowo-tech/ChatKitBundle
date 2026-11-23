@@ -241,6 +241,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `make validate-phpdoc` passes again: the 36 public methods that had no docblock (the SearchKit definitions and providers, `ChatMessageSearchType`, `ChatConflictResponseFormatter`, `ChatReadTimesOptOutListener`, `InvalidRetentionConfigurationException`) now carry one, with the `@return` shape on the array-returning ones. Documentation only, no code change.
+
+### Changed
+
+- CI: new `release-gates` job in `.github/workflows/ci.yml` runs the `make release-check` gates (`rector-dry`, `validate-phpdoc`, `validate-translations`, `check-twig-extra`) on every full-mode push and PR, so they no longer fail only at release time. CI only, no bundle change.
+
 ### Tests
 
 - **`ChatSupportInboxInterface::ticket()`: the intake draft and a channel conversation (audit YR-C-I1).** The port's two documented answers that no test pinned are asserted now: an agent reading a channel conversation's uuid gets `null` (as for a direct one), and the requester's intake draft — no topic chosen, `ticketNumber` null — is read as a view, while `ChatAccessInterface::canViewTicket()` refuses it and the writes still answer `ChatNotFoundException`. No behaviour change; a later tightening of the draft case can no longer pass CI unnoticed.

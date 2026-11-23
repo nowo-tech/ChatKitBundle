@@ -87,6 +87,9 @@ final class ChatMessageSearchType extends AbstractType
         $this->addWithDefaults($builder, 'search', SubmitType::class, ['label' => 'chat_search.submit']);
     }
 
+    /**
+     * Configures the options of the search form type.
+     */
     public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults([
@@ -101,6 +104,9 @@ final class ChatMessageSearchType extends AbstractType
         $resolver->setAllowedTypes('scope', 'bool');
     }
 
+    /**
+     * Returns the block prefix of the form type.
+     */
     public function getBlockPrefix(): string
     {
         return 'nowo_chat_message_search';

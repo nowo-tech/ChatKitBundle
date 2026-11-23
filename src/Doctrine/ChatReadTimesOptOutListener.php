@@ -27,6 +27,9 @@ use function array_values;
 #[AsDoctrineListener(event: Events::onFlush)]
 final readonly class ChatReadTimesOptOutListener
 {
+    /**
+     * Creates the ChatReadTimesOptOutListener with its collaborators.
+     */
     public function __construct(
         private ChatUserReferences $refs = new ChatUserReferences(),
     ) {
