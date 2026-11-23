@@ -70,7 +70,7 @@
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.64",
-        "igor-php/igor-php": "^0.9.7 || ^0.10.0",
+        "igor-php/igor-php": "^0.9.7 || ^0.10.0 || ^0.11.0",
         "nowo-tech/phpstan-frankenphp": "^1.4",
         "nowo-tech/runtime-setting-contract": "^1.0",
         "nowo-tech/search-kit-bundle": "^1.10",
