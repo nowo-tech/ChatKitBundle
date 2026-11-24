@@ -5,6 +5,9 @@ on:
     branches: [main, master, 1.x]
   pull_request:
     branches: [main, master, 1.x]
+  # Dispatched by dependabot-assets.yml on a Dependabot branch after it pushed the rebuilt assets (a push made with
+  # GITHUB_TOKEN starts no workflow), so the required checks run on the rebuilt head (audit ZAWD-L2).
+  workflow_dispatch:
   # REQ-GH-008: weekly scheduled run (Monday 06:00 UTC) catches upstream dependency drift.
   schedule:
     - cron: '0 6 * * 1'
@@ -404,7 +407,7 @@ jobs:
   code-style-check:
     name: Code Style Check
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code

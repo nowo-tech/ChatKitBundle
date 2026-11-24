@@ -20,6 +20,7 @@ Canonical per-repo doc for **REQ-GIT-001** (no Cursor co-author trailers). Copy 
 - [Prevention](#prevention)
 - [Common pitfalls](#common-pitfalls)
 - [Light mode for deps and docs-only PRs](#light-mode-for-deps-and-docs-only-prs)
+- [Dependabot npm updates and the asset rebuild](#dependabot-npm-updates-and-the-asset-rebuild)
   - [Classification](#classification)
   - [What still runs in light mode](#what-still-runs-in-light-mode)
   - [Concurrency](#concurrency)
@@ -278,6 +279,28 @@ A new push to a PR cancels its superseded run. Push runs use their own `run_id` 
 
 ---
 
+## Dependabot npm updates and the asset rebuild
+
+REQ-GH-002 / REQ-GH-003. A Dependabot npm bump can change the built frontend assets (`nowo-chat.js` and its CSS), which are committed.
+`.github/workflows/dependabot-assets.yml` rebuilds them on Dependabot's npm branches only (author `dependabot[bot]`,
+branch `dependabot/npm_and_yarn/…`), in two jobs (audit ZAWD-M1):
+
+- **build** (`contents: read`): checks out without persisted credentials, runs `pnpm install --frozen-lockfile
+  --ignore-scripts` (no lifecycle script of the bumped, untrusted packages, and not the root `preinstall`), runs
+  `pnpm run build` and uploads only `src/Resources/public` and `build-info.json` as an artifact (kept one day).
+- **commit** (`contents: write`, `actions: write`): never installs, builds or runs a repository script. It checks the
+  artifact (regular files only, plain names, nothing outside those paths), replaces those directories with it, stages
+  only those paths, commits `[dependabot-skip] Rebuild frontend assets` and pushes.
+
+A push made with `GITHUB_TOKEN` starts no workflow (audit ZAWD-L2), so the commit job then runs `gh workflow run
+ci.yml --ref <branch>`. `ci.yml` accepts `workflow_dispatch` (always the full mode), and its check runs land on the
+rebuilt head, which is what the PR's required checks look at. If that dispatch ever fails, re-run CI on the PR by
+hand (close and reopen it, or push an empty commit as a person) before merging.
+
+`pr-lint.yml` ("Validate semantic PR title", a required check) runs on `pull_request` only and cannot be dispatched,
+so after a rebuild push it has no run on the new head: close and reopen the Dependabot PR (or edit its title) to run
+it again before merging.
+
 ## Acceptance criteria
 
 A bundle complies when:
@@ -297,5 +320,6 @@ A bundle complies when:
 - [CONTRIBUTING.md](CONTRIBUTING.md) — hooks and contribution flow
 - [RELEASE.md](RELEASE.md) — post-tag co-author check before push
 - [.github/workflows/ci.yml](../.github/workflows/ci.yml) — `git-hygiene` job, `changes` job (light mode)
+- [.github/workflows/dependabot-assets.yml](../.github/workflows/dependabot-assets.yml) — Dependabot npm asset rebuild (build read-only, commit write-only)
 - Shared templates: `repositories/bundles/.scripts/templates/`
 - Spec detail: `repositories/bundles/BUNDLES_FULL_SPECS_DETAILS.md` → REQ-GIT-001
