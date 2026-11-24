@@ -1,0 +1,153 @@
+# REQ-GH-003: when Dependabot bumps npm dependencies, rebuild the committed frontend assets (`nowo-chat.js` and its CSS) and
+# build-info.json on the Dependabot branch, so the committed bundle stays the build of the TypeScript source.
+#
+# Supply chain (audit ZAWD-M1): the bumped packages are untrusted code. They run only in `build`, which has a
+# read-only token, no persisted credentials and no install scripts (`--ignore-scripts`, so neither the root
+# `preinstall` nor any dependency hook runs). `commit` has write access but never installs, builds or runs a repository
+# script: it checks out the branch, checks the artifact (regular files only, only under ASSET_DIRS or build-info.json,
+# no hidden or `..` path segment), replaces the ASSET_DIRS directories with it and pushes them.
+#
+# A push made with GITHUB_TOKEN starts no workflow (audit ZAWD-L2), so `commit` then dispatches ci.yml on the branch:
+# its check runs land on the rebuilt head and satisfy the required checks of the PR (docs/GITHUB_CI.md).
+name: Dependabot rebuild assets
+
+on: pull_request
+
+permissions:
+  contents: read
+
+env:
+  # The only paths the commit job writes: these directories (replaced whole by the build output) and build-info.json.
+  ASSET_DIRS: src/Resources/public
+
+jobs:
+  build:
+    name: Build the frontend assets (read-only)
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && contains(github.event.pull_request.head.ref, 'npm_and_yarn')
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Install dependencies (no lifecycle scripts)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build frontend assets
+        run: pnpm run build
+
+      - name: Upload the rebuilt files
+        uses: actions/upload-artifact@v7
+        with:
+          name: rebuilt-assets
+          path: |
+            src/Resources/public
+            build-info.json
+          if-no-files-found: error
+          retention-days: 1
+
+  commit:
+    name: Commit the rebuilt assets
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && contains(github.event.pull_request.head.ref, 'npm_and_yarn')
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Download the rebuilt files
+        uses: actions/download-artifact@v8
+        with:
+          name: rebuilt-assets
+          path: ${{ runner.temp }}/rebuilt
+
+      # The artifact is the output of untrusted code: accept only regular files with plain names under the asset paths.
+      - name: Check the artifact holds only the expected paths
+        env:
+          SRC: ${{ runner.temp }}/rebuilt
+        run: |
+          set -euo pipefail
+          read -r -a dirs <<< "$ASSET_DIRS"
+          cd "$SRC"
+          test -f build-info.json || { echo "::error::build-info.json is missing from the artifact"; exit 1; }
+          for d in "${dirs[@]}"; do
+            test -d "$d" || { echo "::error::$d is missing from the artifact"; exit 1; }
+          done
+          bad=$(find . -mindepth 1 ! -type f ! -type d -print -quit)
+          if [ -n "$bad" ]; then echo "::error::not a regular file: $bad"; exit 1; fi
+          seg='[A-Za-z0-9_@+=,~-][A-Za-z0-9_.@+=,~-]*'
+          re="^$seg(/$seg)*\$"
+          while IFS= read -r -d '' p; do
+            p=${p#./}
+            [[ $p =~ $re ]] || { echo "::error::unexpected file name in the artifact: $p"; exit 1; }
+            ok=0
+            [ "$p" = build-info.json ] && ok=1
+            for d in "${dirs[@]}"; do
+              case "$p" in "$d"/*) ok=1 ;; esac
+            done
+            [ "$ok" = 1 ] || { echo "::error::file outside the asset paths: $p"; exit 1; }
+          done < <(find . -type f -print0)
+
+      - name: Replace the asset directories with the rebuilt ones
+        env:
+          SRC: ${{ runner.temp }}/rebuilt
+        run: |
+          set -euo pipefail
+          read -r -a dirs <<< "$ASSET_DIRS"
+          for d in "${dirs[@]}"; do
+            rm -rf -- "${GITHUB_WORKSPACE:?}/$d"
+            mkdir -p -- "$GITHUB_WORKSPACE/$d"
+            cp -R -- "$SRC/$d/." "$GITHUB_WORKSPACE/$d/"
+          done
+          cp -- "$SRC/build-info.json" "$GITHUB_WORKSPACE/build-info.json"
+
+      - name: Commit and push
+        id: push
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          read -r -a dirs <<< "$ASSET_DIRS"
+          git add -A -- build-info.json "${dirs[@]}"
+          if git diff --cached --quiet; then
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          while IFS= read -r -d '' p; do
+            ok=0
+            [ "$p" = build-info.json ] && ok=1
+            for d in "${dirs[@]}"; do
+              case "$p" in "$d"/*) ok=1 ;; esac
+            done
+            [ "$ok" = 1 ] || { echo "::error::staged path outside the asset paths: $p"; exit 1; }
+          done < <(git diff --cached --name-only -z)
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "[dependabot-skip] Rebuild frontend assets"
+          git push origin "HEAD:$BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run CI on the rebuilt head
+        if: steps.push.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
