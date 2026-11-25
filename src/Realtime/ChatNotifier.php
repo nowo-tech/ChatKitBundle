@@ -304,6 +304,8 @@ final readonly class ChatNotifier
         $conversation = $message->getConversation();
         $payload      = $this->realtimeEvents === 'ids'
             ? ['messageUuid' => $message->getUuid(), 'messageId' => $message->getId(), 'deleted' => $message->isDeleted()]
+                // A thread reply names its root (an id): clients update the thread, not the timeline.
+                + ($message->getThreadRoot() instanceof ChatMessage ? ['threadRootUuid' => $message->getThreadRoot()->getUuid()] : [])
             : ['message' => $this->presenter->message($message, null, $reactions)];
         $this->publisher->publish($type, ['conversationUuid' => $conversation->getUuid()] + $payload, $this->recipients->of($conversation));
     }

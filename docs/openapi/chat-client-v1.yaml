@@ -170,6 +170,50 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /conversations/{uuid}/messages/{messageUuid}/thread:
+    get:
+      operationId: thread
+      summary: A thread's root and a page of its replies (30, oldest first); a reply's uuid opens its root's thread
+      description: 404 while threads are off (message_menu.threads.enabled). Read-only; replying comes with the write routes.
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+        - name: messageUuid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: before
+          in: query
+          required: false
+          description: Replies older than this id. Not with after.
+          schema: { type: integer, minimum: 1 }
+        - name: after
+          in: query
+          required: false
+          description: Replies newer than this id (catch-up). Not with before.
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [root, replies, hasMore, replyCount, readUpTo, following]
+                properties:
+                  root: { $ref: '#/components/schemas/Message' }
+                  replies:
+                    type: array
+                    items: { $ref: '#/components/schemas/Message' }
+                  hasMore: { type: boolean }
+                  replyCount: { type: integer }
+                  readUpTo: { type: [integer, 'null'] }
+                  following: { type: boolean }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /conversations/{uuid}/read:
     post:
       operationId: read

@@ -313,6 +313,8 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertSame('Secret plan', $own['body']['blocks'][0]['tokens'][6]['title']);
 
         self::assertError($this->call('GET', self::API . '/conversations/' . $channel->getUuid() . '/messages/00000000-0000-4000-8000-000000000000', 'ana-token', 'org:acme'), 404, 'not_found');
+        // Threads are off in this profile: the thread route answers 404.
+        self::assertError($this->call('GET', self::API . '/conversations/' . $channel->getUuid() . '/messages/' . $text->getUuid() . '/thread', 'ana-token', 'org:acme'), 404, 'not_found');
 
         // A group mention is named (`mentionAll`), as in the web UI.
         $lead = $this->user('Lead Lia');

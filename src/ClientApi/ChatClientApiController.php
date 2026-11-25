@@ -32,6 +32,7 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatThreads;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -105,6 +106,7 @@ final readonly class ChatClientApiController
 
     /**
      * @param string $realtimeEvents `full` or `ids` (the profile's `realtime_events`): what hub events carry
+     * @param ChatThreads|null $threads Thread reads (`message_menu.threads`); null or off: the thread route answers 404
      */
     public function __construct(
         private ChatClientApiGuard $guard,
@@ -125,6 +127,7 @@ final readonly class ChatClientApiController
         private ChatMessageTokens $tokens,
         private string $realtimeEvents = 'full',
         private ClockInterface $clock = new Clock(),
+        private ?ChatThreads $threads = null,
     ) {
     }
 
@@ -325,6 +328,45 @@ final readonly class ChatClientApiController
         }
 
         return $this->json(['ok' => true, 'readUpTo' => $this->participants->findOneFor($conversation, $user)?->getLastReadMessageId()]);
+    }
+
+    /**
+     * A thread (owner 2026-11-25: threads in the first desktop version): its root and a page of replies, oldest first
+     * (`?before=<id>` older, `?after=<id>` catch-up; 30 per page), with the reply count and the caller's thread read
+     * cursor. A reply's uuid opens its root's thread. Same access as the conversation; 404 while threads are off
+     * (`message_menu.threads.enabled`). Read-only: replying comes with the write routes.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid The root's (or a reply's) uuid
+     * @param Request $request The request (query `before`, `after`)
+     *
+     * @return JsonResponse `{root, replies, hasMore, replyCount, readUpTo, following}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/thread', name: 'thread', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['GET'])]
+    public function thread(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $call    = $this->guard->authenticate($request);
+        $threads = $this->threads;
+        $message = $this->messages->findOneInConversation($this->find($call, $uuid), $messageUuid);
+        if (!$threads instanceof ChatThreads || !$threads->enabled() || !$message instanceof ChatMessage || $message->getUuid() !== $messageUuid) {
+            throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
+        }
+        $before = $this->messageId($request, 'before');
+        $after  = $this->messageId($request, 'after');
+        $this->deny($before !== null && $after !== null, 'invalid_cursor', Response::HTTP_BAD_REQUEST);
+        $user = $call->principal->user;
+        $root = ChatThreads::rootOf($message);
+        $page = $threads->page($user, $root, $before, $after);
+        $rows = $this->presentMessages($user, [$root, ...$page['replies']]);
+
+        return $this->json([
+            'root'       => $rows[0],
+            'replies'    => array_slice($rows, 1),
+            'hasMore'    => $page['hasMore'],
+            'replyCount' => $root->getThreadReplyCount(),
+            'readUpTo'   => $page['readUpTo'],
+            'following'  => $page['following'],
+        ]);
     }
 
     /**

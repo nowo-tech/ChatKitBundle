@@ -307,6 +307,8 @@ export interface MessageIdsEvent {
   messageUuid: string;
   messageId: number;
   deleted: boolean;
+  /** A thread reply names its root. */
+  threadRootUuid?: string;
 }
 
 /** Events on the caller's private topic (ChatNotifier). */

@@ -98,6 +98,7 @@ All paths are under `<prefix>/chat/v1`. All responses are sent with `Cache-Contr
 | `GET conversations/{uuid}` | `{conversation}`, with `membersCount` and `permissions` |
 | `GET conversations/{uuid}/messages?before=&after=&limit=` | `{messages, hasMore, readUpTo}` (oldest first) |
 | `GET conversations/{uuid}/messages/{messageUuid}` | `{message}` |
+| `GET conversations/{uuid}/messages/{messageUuid}/thread?before=&after=` | `{root, replies, hasMore, replyCount, readUpTo, following}`. Needs `message_menu.threads.enabled` (404 otherwise); a reply's uuid opens its root's thread |
 | `POST conversations/{uuid}/read` `{messageId}` | `{ok, readUpTo}` |
 | `GET realtime` | `{enabled, hubUrl, token, topic, expiresAt, events}` |
 
@@ -135,6 +136,9 @@ Markdown by the dock renderer's own rules. Render every string as a text node.
   - Anything else is `{type: "reference", visible: false, text: "Content not visible"}`, with no type, id or title.
   - References inside code are never resolved, and their titles are never shown.
 - Deleted messages have `body: null`. Bot and system lines are one translated paragraph.
+- Each message has `reactions`, a list of `{emoji, count, mine}` (`mine`: the reader reacted). A thread root has
+  `thread: {count, lastReplyAt}` and a reply has `threadRootUuid`. Timeline pages hold no thread replies: read them
+  through `…/thread`.
 - `previews` lists the reader's link previews: at most 3 per message and 30 per response. The host's
   `ChatLinkPreviewProviderInterface` is asked 10 URLs at a time, and anything it answers that was not asked is dropped.
 - `lastMessage.preview` in the conversation list is plain text for the reader. A reference the reader may not open reads
@@ -151,7 +155,8 @@ Markdown by the dock renderer's own rules. Render every string as a text node.
 - `enabled: false` means the client polls.
 - Treat events as hints and re-fetch through the API.
 - The profile option `realtime_events: ids` (Q-BD-13) makes `message` and `message_updated` events carry only
-  `{conversationUuid, messageUuid, messageId, deleted}`. No body, reference or name ever reaches the hub. The dock
+  `{conversationUuid, messageUuid, messageId, deleted}`, plus `threadRootUuid` for a thread reply. A reaction change is a
+  `message_updated` hint, and a thread change is also a `thread` event (`rootUuid`, `replyCount`, `lastReplyAt`). No body, reference or name ever reaches the hub. The dock
   fetches such messages through its own API. The default `full` keeps the 2.3 behaviour.
 
 ## Limits
