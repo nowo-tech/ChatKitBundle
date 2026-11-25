@@ -17,7 +17,17 @@ import { ChatSidebarView } from './sidebar';
 import { loadContextMenuRuntime, takeMessageFromUrl } from './message-menu';
 import { part, Templates, text } from './templates';
 import { isMuted, plain, ThreadView, type ThreadHost } from './thread';
-import type { ChatConfig, ChatMessage, ChatPrefs, Contact, ConversationSummary, LinkPreview, PeerStatus, RealtimeEvent, SoundName, SupportContext } from './types';
+import type { ChatConfig, ChatMessage, ChatPrefs, Contact, ConversationSummary, LinkPreview, MessageIdsEvent, PeerStatus, RealtimeEvent, SoundName, SupportContext } from './types';
+
+/**
+ * 2.4: whether a realtime event names a message by its ids only (`realtime_events: ids`).
+ *
+ * @param event A realtime event.
+ * @returns True for an ids-only message event.
+ */
+function isIdsEvent(event: RealtimeEvent): event is MessageIdsEvent {
+  return (event.type === 'message' || event.type === 'message_updated') && !('message' in event && event.message !== undefined);
+}
 
 type Filter = 'all' | 'unread' | 'channel' | 'support' | 'archived';
 
@@ -1359,6 +1369,23 @@ export class ChatDock implements ThreadHost {
   }
 
   /**
+   * 2.4 (`realtime_events: ids`): the event names the message only. Fetches it for this user, then applies it as a full
+   * event; a new message that cannot be fetched (deleted, no longer visible) refreshes the list instead.
+   *
+   * @param event The ids-only event.
+   */
+  private fetchNamedMessage(event: MessageIdsEvent): void {
+    void this.api
+      .message(event.conversationUuid, event.messageUuid)
+      .then((message) => this.onRealtime(event.type === 'message' ? { type: 'message', conversationUuid: event.conversationUuid, message } : { type: 'message_updated', conversationUuid: event.conversationUuid, message }))
+      .catch(() => {
+        if (event.type === 'message') {
+          void this.refreshList();
+        }
+      });
+  }
+
+  /**
    * Applies a realtime event: new / updated messages, read cursors, typing, or a changed conversation.
    *
    * @param event Event from the user's private topic.
@@ -1393,6 +1420,10 @@ export class ChatDock implements ThreadHost {
       if (this.filter === 'archived') {
         void this.loadArchived();
       }
+      return;
+    }
+    if (isIdsEvent(event)) {
+      this.fetchNamedMessage(event);
       return;
     }
     if (event.type === 'message' || event.type === 'message_updated') {

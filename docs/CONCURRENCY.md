@@ -54,6 +54,11 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | 1.37 `nowo:chat:search-backfill` | batches by id, one short connection-level transaction each (DBAL only: no entity manager flushed, cleared or reset); `UPDATE … WHERE search_text IS NULL`, so a concurrent send or edit always wins; a lock wait timeout, deadlock or `lock_timeout` rolls the batch back and stops with `CONFLICT_001` (exit 75), the batches before it kept | `--after-id` resumes; re-run safe |
 | 1.37 `nowo:chat:search-index --force` | one DDL statement outside any transaction (`CREATE INDEX CONCURRENTLY` cannot run in one; MySQL commits DDL itself); a lock wait timeout, deadlock or `lock_timeout` stops it with `CONFLICT_001` (exit 75): no usable index was built; on PostgreSQL an INVALID index may remain until `--force` runs again, which drops it before building (if that build fails too, no index is left); PostgreSQL search keeps working without it (slower), MySQL / MariaDB search needs it | re-run safe |
 
+2.4 client API: its only write is the read mark (`POST <prefix>/chat/v1/conversations/{uuid}/read`). It goes through
+`ChatService::markRead()`, the same unit as the web UI. The participant row is locked (`PESSIMISTIC_WRITE`) and the
+cursor only moves forward, so two devices never lose an update or move it back. A lock conflict answers `409` with
+`CONFLICT_001` and `Retry-After`.
+
 ## Conflict answers
 
 A lock conflict, deadlock, lock-wait timeout or serialization failure on a ChatKit route answers **409** with

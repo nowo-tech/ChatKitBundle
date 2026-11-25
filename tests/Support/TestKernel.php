@@ -23,6 +23,8 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestAccessPolicy;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestAuthorBadgeProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientContextPolicy;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientPrincipalResolver;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestGrantReferenceProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestLinkPreviewProvider;
@@ -249,7 +251,7 @@ final class TestKernel extends Kernel
         ));
 
         $services = $container->services()->defaults()->autowire()->public();
-        foreach ([TestDirectory::class, TestAccessPolicy::class, TestChannelProvider::class, RecordingRealtime::class, RecordingPushSender::class, TestLinkPreviewProvider::class, CountingAvatarResolver::class] as $class) {
+        foreach ([TestDirectory::class, TestAccessPolicy::class, TestChannelProvider::class, RecordingRealtime::class, RecordingPushSender::class, TestLinkPreviewProvider::class, CountingAvatarResolver::class, TestClientPrincipalResolver::class, TestClientContextPolicy::class] as $class) {
             $services->set($class);
         }
         // #references: one provider, autoconfigured through the interface's tag.
@@ -341,6 +343,8 @@ final class TestKernel extends Kernel
         }
 
         $routes->import('@NowoChatKitBundle/Resources/config/routes.php')->prefix('/chat');
+        // 2.4: the client API (no route while client_api.principal_resolver is null).
+        $routes->import('.', 'nowo_chat_kit_client_api');
         $routes->add('test_page', '/page')->controller([self::class, 'page']);
         $routes->add('test_project_page', '/projects/acme/page')->controller([self::class, 'page']);
         $routes->add('test_bundler_page', '/bundler-page')->controller([self::class, 'bundlerPage']);

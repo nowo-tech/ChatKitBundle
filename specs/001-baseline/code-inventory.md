@@ -1,8 +1,8 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-11-22  
-**Production units**: **297/297** table rows below; **all 308 files** the audit command returns (2026-11-22) are named in this file (some rows group several files or repeat one file under two sections)  
+**Last audited**: 2026-11-25  
+**Production units**: **310/310** table rows below (2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 322 files** the audit command returns (2026-11-25) are named in this file (some rows group several files or repeat one file under two sections)  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -44,7 +44,8 @@
 | Browser (TypeScript) — feature modules | 15 |
 | Message search (1.37) | 16 |
 | Sources added 1.34–2.2 (sweep 2026-11-22) | 54 |
-| **Total** | **297** |
+| Client API v1 (2.4) | 13 |
+| **Total** | **310** |
 
 ## Bundle, configuration & DI
 
@@ -477,3 +478,21 @@ The 54 files below were added by releases 1.34–2.2 without an inventory row. T
 | `src/Service/ChatMenuOptions.php` | 1.36: which of the message menu's data items are offered — forward, threads, edit history — and their limits (`message_menu.forward`, `message_menu.threads`, `m | FR-MENU-004 |
 | `src/Service/ChatSupportDesk.php` | 2.2: default ChatSupportInboxInterface (aliased to it): the agent is resolved (ChatActorResolver) and must be a reachable support agent; the threads come from C | FR-QUERY-001 |
 | `src/Service/ChatThreads.php` | 1.36 (Beacon, D-20261118-02): one-level threads (`message_menu.threads`). | FR-THREAD-001 |
+
+## Client API v1 (2.4)
+
+| File | Role | Spec |
+| --- | --- | --- |
+| `src/ClientApi/ChatClientApiController.php` | 2.4: the client API v1 routes (`<prefix>/chat/v1`): me, conversations, conversation, messages, message, read, realtime | FR-CAPI-001 |
+| `src/ClientApi/ChatClientApiGuard.php` | 2.4: stateless checks of every client API request (budgets, Bearer via the host resolver, reachability, scope, context) | FR-CAPI-001 |
+| `src/ClientApi/ChatClientApiRouteLoader.php` | 2.4: routing type `nowo_chat_kit_client_api` (no route while the API is off) | FR-CAPI-001 |
+| `src/ClientApi/ChatClientCall.php` | 2.4: principal + context of one request (request attribute only) | FR-CAPI-001 |
+| `src/ClientApi/ChatClientCursor.php` | 2.4: opaque keyset cursor of the conversation list | FR-CAPI-001 |
+| `src/ClientApi/ChatMessageTokens.php` | 2.4: message bodies as structured tokens, references resolved per reader (Q-BD-16, R2) | FR-CAPI-001 |
+| `src/Contract/ChatClientPrincipalResolverInterface.php` | 2.4: host port resolving a Bearer token to a principal | FR-CAPI-001 |
+| `src/Contract/ChatClientContextPolicyInterface.php` | 2.4: host port for the tenant named per request | FR-CAPI-001 |
+| `src/Event/ChatClientApiDeniedEvent.php` | 2.4: a refused client API request (ids and codes only) | FR-CAPI-001 |
+| `src/Model/ChatClientPrincipal.php` | 2.4: the caller of the client API | FR-CAPI-001 |
+| `src/Model/ChatClientRequest.php` | 2.4: a client API request as the host ports see it | FR-CAPI-001 |
+| `src/Model/ChatClientContext.php` | 2.4: a tenant a person may use | FR-CAPI-001 |
+| `src/Model/ChatClientConversationRef.php` | 2.4: what the context policy learns about a conversation | FR-CAPI-001 |

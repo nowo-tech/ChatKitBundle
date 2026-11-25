@@ -19,9 +19,12 @@ final class RecordingRealtime implements ChatRealtimePort
 
     public bool $failing = false;
 
+    /** 2.4: a hub that is off (the clients poll). */
+    public bool $disabled = false;
+
     public function isEnabled(): bool
     {
-        return true;
+        return !$this->disabled;
     }
 
     public function publish(array $topics, array $payload): void

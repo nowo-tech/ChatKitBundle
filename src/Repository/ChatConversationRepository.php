@@ -219,16 +219,22 @@ class ChatConversationRepository extends ServiceEntityRepository
      * @param bool $isSupportAgent Whether every support thread is included
      * @param int $limit Maximum number of conversations
      * @param DateTimeImmutable|null $before Only conversations with older activity (pagination); null for the first page
+     * @param int|null $beforeId 2.4 (client API cursor): with `$before`, also the conversations of the same activity time
+     *                           with a smaller id (keyset, no row skipped or repeated); null: strictly older activity only
      *
      * @return list<ChatConversation> The conversations, newest activity first
      */
-    public function findListForUser(ChatUserInterface $user, array $channelKeys, bool $isSupportAgent, int $limit, ?DateTimeImmutable $before = null): array
+    public function findListForUser(ChatUserInterface $user, array $channelKeys, bool $isSupportAgent, int $limit, ?DateTimeImmutable $before = null, ?int $beforeId = null): array
     {
-        $branch = function (callable $shape) use ($limit, $before): array {
+        $branch = function (callable $shape) use ($limit, $before, $beforeId): array {
             $qb = $this->createQueryBuilder('c');
             $this->refs->join($qb, 'c.supportOwner', 'owner');
             $shape($qb);
-            if ($before instanceof DateTimeImmutable) {
+            if ($before instanceof DateTimeImmutable && $beforeId !== null) {
+                $qb->andWhere('(c.lastMessageAt < :before OR (c.lastMessageAt = :before AND c.id < :beforeId))')
+                    ->setParameter('before', $before)
+                    ->setParameter('beforeId', $beforeId);
+            } elseif ($before instanceof DateTimeImmutable) {
                 $qb->andWhere('c.lastMessageAt < :before')->setParameter('before', $before);
             }
 

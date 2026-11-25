@@ -297,10 +297,23 @@ export interface Reader {
   messageId: number;
 }
 
+/**
+ * 2.4 (`realtime_events: ids`, Q-BD-13): a new or changed message named by its ids only; the dock fetches it through
+ * the API for its own user.
+ */
+export interface MessageIdsEvent {
+  type: 'message' | 'message_updated';
+  conversationUuid: string;
+  messageUuid: string;
+  messageId: number;
+  deleted: boolean;
+}
+
 /** Events on the caller's private topic (ChatNotifier). */
 export type RealtimeEvent =
   | { type: 'message'; conversationUuid: string; message: ChatMessage }
   | { type: 'message_updated'; conversationUuid: string; message: ChatMessage }
+  | MessageIdsEvent
   | { type: 'read'; conversationUuid: string; userUuid: string; userName: string; messageId: number }
   | { type: 'typing'; conversationUuid: string; userUuid: string; userName: string }
   | { type: 'conversation'; conversationUuid: string }

@@ -1,0 +1,474 @@
+# ChatKitBundle client API v1 (2.4). Kept in step with the routes by ChatClientApiOpenApiTest. See docs/API.md.
+openapi: 3.1.0
+info:
+  title: ChatKitBundle client API
+  version: 1.0.0
+  description: >-
+    Stateless, read-only chat API for native clients (Beacon Desktop). Bearer tokens of the host (ChatKit issues
+    none); off until the host configures client_api.principal_resolver. Paths are relative to
+    <client_api.prefix>/chat/v1 (default /api/chat/v1). Every request names its context in the context header
+    (client_api.context_header; Beacon X-Beacon-Context) when the host has a context policy. Responses are never
+    cached. Unknown, foreign or out-of-context uuids answer 404, never 403.
+servers:
+  - url: /api/chat/v1
+security:
+  - bearer: []
+paths:
+  /me:
+    get:
+      operationId: me
+      summary: The caller, the token's scopes, the request's context, the contexts the caller may use, and what the server offers
+      parameters:
+        - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /conversations:
+    get:
+      operationId: conversations
+      summary: The caller's conversations in the context, newest activity first, a page at a time
+      description: >-
+        Follow nextCursor until it is null; a page may hold fewer rows than limit, or none. unreadTotal is answered on
+        the first page only (muted conversations excluded, counted over the 200 most recent conversations).
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - name: archived
+          in: query
+          required: false
+          description: 1 lists the conversations the caller closed.
+          schema: { type: boolean, default: false }
+        - name: cursor
+          in: query
+          required: false
+          description: The nextCursor of the previous page.
+          schema: { type: string, maxLength: 64, pattern: '^[A-Za-z0-9_-]+$' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conversations, nextCursor, unreadTotal]
+                properties:
+                  conversations:
+                    type: array
+                    items: { $ref: '#/components/schemas/Conversation' }
+                  nextCursor: { type: [string, 'null'] }
+                  unreadTotal: { type: [integer, 'null'] }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /conversations/{uuid}:
+    get:
+      operationId: conversation
+      summary: One conversation, with its member count and the caller's permissions
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conversation]
+                properties:
+                  conversation:
+                    allOf:
+                      - $ref: '#/components/schemas/Conversation'
+                      - type: object
+                        required: [membersCount, permissions]
+                        properties:
+                          membersCount: { type: integer }
+                          permissions:
+                            type: object
+                            properties:
+                              send: { type: boolean }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /conversations/{uuid}/messages:
+    get:
+      operationId: messages
+      summary: A page of messages, oldest first (the newest page, an older page, or a catch-up page)
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+        - name: before
+          in: query
+          required: false
+          description: Older than this message id. Not with after.
+          schema: { type: integer, minimum: 1 }
+        - name: after
+          in: query
+          required: false
+          description: Newer than this message id (catch-up). Not with before.
+          schema: { type: integer, minimum: 1 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [messages, hasMore, readUpTo]
+                properties:
+                  messages:
+                    type: array
+                    items: { $ref: '#/components/schemas/Message' }
+                  hasMore: { type: boolean }
+                  readUpTo: { type: [integer, 'null'] }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /conversations/{uuid}/messages/{messageUuid}:
+    get:
+      operationId: message
+      summary: One message (fetched after a realtime hint)
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+        - name: messageUuid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: { $ref: '#/components/schemas/Message' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /conversations/{uuid}/read:
+    post:
+      operationId: read
+      summary: Moves the caller's read cursor (scope chat:read, Q-BD-8); capped at the newest message, never moved back
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messageId]
+              properties:
+                messageId: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, readUpTo]
+                properties:
+                  ok: { type: boolean, const: true }
+                  readUpTo: { type: [integer, 'null'] }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /realtime:
+    get:
+      operationId: realtime
+      summary: The hub URL and a short-lived subscriber token for the caller's own private topic (enabled false → poll)
+      parameters:
+        - $ref: '#/components/parameters/Context'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, hubUrl, token, topic, expiresAt, events]
+                properties:
+                  enabled: { type: boolean }
+                  hubUrl: { type: [string, 'null'] }
+                  token: { type: [string, 'null'] }
+                  topic: { type: string }
+                  expiresAt: { type: string, format: date-time }
+                  events: { type: string, enum: [full, ids] }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: A token of the host's client token system holding the chat:read scope.
+  parameters:
+    Context:
+      name: X-Chat-Context
+      in: header
+      required: false
+      description: >-
+        The tenant of the request (the header name is client_api.context_header; Beacon X-Beacon-Context). Required when
+        the host has a context policy and the token is not bound to a context. Never changes the person's web context.
+      schema: { type: string, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+    ConversationUuid:
+      name: uuid
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: >-
+        A refusal with a stable code: invalid_context, context_required, invalid_cursor, invalid_limit, invalid_json
+        (400); insufficient_scope, context_forbidden (403); not_found (404); invalid_message_id (422).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: invalid_token (missing, unknown, expired or revoked token, or an account that cannot use the chat).
+      headers:
+        WWW-Authenticate: { schema: { type: string } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: rate_limited (per IP, per token, or the person's own budget shared with the web UI).
+      headers:
+        Retry-After: { schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: A lock conflict (code CONFLICT_001, Retry-After); retry.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [ok, error]
+      properties:
+        ok: { type: boolean, const: false }
+        error: { type: string }
+        code: { type: string }
+    Me:
+      type: object
+      required: [apiVersion, user, scopes, context, contexts, features, limits]
+      properties:
+        apiVersion: { type: integer, const: 1 }
+        user: { $ref: '#/components/schemas/Person' }
+        scopes: { type: array, items: { type: string } }
+        context: { type: [string, 'null'] }
+        contexts:
+          type: array
+          items:
+            type: object
+            required: [key, label]
+            properties:
+              key: { type: string }
+              label: { type: string }
+        features:
+          type: object
+          properties:
+            realtime: { type: boolean }
+            realtimeEvents: { type: string, enum: [full, ids] }
+            send: { type: boolean }
+            search: { type: boolean }
+            attachments: { type: boolean }
+        limits:
+          type: object
+          properties:
+            conversationsPageMax: { type: integer }
+            messagesPageMax: { type: integer }
+    Person:
+      type: object
+      required: [uuid, name, initials, avatarUrl]
+      properties:
+        uuid: { type: string }
+        name: { type: string }
+        initials: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+    Conversation:
+      type: object
+      required: [uuid, kind, title, subtitle, initials, unread, archived, mutedUntil, lastMessageAt, canSend]
+      properties:
+        uuid: { type: string, format: uuid }
+        kind: { type: string, enum: [direct, channel, support] }
+        title: { type: string }
+        subtitle: { type: string }
+        initials: { type: string }
+        avatarUrl: { type: [string, 'null'] }
+        peerUuid: { type: [string, 'null'] }
+        peerStatus: { type: string }
+        peerStatusText: { type: [string, 'null'] }
+        peerStatusEmoji: { type: [string, 'null'] }
+        channelKey: { type: [string, 'null'] }
+        ticket:
+          type: [object, 'null']
+          properties:
+            number: { type: [string, 'null'] }
+            topicLabel: { type: [string, 'null'] }
+            status: { type: string }
+            statusLabel: { type: string }
+            readOnly: { type: boolean }
+        canSend: { type: boolean }
+        unread: { type: integer }
+        archived: { type: boolean }
+        mutedUntil: { type: [string, 'null'], format: date-time }
+        lastMessageAt: { type: string, format: date-time }
+        lastMessageId: { type: [integer, 'null'] }
+        lastMessage:
+          type: [object, 'null']
+          description: The preview is plain text for this reader (references it may not open read "Content not visible").
+          properties:
+            preview: { type: string }
+            buzz: { type: boolean }
+            pin: { type: boolean }
+            deleted: { type: boolean }
+            moderated: { type: boolean }
+            mine: { type: boolean }
+            authorName: { type: [string, 'null'] }
+    Message:
+      type: object
+      required: [id, uuid, kind, author, mine, createdAt, edited, deleted, moderated, pinned, mentionsMe, reactions, body, previews]
+      properties:
+        id: { type: integer }
+        uuid: { type: string, format: uuid }
+        kind: { type: string }
+        author:
+          type: object
+          properties:
+            uuid: { type: [string, 'null'] }
+            name: { type: string }
+            initials: { type: string }
+            avatarUrl: { type: [string, 'null'] }
+            bot: { type: boolean }
+            badges: { type: array, items: { type: object } }
+        mine: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        edited: { type: boolean }
+        deleted: { type: boolean }
+        moderated: { type: boolean }
+        pinned: { type: boolean }
+        pinnedMessage: { type: [string, 'null'] }
+        mentionsMe: { type: boolean }
+        mentionAll: { type: string, enum: [channel, here] }
+        forwarded:
+          type: object
+          properties:
+            from: { type: [string, 'null'] }
+            label: { type: [string, 'null'] }
+        threadRootUuid: { type: string }
+        thread:
+          type: object
+          properties:
+            count: { type: integer }
+            lastReplyAt: { type: [string, 'null'] }
+        reactions:
+          type: array
+          items:
+            type: object
+            required: [emoji, count, mine]
+            properties:
+              emoji: { type: string }
+              count: { type: integer }
+              mine: { type: boolean }
+        body:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/Body'
+        previews:
+          type: array
+          description: Link previews of this reader (the host's provider decides what the reader may see).
+          items:
+            type: object
+            required: [url, title, subtitle, badge]
+            properties:
+              url: { type: string }
+              title: { type: string }
+              subtitle: { type: string }
+              badge: { type: string }
+    Body:
+      type: object
+      description: Structured tokens, never HTML (Q-BD-16). Render every string as text.
+      required: [format, blocks]
+      properties:
+        format: { type: string, const: tokens/1 }
+        blocks:
+          type: array
+          items: { $ref: '#/components/schemas/Block' }
+    Block:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [paragraph, quote, list, code] }
+        tokens: { type: array, items: { $ref: '#/components/schemas/Token' } }
+        ordered: { type: boolean }
+        items:
+          type: array
+          items:
+            type: array
+            items: { $ref: '#/components/schemas/Token' }
+        text: { type: string }
+    Token:
+      type: object
+      required: [type]
+      description: >-
+        text (text, marks: bold|italic|strike), break, code (text), mention (userUuid, name), link (url: http(s) or
+        mailto, text, card, provider), reference (visible true: refType, id, typeLabel, icon, title, url or null,
+        subtitle, badge, tone; visible false: text only — the neutral "not visible" placeholder, R2).
+      properties:
+        type: { type: string, enum: [text, break, code, mention, link, reference] }
+        text: { type: string }
+        marks: { type: array, items: { type: string, enum: [bold, italic, strike] } }
+        userUuid: { type: string }
+        name: { type: string }
+        url: { type: [string, 'null'] }
+        card: { type: boolean }
+        provider:
+          type: object
+          properties:
+            key: { type: string }
+            label: { type: string }
+        visible: { type: boolean }
+        refType: { type: string }
+        id: { type: string }
+        typeLabel: { type: string }
+        icon: { type: string }
+        title: { type: string }
+        subtitle: { type: string }
+        badge: { type: string }
+        tone: { type: string, enum: [neutral, info, success, warning, danger] }

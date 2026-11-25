@@ -10,6 +10,7 @@
 - [Retention from the application (1.31)](#retention-from-the-application-131)
 - [Retention from a runtime setting (1.32)](#retention-from-a-runtime-setting-132)
 - [Rate limits](#rate-limits)
+- [Client API (2.4)](#client-api-24)
 - [Private entity manager](#private-entity-manager)
 - [Container parameters](#container-parameters)
 - [Timeouts](#timeouts)
@@ -89,6 +90,13 @@ nowo_chat_kit:
 | `profiles.<name>.retention_days` | int ≥ 30 | `365` | Messages older than this are purged by `nowo:chat:purge`. `%env()%` allowed. Fixed when the container is built; since 1.31 a `RetentionPolicyProviderInterface` service overrides it at run time (see below). |
 | `profiles.<name>.runtime.retention_days` | string or map | not set | 1.32: read `retention_days` from a runtime setting on every purge (needs `nowo-tech/runtime-setting-contract`). See [Retention from a runtime setting](#retention-from-a-runtime-setting-132). |
 | `profiles.<name>.realtime` | bool | `true` | Use the realtime transport when one is available. |
+| `profiles.<name>.realtime_events` | `full` \| `ids` | `full` | 2.4 (Q-BD-13): what hub events of new and changed messages carry. `ids`: only `conversationUuid`, `messageUuid`, `messageId`, `deleted`; every client, the dock included, fetches the message through the API. `full`: the presented message (the 2.3 behaviour). |
+| `profiles.<name>.client_api.principal_resolver` | ?string | `null` | 2.4: service id of your `ChatClientPrincipalResolverInterface`. `null`: the [client API](API.md) is off (no route). |
+| `profiles.<name>.client_api.context_policy` | ?string | `null` | 2.4: service id of your `ChatClientContextPolicyInterface` (tenant per request). Needs `principal_resolver`. |
+| `profiles.<name>.client_api.prefix` | string | `/api` | 2.4: the API answers at `<prefix>/chat/v1`. Empty or a lowercase path without a trailing slash. |
+| `profiles.<name>.client_api.context_header` | string | `X-Chat-Context` | 2.4: header naming the tenant (Beacon: `X-Beacon-Context`). |
+| `profiles.<name>.client_api.limits.per_ip_per_minute` | int ≥ 1 | `300` | 2.4: client API requests per IP (IPv6: per /64). |
+| `profiles.<name>.client_api.limits.per_token_per_minute` | int ≥ 1 | `60` | 2.4: client API requests per token. |
 | `profiles.<name>.push` | bool | `false` | Queue Web Push for new messages (needs a `ChatPushSenderInterface`). |
 | `profiles.<name>.push_url` | string | `/?chat={uuid}` | URL a notification opens; `{uuid}` is the conversation. The dock opens `?chat=<uuid>` itself. |
 | `profiles.<name>.push_icon` | ?string | `null` | Notification icon URL. |
@@ -254,6 +262,27 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 | `limits.searches_per_minute` | `nowo_chat_search` (1.37, at least 3: message searches of the page and the API, key `nowo_chat_search_page_<public id>`; the SearchKit palette has its own bucket of the same size, key `nowo_chat_search_palette_<public id>`, one token per call since 1.38; 1.38: the SearchKit Conversations group has its own bucket too, key `nowo_chat_search_conversations_<public id>`, one token per call) | 30 |
 | `limits.mention_all_per_hour` | `nowo_chat_mention_all` (1.24: `@channel` / `@here` per writer, when the channel provider allows them; over it the message is sent without the group mention) | 6 |
 
+## Client API (2.4)
+
+The versioned, stateless client API for native clients. See [API.md](API.md) for the routes, the ports and the
+`security.yaml` firewall.
+
+```yaml
+nowo_chat_kit:
+    profiles:
+        default:
+            realtime_events: ids                     # optional: no message body on the hub (Q-BD-13)
+            client_api:
+                principal_resolver: App\Chat\ClientTokens
+                context_policy: App\Chat\ClientContexts
+                prefix: /api                         # → /api/chat/v1
+                context_header: X-Beacon-Context
+                limits: { per_ip_per_minute: 300, per_token_per_minute: 60 }
+```
+
+It adds two limiters, `nowo_chat_client_ip` and `nowo_chat_client_token`. The client API also uses the person's own
+`nowo_chat_read` (reads) and `nowo_chat_action` (read marks) budgets, shared with the web UI.
+
 ## Table names
 
 The bundle maps its tables as `nowo_chat_<name>`. Two options change that, applied in this order:
@@ -393,6 +422,7 @@ is gone with the mode it reported on; its entries on 1.x are your migration list
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
 key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `web_ui.assets`, `web_ui.page.full_height`, `web_ui.page.open_recent` and `web_ui.dock.sidebar_sections` (1.25), `web_ui.dock.dialog_runtime` (1.26), `web_ui.message_context_menu` (1.33), `doctrine.table_prefix`, `doctrine.table_name_prefix`, `doctrine.tables`, `doctrine.table.<key>`,
 `reactions`, `icon_set`, `icons`, `presence_ttl`, `auto_away_minutes`, `status_presets`, `max_pins`, `auto_reply_interval_hours`, `limits`, `digest`, `support`, `dock`, and `support.<key>` for each support key).
+Since 2.4: `nowo_chat_kit.realtime_events`, `nowo_chat_kit.client_api.enabled` (a principal resolver is configured), `nowo_chat_kit.client_api.prefix`, `nowo_chat_kit.client_api.v1_path_prefix` (`<prefix>/chat/v1`, for `security.yaml` patterns) and `nowo_chat_kit.client_api.context_header`.
 Since 1.32, `nowo_chat_kit.runtime.retention_days` holds the `runtime.retention_days` setting id (null when not set).
 
 ## Timeouts

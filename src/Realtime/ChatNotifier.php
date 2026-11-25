@@ -29,6 +29,7 @@ final readonly class ChatNotifier
      * @param bool $pushEnabled Whether Web Push is configured
      * @param MessageBusInterface|null $bus Messenger bus for async push; null delivers inline
      * @param ChatDigestScheduler|null $digest Unread-email scheduler; null when the digest is disabled
+     * @param string $realtimeEvents 2.4 (Q-BD-13): `full` publishes the presented message; `ids` only its ids
      */
     public function __construct(
         private ChatRecipients $recipients,
@@ -38,6 +39,7 @@ final readonly class ChatNotifier
         private bool $pushEnabled = false,
         private ?MessageBusInterface $bus = null,
         private ?ChatDigestScheduler $digest = null,
+        private string $realtimeEvents = 'full',
     ) {
     }
 
@@ -292,14 +294,17 @@ final readonly class ChatNotifier
     }
 
     /**
+     * A new or changed message: the presented message (viewer-neutral), or 2.4 (`realtime_events: ids`, Q-BD-13) its
+     * ids only, so no body, reference or name of the message travels through the hub: each client fetches it.
+     *
      * @param array<string, list<string>> $reactions
      */
     private function messageEvent(string $type, ChatMessage $message, array $reactions): void
     {
         $conversation = $message->getConversation();
-        $this->publisher->publish($type, [
-            'conversationUuid' => $conversation->getUuid(),
-            'message'          => $this->presenter->message($message, null, $reactions),
-        ], $this->recipients->of($conversation));
+        $payload      = $this->realtimeEvents === 'ids'
+            ? ['messageUuid' => $message->getUuid(), 'messageId' => $message->getId(), 'deleted' => $message->isDeleted()]
+            : ['message' => $this->presenter->message($message, null, $reactions)];
+        $this->publisher->publish($type, ['conversationUuid' => $conversation->getUuid()] + $payload, $this->recipients->of($conversation));
     }
 }

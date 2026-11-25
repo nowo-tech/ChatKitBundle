@@ -70,7 +70,7 @@ final class ChatApiExceptionListener
 
     /**
      * Replaces the response of a ChatApiException with `{ok: false, error: <code>}` (plus `message` when it carries a
-     * reason) and its HTTP status.
+     * reason) and its HTTP status (2.4: and the exception's headers).
      *
      * @param ExceptionEvent $event The kernel exception event
      */
@@ -80,7 +80,7 @@ final class ChatApiExceptionListener
         if (!$exception instanceof ChatApiException) {
             return;
         }
-        $response = new JsonResponse(['ok' => false, 'error' => $exception->getMessage()] + ($exception->reason === '' ? [] : ['message' => mb_scrub($exception->reason, 'UTF-8')]) + $exception->details, $exception->getCode());
+        $response = new JsonResponse(['ok' => false, 'error' => $exception->getMessage()] + ($exception->reason === '' ? [] : ['message' => mb_scrub($exception->reason, 'UTF-8')]) + $exception->details, $exception->getCode(), $exception->headers);
         $response->headers->set('Cache-Control', 'no-store, private');
         $event->setResponse($response);
     }

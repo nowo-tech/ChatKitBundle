@@ -20,8 +20,9 @@ final class ChatApiException extends RuntimeException
      * @param Throwable|null $previous Cause
      * @param string $reason Text for the person; empty = none
      * @param array<string, int|string> $details 1.36: more fields of the error body (e.g. `target` and `reason` of a refused forward)
+     * @param array<string, string> $headers 2.4: response headers of the refusal (`Retry-After`, `WWW-Authenticate` of the client API)
      */
-    public function __construct(string $message = '', int $code = 0, ?Throwable $previous = null, public readonly string $reason = '', public readonly array $details = [])
+    public function __construct(string $message = '', int $code = 0, ?Throwable $previous = null, public readonly string $reason = '', public readonly array $details = [], public readonly array $headers = [])
     {
         parent::__construct($message, $code, $previous);
     }

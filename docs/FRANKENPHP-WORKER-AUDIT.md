@@ -127,6 +127,23 @@ manager is cleared (audit MC-C-L1). Stock Symfony, including FrankenPHP worker m
 | `ChatSearchSchemaListener` | ✅ | `final readonly`, the two table-name prefixes only. |
 | Verified without the services resetter | ✅ | `ChatMessageSearchTest::testPermissionMatrix` serves five viewers in turn from one kernel that is never rebooted (`disableReboot()`): each gets exactly their own rows. |
 
+## 2.4.0 additions: client API v1 (2026-11-25)
+
+| Service | State | Verdict |
+| --- | --- | --- |
+| `ChatClientApiGuard` | readonly; the host's resolver and context policy are asked on every request; the call (principal + context) is stored in the request attributes only (`_nowo_chat_client`) | Safe |
+| `ChatClientApiController` | readonly, no property written | Safe |
+| `ChatMessageTokens` | readonly; reference cards come from `ChatReferences`' per-request memo, which is emptied at every request boundary | Safe |
+| `ChatClientApiRouteLoader` | runs while the router cache is built; no per-request state | Safe |
+| Rate limiters `nowo_chat_client_ip` / `nowo_chat_client_token` | in the framework's rate-limiter pool (share it across workers) | Safe |
+
+`ChatClientApiWorkerTest` covers this. It runs 500 rounds through `http_kernel` on one kernel with no resetter:
+
+- two people in two contexts never see each other's context;
+- a reference grant flipped every round shows exactly as the grant stands;
+- a token revoked half-way is refused on the next request;
+- memory stays within 4 MB after the warm-up.
+
 ## Rules for future code
 
 - Keep presence, typing and counters in storage (database / cache pool / Mercure), never in service properties.
