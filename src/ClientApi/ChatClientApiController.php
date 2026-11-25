@@ -168,6 +168,8 @@ final readonly class ChatClientApiController
                 'send'           => false,
                 'search'         => false,
                 'attachments'    => false,
+                // 2.4.1: whether `POST logout` revokes the token on the server (else the client only forgets it).
+                'serverLogout' => $this->guard->revokes(),
             ],
             'limits' => [
                 'conversationsPageMax' => self::CONVERSATIONS_PAGE_MAX,
@@ -201,9 +203,14 @@ final readonly class ChatClientApiController
         }
         $isAgent     = $this->access->isSupportAgent($user);
         $channelKeys = array_map(static fn (ChatChannel $channel): string => $channel->key, $this->channels->channelsFor($user));
-        $scan        = $this->conversations->findListForUser($user, $channelKeys, $isAgent, $position === null ? self::UNREAD_SCAN : $limit + 1, $position[0] ?? null, $position[1] ?? null);
-        $page        = array_slice($scan, 0, $limit);
-        $nextCursor  = count($scan) > $limit ? ChatClientCursor::after($page[count($page) - 1]) : null;
+        // Audit ZBWv-I2: the first page reads one row more than it counts, so `unreadTotalCapped` is true only when more exist.
+        $scan   = $this->conversations->findListForUser($user, $channelKeys, $isAgent, $position === null ? self::UNREAD_SCAN + 1 : $limit + 1, $position[0] ?? null, $position[1] ?? null);
+        $capped = $position === null ? count($scan) > self::UNREAD_SCAN : null;
+        if ($capped === true) {
+            $scan = array_slice($scan, 0, self::UNREAD_SCAN);
+        }
+        $page       = array_slice($scan, 0, $limit);
+        $nextCursor = count($scan) > $limit ? ChatClientCursor::after($page[count($page) - 1]) : null;
 
         $visible          = $this->visible($call, $position === null ? $scan : $page);
         $ids              = array_map(static fn (ChatConversation $conversation): int => (int) $conversation->getId(), $visible);
@@ -221,7 +228,7 @@ final readonly class ChatClientApiController
             // A muted conversation keeps its own unread count but leaves the total (as the web UI).
             'unreadTotal' => $position === null ? array_sum(array_diff_key($unread, $muted)) : null,
             // The total was counted over the UNREAD_SCAN most recent conversations and more exist ("200+").
-            'unreadTotalCapped' => $position === null ? count($scan) >= self::UNREAD_SCAN : null,
+            'unreadTotalCapped' => $capped,
         ]);
     }
 
@@ -406,6 +413,24 @@ final readonly class ChatClientApiController
             'expiresAt' => $expiresAt->format(DATE_ATOM),
             'events'    => $this->realtimeEvents,
         ]);
+    }
+
+    /**
+     * 2.4.1: signs the client out: the host revokes the presented token (and only it), then ChatClientLoggedOutEvent is
+     * dispatched. Always 204 with no body, also for a token that was already revoked, has expired or is unknown (never an
+     * oracle), so a client may retry it freely. Without a configured revoker it still answers 204 and the token stays
+     * valid until it expires: `me.features.serverLogout` tells the client so. Per-IP and per-token budgets apply (429).
+     *
+     * @param Request $request The request (Bearer token; no body)
+     *
+     * @return Response 204, empty
+     */
+    #[Route('/logout', name: 'logout', methods: ['POST'])]
+    public function logout(Request $request): Response
+    {
+        $this->guard->logout($request);
+
+        return new Response(null, Response::HTTP_NO_CONTENT, ['Cache-Control' => 'no-store, private', 'X-Content-Type-Options' => 'nosniff']);
     }
 
     /**

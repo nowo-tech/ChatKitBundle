@@ -158,7 +158,8 @@ return static function (ContainerConfigurator $container): void {
         ->autoconfigure(false)
         ->args([param('nowo_chat_kit.client_api.enabled'), param('nowo_chat_kit.client_api.prefix')])
         ->tag('routing.loader');
-    // The resolver and the context policy are set by the extension (client_api.principal_resolver / context_policy).
+    // The resolver, the context policy and the token revoker are set by the extension (client_api.principal_resolver /
+    // context_policy / token_revoker).
     $services->get(ChatClientApiGuard::class)
         ->arg('$ipLimiter', service('limiter.nowo_chat_client_ip'))
         ->arg('$tokenLimiter', service('limiter.nowo_chat_client_token'))

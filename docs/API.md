@@ -1,7 +1,7 @@
 # Client API v1
 
 Since **2.4.0**. A versioned, stateless JSON API for native clients (Beacon Desktop, phase BD-2). It is read-only, except
-for the reader's own read marks. The machine-readable reference is [`openapi/chat-client-v1.yaml`](openapi/chat-client-v1.yaml);
+for the reader's own read marks and, since **2.4.1**, logout (the host revokes the client's own token). The machine-readable reference is [`openapi/chat-client-v1.yaml`](openapi/chat-client-v1.yaml);
 a test keeps it in step with the routes.
 
 This API is not the dock's JSON API. The dock's API (`<chat prefix>/api/...`) is internal UI JSON: it uses the session and
@@ -14,6 +14,7 @@ CSRF, it is unversioned, and native clients must not use it.
 - [Tenant (context)](#tenant-context)
 - [Routes](#routes)
 - [Message bodies](#message-bodies)
+- [Logout](#logout)
 - [Realtime](#realtime)
 - [Limits](#limits)
 - [Errors](#errors)
@@ -33,6 +34,7 @@ nowo_chat_kit:
             client_api:
                 principal_resolver: App\Chat\ClientTokens          # ChatClientPrincipalResolverInterface
                 context_policy: App\Chat\ClientContexts             # optional, ChatClientContextPolicyInterface
+                token_revoker: App\Chat\ClientTokenRevoker          # optional (2.4.1), ChatClientTokenRevokerInterface
                 prefix: /api                                        # the API answers at /api/chat/v1
                 context_header: X-Beacon-Context
 ```
@@ -108,13 +110,15 @@ All paths are under `<prefix>/chat/v1`. All responses are sent with `Cache-Contr
 | `GET conversations/{uuid}/messages/{messageUuid}/thread?before=&after=` | `{root, replies, hasMore, replyCount, readUpTo, following}`. Needs `message_menu.threads.enabled` (404 otherwise); a reply's uuid opens its root's thread |
 | `POST conversations/{uuid}/read` `{messageId}` | `{ok, readUpTo}` |
 | `GET realtime` | `{enabled, hubUrl, token, topic, expiresAt, events}` |
+| `POST logout` (2.4.1) | `204`, no body. See [Logout](#logout) |
 
 How the routes behave:
 
 - **Conversation list.** It is sorted by newest activity first. `limit` is 1–100, 50 by default. `nextCursor` is opaque:
   keep following it until it is `null`. A page may hold fewer rows than `limit`, or none at all, when the rows it scanned
   were not visible. `unreadTotal` comes on the first page only and leaves out muted conversations. It is counted over the
-  200 most recent conversations. `unreadTotalCapped: true` means more exist, so show it as "200+". Later pages answer
+  200 most recent conversations. `unreadTotalCapped: true` means more than 200 exist, so show it as "200+" (exactly 200
+  answer `false`, 2.4.1). Later pages answer
   `null` for both.
 - **Message pages.** Without a cursor you get the newest page. `before=<id>` returns older messages and `after=<id>` is a
   catch-up page. Never send both. `limit` is 1–100, 30 by default.
@@ -153,6 +157,42 @@ Markdown by the dock renderer's own rules. Render every string as a text node.
 - `lastMessage.preview` in the conversation list is plain text for the reader. A reference the reader may not open reads
   "Content not visible".
 
+## Logout
+
+Since 2.4.1, `POST <prefix>/chat/v1/logout` signs the client out. Only `POST` is routed; any other method answers `405`.
+
+- **It revokes the presented token only**, through the host's `ChatClientTokenRevokerInterface::revoke($bearer,
+  $request)` (`client_api.token_revoker`). Other tokens, devices and web sessions of the person are never touched. The
+  resolver must accept the token first; a token the resolver refuses (another client family included) never reaches
+  the revoker.
+- **Always `204` with no body**, also when the token was already revoked, has expired or is unknown. These cases are
+  never told apart (no oracle), so a client may retry a logout freely, for example after a timeout. The only other
+  answers are `401 invalid_token` when there is no usable Bearer token (header absent, blank, or a token longer than
+  4096 bytes: the shape of the header, never the token; audit ZCB-I3), and `429 rate_limited`.
+- **The per-IP budget and a per-token logout budget apply.** Unknown tokens spend the per-IP budget only. A still-valid
+  token can get `429` when its own logout budget is spent, which an unknown token never gets; this tells nothing that
+  `GET me` would not (audit ZCB-I1). The per-token logout budget (`per_token_per_minute`) has a key of its own,
+  separate from the token's budget on the other routes, so read traffic with the same token (a copied token, a client
+  in a reload loop) can never keep its sign-out at `429` (audit ZCB-L1). On `429` the token is not revoked yet: retry
+  after `Retry-After`. The person's own read and action budgets are not spent.
+- **A token the resolver refuses is not revoked.** The answer is the same `204`. Resolvers should refuse only for
+  reasons of the token itself (unknown, expired, revoked, another family), or the host revokes a person's client tokens
+  when it disables the account; a token refused for an account, IP or context reason would otherwise survive a logout
+  (audit ZCB-I2).
+- **No scope, context or account check.** A token without `chat:read`, a bound token whose membership is gone or the
+  token of an account that can no longer use the chat may always be given up. The context header is ignored.
+- **A failed revocation is never a success.** If the revoker throws (database down, lock conflict) the error
+  propagates (`5xx`, or `409` when the host maps it), no event is dispatched, and the client retries.
+- After the revoker returned, `Nowo\ChatKitBundle\Event\ChatClientLoggedOutEvent` is dispatched for the host's audit log,
+  with the `tokenId`, the `userPublicId`, `revoked` and the `/24` or `/64` `ipPrefix`. It never carries the token. A
+  logout with a token the resolver does not accept dispatches nothing. Two concurrent logouts of one token can both
+  revoke (idempotently) and dispatch the event twice: deduplicate on `tokenId` if needed (audit ZCB-I4).
+- **Without a token revoker** the route still answers `204`, but nothing is revoked: the client only forgets its token,
+  which stays valid until it expires or is revoked in the host's UI. `me.features.serverLogout` is `false` then (and the
+  event has `revoked: false`), so a client can tell the person to revoke the device in the web UI. Hosts that issue
+  long-lived tokens should configure a revoker. This fail-open default is deliberate (audit ZCB-I5: the build does not
+  fail without a revoker).
+
 ## Realtime
 
 `GET realtime` returns the hub URL and a 15-minute subscriber token for the caller's **own** private topic only
@@ -176,8 +216,10 @@ Markdown by the dock renderer's own rules. Render every string as a text node.
   - `status`: `{userUuid, status}` (no status text or emoji).
   - The person's own `my_status` and `prefs`, which go to their own topic only.
 
-  No message body, reference, author or display name of another person, and no status text, reaches the hub (audit
-  ZBW-L4). The default `full` keeps the 2.3 payloads.
+  No message body, reference, author, display name or status text of **another** person reaches the hub (audit
+  ZBW-L4). The person's own status (`my_status`: status, text, emoji, expiry) and preferences (`prefs`) still reach the
+  hub, on their own topic only, so the hub operator can see them (audit ZBWv-I1). The default `full` keeps the 2.3
+  payloads.
 
 ## Limits
 
@@ -226,12 +268,12 @@ refused for lack of a context policy. It never carries the token, the raw header
 
 The API keeps no request, user, token or tenant data in services (FrankenPHP worker mode, kernel reset false):
 
-- the principal is resolved per request;
+- the principal is resolved per request, and logout asks the host's revoker per request;
 - the call lives in the request attributes;
 - reference cards are memoised for the request only.
 
 `ChatClientApiWorkerTest` serves two people in two contexts for 500 rounds on one kernel. A reference grant flips every
-round, a token is revoked half-way, and the test checks that memory stays flat. Read marks use the same locked,
+round, a token is signed out with `POST logout` half-way, and the test checks that memory stays flat. Read marks use the same locked,
 monotonic write as the web UI.
 
 ## Implementing the ports (Beacon)
@@ -260,7 +302,23 @@ final readonly class ClientContexts implements ChatClientContextPolicyInterface
 }
 ```
 
+```php
+// 2.4.1: POST logout. Revoke this token only, idempotently, in its own transaction; let failures propagate.
+final readonly class ClientTokenRevoker implements ChatClientTokenRevokerInterface
+{
+    public function revoke(string $bearer, ChatClientRequest $request): void
+    {
+        $this->authenticator->revoke('chat', $bearer);   // TimeTrack ClientFamilyTokenAuthenticator; no-op when unknown
+    }
+}
+```
+
 Configure `realtime_events: ids` together with the context policy.
 
+Beacon checklist for logout (audit ZCB-I5): set `client_api.token_revoker` to the revoker above; assert
+`me.features.serverLogout === true` in the integration test (and that a `POST logout` makes the next request 401);
+Beacon Desktop shows the "revoke this device in the web" hint when it is `false`. Confirm that the chat resolver
+refuses only for reasons of the token, or that disabling an account revokes its client tokens (audit ZCB-I2).
+
 Listen to `ChatClientApiDeniedEvent` to audit refusals, the same way the TimeTrack client API refusals are audited
-(`client_api: chat`).
+(`client_api: chat`), and to `ChatClientLoggedOutEvent` to audit sign-outs.

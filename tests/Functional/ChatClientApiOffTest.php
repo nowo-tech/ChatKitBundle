@@ -39,5 +39,14 @@ final class ChatClientApiOffTest extends DatabaseTestCase
             self::assertSame('not_found', $exception->getMessage());
             self::assertSame(404, $exception->getCode());
         }
+        // 2.4.1: logout is off too (no route, and the guard refuses as if it did not exist).
+        self::assertFalse($guard->revokes());
+        try {
+            $guard->logout(Request::create('/api/chat/v1/logout', 'POST', [], [], [], ['HTTP_AUTHORIZATION' => 'Bearer any']));
+            self::fail('no refusal');
+        } catch (ChatApiException $exception) {
+            self::assertSame('not_found', $exception->getMessage());
+            self::assertSame(404, $exception->getCode());
+        }
     }
 }

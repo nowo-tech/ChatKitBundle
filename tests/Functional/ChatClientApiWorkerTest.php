@@ -9,6 +9,7 @@ use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientTokenRevoker;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestGrantReferenceProvider;
 use Nowo\ChatKitBundle\Tests\Support\ClientApiCalls;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
@@ -23,7 +24,7 @@ use function memory_get_usage;
  * 2.4 (client API v1, R7 / REQ-RUNTIME-002): one kernel, every request through the container's `http_kernel`, no
  * services resetter (FrankenPHP worker mode, kernel reset false). Two people in two contexts are served in turn for
  * {@see self::ROUNDS} rounds: neither ever sees the other's context, a #reference granted and revoked every round is
- * shown exactly as the grant stands, a token revoked half-way is refused on the very next request (and its successor
+ * shown exactly as the grant stands, a token signed out (POST logout) half-way is refused on the very next request (and its successor
  * works), and memory stays flat.
  */
 final class ChatClientApiWorkerTest extends DatabaseTestCase
@@ -41,7 +42,7 @@ final class ChatClientApiWorkerTest extends DatabaseTestCase
 
     protected function chatKitConfig(): array
     {
-        return self::clientApiConfig(['client_api' => ['limits' => ['per_ip_per_minute' => 100_000, 'per_token_per_minute' => 100_000]]]);
+        return self::clientApiConfig(['client_api' => ['token_revoker' => TestClientTokenRevoker::class, 'limits' => ['per_ip_per_minute' => 100_000, 'per_token_per_minute' => 100_000]]]);
     }
 
     protected function grantReferences(): bool
@@ -74,8 +75,8 @@ final class ChatClientApiWorkerTest extends DatabaseTestCase
         $anaToken = 'ana-1';
         for ($round = 0; $round < self::ROUNDS; ++$round) {
             if ($round === self::ROUNDS / 2) {
-                // Ana revokes the desktop's token from her account; the app signs in again.
-                $this->tokens()->revoke('ana-1');
+                // Ana signs the desktop out (2.4.1: POST logout revokes its token); the app signs in again.
+                self::assertSame(204, $this->call('POST', '/api/chat/v1/logout', 'ana-1')->getStatusCode());
                 self::assertError($this->call('GET', '/api/chat/v1/me', 'ana-1'), 401, 'invalid_token');
                 $this->tokens()->grant('ana-2', $ana, id: 'ana-2');
                 $anaToken = 'ana-2';

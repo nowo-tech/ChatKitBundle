@@ -60,6 +60,8 @@ const PAGE_STATE_KEY = 'nowoChatPage';
 
 /** If `animationend` never fires for an entry animation. */
 const ENTRY_FALLBACK_MS = 1000;
+/** 2.4.1 (audit ZBWv-I3): ids-only `status` events within this window share one list reload (ms). */
+const STATUS_REFRESH_MS = 1500;
 const MOBILE_QUERY = '(max-width: 768px)';
 const WINDOW_WIDTH = 336;
 const MINIMISED_WIDTH = 232;
@@ -120,6 +122,8 @@ export class ChatDock implements ThreadHost {
   private live = false;
   private wasLive = false;
   private statusTimer: number | undefined;
+  /** 2.4.1 (audit ZBWv-I3): pending list reload of ids-only `status` events (one per burst). */
+  private statusRefreshTimer: number | undefined;
   /** Since 1.22.1: the server refused this page's CSRF token; the heartbeat stopped and the reload notice stays. */
   private sessionStale = false;
   /** 1.23: last measured height of the folded dock (px, gap included); 0 until measured. */
@@ -731,6 +735,7 @@ export class ChatDock implements ThreadHost {
     window.clearTimeout(this.pollTimer ?? undefined);
     window.clearInterval(this.presenceTimer ?? undefined);
     window.clearTimeout(this.statusTimer);
+    window.clearTimeout(this.statusRefreshTimer);
     window.clearTimeout(this.toastTimer);
     this.dock.remove();
     this.edge.remove();
@@ -1394,8 +1399,14 @@ export class ChatDock implements ThreadHost {
     if (event.type === 'status') {
       // Reciprocal presence: someone who hides their own presence sees no dots, only the custom text.
       if (event.text === undefined) {
-        // 2.4 (`realtime_events: ids`): no status text on the hub; the list answers it for this user.
-        void this.refreshList();
+        // 2.4 (`realtime_events: ids`): no status text on the hub; the list answers it for this user. 2.4.1 (audit
+        // ZBWv-I3): a burst of contacts changing status reloads the list once, not once per event.
+        if (this.statusRefreshTimer === undefined) {
+          this.statusRefreshTimer = window.setTimeout(() => {
+            this.statusRefreshTimer = undefined;
+            void this.refreshList();
+          }, STATUS_REFRESH_MS);
+        }
         return;
       }
       this.applyPeerStatuses({ [event.userUuid]: { status: this.config.prefs.presence ? event.status : 'offline', text: event.text, emoji: event.emoji ?? null } });

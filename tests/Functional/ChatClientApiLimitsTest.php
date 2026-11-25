@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
+use Nowo\ChatKitBundle\Event\ChatClientLoggedOutEvent;
 use Nowo\ChatKitBundle\Model\ChatClientPrincipal;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Service\ChatService;
@@ -11,12 +12,14 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientPrincipalResolver;
 use Nowo\ChatKitBundle\Tests\Support\ClientApiCalls;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 use function array_column;
 use function array_filter;
 use function array_keys;
 use function array_map;
 use function array_values;
+use function assert;
 use function count;
 use function in_array;
 use function json_encode;
@@ -143,5 +146,60 @@ final class ChatClientApiLimitsTest extends DatabaseTestCase
         // The client re-fetches the message through the API.
         $page = $this->call('GET', '/chat/v1/conversations/' . $conversation->getUuid() . '/messages', 'luis', null, null, [], '192.0.2.77');
         self::assertSame([$message->getUuid()], array_column(self::decode($page)['messages'], 'uuid'));
+    }
+
+    public function testWithoutARevokerLogoutOnlyTellsTheClientToForgetItsToken(): void
+    {
+        $ana        = $this->user('Ana');
+        $events     = [];
+        $dispatcher = $this->kernel->getContainer()->get('event_dispatcher');
+        assert($dispatcher instanceof EventDispatcherInterface);
+        $dispatcher->addListener(ChatClientLoggedOutEvent::class, static function (ChatClientLoggedOutEvent $event) use (&$events): void {
+            $events[] = $event;
+        });
+        $this->tokens()->grant('kept', $ana, [ChatClientPrincipal::SCOPE_READ], null, 'tok-kept-logout');
+        self::assertFalse(self::decode($this->call('GET', '/chat/v1/me', 'kept', null, null, [], '192.0.2.120'))['features']['serverLogout']);
+
+        // 2.4.1: still 204 (the client forgets the token), but the token stays valid until it expires or is revoked in
+        // the host's UI; the event says nothing was revoked.
+        $logout = $this->call('POST', '/chat/v1/logout', 'kept', null, null, [], '192.0.2.121');
+        self::assertSame(204, $logout->getStatusCode());
+        self::assertSame('', (string) $logout->getContent());
+        self::assertCount(1, $events);
+        self::assertFalse($events[0]->revoked);
+        self::assertSame('tok-kept-logout', $events[0]->tokenId);
+        // The token stays valid without a revoker.
+        self::assertSame(200, $this->call('GET', '/chat/v1/me', 'kept', null, null, [], '192.0.2.122')->getStatusCode());
+        // A per-token logout budget (2 a minute, its own key: audit ZCB-L1) applies: the third logout is refused.
+        self::assertSame(204, $this->call('POST', '/chat/v1/logout', 'kept', null, null, [], '192.0.2.123')->getStatusCode());
+        self::assertError($this->call('POST', '/chat/v1/logout', 'kept', null, null, [], '192.0.2.124'), 429, 'rate_limited');
+        self::assertSame('tok-kept-logout', $this->denied[0]->tokenId);
+        self::assertCount(2, $events);
+    }
+
+    public function testThePerIpBudgetAlsoCoversLogout(): void
+    {
+        // Unknown tokens answer 204 but still spend the network's budget (4 a minute): guessing is throttled.
+        foreach (['g1', 'g2', 'g3', 'g4'] as $guess) {
+            self::assertSame(204, $this->call('POST', '/chat/v1/logout', $guess, null, null, [], '198.51.100.130')->getStatusCode());
+        }
+        $limited = $this->call('POST', '/chat/v1/logout', 'g5', null, null, [], '198.51.100.130');
+        self::assertError($limited, 429, 'rate_limited');
+        self::assertGreaterThanOrEqual(1, (int) $limited->headers->get('Retry-After'));
+        self::assertSame(['rate_limited'], array_map(static fn ($event): string => $event->reason, $this->denied));
+    }
+
+    public function testReadTrafficNeverStarvesTheSignOut(): void
+    {
+        // Audit ZCB-L1: the token's read budget (2 a minute here) is spent, its own logout budget is not.
+        $this->tokens()->grant('busy', $this->user('Ana'), [ChatClientPrincipal::SCOPE_READ], null, 'tok-busy-logout');
+        self::assertSame(200, $this->call('GET', '/chat/v1/me', 'busy', null, null, [], '192.0.2.140')->getStatusCode());
+        self::assertSame(200, $this->call('GET', '/chat/v1/me', 'busy', null, null, [], '192.0.2.140')->getStatusCode());
+        self::assertError($this->call('GET', '/chat/v1/me', 'busy', null, null, [], '192.0.2.141'), 429, 'rate_limited');
+
+        self::assertSame(204, $this->call('POST', '/chat/v1/logout', 'busy', null, null, [], '192.0.2.142')->getStatusCode());
+        self::assertSame(204, $this->call('POST', '/chat/v1/logout', 'busy', null, null, [], '192.0.2.143')->getStatusCode());
+        // The logout budget itself still applies.
+        self::assertError($this->call('POST', '/chat/v1/logout', 'busy', null, null, [], '192.0.2.144'), 429, 'rate_limited');
     }
 }

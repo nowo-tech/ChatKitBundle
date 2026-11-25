@@ -300,7 +300,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      * Audit ZBW-L2: the realtime stream is per person, not per context, so a host with a context policy must keep
      * message bodies off the hub (`realtime_events: ids`); with `full` the build fails. The web dock works with both.
      *
-     * @param array{principal_resolver: string|null, context_policy: string|null, prefix: string, context_header: string} $clientApi The processed `client_api` options
+     * 2.4.1: the host's token revoker (`client_api.token_revoker`) goes on the guard too (`POST logout`).
+     *
+     * @param array{principal_resolver: string|null, context_policy: string|null, token_revoker: string|null, prefix: string, context_header: string} $clientApi The processed `client_api` options
      * @param string $realtimeEvents The profile's `realtime_events`
      *
      * @throws InvalidConfigurationException When a context policy is configured with `realtime_events: full`
@@ -317,6 +319,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $guard = $container->getDefinition(ChatClientApiGuard::class);
         $guard->setArgument('$resolver', $clientApi['principal_resolver'] === null ? null : new Reference($clientApi['principal_resolver']));
         $guard->setArgument('$contexts', $clientApi['context_policy'] === null ? null : new Reference($clientApi['context_policy']));
+        $guard->setArgument('$revoker', $clientApi['token_revoker'] === null ? null : new Reference($clientApi['token_revoker']));
     }
 
     /**

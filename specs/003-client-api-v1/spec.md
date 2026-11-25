@@ -51,6 +51,13 @@ tokens filtered per reader. It is off unless the host configures a principal res
   - 404s are audited.
 - **FR-CAPI-010**: thread reads (root + a page of replies), the reply count and last reply time per message, and reaction
   summaries (`emoji`, `count`, `mine`) per message. Writing them comes in 2.5.0 (owner, 2026-11-25).
+- **FR-CAPI-012** (2.4.1, Beacon Desktop): `POST logout` revokes the presented token only, through the optional host
+  port `ChatClientTokenRevokerInterface`. Always 204 without body for any token (valid, revoked, expired, unknown: no
+  oracle); 401 only without a Bearer header. Per-IP and per-token budgets apply; no scope, context or reachability
+  check. A revoker failure propagates. `ChatClientLoggedOutEvent` (ids only) after the revocation. Without a revoker:
+  204, client-side only, `me.features.serverLogout: false`.
+- **FR-CAPI-013** (2.4.1, audit ZBWv): `unreadTotalCapped` only when more than 200 conversations exist (I2); the dock
+  coalesces ids-only `status` list reloads (I3); docs name the person's own status on the hub (I1).
 - **FR-CAPI-009**: the profile option `realtime_events: ids` sends ids-only message events. The dock fetches the message.
 
 ## Success criteria

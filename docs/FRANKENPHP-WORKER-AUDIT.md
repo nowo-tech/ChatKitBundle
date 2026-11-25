@@ -144,6 +144,18 @@ manager is cleared (audit MC-C-L1). Stock Symfony, including FrankenPHP worker m
 - a token revoked half-way is refused on the next request;
 - memory stays within 4 MB after the warm-up.
 
+## 2.4.1 additions: client API logout (2026-11-26)
+
+| Service | State | Verdict |
+| --- | --- | --- |
+| `ChatClientApiGuard::logout()` | readonly guard; the host's resolver and `ChatClientTokenRevokerInterface` are asked per call; the bearer and principal live in locals only | Safe |
+| `ChatClientTokenRevokerInterface` (host) | contract: revoke per call, keep nothing of the call, own write unit | Host |
+| Dock `statusRefreshTimer` (browser) | one debounce timer per dock instance (tab), cleared on `destroy()`; not server state | Safe |
+
+`ChatClientApiLogoutTest::testSignInAndOutOnOneKernel` runs 300 rounds on one kernel with no resetter: two people sign in
+and out in turn, each logout revokes only its own token, the other person keeps being served, and memory stays flat.
+`ChatClientApiWorkerTest` now signs its token out half-way with `POST logout`.
+
 ## Rules for future code
 
 - Keep presence, typing and counters in storage (database / cache pool / Mercure), never in service properties.

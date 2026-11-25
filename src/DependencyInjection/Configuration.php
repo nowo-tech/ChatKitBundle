@@ -534,6 +534,10 @@ final class Configuration implements ConfigurationInterface
                     ->info('Service id of a Nowo\\ChatKitBundle\\Contract\\ChatClientContextPolicyInterface: the tenant named per request in the context header, checked on every request. null: the token\'s own context only.')
                     ->defaultNull()
                 ->end()
+                ->scalarNode('token_revoker')
+                    ->info('2.4.1: service id of a Nowo\\ChatKitBundle\\Contract\\ChatClientTokenRevokerInterface: POST <prefix>/chat/v1/logout revokes the presented token (only it). null: logout still answers 204, but only the client forgets the token (me.features.serverLogout false).')
+                    ->defaultNull()
+                ->end()
                 ->scalarNode('prefix')
                     ->info('Path the API is mounted under (the API answers at <prefix>/chat/v1). Exposed as %nowo_chat_kit.client_api.v1_path_prefix% for security.yaml.')
                     ->defaultValue('/api')
@@ -562,6 +566,10 @@ final class Configuration implements ConfigurationInterface
             ->validate()
                 ->ifTrue(static fn (array $config): bool => $config['context_policy'] !== null && $config['principal_resolver'] === null)
                 ->thenInvalid('client_api.context_policy needs client_api.principal_resolver (the API is off without it).')
+            ->end()
+            ->validate()
+                ->ifTrue(static fn (array $config): bool => $config['token_revoker'] !== null && $config['principal_resolver'] === null)
+                ->thenInvalid('client_api.token_revoker needs client_api.principal_resolver (the API is off without it).')
             ->end();
 
         return $node;
