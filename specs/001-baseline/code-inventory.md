@@ -1,7 +1,7 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-11-25  
+**Last audited**: 2026-11-27 (2.4.0: 322 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
 **Production units**: **310/310** table rows below (2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 322 files** the audit command returns (2026-11-25) are named in this file (some rows group several files or repeat one file under two sections)  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
@@ -22,15 +22,15 @@
 | Category | Mapped |
 | --- | ---: |
 | Bundle, configuration & DI | 8 |
-| Domain model & persistence | 13 |
-| Contracts & value objects | 13 |
+| Domain model & persistence | 17 |
+| Contracts & value objects | 11 |
 | Access control | 2 |
-| Messaging | 7 |
+| Messaging | 13 |
 | HTTP | 6 |
 | Realtime, presence & notifications | 15 |
 | Privacy & retention | 2 |
-| Twig, markup & theme | 10 |
-| Browser (TypeScript) | 14 |
+| Twig, markup & theme | 9 |
+| Browser (TypeScript) | 17 |
 | Translations | 7 |
 | Automatic replies, avatars & author badges | 11 |
 | Links (pinned links and links panel) | 14 |
@@ -40,12 +40,12 @@
 | Application ports (framework-free twins, messaging by id) | 20 |
 | User reference modes (relation, id, string) | 10 |
 | Private entity manager, savepoints & write concurrency | 14 |
-| Retention policy | 7 |
+| Retention policy | 8 |
 | Browser (TypeScript) — feature modules | 15 |
-| Message search (1.37) | 16 |
+| Message search (1.37) | 17 |
 | Sources added 1.34–2.2 (sweep 2026-11-22) | 54 |
 | Client API v1 (2.4) | 13 |
-| **Total** | **310** |
+| **Total** | **322** |
 
 ## Bundle, configuration & DI
 
@@ -88,12 +88,10 @@
 | --- | --- | --- |
 | `src/Channel/NullChannelProvider.php` | US-03 | FR-DI-001, FR-CONTRACT-003 |
 | `src/Contract/ChatAccessPolicyInterface.php` | US-01, US-02, US-04 | FR-CONTRACT-002 |
-| `src/Contract/ChatChannelProviderInterface.php` | US-03 | FR-CONTRACT-003 |
 | `src/Contract/ChatDigestSenderInterface.php` | US-06 | FR-CONTRACT-004 |
 | `src/Contract/ChatDirectoryInterface.php` | US-01, US-02 | FR-CONTRACT-001 |
 | `src/Contract/ChatLinkPreviewProviderInterface.php` | US-10 | FR-CONTRACT-004 |
 | `src/Contract/ChatPushSenderInterface.php` | US-06 | FR-CONTRACT-004 |
-| `src/Contract/ChatRealtimeInterface.php` | US-05 | FR-CONTRACT-004 |
 | `src/Model/ChatChannel.php` | US-03 | FR-MODEL-004 |
 | `src/Model/ChatContact.php` | US-02 | FR-MODEL-004 |
 | `src/Model/ChatDigestItem.php` | US-06 | FR-MODEL-004 |
@@ -175,8 +173,6 @@
 | `src/Resources/views/dock.html.twig` | US-01 | FR-TWIG-002 |
 | `src/Resources/views/page.html.twig` | US-07 | FR-TWIG-002, FR-PAGE-001 |
 | `src/Resources/views/saved.html.twig` | US-07 | FR-MENU-002 |
-| `src/Resources/views/page_layout.html.twig` | US-07 | FR-TWIG-002 |
-| `src/Resources/views/page_legacy.html.twig` | US-07 | FR-TWIG-002, FR-PAGE-001 |
 | `src/Twig/ChatDockExtension.php` | US-01, US-08 | FR-TWIG-001, FR-TWIG-004 |
 
 ## Browser (TypeScript)
@@ -189,6 +185,7 @@
 | `src/Resources/assets/src/emoji.ts` | US-02 | FR-TS-005 |
 | `src/Resources/assets/src/format.ts` | US-02 | FR-TS-005 |
 | `src/Resources/assets/src/iife.ts` | US-01 | FR-TS-001, FR-BUILD-001 |
+| `src/Resources/assets/src/logger.ts` | US-01 | FR-TS-011 |
 | `src/Resources/assets/src/index.ts` | US-01 | FR-TS-001, FR-BUILD-001 |
 | `src/Resources/assets/src/page.ts` | US-07 | FR-TS-008 |
 | `src/Resources/assets/src/message-info.ts` | US-02 | FR-MENU-002 |
@@ -306,7 +303,6 @@
 | Source path | Spec section | Requirement ID(s) |
 | --- | --- | --- |
 | `src/Contract/ChatServiceInterface.php` | US-02 | FR-PORT-001 |
-| `src/Contract/CurrentChatUserResolverInterface.php` | US-01 | FR-PORT-001 |
 | `src/Security/SecurityChatUserResolver.php` | US-01 | FR-PORT-001 |
 | `src/Contract/ChatChannelSourceInterface.php` | US-03 | FR-PORT-002 |
 | `src/Contract/ChatParticipantResolverInterface.php` | US-01 | FR-PORT-002 |
