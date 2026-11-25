@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Unit\DependencyInjection;
 
+use Nowo\ChatKitBundle\ClientApi\ChatClientApiGuard;
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
 use Nowo\ChatKitBundle\Support\ChatEmojiCatalog;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Reference;
 
 use function count;
 
@@ -47,11 +49,20 @@ final class NowoChatKitExtensionMessageMenuTest extends TestCase
         $container = new ContainerBuilder();
         (new NowoChatKitExtension())->load([['profiles' => ['default' => ['user_class' => TestUser::class, 'realtime_events' => 'ids', 'client_api' => ['principal_resolver' => 'app.tokens', 'context_policy' => 'app.contexts']]]]], $container);
         self::assertTrue($container->getParameter('nowo_chat_kit.client_api.enabled'));
+        self::assertNull($container->getDefinition(ChatClientApiGuard::class)->getArgument('$revoker'));
 
         // Audit ZBW-L2: with `full`, every context's message bodies would reach the client through the per-person hub topic.
         $this->expectException(InvalidConfigurationException::class);
         $this->expectExceptionMessage('client_api.context_policy needs "realtime_events: ids"');
         (new NowoChatKitExtension())->load([['profiles' => ['default' => ['user_class' => TestUser::class, 'client_api' => ['principal_resolver' => 'app.tokens', 'context_policy' => 'app.contexts']]]]], new ContainerBuilder());
+    }
+
+    public function testTheTokenRevokerGoesOnTheGuard(): void
+    {
+        // 2.4.1: POST logout revokes the presented token through the host's revoker.
+        $container = new ContainerBuilder();
+        (new NowoChatKitExtension())->load([['profiles' => ['default' => ['user_class' => TestUser::class, 'client_api' => ['principal_resolver' => 'app.tokens', 'token_revoker' => 'app.revoker']]]]], $container);
+        self::assertEquals(new Reference('app.revoker'), $container->getDefinition(ChatClientApiGuard::class)->getArgument('$revoker'));
     }
 
     /**

@@ -93,6 +93,7 @@ nowo_chat_kit:
 | `profiles.<name>.realtime_events` | `full` \| `ids` | `full` | 2.4 (Q-BD-13): what hub events carry. `ids`: new and changed messages as ids only (`conversationUuid`, `messageUuid`, `messageId`, `deleted`, plus `threadRootUuid`); `read` / `typing` without the display name; `status` without its text. Every client, the dock included, fetches through the API. `full`: the 2.3 payloads. **Required with `client_api.context_policy`** (the build fails otherwise). |
 | `profiles.<name>.client_api.principal_resolver` | ?string | `null` | 2.4: service id of your `ChatClientPrincipalResolverInterface`. `null`: the [client API](API.md) is off (no route). |
 | `profiles.<name>.client_api.context_policy` | ?string | `null` | 2.4: service id of your `ChatClientContextPolicyInterface` (tenant per request). Needs `principal_resolver`. |
+| `profiles.<name>.client_api.token_revoker` | ?string | `null` | 2.4.1: service id of your `ChatClientTokenRevokerInterface`: `POST <prefix>/chat/v1/logout` revokes the presented token (only it). `null`: logout still answers 204 but only the client forgets the token (`me.features.serverLogout: false`). Needs `principal_resolver`. |
 | `profiles.<name>.client_api.prefix` | string | `/api` | 2.4: the API answers at `<prefix>/chat/v1`. Empty or a lowercase path without a trailing slash. |
 | `profiles.<name>.client_api.context_header` | string | `X-Chat-Context` | 2.4: header naming the tenant (Beacon: `X-Beacon-Context`). |
 | `profiles.<name>.client_api.limits.per_ip_per_minute` | int ≥ 1 | `300` | 2.4: client API requests per IP (IPv6: per /64). |
@@ -275,6 +276,7 @@ nowo_chat_kit:
             client_api:
                 principal_resolver: App\Chat\ClientTokens
                 context_policy: App\Chat\ClientContexts
+                token_revoker: App\Chat\ClientTokenRevoker   # 2.4.1: POST logout revokes the token
                 prefix: /api                         # → /api/chat/v1
                 context_header: X-Beacon-Context
                 limits: { per_ip_per_minute: 300, per_token_per_minute: 60 }

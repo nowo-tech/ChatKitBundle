@@ -7,7 +7,9 @@ namespace Nowo\ChatKitBundle\ClientApi;
 use DateTimeImmutable;
 use Nowo\ChatKitBundle\Contract\ChatClientContextPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatClientPrincipalResolverInterface;
+use Nowo\ChatKitBundle\Contract\ChatClientTokenRevokerInterface;
 use Nowo\ChatKitBundle\Event\ChatClientApiDeniedEvent;
+use Nowo\ChatKitBundle\Event\ChatClientLoggedOutEvent;
 use Nowo\ChatKitBundle\Http\ChatApiException;
 use Nowo\ChatKitBundle\Model\ChatClientPrincipal;
 use Nowo\ChatKitBundle\Model\ChatClientRequest;
@@ -51,6 +53,9 @@ use const FILTER_VALIDATE_IP;
  *
  * Never reads or writes the session, never trusts a cookie, never changes the person's web context. Every refusal
  * after step 1 dispatches ChatClientApiDeniedEvent (ids and codes only). Stateless: nothing of a request is kept.
+ *
+ * 2.4.1: logout ({@see self::logout()}) runs steps 1–3 and 5 only, and answers the same way for an unknown, expired or
+ * revoked token as for a revoked one (not an oracle).
  */
 final readonly class ChatClientApiGuard
 {
@@ -75,6 +80,8 @@ final readonly class ChatClientApiGuard
      * @param ChatClientContextPolicyInterface|null $contexts The host's context policy; null: the token's own context only
      * @param EventDispatcherInterface|null $events Receives ChatClientApiDeniedEvent
      * @param ClockInterface $clock Clock of the Retry-After seconds
+     * @param ChatClientTokenRevokerInterface|null $revoker 2.4.1: the host's token revocation (logout); null: logout only
+     *                                                      tells the client to forget its token
      */
     public function __construct(
         private ChatAccess $access,
@@ -87,7 +94,18 @@ final readonly class ChatClientApiGuard
         private ?ChatClientContextPolicyInterface $contexts = null,
         private ?EventDispatcherInterface $events = null,
         private ClockInterface $clock = new Clock(),
+        private ?ChatClientTokenRevokerInterface $revoker = null,
     ) {
+    }
+
+    /**
+     * 2.4.1: whether logout revokes the token on the server (a revoker is configured).
+     *
+     * @return bool True when a revoker is configured
+     */
+    public function revokes(): bool
+    {
+        return $this->revoker instanceof ChatClientTokenRevokerInterface;
     }
 
     /**
@@ -136,11 +154,7 @@ final readonly class ChatClientApiGuard
         if ($bearer === null) {
             $this->deny('invalid_token', Response::HTTP_UNAUTHORIZED, null, $ipPrefix, ['WWW-Authenticate' => 'Bearer']);
         }
-        $principal = $resolver->resolve($bearer, new ChatClientRequest(
-            ChatRequestContexts::fromRequest($request),
-            $ip,
-            $header === null ? null : substr($header, 0, self::MAX_CONTEXT_LENGTH),
-        ));
+        $principal = $resolver->resolve($bearer, $this->clientRequest($request, $ip, $header));
         if (!$principal instanceof ChatClientPrincipal) {
             $this->deny('invalid_token', Response::HTTP_UNAUTHORIZED, null, $ipPrefix, ['WWW-Authenticate' => 'Bearer error="invalid_token"']);
         }
@@ -160,6 +174,42 @@ final readonly class ChatClientApiGuard
         $request->attributes->set(ChatClientCall::ATTRIBUTE, $call);
 
         return $call;
+    }
+
+    /**
+     * 2.4.1: `POST logout`. Revokes the presented token only, through the host's revoker, and dispatches
+     * ChatClientLoggedOutEvent. Runs the per-IP budget, the Bearer check and the per-token budget (429 + Retry-After);
+     * an absent or malformed Authorization header answers 401 as on every route. A token the resolver does not accept
+     * now (unknown, expired, revoked, another client family) returns silently: the caller answers the same 204 (no
+     * oracle), nothing is revoked and no event is dispatched. Reachability, scope and context are not checked: a
+     * person whose account is inactive, whose token lacks `chat:read` or whose membership is gone may always give
+     * up their own token. A failure of the revoker propagates (never reported as a success).
+     *
+     * @param Request $request The request
+     *
+     * @throws ChatApiException The refusal (404 API off, 401 no Bearer token, 429 budget spent)
+     */
+    public function logout(Request $request): void
+    {
+        $resolver = $this->resolver;
+        if (!$resolver instanceof ChatClientPrincipalResolverInterface) {
+            throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
+        }
+        $ip       = $request->getClientIp();
+        $ipPrefix = self::ipPrefix($ip);
+        $this->consume($this->ipLimiter, 'nowo_chat_client_ip_' . hash('sha256', $this->ipKey($ip)), null, $ipPrefix);
+        $bearer = self::bearer($request);
+        if ($bearer === null) {
+            $this->deny('invalid_token', Response::HTTP_UNAUTHORIZED, null, $ipPrefix, ['WWW-Authenticate' => 'Bearer']);
+        }
+        $clientRequest = $this->clientRequest($request, $ip, $request->headers->get($this->contextHeader));
+        $principal     = $resolver->resolve($bearer, $clientRequest);
+        if (!$principal instanceof ChatClientPrincipal) {
+            return;
+        }
+        $this->consume($this->tokenLimiter, 'nowo_chat_client_token_' . hash('sha256', $principal->tokenId), $principal, $ipPrefix);
+        $this->revoker?->revoke($bearer, $clientRequest);
+        $this->events?->dispatch(new ChatClientLoggedOutEvent($principal->tokenId, $principal->user->getChatPublicId(), $this->revokes(), $ipPrefix));
     }
 
     /**
@@ -208,6 +258,18 @@ final readonly class ChatClientApiGuard
         }
 
         return str_contains($ip, ':') ? IpUtils::anonymize($ip, 0, 8) . '/64' : IpUtils::anonymize($ip, 1) . '/24';
+    }
+
+    /**
+     * The request as the host's ports see it (no Authorization header, cookie or body).
+     */
+    private function clientRequest(Request $request, ?string $ip, ?string $header): ChatClientRequest
+    {
+        return new ChatClientRequest(
+            ChatRequestContexts::fromRequest($request),
+            $ip,
+            $header === null ? null : substr($header, 0, self::MAX_CONTEXT_LENGTH),
+        );
     }
 
     /**

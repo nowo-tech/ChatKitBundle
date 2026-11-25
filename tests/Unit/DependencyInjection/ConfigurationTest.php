@@ -48,7 +48,7 @@ final class ConfigurationTest extends TestCase
             'auto_away_minutes'         => 10,
             'dock'                      => ['overlay' => 'hide', 'watch_aria_modal' => false],
             'links'                     => ['enabled' => true, 'max_pinned' => 20, 'allow_http' => false, 'channel_managers' => 'members', 'providers' => Configuration::DEFAULT_LINK_PROVIDERS],
-            'client_api'                => ['principal_resolver' => null, 'context_policy' => null, 'prefix' => '/api', 'context_header' => 'X-Chat-Context', 'limits' => ['per_ip_per_minute' => 300, 'per_token_per_minute' => 60]],
+            'client_api'                => ['principal_resolver' => null, 'context_policy' => null, 'token_revoker' => null, 'prefix' => '/api', 'context_header' => 'X-Chat-Context', 'limits' => ['per_ip_per_minute' => 300, 'per_token_per_minute' => 60]],
             'search'                    => ['enabled' => false, 'dock_entry' => true, 'conversation_entry' => true, 'fulltext' => true, 'postgresql_config' => 'simple', 'mysql_min_token_length' => 3, 'min_query_length' => 2, 'max_query_length' => 200, 'page_size' => 20],
             'search_kit'                => ['enabled' => false, 'priority' => 30, 'messages' => ['enabled' => true, 'max_candidates' => 100], 'channels' => ['enabled' => true, 'priority' => 35, 'max_candidates' => 100, 'direct_scan' => 200]],
             'message_menu'              => [
@@ -105,6 +105,7 @@ final class ConfigurationTest extends TestCase
         self::assertSame([
             'principal_resolver' => null,
             'context_policy'     => null,
+            'token_revoker'      => null,
             'prefix'             => '/api',
             'context_header'     => 'X-Chat-Context',
             'limits'             => ['per_ip_per_minute' => 300, 'per_token_per_minute' => 60],
@@ -116,6 +117,7 @@ final class ConfigurationTest extends TestCase
             [['prefix' => 'api'], 'client_api.prefix must be empty or a path'],
             [['context_header' => 'X Context'], 'client_api.context_header must be an HTTP header name'],
             [['context_policy' => 'app.contexts'], 'client_api.context_policy needs client_api.principal_resolver'],
+            [['token_revoker' => 'app.revoker'], 'client_api.token_revoker needs client_api.principal_resolver'],
         ] as [$clientApi, $message]) {
             try {
                 $this->process([['profiles' => ['default' => ['client_api' => $clientApi]]]]);

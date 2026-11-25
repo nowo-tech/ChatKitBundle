@@ -25,6 +25,7 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestAuthorBadgeProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientContextPolicy;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientPrincipalResolver;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientTokenRevoker;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestGrantReferenceProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestLinkPreviewProvider;
@@ -251,7 +252,7 @@ final class TestKernel extends Kernel
         ));
 
         $services = $container->services()->defaults()->autowire()->public();
-        foreach ([TestDirectory::class, TestAccessPolicy::class, TestChannelProvider::class, RecordingRealtime::class, RecordingPushSender::class, TestLinkPreviewProvider::class, CountingAvatarResolver::class, TestClientPrincipalResolver::class, TestClientContextPolicy::class] as $class) {
+        foreach ([TestDirectory::class, TestAccessPolicy::class, TestChannelProvider::class, RecordingRealtime::class, RecordingPushSender::class, TestLinkPreviewProvider::class, CountingAvatarResolver::class, TestClientPrincipalResolver::class, TestClientContextPolicy::class, TestClientTokenRevoker::class] as $class) {
             $services->set($class);
         }
         // #references: one provider, autoconfigured through the interface's tag.

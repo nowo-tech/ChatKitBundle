@@ -1,8 +1,8 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-11-27 (2.4.0: 322 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
-**Production units**: **310/310** table rows below (2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 322 files** the audit command returns (2026-11-25) are named in this file (some rows group several files or repeat one file under two sections)  
+**Last audited**: 2026-11-26 (2.4.1: 324 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
+**Production units**: **312/312** table rows below (2.4.1: +2 logout units, `ChatClientTokenRevokerInterface` and `ChatClientLoggedOutEvent`; 2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 324 files** the audit command returns (2026-11-26) are named in this file (some rows group several files or repeat one file under two sections)  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -44,8 +44,8 @@
 | Browser (TypeScript) — feature modules | 15 |
 | Message search (1.37) | 17 |
 | Sources added 1.34–2.2 (sweep 2026-11-22) | 54 |
-| Client API v1 (2.4) | 13 |
-| **Total** | **322** |
+| Client API v1 (2.4, 2.4.1) | 15 |
+| **Total** | **324** |
 
 ## Bundle, configuration & DI
 
@@ -488,6 +488,8 @@ The 54 files below were added by releases 1.34–2.2 without an inventory row. T
 | `src/Contract/ChatClientPrincipalResolverInterface.php` | 2.4: host port resolving a Bearer token to a principal | FR-CAPI-001 |
 | `src/Contract/ChatClientContextPolicyInterface.php` | 2.4: host port for the tenant named per request | FR-CAPI-001 |
 | `src/Event/ChatClientApiDeniedEvent.php` | 2.4: a refused client API request (ids and codes only) | FR-CAPI-001 |
+| `src/Contract/ChatClientTokenRevokerInterface.php` | 2.4.1: optional host port revoking the presented token on `POST logout` | FR-CAPI-012 |
+| `src/Event/ChatClientLoggedOutEvent.php` | 2.4.1: a client signed out (token id, user public id, `revoked`; never the token) | FR-CAPI-012 |
 | `src/Model/ChatClientPrincipal.php` | 2.4: the caller of the client API | FR-CAPI-001 |
 | `src/Model/ChatClientRequest.php` | 2.4: a client API request as the host ports see it | FR-CAPI-001 |
 | `src/Model/ChatClientContext.php` | 2.4: a tenant a person may use | FR-CAPI-001 |

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use DateTimeImmutable;
+use Nowo\ChatKitBundle\ClientApi\ChatClientApiController;
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiGuard;
 use Nowo\ChatKitBundle\ClientApi\ChatClientCall;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -83,7 +84,7 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertSame('personal', $me['context']);
         // The host's labels lose their control and bidirectional characters.
         self::assertSame([['key' => 'personal', 'label' => 'Personal'], ['key' => 'org:acme', 'label' => 'Acme']], $me['contexts']);
-        self::assertSame(['realtime' => true, 'realtimeEvents' => 'ids', 'send' => false, 'search' => false, 'attachments' => false], $me['features']);
+        self::assertSame(['realtime' => true, 'realtimeEvents' => 'ids', 'send' => false, 'search' => false, 'attachments' => false, 'serverLogout' => false], $me['features']);
         self::assertSame(['conversationsPageMax' => 100, 'messagesPageMax' => 100], $me['limits']);
         // The resolver saw the request without its token, and the raw context header.
         $request = $this->tokens()->requests[0];
@@ -223,6 +224,33 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertSame($direct->getUuid(), $refs[0]->uuid);
         self::assertNull($refs[0]->channelKey);
         self::assertEqualsCanonicalizing([$this->ana->getChatPublicId(), $this->luis->getChatPublicId()], $refs[0]->memberPublicIds);
+    }
+
+    public function testUnreadTotalIsCappedOnlyWhenMoreConversationsExist(): void
+    {
+        // Audit ZBWv-I2: exactly UNREAD_SCAN conversations are not "200+"; one more is, and only the 200 most recent count.
+        $peer   = $this->user('Oldest');
+        $oldest = $this->direct($this->ana, $peer);
+        $this->send($peer, $oldest, 'unread');
+        for ($i = 1; $i < ChatClientApiController::UNREAD_SCAN; ++$i) {
+            $this->direct($this->ana, $this->user('Peer ' . $i));
+        }
+        $connection = $this->em->getConnection();
+        $connection->executeStatement('UPDATE nowo_chat_conversation SET last_message_at = ?', ['2026-11-25 10:00:00']);
+        $connection->executeStatement('UPDATE nowo_chat_conversation SET last_message_at = ? WHERE id = ?', ['2026-11-24 10:00:00', $oldest->getId()]);
+
+        $first = $this->ok('GET', self::API . '/conversations?limit=1', 'ana-token');
+        self::assertFalse($first['unreadTotalCapped']);
+        self::assertSame(1, $first['unreadTotal']);
+
+        $newest = $this->direct($this->ana, $this->user('Newest'));
+        $connection->executeStatement('UPDATE nowo_chat_conversation SET last_message_at = ? WHERE id = ?', ['2026-11-25 10:00:00', $newest->getId()]);
+        $capped = $this->ok('GET', self::API . '/conversations?limit=1', 'ana-token');
+        self::assertTrue($capped['unreadTotalCapped']);
+        // The oldest conversation is the 201st now: its unread message is not counted.
+        self::assertSame(0, $capped['unreadTotal']);
+        self::assertCount(1, $capped['conversations']);
+        self::assertNotNull($capped['nextCursor']);
     }
 
     public function testTheCursorWalksEveryConversationOnce(): void

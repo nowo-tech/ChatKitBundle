@@ -2,10 +2,10 @@
 openapi: 3.1.0
 info:
   title: ChatKitBundle client API
-  version: 1.0.0
+  version: 1.1.0
   description: >-
-    Stateless, read-only chat API for native clients (Beacon Desktop). Bearer tokens of the host (ChatKit issues
-    none); off until the host configures client_api.principal_resolver. Paths are relative to
+    Stateless, read-only chat API for native clients (Beacon Desktop), plus the reader's own read marks and (2.4.1)
+    logout. Bearer tokens of the host (ChatKit issues none); off until the host configures client_api.principal_resolver. Paths are relative to
     <client_api.prefix>/chat/v1 (default /api/chat/v1). Every request names its context in the context header
     (client_api.context_header; Beacon X-Beacon-Context) when the host has a context policy. Responses are never
     cached. Unknown, foreign or out-of-context uuids answer 404, never 403.
@@ -251,6 +251,22 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /logout:
+    post:
+      operationId: logout
+      summary: Signs the client out (2.4.1); the host revokes the presented token, and only it
+      description: >-
+        Revokes the Bearer token of the request through the host's token revoker (client_api.token_revoker): never the
+        person's other tokens or devices. Always 204 with no body when an Authorization Bearer header is present, also
+        for a token that was already revoked, has expired or is unknown (never an oracle): a client may retry it. No
+        scope, context or account check (a token may always be given up); the context header is ignored. The per-IP and
+        per-token budgets apply (429 + Retry-After: retry later, the token is not revoked yet). Without a revoker the
+        answer is still 204 but the token stays valid until it expires (me.features.serverLogout is false).
+      responses:
+        '204':
+          description: Signed out (or nothing to sign out). No body.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /realtime:
     get:
       operationId: realtime
@@ -306,7 +322,9 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Unauthorized:
-      description: invalid_token (missing, unknown, expired or revoked token, or an account that cannot use the chat).
+      description: >-
+        invalid_token (missing, unknown, expired or revoked token, or an account that cannot use the chat). POST /logout
+        answers 401 only when no Bearer token is sent.
       headers:
         WWW-Authenticate: { schema: { type: string } }
       content:
@@ -356,6 +374,11 @@ components:
             send: { type: boolean }
             search: { type: boolean }
             attachments: { type: boolean }
+            serverLogout:
+              type: boolean
+              description: >-
+                2.4.1: true when POST /logout revokes the token on the server; false when the host configured no token
+                revoker (logout then only tells the client to forget the token, which stays valid until it expires).
         limits:
           type: object
           properties:

@@ -8,3 +8,5 @@
 - [x] T006 Configuration, extension, services, route loader, container parameters
 - [x] T007 Tests: functional, limits, off, worker (500 rounds), tokenizer, values, OpenAPI parity, Vitest
 - [x] T008 Docs: API.md, OpenAPI, CONFIGURATION, USAGE, SECURITY, UPGRADING, CHANGELOG, worker audit, concurrency
+- [x] T009 2.4.1: `POST logout` (FR-CAPI-012): revoker port, guard, route, event, config, OpenAPI, docs, tests (incl. worker loop)
+- [x] T010 2.4.1: audit ZBWv-I1/I2/I3 (FR-CAPI-013) and the dev lockfile refresh (ZBW-I3)
