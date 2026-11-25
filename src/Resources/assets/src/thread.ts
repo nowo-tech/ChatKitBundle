@@ -1293,6 +1293,19 @@ export class ThreadView {
   }
 
   /**
+   * 2.4 (`realtime_events: ids`, events without names): the name of a person this window already knows — a reader of
+   * the conversation, the author of a loaded message, the other person of a direct conversation; empty when unknown.
+   *
+   * @param userUuid The person's public id.
+   * @returns The display name, or an empty string.
+   */
+  nameOf(userUuid: string): string {
+    return this.readers.get(userUuid)?.name
+      ?? this.messages.find((message) => message.authorUuid === userUuid)?.authorName
+      ?? (this.summary.peerUuid === userUuid ? this.summary.title : '');
+  }
+
+  /**
    * Realtime: someone is typing (hidden after 5 s without a new ping, or when their message arrives).
    *
    * @param userUuid Typist uuid.

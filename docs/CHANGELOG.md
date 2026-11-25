@@ -248,6 +248,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Client API v1** (Beacon Desktop BD-2): a versioned, stateless JSON API for native clients at `<client_api.prefix>/chat/v1` (default `/api/chat/v1`, D-20261110-04). See [API.md](API.md) and [openapi/chat-client-v1.yaml](openapi/chat-client-v1.yaml).
+  - **Authentication.** Bearer only; no session, cookie or CSRF. ChatKit issues no tokens: the new host port `ChatClientPrincipalResolverInterface` resolves the token on every request. Without one the API is off and no route exists (deny by default).
+  - **Routes.** Read-only: `GET me`, `GET conversations` (cursor pages, unread counts, `unreadTotal` without muted conversations), `GET conversations/{uuid}`, `GET conversations/{uuid}/messages` (`before` / `after`, `limit` 1–100), `GET conversations/{uuid}/messages/{messageUuid}`, `GET conversations/{uuid}/messages/{messageUuid}/thread` (a thread's root and a page of replies, while `message_menu.threads.enabled`), `POST conversations/{uuid}/read` (scope `chat:read`, Q-BD-8) and `GET realtime`. Every message carries its reaction summary (`emoji`, `count`, `mine`) and, on thread roots, `thread: {count, lastReplyAt}` (owner decision 2026-11-25: threads and reactions in the first desktop version; writing them comes with 2.5.0). The realtime route returns a subscriber token for the caller's own topic, issued by the host's transport.
+  - **Tenant.** The tenant is explicit on every request: either the token's own context, or the context header checked by the optional `ChatClientContextPolicyInterface` (membership re-checked, conversations filtered). The person's web context is never changed.
+  - **Message bodies.** Structured tokens (`text`, `break`, `code`, `mention`, `link`, `reference`), never HTML (Q-BD-16). #references are resolved per reader; one the reader may not open is a neutral "not visible" placeholder with no type, id or title (R2). Link previews come from the host's provider, per reader.
+  - **Limits.** New budgets per IP (300/min, IPv6 per /64) and per token (60/min), on top of the person's own budgets shared with the web UI. A spent budget answers `429` with `Retry-After`.
+  - **Audit.** Every refusal dispatches `ChatClientApiDeniedEvent` (ids and codes only) for the host's audit log.
+  - **New types.** `ChatClientPrincipal`, `ChatClientRequest`, `ChatClientContext` and `ChatClientConversationRef`.
+- Profile option `realtime_events: full|ids` (Q-BD-13). With `ids`, the hub events `message` and `message_updated` carry only `conversationUuid`, `messageUuid`, `messageId`, `deleted` and (thread replies) `threadRootUuid`, never a body, reference or name. `read` and `typing` lose the display name, and `status` loses its text and emoji. The dock fetches what it needs through its API and names people from what it has loaded. The default `full` keeps the 2.3 behaviour.
+- Security audit ZBW follow-ups (unreleased code, no GHSA):
+  - ZBW-L1: a token bound to a context is refused when no `context_policy` is configured (fail closed, reason `context_unverifiable`).
+  - ZBW-L3: `allows()` is asked for bound tokens on every request too.
+  - ZBW-L2: a `context_policy` with `realtime_events: full` fails the build, because the hub topic is per person, not per context.
+  - ZBW-L4: in `ids` mode, `typing` / `read` carry no display name and `status` no text.
+  - ZBW-I1: a URL in a message stops at a mention or a #reference written right after it (tokenizer and web renderer).
+  - ZBW-I2: client API 404s dispatch `ChatClientApiDeniedEvent` (reason `not_found`).
+  - ZBW-I5: `trusted_proxies` documented.
+  - The conversation list adds `unreadTotalCapped`, and `mentionAll` is the enum `channel|here`.
+- `ChatConversationRepository::findListForUser()` takes an optional `$beforeId`: a keyset that skips no conversation and repeats none at the same activity time. `ChatApiException` takes optional response headers. `ChatReferences` gains `cardsFor()`, `typeView()` and `isSafeLink()`.
+
+### Tests
+
+- The client API end to end. A worker test runs 500 rounds on one kernel with no reset: two people in two contexts, a reference grant flipped every round, a token revoked half-way, flat memory.
+- Budgets, the API being off, the tokenizer, and an OpenAPI ↔ routes parity test.
+
 ### Changed
 
 - CI (not shipped): the Dependabot asset rebuild (`.github/workflows/dependabot-assets.yml`, was `dependabot.yml`) is split into a read-only build job (no persisted credentials, `pnpm install --frozen-lockfile --ignore-scripts`) and a commit job, the only one with write access, that never installs or builds: it accepts only regular files under the asset paths from the build artifact, commits them and dispatches `ci.yml` (now `workflow_dispatch`-able) so the required checks run on the rebuilt head (audits ZAWD-M1, ZAWD-L2). It now runs on Dependabot npm branches only.

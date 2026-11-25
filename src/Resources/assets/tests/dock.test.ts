@@ -590,6 +590,57 @@ describe('ChatDock', () => {
     await flush();
   });
 
+  it('2.4: fetches the message of an ids-only realtime event, then applies it; a failed fetch refreshes the list', async () => {
+    const original = message({ html: '<p>before</p>' });
+    api.messages.mockResolvedValue({ messages: [original], hasMore: false, readUpTo: null, readers: [] });
+    const { dock, q } = mount([summary('a')]);
+    await dock.start();
+    await dock.open(summary('a'));
+    await flush();
+    api.message.mockResolvedValueOnce({ ...original, html: '<p>after</p>' });
+    realtimeHandlers?.onEvent({ type: 'message_updated', conversationUuid: 'a', messageUuid: original.uuid, messageId: original.id, deleted: false });
+    await flush();
+    expect(api.message).toHaveBeenCalledWith('a', original.uuid);
+    expect(q(`[data-id="${original.id}"]`).textContent).toContain('after');
+
+    // A new message that cannot be fetched (deleted, not visible any more): the list is read again.
+    api.conversations.mockClear();
+    api.message.mockRejectedValueOnce(new Error('not_found'));
+    realtimeHandlers?.onEvent({ type: 'message', conversationUuid: 'a', messageUuid: 'gone', messageId: 99, deleted: false });
+    await flush();
+    expect(api.conversations).toHaveBeenCalled();
+
+    // A changed message that cannot be fetched: nothing else happens.
+    api.conversations.mockClear();
+    api.message.mockRejectedValueOnce(new Error('not_found'));
+    realtimeHandlers?.onEvent({ type: 'message_updated', conversationUuid: 'a', messageUuid: 'gone', messageId: 99, deleted: true });
+    await flush();
+    expect(api.conversations).not.toHaveBeenCalled();
+  });
+
+  it('2.4: names the people of ids-only typing and read events from what the window knows; a status without text reloads the list', async () => {
+    const original = message({ authorUuid: 'author-x', authorName: 'Xavi' });
+    api.messages.mockResolvedValue({ messages: [original], hasMore: false, readUpTo: null, readers: [{ userUuid: 'reader-r', name: 'Rosa', messageId: 1 }] });
+    const { dock } = mount([summary('a')]);
+    await dock.start();
+    await dock.open(summary('a'));
+    await flush();
+    const thread = (dock as unknown as { windows: Map<string, { nameOf(uuid: string): string; typingLabel(): string | null }> }).windows.get('a') as { nameOf(uuid: string): string; typingLabel(): string | null };
+    expect(thread.nameOf('reader-r')).toBe('Rosa');
+    expect(thread.nameOf('author-x')).toBe('Xavi');
+    expect(thread.nameOf('peer-a')).toBe('T a');
+    expect(thread.nameOf('stranger')).toBe('');
+    realtimeHandlers?.onEvent({ type: 'typing', conversationUuid: 'a', userUuid: 'peer-a' });
+    realtimeHandlers?.onEvent({ type: 'read', conversationUuid: 'a', userUuid: 'peer-a', messageId: original.id });
+    realtimeHandlers?.onEvent({ type: 'typing', conversationUuid: 'closed', userUuid: 'peer-a' });
+    realtimeHandlers?.onEvent({ type: 'read', conversationUuid: 'closed', userUuid: 'peer-a', messageId: 1 });
+    expect(thread.typingLabel()).toBe('T a typing');
+    api.conversations.mockClear();
+    realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-a', status: 'away' });
+    await flush();
+    expect(api.conversations).toHaveBeenCalled();
+  });
+
   it('opens conversations from data-nowo-chat-open links (support with context, people, channels)', async () => {
     const { dock, all, q } = mount([]);
     await dock.start();

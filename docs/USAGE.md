@@ -13,6 +13,7 @@
 - [Support inbox](#support-inbox)
 - [Support tickets](#support-tickets)
 - [Full-page chat](#full-page-chat)
+- [Client API for native clients (2.4)](#client-api-for-native-clients-24)
 - [Events](#events)
 - [Mentions](#mentions)
 - [References](#references)
@@ -905,6 +906,18 @@ history as unread, as the list does.
 `chat-sidebar-dialog-md` / `chat-sidebar-dialog-wide`. Keys may contain `-`, which also joins section and row in the
 test id: keep keys that cannot meet (`a` + `b-c` and `a-b` + `c` give the same test id). The focus keys use `/`, so the
 focus never moves to the wrong row.
+
+## Client API for native clients (2.4)
+
+Desktop and mobile apps do not use the dock's session API. They use the versioned client API at `<prefix>/chat/v1`,
+with Bearer tokens of your own token system. To turn it on:
+
+1. Implement `ChatClientPrincipalResolverInterface` and, optionally, `ChatClientContextPolicyInterface`.
+2. Name them under `client_api`.
+3. Import the `nowo_chat_kit_client_api` routes.
+4. Give the path a stateless firewall.
+
+[API.md](API.md) is the reference: routes, token bodies, contexts, limits, errors, and a Beacon example.
 
 ## Events
 

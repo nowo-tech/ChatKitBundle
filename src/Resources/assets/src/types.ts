@@ -297,14 +297,31 @@ export interface Reader {
   messageId: number;
 }
 
+/**
+ * 2.4 (`realtime_events: ids`, Q-BD-13): a new or changed message named by its ids only; the dock fetches it through
+ * the API for its own user.
+ */
+export interface MessageIdsEvent {
+  type: 'message' | 'message_updated';
+  conversationUuid: string;
+  messageUuid: string;
+  messageId: number;
+  deleted: boolean;
+  /** A thread reply names its root. */
+  threadRootUuid?: string;
+}
+
 /** Events on the caller's private topic (ChatNotifier). */
 export type RealtimeEvent =
   | { type: 'message'; conversationUuid: string; message: ChatMessage }
   | { type: 'message_updated'; conversationUuid: string; message: ChatMessage }
-  | { type: 'read'; conversationUuid: string; userUuid: string; userName: string; messageId: number }
-  | { type: 'typing'; conversationUuid: string; userUuid: string; userName: string }
+  | MessageIdsEvent
+  /** 2.4 (`realtime_events: ids`): `userName` is left out. */
+  | { type: 'read'; conversationUuid: string; userUuid: string; userName?: string; messageId: number }
+  | { type: 'typing'; conversationUuid: string; userUuid: string; userName?: string }
   | { type: 'conversation'; conversationUuid: string }
-  | ({ type: 'status'; userUuid: string } & PeerStatus)
+  /** 2.4 (`realtime_events: ids`): `text` and `emoji` are left out. */
+  | ({ type: 'status'; userUuid: string } & Pick<PeerStatus, 'status'> & Partial<Pick<PeerStatus, 'text' | 'emoji'>>)
   | { type: 'my_status'; status: OwnStatus }
   | { type: 'prefs'; prefs: ChatPrefs }
   | { type: 'list' }

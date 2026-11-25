@@ -467,6 +467,50 @@ final class ChatReferences implements ResetInterface
     }
 
     /**
+     * 2.4 (client API v1): the cards of a message body's #reference tokens the reader may open, resolved like fill()
+     * (one resolve() per type, cached for the request). Tokens inside code are not references. An item the reader may
+     * not open is absent: the client API shows the neutral placeholder for it.
+     *
+     * @param ChatUserInterface $viewer The reader
+     * @param string $body Stored Markdown
+     *
+     * @return array<string, ChatReference> `type:id` => card
+     */
+    public function cardsFor(ChatUserInterface $viewer, string $body): array
+    {
+        $tokens = self::parse($body);
+
+        return $tokens === [] ? [] : $this->resolveFor($viewer, $tokens);
+    }
+
+    /**
+     * 2.4 (client API v1): the label and icon of a reference type (its provider's); null for a type no provider has.
+     *
+     * @param string $type The type key
+     *
+     * @return array{label: string, icon: string}|null The type's label and icon
+     */
+    public function typeView(string $type): ?array
+    {
+        $provider = $this->providers()[$type] ?? null;
+
+        return $provider === null ? null : ['label' => $provider->label(), 'icon' => $provider->icon()];
+    }
+
+    /**
+     * 2.4 (client API v1): whether a card URL may be followed (root-relative, never `//host`, or http(s); no spaces or
+     * control characters), as the dock's chips decide.
+     *
+     * @param string $url The card's URL
+     *
+     * @return bool True when safe to link
+     */
+    public static function isSafeLink(string $url): bool
+    {
+        return preg_match('~^(?:/(?![/\\\\])|https?://)~i', $url) === 1 && preg_match('/[\x00-\x20]/', $url) !== 1;
+    }
+
+    /**
      * The neutral placeholder of an item the reader may not open ("Content not visible").
      *
      * @param string|null $locale Locale; null for the current one
@@ -530,15 +574,9 @@ final class ChatReferences implements ResetInterface
         $full       = implode(' · ', array_filter([$provider->label(), $card['title'], $card['subtitle'], $card['badge']], static fn (string $part): bool => $part !== ''));
         $attributes = ' data-ref-type="' . $this->escape($reference->type) . '" title="' . $this->escape($full) . '"';
 
-        return $this->isSafeUrl($reference->url)
+        return self::isSafeLink($reference->url)
             ? '<a class="nowo-chat-ref' . $variant . '" href="' . $this->escape($reference->url) . '"' . $attributes . '>' . $inner . '</a>'
             : '<span class="nowo-chat-ref' . $variant . '"' . $attributes . '>' . $inner . '</span>';
-    }
-
-    /** Root-relative (`/x`, never `//host`) or http(s) URLs only. */
-    private function isSafeUrl(string $url): bool
-    {
-        return preg_match('~^(?:/(?![/\\\\])|https?://)~i', $url) === 1 && preg_match('/[\x00-\x20]/', $url) !== 1;
     }
 
     /**

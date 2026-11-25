@@ -9,6 +9,9 @@ use Nowo\ChatKitBundle\Avatar\NullChatAvatarUrlResolver;
 use Nowo\ChatKitBundle\Badge\ChatAuthorBadges;
 use Nowo\ChatKitBundle\Badge\NoChatAuthorBadges;
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
+use Nowo\ChatKitBundle\ClientApi\ChatClientApiController;
+use Nowo\ChatKitBundle\ClientApi\ChatClientApiGuard;
+use Nowo\ChatKitBundle\ClientApi\ChatClientApiRouteLoader;
 use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
 use Nowo\ChatKitBundle\Contract\ChatAccessInterface;
 use Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface;
@@ -135,6 +138,8 @@ return static function (ContainerConfigurator $container): void {
             '../../Search/{ChatSearchText,ChatMessageSearchQuery,ChatMessageSearchHit,ChatMessageSearchPage,ChatSearchScope,ChatSearchQueryException,ChatSearchSchemaListener}.php',
             '../../SearchKit',
             '../../Doctrine/{ChatKitEntityManager,ChatKitManagerRegistry,ChatKitSavepoint,PrivateEntityManagerConnection,PrivateEntityManagerDriver,PrivateEntityManagerMiddleware,PrivateManagerRepositoryFactory}.php',
+            // 2.4: the client API's controller and route loader are registered below; its call and cursor are values.
+            '../../ClientApi/{ChatClientApiController,ChatClientApiRouteLoader,ChatClientCall,ChatClientCursor}.php',
         ]);
     // REQ-SF-004 rule 7: controllers are NOT autoconfigured. On Symfony >= 7.3 autoconfiguration tags every #[Route]
     // class with routing.controller, and the host's default `routing.controllers` import would then register the chat
@@ -143,6 +148,24 @@ return static function (ContainerConfigurator $container): void {
         ->autoconfigure(false)
         ->tag('controller.service_arguments')
         ->tag('container.service_subscriber');
+    // 2.4: the client API v1. Same rule as the controllers above (no autoconfiguration: its routes come only through the
+    // `nowo_chat_kit_client_api` import, under client_api.prefix, and only while a principal resolver is configured).
+    $services->set(ChatClientApiController::class)
+        ->autoconfigure(false)
+        ->tag('controller.service_arguments')
+        ->arg('$realtimeEvents', param('nowo_chat_kit.realtime_events'));
+    $services->set(ChatClientApiRouteLoader::class)
+        ->autoconfigure(false)
+        ->args([param('nowo_chat_kit.client_api.enabled'), param('nowo_chat_kit.client_api.prefix')])
+        ->tag('routing.loader');
+    // The resolver and the context policy are set by the extension (client_api.principal_resolver / context_policy).
+    $services->get(ChatClientApiGuard::class)
+        ->arg('$ipLimiter', service('limiter.nowo_chat_client_ip'))
+        ->arg('$tokenLimiter', service('limiter.nowo_chat_client_token'))
+        ->arg('$readLimiter', service('limiter.nowo_chat_read'))
+        ->arg('$actionLimiter', service('limiter.nowo_chat_action'))
+        ->arg('$contextHeader', param('nowo_chat_kit.client_api.context_header'))
+        ->arg('$events', service('event_dispatcher')->nullOnInvalid());
     $services->load('Nowo\\ChatKitBundle\\Repository\\', '../../Repository/')
         ->tag('doctrine.repository_service');
 
@@ -245,6 +268,8 @@ return static function (ContainerConfigurator $container): void {
     $bus = $messenger ? service('messenger.default_bus')->nullOnInvalid() : null;
     $services->get(ChatNotifier::class)
         ->arg('$pushEnabled', param('nowo_chat_kit.push'))
+        // 2.4 (Q-BD-13): `ids` keeps message bodies off the hub.
+        ->arg('$realtimeEvents', param('nowo_chat_kit.realtime_events'))
         ->arg('$bus', $bus)
         ->arg('$digest', service(ChatDigestScheduler::class));
     $services->get(ChatDigestScheduler::class)

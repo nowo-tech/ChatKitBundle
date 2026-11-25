@@ -42,6 +42,18 @@ final class NowoChatKitExtensionMessageMenuTest extends TestCase
         $this->load(['quick_reactions' => ['picker' => false]]);
     }
 
+    public function testAContextPolicyNeedsIdsOnlyRealtimeEvents(): void
+    {
+        $container = new ContainerBuilder();
+        (new NowoChatKitExtension())->load([['profiles' => ['default' => ['user_class' => TestUser::class, 'realtime_events' => 'ids', 'client_api' => ['principal_resolver' => 'app.tokens', 'context_policy' => 'app.contexts']]]]], $container);
+        self::assertTrue($container->getParameter('nowo_chat_kit.client_api.enabled'));
+
+        // Audit ZBW-L2: with `full`, every context's message bodies would reach the client through the per-person hub topic.
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('client_api.context_policy needs "realtime_events: ids"');
+        (new NowoChatKitExtension())->load([['profiles' => ['default' => ['user_class' => TestUser::class, 'client_api' => ['principal_resolver' => 'app.tokens', 'context_policy' => 'app.contexts']]]]], new ContainerBuilder());
+    }
+
     /**
      * @param array<string, mixed> $menu
      */

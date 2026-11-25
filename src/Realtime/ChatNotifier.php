@@ -29,6 +29,7 @@ final readonly class ChatNotifier
      * @param bool $pushEnabled Whether Web Push is configured
      * @param MessageBusInterface|null $bus Messenger bus for async push; null delivers inline
      * @param ChatDigestScheduler|null $digest Unread-email scheduler; null when the digest is disabled
+     * @param string $realtimeEvents 2.4 (Q-BD-13): `full` publishes the presented message; `ids` only its ids
      */
     public function __construct(
         private ChatRecipients $recipients,
@@ -38,6 +39,7 @@ final readonly class ChatNotifier
         private bool $pushEnabled = false,
         private ?MessageBusInterface $bus = null,
         private ?ChatDigestScheduler $digest = null,
+        private string $realtimeEvents = 'full',
     ) {
     }
 
@@ -148,9 +150,7 @@ final readonly class ChatNotifier
         $this->publisher->publish('read', [
             'conversationUuid' => $conversation->getUuid(),
             'userUuid'         => $reader->getChatPublicId(),
-            'userName'         => $reader->getChatDisplayName(),
-            'messageId'        => $messageId,
-        ], $recipients);
+        ] + $this->nameOf($reader) + ['messageId' => $messageId], $recipients);
     }
 
     /**
@@ -166,9 +166,7 @@ final readonly class ChatNotifier
         $this->publisher->publish('read', [
             'conversationUuid' => $conversation->getUuid(),
             'userUuid'         => $reader->getChatPublicId(),
-            'userName'         => $reader->getChatDisplayName(),
-            'messageId'        => $messageId,
-        ], [$reader]);
+        ] + $this->nameOf($reader) + ['messageId' => $messageId], [$reader]);
     }
 
     /**
@@ -207,8 +205,7 @@ final readonly class ChatNotifier
         $this->publisher->publish('typing', [
             'conversationUuid' => $conversation->getUuid(),
             'userUuid'         => $typist->getChatPublicId(),
-            'userName'         => $typist->getChatDisplayName(),
-        ], array_values(array_filter(
+        ] + $this->nameOf($typist), array_values(array_filter(
             $this->recipients->of($conversation),
             static fn (ChatUserInterface $user): bool => !ChatUserReferences::same($user, $typist),
         )));
@@ -246,7 +243,8 @@ final readonly class ChatNotifier
      */
     public function statusChanged(ChatUserInterface $user, array $visible, array $own, array $peers): void
     {
-        $this->publisher->publish('status', ['userUuid' => $user->getChatPublicId()] + $visible, $peers);
+        // 2.4 (`realtime_events: ids`, audit ZBW-L4): the status only, never its text or emoji (clients re-read it).
+        $this->publisher->publish('status', ['userUuid' => $user->getChatPublicId()] + ($this->realtimeEvents === 'ids' ? ['status' => $visible['status']] : $visible), $peers);
         $this->publisher->publish('my_status', ['status' => $own], [$user]);
     }
 
@@ -292,14 +290,30 @@ final readonly class ChatNotifier
     }
 
     /**
+     * The display name of an event's person: none in `realtime_events: ids` mode (audit ZBW-L4: ids only on the hub; the
+     * clients name the person from what they already loaded).
+     *
+     * @return array{userName?: string}
+     */
+    private function nameOf(ChatUserInterface $user): array
+    {
+        return $this->realtimeEvents === 'ids' ? [] : ['userName' => $user->getChatDisplayName()];
+    }
+
+    /**
+     * A new or changed message: the presented message (viewer-neutral), or 2.4 (`realtime_events: ids`, Q-BD-13) its
+     * ids only, so no body, reference or name of the message travels through the hub: each client fetches it.
+     *
      * @param array<string, list<string>> $reactions
      */
     private function messageEvent(string $type, ChatMessage $message, array $reactions): void
     {
         $conversation = $message->getConversation();
-        $this->publisher->publish($type, [
-            'conversationUuid' => $conversation->getUuid(),
-            'message'          => $this->presenter->message($message, null, $reactions),
-        ], $this->recipients->of($conversation));
+        $payload      = $this->realtimeEvents === 'ids'
+            ? ['messageUuid' => $message->getUuid(), 'messageId' => $message->getId(), 'deleted' => $message->isDeleted()]
+                // A thread reply names its root (an id): clients update the thread, not the timeline.
+                + ($message->getThreadRoot() instanceof ChatMessage ? ['threadRootUuid' => $message->getThreadRoot()->getUuid()] : [])
+            : ['message' => $this->presenter->message($message, null, $reactions)];
+        $this->publisher->publish($type, ['conversationUuid' => $conversation->getUuid()] + $payload, $this->recipients->of($conversation));
     }
 }

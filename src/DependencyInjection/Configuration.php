@@ -166,6 +166,15 @@ final class Configuration implements ConfigurationInterface
         'webex' => ['label' => 'Webex', 'hosts' => ['webex.com'], 'icon' => 'tabler:video', 'fallback_icon' => 'video'],
     ];
 
+    /** 2.4: `realtime_events` values (Q-BD-13). */
+    public const array REALTIME_EVENTS = ['full', 'ids'];
+
+    /** 2.4: `client_api.prefix`: empty, or a path of lowercase segments without a trailing slash (`/api`). */
+    public const string CLIENT_API_PREFIX_PATTERN = '#^(/[a-z0-9][a-z0-9._-]*)*$#D';
+
+    /** 2.4: `client_api.context_header`: an HTTP header name. */
+    public const string HEADER_NAME_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/D';
+
     /** 1.32: `runtime.<setting>.source` values (nowo-tech/runtime-setting-contract `RuntimeSettingSource`). */
     public const array RUNTIME_SOURCES = ['env', 'db', 'db_then_env'];
 
@@ -271,6 +280,11 @@ final class Configuration implements ConfigurationInterface
                             ->booleanNode('realtime')
                                 ->info('Push messages, typing, presence and receipts live (needs a ChatRealtimeTransportInterface; Mercure by default).')
                                 ->defaultTrue()
+                            ->end()
+                            ->enumNode('realtime_events')
+                                ->info('2.4 (Q-BD-13): what the hub events carry. "full": the presented message and names (the 2.3 behaviour). "ids": ids only — new and changed messages as `conversationUuid`, `messageUuid`, `messageId`, `deleted` (+ `threadRootUuid`), `read` / `typing` without the display name, `status` without its text; every client (the dock too) fetches through the API. Required with client_api.context_policy.')
+                                ->values(self::REALTIME_EVENTS)
+                                ->defaultValue('full')
                             ->end()
                             ->booleanNode('push')
                                 ->info('Offer Web Push for new messages (needs a ChatPushSenderInterface implementation).')
@@ -457,6 +471,7 @@ final class Configuration implements ConfigurationInterface
                                 ->end()
                             ->end()
                             ->append($this->linksNode())
+                            ->append($this->clientApiNode())
                             ->append($this->searchNode())
                             ->append($this->searchKitNode())
                             ->append($this->messageMenuNode())
@@ -498,6 +513,58 @@ final class Configuration implements ConfigurationInterface
             ->end();
 
         return $treeBuilder;
+    }
+
+    /**
+     * `client_api` (2.4): the versioned, stateless client API for native clients (`<prefix>/chat/v1`). Off until a
+     * principal resolver is configured.
+     */
+    private function clientApiNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('client_api'))->getRootNode();
+        $node
+            ->info('2.4: the client API v1 for native clients (Bearer tokens of the host). Off while principal_resolver is null. See docs/API.md.')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->scalarNode('principal_resolver')
+                    ->info('Service id of a Nowo\\ChatKitBundle\\Contract\\ChatClientPrincipalResolverInterface (the host\'s token lookup). null: the API is off (no route).')
+                    ->defaultNull()
+                ->end()
+                ->scalarNode('context_policy')
+                    ->info('Service id of a Nowo\\ChatKitBundle\\Contract\\ChatClientContextPolicyInterface: the tenant named per request in the context header, checked on every request. null: the token\'s own context only.')
+                    ->defaultNull()
+                ->end()
+                ->scalarNode('prefix')
+                    ->info('Path the API is mounted under (the API answers at <prefix>/chat/v1). Exposed as %nowo_chat_kit.client_api.v1_path_prefix% for security.yaml.')
+                    ->defaultValue('/api')
+                    ->validate()
+                        ->ifTrue(static fn (mixed $value): bool => !is_string($value) || preg_match(self::CLIENT_API_PREFIX_PATTERN, $value) !== 1)
+                        ->thenInvalid('client_api.prefix must be empty or a path such as /api, without a trailing slash.')
+                    ->end()
+                ->end()
+                ->scalarNode('context_header')
+                    ->info('Request header naming the tenant (Beacon: X-Beacon-Context).')
+                    ->defaultValue('X-Chat-Context')
+                    ->validate()
+                        ->ifTrue(static fn (mixed $value): bool => !is_string($value) || preg_match(self::HEADER_NAME_PATTERN, $value) !== 1)
+                        ->thenInvalid('client_api.context_header must be an HTTP header name such as X-Chat-Context.')
+                    ->end()
+                ->end()
+                ->arrayNode('limits')
+                    ->info('Budgets of the client API, on top of the person\'s own budgets shared with the web UI (limits.reads_per_minute, limits.actions_per_minute).')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->integerNode('per_ip_per_minute')->defaultValue(300)->min(1)->info('Requests per client IP (IPv6: per /64) and minute, checked before the token.')->end()
+                        ->integerNode('per_token_per_minute')->defaultValue(60)->min(1)->info('Requests per token and minute.')->end()
+                    ->end()
+                ->end()
+            ->end()
+            ->validate()
+                ->ifTrue(static fn (array $config): bool => $config['context_policy'] !== null && $config['principal_resolver'] === null)
+                ->thenInvalid('client_api.context_policy needs client_api.principal_resolver (the API is off without it).')
+            ->end();
+
+        return $node;
     }
 
     /**

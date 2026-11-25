@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\DependencyInjection;
 
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\ClientApi\ChatClientApiGuard;
+use Nowo\ChatKitBundle\ClientApi\ChatClientApiRouteLoader;
 use Nowo\ChatKitBundle\Contract\ChatReferenceProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatSidebarSectionProviderInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerPass;
@@ -81,6 +83,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      */
     public const ASSET_BASE_PATH = '/bundles/nowochatkit';
 
+    /** 2.4 (audit ZBW-L2): the build error of a context policy with `realtime_events: full`. */
+    public const string CONTEXTS_NEED_IDS_EVENTS = 'nowo_chat_kit: client_api.context_policy needs "realtime_events: ids". The realtime stream is per person, not per context: with "full", the message bodies of every context would reach the client through the hub. The web dock works with "ids". See docs/API.md, "Realtime".';
+
     /** 1.32: parameter holding the `runtime.retention_days` setting id of the default profile (null: not configured). */
     public const RUNTIME_RETENTION_PARAMETER = 'nowo_chat_kit.runtime.retention_days';
 
@@ -98,7 +103,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      */
     public function prepend(ContainerBuilder $container): void
     {
-        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>, doctrine: array{user_reference: string}}>} $config */
+        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>, doctrine: array{user_reference: string}, client_api: array{limits: array{per_ip_per_minute: int, per_token_per_minute: int}}}>} $config */
         $config  = (new Processor())->processConfiguration(new Configuration(), $this->prependableConfigs($container));
         $profile = $config['profiles'][$config['default_profile']];
         $this->prependDoctrine($container, $config['default_profile'], $profile['user_class'], $profile['doctrine']['user_reference']);
@@ -122,6 +127,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 'nowo_chat_mention_all' => $limiter($limits['mention_all_per_hour'], '1 hour'),
                 // 1.37: message searches (page, API, palette).
                 'nowo_chat_search' => $limiter($limits['searches_per_minute'], '1 minute'),
+                // 2.4: the client API's own budgets (per IP before the token, per token after it).
+                'nowo_chat_client_ip'    => $limiter($profile['client_api']['limits']['per_ip_per_minute'], '1 minute'),
+                'nowo_chat_client_token' => $limiter($profile['client_api']['limits']['per_token_per_minute'], '1 minute'),
             ],
         ]);
 
@@ -203,7 +211,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 $profile['icons']['provider_' . $key] ??= $provider['icon'];
             }
         }
-        foreach (['user_class', 'retention_days', 'realtime', 'push', 'push_url', 'push_icon', 'push_preview', 'cache_pool', 'web_ui', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'auto_away_minutes', 'status_presets', 'max_pins', 'auto_reply_interval_hours', 'limits', 'digest', 'doctrine', 'support', 'dock', 'links'] as $key) {
+        foreach (['user_class', 'retention_days', 'realtime', 'realtime_events', 'push', 'push_url', 'push_icon', 'push_preview', 'cache_pool', 'web_ui', 'reactions', 'icon_set', 'icons', 'presence_ttl', 'auto_away_minutes', 'status_presets', 'max_pins', 'auto_reply_interval_hours', 'limits', 'digest', 'doctrine', 'support', 'dock', 'links'] as $key) {
             $container->setParameter(Configuration::ALIAS . '.' . $key, $profile[$key]);
         }
         // 1.35: the message menu; the quick reactions must be ones the server accepts.
@@ -280,6 +288,35 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.web_ui.dock.dialog_runtime', $profile['web_ui']['dock']['dialog_runtime']);
         // 1.33: the message context menu (null = UiKit's theme flag).
         $container->setParameter(Configuration::ALIAS . '.web_ui.message_context_menu', $profile['web_ui']['message_context_menu']);
+        $this->registerClientApi($container, $profile['client_api'], $profile['realtime_events']);
+    }
+
+    /**
+     * 2.4: the client API v1 (`<client_api.prefix>/chat/v1`): its parameters (`client_api.enabled`, `client_api.prefix`,
+     * `client_api.v1_path_prefix` for the host's security.yaml, `client_api.context_header`) and the host's resolver and
+     * context policy on the guard. Without a principal resolver the API is off: the route import yields no route and the
+     * guard answers 404.
+     *
+     * Audit ZBW-L2: the realtime stream is per person, not per context, so a host with a context policy must keep
+     * message bodies off the hub (`realtime_events: ids`); with `full` the build fails. The web dock works with both.
+     *
+     * @param array{principal_resolver: string|null, context_policy: string|null, prefix: string, context_header: string} $clientApi The processed `client_api` options
+     * @param string $realtimeEvents The profile's `realtime_events`
+     *
+     * @throws InvalidConfigurationException When a context policy is configured with `realtime_events: full`
+     */
+    private function registerClientApi(ContainerBuilder $container, array $clientApi, string $realtimeEvents): void
+    {
+        if ($clientApi['context_policy'] !== null && $realtimeEvents !== 'ids') {
+            throw new InvalidConfigurationException(self::CONTEXTS_NEED_IDS_EVENTS);
+        }
+        $container->setParameter(Configuration::ALIAS . '.client_api.enabled', $clientApi['principal_resolver'] !== null);
+        $container->setParameter(Configuration::ALIAS . '.client_api.prefix', $clientApi['prefix']);
+        $container->setParameter(Configuration::ALIAS . '.client_api.v1_path_prefix', $clientApi['prefix'] . ChatClientApiRouteLoader::SEGMENT);
+        $container->setParameter(Configuration::ALIAS . '.client_api.context_header', $clientApi['context_header']);
+        $guard = $container->getDefinition(ChatClientApiGuard::class);
+        $guard->setArgument('$resolver', $clientApi['principal_resolver'] === null ? null : new Reference($clientApi['principal_resolver']));
+        $guard->setArgument('$contexts', $clientApi['context_policy'] === null ? null : new Reference($clientApi['context_policy']));
     }
 
     /**
@@ -445,6 +482,11 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         foreach ($container->getExtensionConfig(Configuration::ALIAS) as $config) {
             foreach ($config['profiles'] ?? [] as $name => $profile) {
                 $kept = array_intersect_key(is_array($profile) ? $profile : [], ['user_class' => true, 'limits' => true]);
+                // 2.4: the client API's budgets (integers) feed its rate limiters.
+                $clientApi = is_array($profile) && is_array($profile['client_api'] ?? null) ? $profile['client_api'] : [];
+                if (array_key_exists('limits', $clientApi)) {
+                    $kept['client_api'] = ['limits' => $clientApi['limits']];
+                }
                 // 1.24: only `doctrine.user_reference` (an enum, never an %env()%) is read here.
                 $doctrine = is_array($profile) && is_array($profile['doctrine'] ?? null) ? $profile['doctrine'] : [];
                 if (array_key_exists('user_reference', $doctrine)) {

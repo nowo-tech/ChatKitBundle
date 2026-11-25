@@ -109,6 +109,25 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+### To 2.4.0
+
+From **2.3.x**, nothing changes unless you opt in:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+- **Client API v1 (optional).** To serve native clients:
+  1. Implement `ChatClientPrincipalResolverInterface` and, for tenants chosen per request, `ChatClientContextPolicyInterface`.
+  2. Set `client_api.principal_resolver` (and `context_policy`).
+  3. Import the routes (`resource: .`, `type: nowo_chat_kit_client_api`).
+  4. Add a stateless firewall on `^%nowo_chat_kit.client_api.v1_path_prefix%/`.
+
+  See [API.md](API.md). The API is new, so it has no unversioned alias.
+- **A context policy needs `realtime_events: ids`.** With `client_api.context_policy` set, `full` fails the build. A token bound to a context needs the policy, otherwise it is refused.
+- **`realtime_events: ids` (optional).** Turn it on once every client of your hub handles ids-only events. The bundled dock does from 2.4.0. A custom client that reads `event.message` must fetch `GET …/messages/{messageUuid}` instead. `read` / `typing` events then come without `userName`, and `status` without `text` / `emoji`.
+- **Rate limiters.** Two new limiters are prepended: `nowo_chat_client_ip` and `nowo_chat_client_token`. If you define `framework.rate_limiter` limiters with these names yourself, rename yours.
+
 ## To 2.3.1
 
 From **2.3.0**:

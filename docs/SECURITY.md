@@ -31,6 +31,7 @@ whom).
 | Input | Where | Who |
 | --- | --- | --- |
 | JSON API `/chat/api/*` (GET + POST / PATCH / DELETE) | `ChatApiController` | Signed-in users only (401 otherwise) |
+| 2.4 client API `<prefix>/chat/v1/*` (Bearer; GET + `POST …/read`) | `ChatClientApiController`, `ChatClientApiGuard` | Off without `client_api.principal_resolver`. Every request is checked in this order: per-IP budget, the host's token resolver, reachability, per-token and per-person budgets, scope `chat:read`, then the context checked by the host's policy. No session, cookie or CSRF (the Bearer token is no ambient credential). Same access rules as the web UI (`ChatVoter::decide()`). Unknown, foreign and out-of-context uuids answer 404. Bodies are tokens, never HTML; references are filtered per reader (neutral placeholder); link previews are per reader. Refusals dispatch `ChatClientApiDeniedEvent` (ids only). |
 | Full-page chat `/chat/`, `/chat/{uuid}` (GET + form POST) | `ChatPageController`, `ChatPageMessageType` | Signed-in users only (403 otherwise) |
 | Message bodies (Markdown, ≤ 4000 characters), reactions, support context (path + label) | API / page | Conversation members |
 | Host-written refusal text (`ChatChannelOpeningEvent::deny()`) | `/chat/api/channel` → the asking user's dock, as text | Deployer's code |
@@ -111,6 +112,18 @@ dependencies current. Security fixes are released as patch versions of the suppo
 | Mercure topics | `/nowo-chat/users/<public id>`, private |
 
 ## Host responsibilities (residual risks)
+
+- **2.4 client API.** Your `ChatClientPrincipalResolverInterface` is the authentication of the client API. It must:
+  - compare tokens in constant time (look them up by hash);
+  - refuse expired and revoked tokens, and tokens of other client families, on every call (never cache);
+  - return a stable, non-secret `tokenId`.
+
+  Give the path a stateless firewall and no credentialed CORS. Share the rate-limiter cache pool across workers. With
+  `ChatClientContextPolicyInterface`, `allows()` must answer from current membership data (it is asked for bound tokens
+  too; a bound token without a policy is refused). The hub topic is per person, not per context, so a context policy
+  requires `realtime_events: ids` (the build fails otherwise). Configure `trusted_proxies` for the per-IP budget.
+  `realtime_events: ids` keeps
+  every message body, author and display name and every status text off the hub.
 
 - **Mercure:** strong publisher secret, **no anonymous subscribers** in production, HTTPS. The subscriber JWT travels as
   an `authorization` query parameter — prefer the hub cookie when same-site, or scrub hub / proxy access logs.
