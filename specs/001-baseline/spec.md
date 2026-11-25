@@ -76,7 +76,7 @@ A floating chat dock for Symfony applications. Installing the bundle gives integ
 ### Bundle, configuration and DI
 
 - **FR-BUNDLE-001** — The bundle class registers the Twig namespace (`@NowoChatKitBundle`, `@!NowoChatKitBundle`) and compiler passes.
-- **FR-CFG-001** — `nowo_chat_kit` accepts `default_profile` + `profiles` (enabled, user_class, retention_days ≥ 30, realtime, push, push_url, push_icon, push_preview, digest, doctrine.table_name_prefix, doctrine.table_prefix, page_layout, cache_pool, reactions, icon_set, icons — including `tuck` since 1.2 —, presence_ttl, limits); `default_profile` must be a profile key; only the default profile is active (others are validated, not used).
+- **FR-CFG-001** — `nowo_chat_kit` accepts `default_profile` + `profiles` (enabled, user_class, retention_days ≥ 30, realtime, push, push_url, push_icon, push_preview, digest, doctrine.table_name_prefix, doctrine.table_prefix, cache_pool, reactions, icon_set, icons — including `tuck` since 1.2 —, presence_ttl, limits); `default_profile` must be a profile key; only the default profile is active (others are validated, not used).
 - **FR-CFG-002** — The extension exposes `nowo_chat_kit.*` parameters and prepends Doctrine `resolve_target_entities` (from `user_class`), the rate limiters, the `nowo_chat_kit` asset package and Messenger signing.
 - **FR-DI-001** — Services are autowired; every optional contract has a null default the application can alias.
 - **FR-DI-002** — The realtime transport is Mercure when a hub exists, otherwise the null transport (polling).
@@ -94,8 +94,8 @@ A floating chat dock for Symfony applications. Installing the bundle gives integ
 
 - **FR-CONTRACT-001** — `ChatDirectoryInterface`: users by public id / ids, picker contacts, support agents.
 - **FR-CONTRACT-002** — `ChatAccessPolicyInterface`: reachability, support agents, who may message whom.
-- **FR-CONTRACT-003** — `ChatChannelProviderInterface`: channels per user, lookup, page context channel, access, members.
-- **FR-CONTRACT-004** — `ChatRealtimeInterface`, `ChatPushSenderInterface`, `ChatLinkPreviewProviderInterface`, `ChatDigestSenderInterface` (optional, null defaults).
+- **FR-CONTRACT-003** — `ChatChannelSourceInterface` (2.0; the 1.x `ChatChannelProviderInterface` was removed): channels per user, lookup, page context channel, access, members.
+- **FR-CONTRACT-004** — `ChatRealtimeTransportInterface` (2.0; the 1.x `ChatRealtimeInterface` was removed), `ChatPushSenderInterface`, `ChatLinkPreviewProviderInterface`, `ChatDigestSenderInterface` (optional, null defaults).
 
 ### Access control
 
@@ -133,7 +133,7 @@ A floating chat dock for Symfony applications. Installing the bundle gives integ
 ### Twig, markup and theme
 
 - **FR-TWIG-001** — `ChatDockExtension`: dock config (endpoints, i18n, prefs, limits, icons) for reachable users; `nowo_chat_icons()`; the dock form views (FR-TWIG-004).
-- **FR-TWIG-002** — Views: `dock.html.twig` (root + assets), `_templates.html.twig` (inert `<template>` markup cloned by the TypeScript, overridable per block), `page.html.twig` / `page_layout.html.twig` (full page; 1.3: extends the Twig global `nowo_chat_kit_page_layout`, adds the chat CSS / JS through the layout's `stylesheets` / `javascripts` blocks, each asset loaded once with the dock). 1.5: `page.html.twig` renders on the UiKit page contract (REQ-UI-003) with the `ChatPage` view data (page header, theme bundle name); `page_legacy.html.twig` keeps the deprecated 1.x full page while only `page_layout` is configured (removed in 2.0).
+- **FR-TWIG-002** — Views: `dock.html.twig` (root + assets), `_templates.html.twig` (inert `<template>` markup cloned by the TypeScript, overridable per block), `page.html.twig` (full page, UiKit page contract since 1.5, REQ-UI-003, with the `ChatPage` view data: page header, theme bundle name). 2.0 removed `page_layout.html.twig`, `page_legacy.html.twig`, `profiles.<name>.page_layout` (setting it fails the container build naming `web_ui.layout_template`) and the Twig global `nowo_chat_kit_page_layout`.
 - **FR-TWIG-003** — Hide to the side (1.2): the list header carries a `data-part="tuck"` button (`chat.tuck`, icon `tuck`) and the `nowo_chat_template_edge` block defines the `edge` template (`.nowo-chat-edge` button, `chat.untuck` label, `edge-badge` unread count), hidden by default.
 - **FR-TWIG-004** — Dock form types `ChatDockSearchType` (conversation search `query`, people picker `people`), `ChatDockComposerType` (`body`) and `ChatDockEditType` (`body`): built by `ChatDockExtension` and rendered with `form_widget` in `_templates.html.twig` so the dock has no raw `<form>` / `<input>` / `<textarea>` (REQ-TWIG-005); they are the markup contract only — the TypeScript cancels the submit and talks JSON to the API (CSRF header).
 - **FR-THEME-001** — `nowo-chat.css`: `--nowo-chat-*` tokens (light / dark), dock, windows, mobile sheet, full page.
@@ -151,6 +151,7 @@ A floating chat dock for Symfony applications. Installing the bundle gives integ
 - **FR-TS-006** — Bottom bars (1.1): `dock.ts` lifts the dock (`--nowo-chat-lift`) above the visible part of elements marked `data-nowo-chat-avoid` and of the Symfony web debug toolbar (real height), recomputed on scroll and resize.
 - **FR-TS-007** — Hide to the side (1.2): `dock.ts` `setTucked()` toggles `is-tucked` on the root, makes the dock `inert`, shows the edge tab (focus moves to it) and keeps its badge in sync with the total unread count; `state.ts` persists `tucked` in the shared dock layout (localStorage, mirrored across tabs by BroadcastChannel); opening a conversation (list, `data-nowo-chat-open` link, `?chat=` / push) untucks.
 - **FR-TS-008** — Page read state (1.3): `page.ts` `markPageRead()` (called by `autoStart`) POSTs `/api/conversations/{uuid}/read` with the `X-CSRF-TOKEN` header once the full-page tab is visible.
+- **FR-TS-011** — `logger.ts` (`createBundleLogger('chat-kit', { buildTime })`, called from `iife.ts`) prints one `📦 [chat-kit] script loaded, build: <date> UTC` console line (readable build label from the committed `build-info.json`, REQ-ASSETS-005); `<html data-nowo-console="quiet">` or `globalThis.NOWO_CONSOLE = 'quiet'` silences it, and the level methods are no-ops unless debug is on.
 - **FR-BUILD-001** — Vite builds the IIFE `Resources/public/js/nowo-chat.js` from the sources (build output, not a unit).
 
 ### Automatic replies, avatars, badges, mentions and references (1.10–1.29)
@@ -184,7 +185,7 @@ A floating chat dock for Symfony applications. Installing the bundle gives integ
 
 ### Application ports (1.24–1.27, REQ-ARCH-001)
 
-- **FR-PORT-001** — `ChatServiceInterface` (default `ChatService`, decoratable) and `CurrentChatUserResolverInterface` (default `SecurityChatUserResolver`: the security user is the participant when it implements `ChatUserInterface`).
+- **FR-PORT-001** — `ChatServiceInterface` (default `ChatService`, decoratable) and `ChatParticipantResolverInterface` (2.0, replaces the removed 1.x `CurrentChatUserResolverInterface`; default `SecurityChatUserResolver`: the security user is the participant when it implements `ChatUserInterface`).
 - **FR-PORT-002** — Framework-free twins `ChatChannelSourceInterface`, `ChatParticipantResolverInterface` and `ChatRealtimeTransportInterface` take `ChatRequestContext` / `ChatSecurityUser` instead of HttpFoundation or Security types; `Ports` and the `*Gate` classes pick the interface a host service implements (the deprecated one wins when both), `ChatRequestContexts` copies request and user without headers, cookies, session or body, and `ChatKitPortsPass` wires them and refuses a service implementing neither.
 - **FR-PORT-003** — `ChatMessagingInterface` / `ChatMessaging`: the chat's application service by public uuid (compared byte for byte), answering read-only views (`ChatConversationView`, `ChatMessageView`, `ChatParticipantView`, `ChatLinkView`) and authorizing with the API's rules; an unknown or forbidden uuid gives the same `ChatNotFoundException`.
 
