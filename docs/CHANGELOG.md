@@ -258,7 +258,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - **Limits.** New budgets per IP (300/min, IPv6 per /64) and per token (60/min), on top of the person's own budgets shared with the web UI. A spent budget answers `429` with `Retry-After`.
   - **Audit.** Every refusal dispatches `ChatClientApiDeniedEvent` (ids and codes only) for the host's audit log.
   - **New types.** `ChatClientPrincipal`, `ChatClientRequest`, `ChatClientContext` and `ChatClientConversationRef`.
-- Profile option `realtime_events: full|ids` (Q-BD-13). With `ids`, the hub events `message` and `message_updated` carry only `conversationUuid`, `messageUuid`, `messageId`, `deleted` and (thread replies) `threadRootUuid`, never a body, reference or name. The dock fetches the message through its API. The default `full` keeps the 2.3 behaviour.
+- Profile option `realtime_events: full|ids` (Q-BD-13). With `ids`, the hub events `message` and `message_updated` carry only `conversationUuid`, `messageUuid`, `messageId`, `deleted` and (thread replies) `threadRootUuid`, never a body, reference or name. `read` and `typing` lose the display name, and `status` loses its text and emoji. The dock fetches what it needs through its API and names people from what it has loaded. The default `full` keeps the 2.3 behaviour.
+- Security audit ZBW follow-ups (unreleased code, no GHSA):
+  - ZBW-L1: a token bound to a context is refused when no `context_policy` is configured (fail closed, reason `context_unverifiable`).
+  - ZBW-L3: `allows()` is asked for bound tokens on every request too.
+  - ZBW-L2: a `context_policy` with `realtime_events: full` fails the build, because the hub topic is per person, not per context.
+  - ZBW-L4: in `ids` mode, `typing` / `read` carry no display name and `status` no text.
+  - ZBW-I1: a URL in a message stops at a mention or a #reference written right after it (tokenizer and web renderer).
+  - ZBW-I2: client API 404s dispatch `ChatClientApiDeniedEvent` (reason `not_found`).
+  - ZBW-I5: `trusted_proxies` documented.
+  - The conversation list adds `unreadTotalCapped`, and `mentionAll` is the enum `channel|here`.
 - `ChatConversationRepository::findListForUser()` takes an optional `$beforeId`: a keyset that skips no conversation and repeats none at the same activity time. `ChatApiException` takes optional response headers. `ChatReferences` gains `cardsFor()`, `typeView()` and `isSafeLink()`.
 
 ### Tests

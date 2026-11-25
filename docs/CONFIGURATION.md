@@ -90,7 +90,7 @@ nowo_chat_kit:
 | `profiles.<name>.retention_days` | int ≥ 30 | `365` | Messages older than this are purged by `nowo:chat:purge`. `%env()%` allowed. Fixed when the container is built; since 1.31 a `RetentionPolicyProviderInterface` service overrides it at run time (see below). |
 | `profiles.<name>.runtime.retention_days` | string or map | not set | 1.32: read `retention_days` from a runtime setting on every purge (needs `nowo-tech/runtime-setting-contract`). See [Retention from a runtime setting](#retention-from-a-runtime-setting-132). |
 | `profiles.<name>.realtime` | bool | `true` | Use the realtime transport when one is available. |
-| `profiles.<name>.realtime_events` | `full` \| `ids` | `full` | 2.4 (Q-BD-13): what hub events of new and changed messages carry. `ids`: only `conversationUuid`, `messageUuid`, `messageId`, `deleted`; every client, the dock included, fetches the message through the API. `full`: the presented message (the 2.3 behaviour). |
+| `profiles.<name>.realtime_events` | `full` \| `ids` | `full` | 2.4 (Q-BD-13): what hub events carry. `ids`: new and changed messages as ids only (`conversationUuid`, `messageUuid`, `messageId`, `deleted`, plus `threadRootUuid`); `read` / `typing` without the display name; `status` without its text. Every client, the dock included, fetches through the API. `full`: the 2.3 payloads. **Required with `client_api.context_policy`** (the build fails otherwise). |
 | `profiles.<name>.client_api.principal_resolver` | ?string | `null` | 2.4: service id of your `ChatClientPrincipalResolverInterface`. `null`: the [client API](API.md) is off (no route). |
 | `profiles.<name>.client_api.context_policy` | ?string | `null` | 2.4: service id of your `ChatClientContextPolicyInterface` (tenant per request). Needs `principal_resolver`. |
 | `profiles.<name>.client_api.prefix` | string | `/api` | 2.4: the API answers at `<prefix>/chat/v1`. Empty or a lowercase path without a trailing slash. |
@@ -271,7 +271,7 @@ The versioned, stateless client API for native clients. See [API.md](API.md) for
 nowo_chat_kit:
     profiles:
         default:
-            realtime_events: ids                     # optional: no message body on the hub (Q-BD-13)
+            realtime_events: ids                     # required with context_policy: ids-only hub events (Q-BD-13)
             client_api:
                 principal_resolver: App\Chat\ClientTokens
                 context_policy: App\Chat\ClientContexts

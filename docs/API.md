@@ -81,8 +81,15 @@ default `X-Chat-Context`; Beacon uses `X-Beacon-Context`). A key is 1–128 char
   left out of lists, and asking for one directly answers `404`.
 - With a token bound to a context (`ChatClientPrincipal::$contextKey`), the header may be left out. If it is sent, it
   must name the same context.
+- Membership is re-checked on every request for bound tokens too: `allows()` must still answer `true` for the bound
+  context (audit ZBW-L3).
+- **Only the policy filters conversations by context** (`includes()`). A token bound to a context while no
+  `context_policy` is configured is therefore refused (`403 context_forbidden`, event reason `context_unverifiable`).
+  ChatKit fails closed rather than serve every context to a token approved for one (audit ZBW-L1).
 - Without a policy and without a bound context, a request that names a context is refused (`403 context_forbidden`).
-  Nothing could check it.
+  Nothing could check it. Without a policy, unbound tokens and no header, the API serves the person's whole chat:
+  this is the host-without-tenants case.
+- A `context_policy` requires `realtime_events: ids`, otherwise the container build fails (see [Realtime](#realtime)).
 - The API never writes the person's web context (a "current organization" stored on the server).
 - The checked context is a request attribute (`ChatClientCall::ATTRIBUTE`, `_nowo_chat_client`). Host ports that need
   it can read it from the current request. It is never stored in a service.
@@ -94,7 +101,7 @@ All paths are under `<prefix>/chat/v1`. All responses are sent with `Cache-Contr
 | Method and path | Answer |
 |---|---|
 | `GET me` | `{apiVersion, user, scopes, context, contexts, features, limits}` |
-| `GET conversations?archived=&cursor=&limit=` | `{conversations, nextCursor, unreadTotal}` |
+| `GET conversations?archived=&cursor=&limit=` | `{conversations, nextCursor, unreadTotal, unreadTotalCapped}` |
 | `GET conversations/{uuid}` | `{conversation}`, with `membersCount` and `permissions` |
 | `GET conversations/{uuid}/messages?before=&after=&limit=` | `{messages, hasMore, readUpTo}` (oldest first) |
 | `GET conversations/{uuid}/messages/{messageUuid}` | `{message}` |
@@ -107,7 +114,8 @@ How the routes behave:
 - **Conversation list.** It is sorted by newest activity first. `limit` is 1–100, 50 by default. `nextCursor` is opaque:
   keep following it until it is `null`. A page may hold fewer rows than `limit`, or none at all, when the rows it scanned
   were not visible. `unreadTotal` comes on the first page only and leaves out muted conversations. It is counted over the
-  200 most recent conversations; later pages answer `null`.
+  200 most recent conversations. `unreadTotalCapped: true` means more exist, so show it as "200+". Later pages answer
+  `null` for both.
 - **Message pages.** Without a cursor you get the newest page. `before=<id>` returns older messages and `after=<id>` is a
   catch-up page. Never send both. `limit` is 1–100, 30 by default.
 - **Read marks.** The read cursor is capped at the conversation's newest message and never moves back. Two devices never
@@ -136,6 +144,7 @@ Markdown by the dock renderer's own rules. Render every string as a text node.
   - Anything else is `{type: "reference", visible: false, text: "Content not visible"}`, with no type, id or title.
   - References inside code are never resolved, and their titles are never shown.
 - Deleted messages have `body: null`. Bot and system lines are one translated paragraph.
+- `mentionAll` is `channel` or `here` when the message carries a group mention, and is absent otherwise.
 - Each message has `reactions`, a list of `{emoji, count, mine}` (`mine`: the reader reacted). A thread root has
   `thread: {count, lastReplyAt}` and a reply has `threadRootUuid`. Timeline pages hold no thread replies: read them
   through `…/thread`.
@@ -154,10 +163,21 @@ Markdown by the dock renderer's own rules. Render every string as a text node.
   UI today.
 - `enabled: false` means the client polls.
 - Treat events as hints and re-fetch through the API.
-- The profile option `realtime_events: ids` (Q-BD-13) makes `message` and `message_updated` events carry only
-  `{conversationUuid, messageUuid, messageId, deleted}`, plus `threadRootUuid` for a thread reply. A reaction change is a
-  `message_updated` hint, and a thread change is also a `thread` event (`rootUuid`, `replyCount`, `lastReplyAt`). No body, reference or name ever reaches the hub. The dock
-  fetches such messages through its own API. The default `full` keeps the 2.3 behaviour.
+- **The stream is per person, not per context.** The topic carries events of every conversation the person is in,
+  whatever context the client shows. Clients ignore events of conversations they did not get from the API in the
+  current context, and re-fetch through the API, which applies the context.
+- The profile option `realtime_events: ids` (Q-BD-13) keeps message content off the hub. **Hosts that use contexts must
+  set it**: a `context_policy` with `full` fails the container build (audit ZBW-L2). The web dock works with both
+  settings. In `ids` mode the hub carries:
+  - `message` / `message_updated`: `{conversationUuid, messageUuid, messageId, deleted}`, plus `threadRootUuid` for a
+    thread reply. A reaction change is a `message_updated` hint.
+  - `thread`: `{conversationUuid, rootUuid, replyCount, lastReplyAt}`.
+  - `read`: `{conversationUuid, userUuid, messageId}`; `typing`: `{conversationUuid, userUuid}` (no display name).
+  - `status`: `{userUuid, status}` (no status text or emoji).
+  - The person's own `my_status` and `prefs`, which go to their own topic only.
+
+  No message body, reference, author or display name of another person, and no status text, reaches the hub (audit
+  ZBW-L4). The default `full` keeps the 2.3 payloads.
 
 ## Limits
 
@@ -173,6 +193,16 @@ These budgets come on top of the person's own budgets, which are shared with the
 When a budget is spent, the API answers `429 rate_limited` with `Retry-After`. Limiters live in the framework's
 rate-limiter cache pool. Share it across workers (for example in Redis).
 
+- **60 per token per minute is the budget the audit accepted.**
+  - Clients poll the list (every 30 s while open, 120 s in the background).
+  - They fetch messages only for the open conversation, with `after=`.
+  - They batch catch-ups after a realtime hint or a wake-up instead of one call per event.
+  - They honour `Retry-After`.
+  - A host may raise the budget (Beacon: up to 120) with `client_api.limits.per_token_per_minute`.
+- **The per-IP budget reads `Request::getClientIp()`.** Behind a reverse proxy, configure `framework.trusted_proxies`
+  and `trusted_headers` for the API path. Without them every client shares the proxy's bucket. With an over-broad
+  trusted range a client could rotate `X-Forwarded-For` (the per-token budget still applies). Audit ZBW-I5.
+
 ## Errors
 
 Errors have the shape `{ok: false, error: <code>}`.
@@ -187,9 +217,10 @@ Errors have the shape `{ok: false, error: <code>}`.
 | 422 | `invalid_message_id` |
 | 429 | `rate_limited` (with `Retry-After`) |
 
-Every refusal from the second step onwards dispatches `Nowo\ChatKitBundle\Event\ChatClientApiDeniedEvent` for the host's
+Every refusal from the second step onwards, 404s included (reason `not_found`, audit ZBW-I2), dispatches `Nowo\ChatKitBundle\Event\ChatClientApiDeniedEvent` for the host's
 audit log. The event carries the `reason` (the code; `account_inactive` for an unreachable person), the `tokenId`, the
-`userPublicId` and the client's `/24` or `/64` `ipPrefix`. It never carries the token, the raw header or a full IP.
+`userPublicId` and the client's `/24` or `/64` `ipPrefix`. The reason `context_unverifiable` marks a bound token
+refused for lack of a context policy. It never carries the token, the raw header or a full IP.
 
 ## Worker mode and concurrency
 
@@ -216,6 +247,7 @@ final readonly class ClientTokens implements ChatClientPrincipalResolverInterfac
             return null;   // also for a `time` token
         }
 
+        // Bind `org:<uuid>` here only if the approval chose a tenant: it then needs the context policy below.
         return new ChatClientPrincipal($token->chatUser(), $token->scopes(), $token->publicId());
     }
 }
@@ -227,6 +259,8 @@ final readonly class ClientContexts implements ChatClientContextPolicyInterface
     public function includes(ChatClientPrincipal $p, string $key, ChatClientConversationRef $c): bool { /* project channel of that organization; direct + support everywhere */ }
 }
 ```
+
+Configure `realtime_events: ids` together with the context policy.
 
 Listen to `ChatClientApiDeniedEvent` to audit refusals, the same way the TimeTrack client API refusals are audited
 (`client_api: chat`).

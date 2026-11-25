@@ -12,8 +12,10 @@ use Nowo\ChatKitBundle\Model\ChatClientPrincipal;
  * 2.4 (client API v1, optional): the tenant of a client API request, named explicitly by the client in the context
  * header (`client_api.context_header`) and checked on every request. The bundle never stores it in a service and never
  * writes it anywhere: the person's web context (a "current organization" kept on the server) is never changed by the
- * client API. Without this port the context is the one bound into the token (ChatClientPrincipal::$contextKey), and a
- * request that names another one is refused.
+ * client API. Only this port filters conversations by context: without it, a token bound to a context
+ * (ChatClientPrincipal::$contextKey) is refused (`403 context_forbidden`, fail closed), and a request that names a
+ * context is refused. A bound token is checked with allows() on every request too. A host with this port must use
+ * `realtime_events: ids` (the hub topic is per person, not per context): the build fails otherwise.
  *
  * Every method is called per request: answer from current data (membership revoked a second ago → refused now).
  */

@@ -61,8 +61,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [conversations, nextCursor, unreadTotal]
+                required: [conversations, nextCursor, unreadTotal, unreadTotalCapped]
                 properties:
+                  unreadTotalCapped:
+                    type: [boolean, 'null']
+                    description: First page only; true when more conversations exist than were counted (show "200+").
                   conversations:
                     type: array
                     items: { $ref: '#/components/schemas/Conversation' }
@@ -297,7 +300,8 @@ components:
     Error:
       description: >-
         A refusal with a stable code: invalid_context, context_required, invalid_cursor, invalid_limit, invalid_json
-        (400); insufficient_scope, context_forbidden (403); not_found (404); invalid_message_id (422).
+        (400); insufficient_scope, context_forbidden (403; also a token bound to a context with no context policy);
+        not_found (404, audited); invalid_message_id (422).
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

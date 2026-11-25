@@ -6,9 +6,14 @@ namespace Nowo\ChatKitBundle\Tests\Integration\ClientApi;
 
 use Nowo\ChatKitBundle\ClientApi\ChatMessageTokens;
 use Nowo\ChatKitBundle\Link\ChatLinkUrls;
+use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 
+use function array_column;
+use function array_filter;
+use function array_values;
+use function in_array;
 use function json_encode;
 
 use const JSON_THROW_ON_ERROR;
@@ -131,6 +136,15 @@ final class ChatMessageTokensTest extends DatabaseTestCase
         self::assertSame(['type' => 'link', 'url' => 'mailto:luis@example.test', 'text' => 'luis@example.test', 'card' => false], $tokens[8]);
         self::assertSame(['type' => 'link', 'url' => 'https://example.test/a', 'text' => 'https://example.test/a', 'card' => false], $tokens[10]);
         self::assertSame(['type' => 'text', 'text' => ')'], $tokens[11]);
+        // Audit ZBW-I1: a URL stops at a mention or a reference written right after it (no placeholder in the URL).
+        $glued = $this->blocks('https://x.test/a@[Luis](' . $this->luis->getChatPublicId() . ') https://x.test/b#[Deploy the API](task:1) [l](https://x.test/c#[Deploy the API](task:1))', $this->ana)[0]['tokens'];
+        self::assertSame(['https://x.test/a', 'https://x.test/b', 'https://x.test/c'], array_values(array_column(array_filter($glued, static fn (array $token): bool => $token['type'] === 'link'), 'url')));
+        self::assertSame(['mention', 'reference', 'reference'], array_values(array_column(array_filter($glued, static fn (array $token): bool => in_array($token['type'], ['mention', 'reference'], true)), 'type')));
+        self::assertStringNotContainsString("\u{E000}", json_encode($glued, JSON_THROW_ON_ERROR));
+        $html = $this->get(ChatMarkdownRenderer::class)->render('https://x.test/a@[Luis](' . $this->luis->getChatPublicId() . ')');
+        self::assertStringContainsString('href="https://x.test/a"', $html);
+        self::assertStringContainsString('data-mention="' . $this->luis->getChatPublicId() . '"', $html);
+
         // No other scheme is a link.
         self::assertSame([['type' => 'text', 'text' => '[x](javascript:alert(1))']], $this->blocks('[x](javascript:alert(1))', $this->ana)[0]['tokens']);
 

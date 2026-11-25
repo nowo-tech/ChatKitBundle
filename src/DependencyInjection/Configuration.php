@@ -282,7 +282,7 @@ final class Configuration implements ConfigurationInterface
                                 ->defaultTrue()
                             ->end()
                             ->enumNode('realtime_events')
-                                ->info('2.4 (Q-BD-13): what the hub events of new and changed messages carry. "full": the presented message (viewer-neutral; the 2.3 behaviour). "ids": only the conversation and message ids (`conversationUuid`, `messageUuid`, `messageId`, `deleted`): no body or reference ever reaches the hub; every client (the dock too) fetches the message through the API.')
+                                ->info('2.4 (Q-BD-13): what the hub events carry. "full": the presented message and names (the 2.3 behaviour). "ids": ids only — new and changed messages as `conversationUuid`, `messageUuid`, `messageId`, `deleted` (+ `threadRootUuid`), `read` / `typing` without the display name, `status` without its text; every client (the dock too) fetches through the API. Required with client_api.context_policy.')
                                 ->values(self::REALTIME_EVENTS)
                                 ->defaultValue('full')
                             ->end()

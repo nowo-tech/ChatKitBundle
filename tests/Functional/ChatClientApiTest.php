@@ -83,7 +83,7 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertSame('personal', $me['context']);
         // The host's labels lose their control and bidirectional characters.
         self::assertSame([['key' => 'personal', 'label' => 'Personal'], ['key' => 'org:acme', 'label' => 'Acme']], $me['contexts']);
-        self::assertSame(['realtime' => true, 'realtimeEvents' => 'full', 'send' => false, 'search' => false, 'attachments' => false], $me['features']);
+        self::assertSame(['realtime' => true, 'realtimeEvents' => 'ids', 'send' => false, 'search' => false, 'attachments' => false], $me['features']);
         self::assertSame(['conversationsPageMax' => 100, 'messagesPageMax' => 100], $me['limits']);
         // The resolver saw the request without its token, and the raw context header.
         $request = $this->tokens()->requests[0];
@@ -146,6 +146,10 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertSame('org:acme', $this->ok('GET', self::API . '/me', 'bound', null)['context']);
         self::assertSame('org:acme', $this->ok('GET', self::API . '/me', 'bound', 'org:acme')['context']);
         self::assertError($this->call('GET', self::API . '/me', 'bound', 'personal'), 403, 'context_forbidden');
+
+        // Audit ZBW-L3: membership is re-checked for a bound token too.
+        $this->contexts()->acmeMembers = [];
+        self::assertError($this->call('GET', self::API . '/me', 'bound', null), 403, 'context_forbidden');
     }
 
     public function testMembershipIsCheckedAgainOnEveryRequest(): void
@@ -179,6 +183,7 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertSame([$direct->getUuid()], array_column($personal['conversations'], 'uuid'));
         self::assertNull($personal['nextCursor']);
         self::assertSame(2, $personal['unreadTotal']);
+        self::assertFalse($personal['unreadTotalCapped']);
         $row = $personal['conversations'][0];
         self::assertSame('direct', $row['kind']);
         self::assertSame('Luis', $row['title']);
@@ -239,6 +244,7 @@ final class ChatClientApiTest extends DatabaseTestCase
             $seen   = [...$seen, ...array_column($page['conversations'], 'uuid')];
             $cursor = $page['nextCursor'];
             self::assertSame($pages === 0 ? 5 : null, $page['unreadTotal']);
+            self::assertSame($pages === 0 ? false : null, $page['unreadTotalCapped']);
             ++$pages;
         } while ($cursor !== null);
 
@@ -269,6 +275,9 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertError($this->call('GET', self::API . '/conversations/00000000-0000-4000-8000-000000000000', 'ana-token'), 404, 'not_found');
         self::assertError($this->call('GET', self::API . '/conversations/' . $other->getUuid() . '/messages', 'ana-token'), 404, 'not_found');
         self::assertSame(200, $this->call('GET', self::API . '/conversations/' . $channel->getUuid(), 'ana-token', 'org:acme')->getStatusCode());
+        // Audit ZBW-I2: every 404 is audited (ids only).
+        self::assertSame(['not_found', 'not_found', 'not_found', 'not_found'], array_map(static fn ($event): string => $event->reason, $this->denied));
+        self::assertSame('tok-' . $this->ana->getChatPublicId(), $this->denied[0]->tokenId);
     }
 
     public function testMessagesAreTokensFilteredForTheReader(): void
@@ -411,7 +420,7 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertSame('https://hub.example.test/.well-known/mercure', $realtime['hubUrl']);
         self::assertSame($topic, $realtime['topic']);
         self::assertStringStartsWith('token:' . $topic . '@', $realtime['token']);
-        self::assertSame('full', $realtime['events']);
+        self::assertSame('ids', $realtime['events']);
         self::assertGreaterThan(new DateTimeImmutable('+14 minutes'), new DateTimeImmutable($realtime['expiresAt']));
 
         // Hub off: poll.

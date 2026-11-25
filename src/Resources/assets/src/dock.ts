@@ -1393,7 +1393,12 @@ export class ChatDock implements ThreadHost {
   private onRealtime(event: RealtimeEvent): void {
     if (event.type === 'status') {
       // Reciprocal presence: someone who hides their own presence sees no dots, only the custom text.
-      this.applyPeerStatuses({ [event.userUuid]: { status: this.config.prefs.presence ? event.status : 'offline', text: event.text, emoji: event.emoji } });
+      if (event.text === undefined) {
+        // 2.4 (`realtime_events: ids`): no status text on the hub; the list answers it for this user.
+        void this.refreshList();
+        return;
+      }
+      this.applyPeerStatuses({ [event.userUuid]: { status: this.config.prefs.presence ? event.status : 'offline', text: event.text, emoji: event.emoji ?? null } });
       return;
     }
     if (event.type === 'my_status') {
@@ -1477,7 +1482,8 @@ export class ChatDock implements ThreadHost {
         }
         this.windows.get(event.conversationUuid)?.markReadLocally(event.messageId);
       } else {
-        this.windows.get(event.conversationUuid)?.readBy(event.userUuid, event.userName, event.messageId);
+        const view = this.windows.get(event.conversationUuid);
+        view?.readBy(event.userUuid, event.userName ?? view.nameOf(event.userUuid), event.messageId);
       }
       return;
     }
@@ -1495,7 +1501,8 @@ export class ChatDock implements ThreadHost {
       return;
     }
     if (event.type === 'typing') {
-      this.windows.get(event.conversationUuid)?.typingBy(event.userUuid, event.userName);
+      const typingView = this.windows.get(event.conversationUuid);
+      typingView?.typingBy(event.userUuid, event.userName ?? typingView.nameOf(event.userUuid));
       window.clearTimeout(this.listTyping.get(event.conversationUuid));
       this.listTyping.set(
         event.conversationUuid,

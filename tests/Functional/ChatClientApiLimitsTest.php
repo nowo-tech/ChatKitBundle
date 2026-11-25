@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
 use Nowo\ChatKitBundle\Model\ChatClientPrincipal;
+use Nowo\ChatKitBundle\Realtime\ChatNotifier;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientPrincipalResolver;
@@ -87,11 +88,11 @@ final class ChatClientApiLimitsTest extends DatabaseTestCase
         self::assertSame('tok-two', $this->denied[1]->tokenId);
     }
 
-    public function testWithoutAContextPolicyTheTokensOwnContextIsTheOnlyOne(): void
+    public function testWithoutAContextPolicyNoContextIsServed(): void
     {
         $ana = $this->user('Ana');
         $this->tokens()->grant('plain', $ana, [ChatClientPrincipal::SCOPE_READ], null, 'tok-plain');
-        $this->tokens()->grant('bound', $ana, [ChatClientPrincipal::SCOPE_READ], 'org:acme', 'tok-bound');
+        $this->tokens()->grant('bound', $this->user('Bo'), [ChatClientPrincipal::SCOPE_READ], 'org:acme', 'tok-bound');
 
         $me = $this->ok('GET', '/chat/v1/me', 'plain', null);
         self::assertNull($me['context']);
@@ -99,7 +100,12 @@ final class ChatClientApiLimitsTest extends DatabaseTestCase
         self::assertSame('ids', $me['features']['realtimeEvents']);
         // A context the server cannot check is refused (fail closed).
         self::assertError($this->call('GET', '/chat/v1/me', 'plain', 'personal', null, ['X-Chat-Context' => 'personal']), 403, 'context_forbidden');
-        self::assertSame('org:acme', $this->ok('GET', '/chat/v1/me', 'bound', null)['context']);
+        // Audit ZBW-L1: a token bound to a context is refused when no policy can filter by it (fail closed), with or
+        // without the header.
+        self::assertError($this->call('GET', '/chat/v1/me', 'bound', null), 403, 'context_forbidden');
+        self::assertError($this->call('GET', '/chat/v1/conversations', 'bound', null, null, ['X-Chat-Context' => 'org:acme'], '192.0.2.99'), 403, 'context_forbidden');
+        self::assertSame(['context_forbidden', 'context_unverifiable', 'context_unverifiable'], array_map(static fn ($event): string => $event->reason, $this->denied));
+        self::assertSame('tok-bound', $this->denied[1]->tokenId);
     }
 
     public function testIdsOnlyEventsCarryNoMessageBody(): void
@@ -111,6 +117,18 @@ final class ChatClientApiLimitsTest extends DatabaseTestCase
         $conversation = $service->openDirect($ana, $luis);
         $message      = $service->send($ana, $conversation, 'Secret body #[Deploy the API](task:1)');
         $service->edit($message, 'Edited body');
+        $service->markRead($luis, $conversation, (int) $message->getId());
+        $notifier = $this->get(ChatNotifier::class);
+        $notifier->typing($conversation, $ana);
+        $notifier->statusChanged($ana, ['status' => 'away', 'text' => 'At lunch', 'emoji' => '🍕'], ['status' => 'away', 'text' => 'At lunch', 'emoji' => '🍕', 'expiresAt' => null], [$luis]);
+        // Audit ZBW-L4: in ids mode no name or status text reaches the hub either.
+        $byType = [];
+        foreach ($this->get(RecordingRealtime::class)->published as $event) {
+            $byType[$event['payload']['type']] = $event['payload'];
+        }
+        self::assertSame(['type', 'conversationUuid', 'userUuid', 'messageId'], array_keys($byType['read']));
+        self::assertSame(['type', 'conversationUuid', 'userUuid'], array_keys($byType['typing']));
+        self::assertSame(['type' => 'status', 'userUuid' => $ana->getChatPublicId(), 'status' => 'away'], $byType['status']);
 
         $events = array_values(array_filter($this->get(RecordingRealtime::class)->published, static fn (array $event): bool => in_array($event['payload']['type'], ['message', 'message_updated'], true)));
         self::assertSame(['message', 'message_updated'], array_map(static fn (array $event): string => $event['payload']['type'], $events));

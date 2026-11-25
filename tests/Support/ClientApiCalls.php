@@ -40,6 +40,8 @@ trait ClientApiCalls
         return ['profiles' => ['default' => array_replace_recursive([
             'client_api' => ['principal_resolver' => TestClientPrincipalResolver::class, 'context_policy' => TestClientContextPolicy::class, 'context_header' => 'X-Beacon-Context'],
             'limits'     => ['reads_per_minute' => 100_000, 'actions_per_minute' => 100_000, 'send_per_minute' => 100_000],
+            // Audit ZBW-L2: a context policy needs ids-only hub events.
+            'realtime_events' => 'ids',
         ], $extra)]];
     }
 

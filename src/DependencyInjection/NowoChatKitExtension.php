@@ -83,6 +83,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      */
     public const ASSET_BASE_PATH = '/bundles/nowochatkit';
 
+    /** 2.4 (audit ZBW-L2): the build error of a context policy with `realtime_events: full`. */
+    public const string CONTEXTS_NEED_IDS_EVENTS = 'nowo_chat_kit: client_api.context_policy needs "realtime_events: ids". The realtime stream is per person, not per context: with "full", the message bodies of every context would reach the client through the hub. The web dock works with "ids". See docs/API.md, "Realtime".';
+
     /** 1.32: parameter holding the `runtime.retention_days` setting id of the default profile (null: not configured). */
     public const RUNTIME_RETENTION_PARAMETER = 'nowo_chat_kit.runtime.retention_days';
 
@@ -285,7 +288,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->setParameter(Configuration::ALIAS . '.web_ui.dock.dialog_runtime', $profile['web_ui']['dock']['dialog_runtime']);
         // 1.33: the message context menu (null = UiKit's theme flag).
         $container->setParameter(Configuration::ALIAS . '.web_ui.message_context_menu', $profile['web_ui']['message_context_menu']);
-        $this->registerClientApi($container, $profile['client_api']);
+        $this->registerClientApi($container, $profile['client_api'], $profile['realtime_events']);
     }
 
     /**
@@ -294,10 +297,19 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      * context policy on the guard. Without a principal resolver the API is off: the route import yields no route and the
      * guard answers 404.
      *
+     * Audit ZBW-L2: the realtime stream is per person, not per context, so a host with a context policy must keep
+     * message bodies off the hub (`realtime_events: ids`); with `full` the build fails. The web dock works with both.
+     *
      * @param array{principal_resolver: string|null, context_policy: string|null, prefix: string, context_header: string} $clientApi The processed `client_api` options
+     * @param string $realtimeEvents The profile's `realtime_events`
+     *
+     * @throws InvalidConfigurationException When a context policy is configured with `realtime_events: full`
      */
-    private function registerClientApi(ContainerBuilder $container, array $clientApi): void
+    private function registerClientApi(ContainerBuilder $container, array $clientApi, string $realtimeEvents): void
     {
+        if ($clientApi['context_policy'] !== null && $realtimeEvents !== 'ids') {
+            throw new InvalidConfigurationException(self::CONTEXTS_NEED_IDS_EVENTS);
+        }
         $container->setParameter(Configuration::ALIAS . '.client_api.enabled', $clientApi['principal_resolver'] !== null);
         $container->setParameter(Configuration::ALIAS . '.client_api.prefix', $clientApi['prefix']);
         $container->setParameter(Configuration::ALIAS . '.client_api.v1_path_prefix', $clientApi['prefix'] . ChatClientApiRouteLoader::SEGMENT);

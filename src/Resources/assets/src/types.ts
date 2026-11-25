@@ -316,10 +316,12 @@ export type RealtimeEvent =
   | { type: 'message'; conversationUuid: string; message: ChatMessage }
   | { type: 'message_updated'; conversationUuid: string; message: ChatMessage }
   | MessageIdsEvent
-  | { type: 'read'; conversationUuid: string; userUuid: string; userName: string; messageId: number }
-  | { type: 'typing'; conversationUuid: string; userUuid: string; userName: string }
+  /** 2.4 (`realtime_events: ids`): `userName` is left out. */
+  | { type: 'read'; conversationUuid: string; userUuid: string; userName?: string; messageId: number }
+  | { type: 'typing'; conversationUuid: string; userUuid: string; userName?: string }
   | { type: 'conversation'; conversationUuid: string }
-  | ({ type: 'status'; userUuid: string } & PeerStatus)
+  /** 2.4 (`realtime_events: ids`): `text` and `emoji` are left out. */
+  | ({ type: 'status'; userUuid: string } & Pick<PeerStatus, 'status'> & Partial<Pick<PeerStatus, 'text' | 'emoji'>>)
   | { type: 'my_status'; status: OwnStatus }
   | { type: 'prefs'; prefs: ChatPrefs }
   | { type: 'list' }

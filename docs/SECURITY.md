@@ -119,8 +119,11 @@ dependencies current. Security fixes are released as patch versions of the suppo
   - return a stable, non-secret `tokenId`.
 
   Give the path a stateless firewall and no credentialed CORS. Share the rate-limiter cache pool across workers. With
-  `ChatClientContextPolicyInterface`, `allows()` must answer from current membership data. `realtime_events: ids` keeps
-  every message body off the hub.
+  `ChatClientContextPolicyInterface`, `allows()` must answer from current membership data (it is asked for bound tokens
+  too; a bound token without a policy is refused). The hub topic is per person, not per context, so a context policy
+  requires `realtime_events: ids` (the build fails otherwise). Configure `trusted_proxies` for the per-IP budget.
+  `realtime_events: ids` keeps
+  every message body, author and display name and every status text off the hub.
 
 - **Mercure:** strong publisher secret, **no anonymous subscribers** in production, HTTPS. The subscriber JWT travels as
   an `authorization` query parameter — prefer the hub cookie when same-site, or scrub hub / proxy access logs.

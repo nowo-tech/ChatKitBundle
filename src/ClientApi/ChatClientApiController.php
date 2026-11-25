@@ -92,6 +92,9 @@ final readonly class ChatClientApiController
     public const int MESSAGES_PAGE     = 30;
     public const int MESSAGES_PAGE_MAX = 100;
 
+    /** Values of `mentionAll`. */
+    public const array MENTION_ALL = ['channel', 'here'];
+
     /** Conversations the first page reads to count `unreadTotal` (the most recent ones). */
     public const int UNREAD_SCAN = 200;
 
@@ -181,7 +184,7 @@ final readonly class ChatClientApiController
      *
      * @param Request $request The request (query `archived`, `cursor`, `limit`)
      *
-     * @return JsonResponse `{conversations, nextCursor, unreadTotal}`
+     * @return JsonResponse `{conversations, nextCursor, unreadTotal, unreadTotalCapped}`
      */
     #[Route('/conversations', name: 'conversations', methods: ['GET'])]
     public function conversations(Request $request): JsonResponse
@@ -217,6 +220,8 @@ final readonly class ChatClientApiController
             'nextCursor'    => $nextCursor,
             // A muted conversation keeps its own unread count but leaves the total (as the web UI).
             'unreadTotal' => $position === null ? array_sum(array_diff_key($unread, $muted)) : null,
+            // The total was counted over the UNREAD_SCAN most recent conversations and more exist ("200+").
+            'unreadTotalCapped' => $position === null ? count($scan) >= self::UNREAD_SCAN : null,
         ]);
     }
 
@@ -234,7 +239,7 @@ final readonly class ChatClientApiController
     {
         $call             = $this->guard->authenticate($request);
         $user             = $call->principal->user;
-        $conversation     = $this->find($call, $uuid);
+        $conversation     = $this->find($request, $call, $uuid);
         $id               = (int) $conversation->getId();
         [$closed, $muted] = $this->participantStates($user, [$id]);
         $unread           = $this->messages->countUnreadByConversation((string) ChatUserReferences::key($user), [$id]);
@@ -262,7 +267,7 @@ final readonly class ChatClientApiController
     {
         $call         = $this->guard->authenticate($request);
         $user         = $call->principal->user;
-        $conversation = $this->find($call, $uuid);
+        $conversation = $this->find($request, $call, $uuid);
         $limit        = $this->limit($request, self::MESSAGES_PAGE, self::MESSAGES_PAGE_MAX);
         $before       = $this->messageId($request, 'before');
         $after        = $this->messageId($request, 'after');
@@ -294,9 +299,9 @@ final readonly class ChatClientApiController
     public function message(string $uuid, string $messageUuid, Request $request): JsonResponse
     {
         $call    = $this->guard->authenticate($request);
-        $message = $this->messages->findOneInConversation($this->find($call, $uuid), $messageUuid);
+        $message = $this->messages->findOneInConversation($this->find($request, $call, $uuid), $messageUuid);
         if (!$message instanceof ChatMessage || $message->getUuid() !== $messageUuid) {
-            throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
+            $this->guard->notFound($request, $call);
         }
 
         return $this->json(['message' => $this->presentMessages($call->principal->user, [$message])[0]]);
@@ -317,7 +322,7 @@ final readonly class ChatClientApiController
     {
         $call         = $this->guard->authenticate($request, ChatClientPrincipal::SCOPE_READ, ChatClientApiGuard::BUDGET_ACTION);
         $user         = $call->principal->user;
-        $conversation = $this->find($call, $uuid);
+        $conversation = $this->find($request, $call, $uuid);
         $requested    = $this->payload($request)['messageId'] ?? null;
         $this->deny(!is_int($requested) || $requested < 1, 'invalid_message_id', Response::HTTP_UNPROCESSABLE_ENTITY);
         $latest = $this->messages->findLatest($conversation);
@@ -347,9 +352,12 @@ final readonly class ChatClientApiController
     {
         $call    = $this->guard->authenticate($request);
         $threads = $this->threads;
-        $message = $this->messages->findOneInConversation($this->find($call, $uuid), $messageUuid);
-        if (!$threads instanceof ChatThreads || !$threads->enabled() || !$message instanceof ChatMessage || $message->getUuid() !== $messageUuid) {
+        if (!$threads instanceof ChatThreads || !$threads->enabled()) {
             throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
+        }
+        $message = $this->messages->findOneInConversation($this->find($request, $call, $uuid), $messageUuid);
+        if (!$message instanceof ChatMessage || $message->getUuid() !== $messageUuid) {
+            $this->guard->notFound($request, $call);
         }
         $before = $this->messageId($request, 'before');
         $after  = $this->messageId($request, 'after');
@@ -444,12 +452,12 @@ final readonly class ChatClientApiController
         ));
     }
 
-    /** The conversation of exactly this uuid the caller may see in the request's context; anything else 404. */
-    private function find(ChatClientCall $call, string $uuid): ChatConversation
+    /** The conversation of exactly this uuid the caller may see in the request's context; anything else 404 (audited). */
+    private function find(Request $request, ChatClientCall $call, string $uuid): ChatConversation
     {
         $conversation = $this->conversations->findOneByUuid($uuid);
         if (!$conversation instanceof ChatConversation || $conversation->getUuid() !== $uuid || !$this->isVisible($call, $conversation)) {
-            throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
+            $this->guard->notFound($request, $call);
         }
 
         return $conversation;
@@ -612,7 +620,11 @@ final readonly class ChatClientApiController
             'reactions'     => $counts,
             'body'          => $body,
         ];
-        foreach (['mentionAll', 'forwarded', 'threadRootUuid', 'thread'] as $optional) {
+        // `mentionAll` is the enum `channel` | `here` (anything else stored in a row's meta is left out).
+        if (in_array($view['mentionAll'] ?? null, self::MENTION_ALL, true)) {
+            $row['mentionAll'] = $view['mentionAll'];
+        }
+        foreach (['forwarded', 'threadRootUuid', 'thread'] as $optional) {
             if (array_key_exists($optional, $view)) {
                 $row[$optional] = $view[$optional];
             }

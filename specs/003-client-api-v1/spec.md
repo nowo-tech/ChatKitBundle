@@ -43,6 +43,12 @@ tokens filtered per reader. It is off unless the host configures a principal res
 - **FR-CAPI-007**: budgets per IP and per token, on top of the person's own budgets. A spent budget answers 429 with
   `Retry-After`.
 - **FR-CAPI-008**: refusals dispatch `ChatClientApiDeniedEvent` with ids and codes only.
+- **FR-CAPI-011** (audit ZBW):
+  - A bound token without a context policy is refused.
+  - `allows()` is asked for bound tokens too.
+  - A context policy requires `realtime_events: ids`.
+  - `ids` mode carries no display name or status text.
+  - 404s are audited.
 - **FR-CAPI-010**: thread reads (root + a page of replies), the reply count and last reply time per message, and reaction
   summaries (`emoji`, `count`, `mine`) per message. Writing them comes in 2.5.0 (owner, 2026-11-25).
 - **FR-CAPI-009**: the profile option `realtime_events: ids` sends ids-only message events. The dock fetches the message.

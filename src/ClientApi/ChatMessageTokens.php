@@ -298,12 +298,12 @@ final readonly class ChatMessageTokens
 
             return "\u{E000}L" . (count($links) - 1) . "\u{E000}";
         }, $text);
-        $text = (string) preg_replace_callback('~\[([^\]\n]{1,200})\]\(((?:https?://|mailto:)[^\s<>"\'`)]+)\)~i', static function (array $m) use (&$links, $placeholders): string {
+        $text = (string) preg_replace_callback('~\[([^\]\n]{1,200})\]\(((?:https?://|mailto:)[^\s<>"\'`)\xEE]+)\)~i', static function (array $m) use (&$links, $placeholders): string {
             $links[] = ['type' => 'link', 'url' => $m[2], 'text' => self::plainOf($m[1], $placeholders), 'card' => false];
 
             return "\u{E000}L" . (count($links) - 1) . "\u{E000}";
         }, $text);
-        $text = (string) preg_replace_callback('~\b(?:https?://|www\.)[^\s<>"\'`]+|\b(?:mailto:)?[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b~i', static function (array $m) use (&$links): string {
+        $text = (string) preg_replace_callback('~\b(?:https?://|www\.)[^\s<>"\'`\xEE]+|\b(?:mailto:)?[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b~i', static function (array $m) use (&$links): string {
             $raw  = rtrim($m[0], '.,;:!?)');
             $tail = substr($m[0], strlen($raw));
             $href = match (true) {

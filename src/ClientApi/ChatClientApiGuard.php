@@ -45,8 +45,9 @@ use const FILTER_VALIDATE_IP;
  * 5. the per-token budget (`per_token_per_minute`, keyed by the principal's token id) — 429;
  * 6. the person's own chat budget, shared with the web UI (reads, or actions for read marks) — 429;
  * 7. the scope (`chat:read`) — 403 `insufficient_scope`;
- * 8. the context: the context header checked by ChatClientContextPolicyInterface on every request, or the token's own
- *    context — 400 `invalid_context` / `context_required`, 403 `context_forbidden`.
+ * 8. the context: the context header, or the token's own context, checked by ChatClientContextPolicyInterface on every
+ *    request (`allows()`; a token bound to a context with no policy is refused: only the policy filters conversations) —
+ *    400 `invalid_context` / `context_required`, 403 `context_forbidden`.
  *
  * Never reads or writes the session, never trusts a cookie, never changes the person's web context. Every refusal
  * after step 1 dispatches ChatClientApiDeniedEvent (ids and codes only). Stateless: nothing of a request is kept.
@@ -162,6 +163,20 @@ final readonly class ChatClientApiGuard
     }
 
     /**
+     * Audit ZBW-I2: a 404 of an authenticated call (unknown, foreign or out-of-context uuid) is audited like the other
+     * refusals (reason `not_found`, ids only), so probing leaves a trace.
+     *
+     * @param Request $request The request
+     * @param ChatClientCall $call The call
+     *
+     * @throws ChatApiException Always: 404 `not_found`
+     */
+    public function notFound(Request $request, ChatClientCall $call): never
+    {
+        $this->deny('not_found', Response::HTTP_NOT_FOUND, $call->principal, self::ipPrefix($request->getClientIp()));
+    }
+
+    /**
      * The plain Bearer token of the request: null when absent, blank or longer than {@see self::MAX_TOKEN_LENGTH}.
      *
      * @param Request $request The request
@@ -212,21 +227,33 @@ final readonly class ChatClientApiGuard
      */
     private function context(ChatClientPrincipal $principal, ?string $header, ?string $ipPrefix): ?string
     {
+        if ($header !== null && (strlen($header) > self::MAX_CONTEXT_LENGTH || preg_match(ChatClientPrincipal::KEY_PATTERN, $header) !== 1)) {
+            $this->deny('invalid_context', Response::HTTP_BAD_REQUEST, $principal, $ipPrefix);
+        }
+        $policy = $this->contexts;
+        $bound  = $principal->contextKey;
+        if ($bound !== null) {
+            // Audit ZBW-L1: only the policy filters conversations by context; a bound token without one is refused
+            // (fail closed) instead of being served every context. ZBW-L3: membership is re-checked for bound tokens too.
+            if (!$policy instanceof ChatClientContextPolicyInterface) {
+                $this->deny('context_forbidden', Response::HTTP_FORBIDDEN, $principal, $ipPrefix, [], 'context_unverifiable');
+            }
+            // A token bound to a context never opens another one.
+            if (($header !== null && $header !== $bound) || !$policy->allows($principal, $bound)) {
+                $this->deny('context_forbidden', Response::HTTP_FORBIDDEN, $principal, $ipPrefix);
+            }
+
+            return $bound;
+        }
         if ($header === null) {
-            if ($this->contexts instanceof ChatClientContextPolicyInterface && $principal->contextKey === null) {
+            if ($policy instanceof ChatClientContextPolicyInterface) {
                 $this->deny('context_required', Response::HTTP_BAD_REQUEST, $principal, $ipPrefix);
             }
 
-            return $principal->contextKey;
+            return null;
         }
-        if (strlen($header) > self::MAX_CONTEXT_LENGTH || preg_match(ChatClientPrincipal::KEY_PATTERN, $header) !== 1) {
-            $this->deny('invalid_context', Response::HTTP_BAD_REQUEST, $principal, $ipPrefix);
-        }
-        // A token bound to a context never opens another one; without a policy, nothing else can be checked (fail closed).
-        $allowed = $principal->contextKey !== null
-            ? $principal->contextKey === $header
-            : $this->contexts instanceof ChatClientContextPolicyInterface && $this->contexts->allows($principal, $header);
-        if (!$allowed) {
+        // Without a policy, nothing can check the context (fail closed).
+        if (!$policy instanceof ChatClientContextPolicyInterface || !$policy->allows($principal, $header)) {
             $this->deny('context_forbidden', Response::HTTP_FORBIDDEN, $principal, $ipPrefix);
         }
 

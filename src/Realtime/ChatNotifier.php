@@ -150,9 +150,7 @@ final readonly class ChatNotifier
         $this->publisher->publish('read', [
             'conversationUuid' => $conversation->getUuid(),
             'userUuid'         => $reader->getChatPublicId(),
-            'userName'         => $reader->getChatDisplayName(),
-            'messageId'        => $messageId,
-        ], $recipients);
+        ] + $this->nameOf($reader) + ['messageId' => $messageId], $recipients);
     }
 
     /**
@@ -168,9 +166,7 @@ final readonly class ChatNotifier
         $this->publisher->publish('read', [
             'conversationUuid' => $conversation->getUuid(),
             'userUuid'         => $reader->getChatPublicId(),
-            'userName'         => $reader->getChatDisplayName(),
-            'messageId'        => $messageId,
-        ], [$reader]);
+        ] + $this->nameOf($reader) + ['messageId' => $messageId], [$reader]);
     }
 
     /**
@@ -209,8 +205,7 @@ final readonly class ChatNotifier
         $this->publisher->publish('typing', [
             'conversationUuid' => $conversation->getUuid(),
             'userUuid'         => $typist->getChatPublicId(),
-            'userName'         => $typist->getChatDisplayName(),
-        ], array_values(array_filter(
+        ] + $this->nameOf($typist), array_values(array_filter(
             $this->recipients->of($conversation),
             static fn (ChatUserInterface $user): bool => !ChatUserReferences::same($user, $typist),
         )));
@@ -248,7 +243,8 @@ final readonly class ChatNotifier
      */
     public function statusChanged(ChatUserInterface $user, array $visible, array $own, array $peers): void
     {
-        $this->publisher->publish('status', ['userUuid' => $user->getChatPublicId()] + $visible, $peers);
+        // 2.4 (`realtime_events: ids`, audit ZBW-L4): the status only, never its text or emoji (clients re-read it).
+        $this->publisher->publish('status', ['userUuid' => $user->getChatPublicId()] + ($this->realtimeEvents === 'ids' ? ['status' => $visible['status']] : $visible), $peers);
         $this->publisher->publish('my_status', ['status' => $own], [$user]);
     }
 
@@ -291,6 +287,17 @@ final readonly class ChatNotifier
     public function preferencesChanged(ChatUserInterface $user, array $preferences): void
     {
         $this->publisher->publish('prefs', ['prefs' => $preferences], [$user]);
+    }
+
+    /**
+     * The display name of an event's person: none in `realtime_events: ids` mode (audit ZBW-L4: ids only on the hub; the
+     * clients name the person from what they already loaded).
+     *
+     * @return array{userName?: string}
+     */
+    private function nameOf(ChatUserInterface $user): array
+    {
+        return $this->realtimeEvents === 'ids' ? [] : ['userName' => $user->getChatDisplayName()];
     }
 
     /**
