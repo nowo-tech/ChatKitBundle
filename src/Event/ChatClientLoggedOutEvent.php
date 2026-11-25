@@ -11,6 +11,8 @@ use Symfony\Contracts\EventDispatcher\Event;
  * accepted. For the host's audit log: ids only — never the token, the raw Authorization header, a full IP or chat data.
  * Dispatched after ChatClientTokenRevokerInterface::revoke() returned (after the host's commit). A logout with an
  * unknown, expired or revoked token answers the same 204 and dispatches nothing (there is no principal to name).
+ * Two concurrent logouts of one token (two tabs, a retry after a timeout) can both pass the resolver before the host's
+ * commit: the event may then be dispatched twice for one token; deduplicate on `tokenId` if needed (audit ZCB-I4).
  */
 final class ChatClientLoggedOutEvent extends Event
 {

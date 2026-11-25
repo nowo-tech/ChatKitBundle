@@ -24,6 +24,12 @@ use Nowo\ChatKitBundle\Model\ChatClientRequest;
  * - lets a transient failure (database down, lock conflict) propagate: the client gets an error and retries; never
  *   swallow it, the token would stay valid while the client believes it is signed out;
  * - keeps nothing of the call (FrankenPHP worker mode, kernel reset false).
+ *
+ * A token the resolver refuses is never revoked by logout (the answer is the same 204). So the resolver should refuse
+ * only for reasons of the token itself (unknown, expired, revoked, another client family), or the host revokes a
+ * person's client tokens when it disables the account or removes the membership it refuses for; otherwise a token
+ * refused for an account, IP or context reason survives a logout and works again once that reason is gone (audit
+ * ZCB-I2).
  */
 interface ChatClientTokenRevokerInterface
 {

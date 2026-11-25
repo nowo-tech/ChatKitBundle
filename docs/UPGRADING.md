@@ -128,7 +128,7 @@ composer update nowo-tech/chat-kit-bundle
                   token_revoker: App\Chat\ClientTokenRevoker
   ```
 
-  The revoker revokes the presented token only, is idempotent, commits in its own write unit and lets failures propagate. Without it, logout answers `204` but the token stays valid until it expires (`me.features.serverLogout: false`). Listen to `ChatClientLoggedOutEvent` to audit sign-outs. The route uses the per-token and per-IP limiters you already have; your stateless firewall on `^%nowo_chat_kit.client_api.v1_path_prefix%/` covers it.
+  The revoker revokes the presented token only, is idempotent, commits in its own write unit and lets failures propagate. Without it, logout answers `204` but the token stays valid until it expires (`me.features.serverLogout: false`). Listen to `ChatClientLoggedOutEvent` to audit sign-outs (deduplicate on `tokenId`: two racing logouts can dispatch it twice). Your resolver should refuse only for reasons of the token (unknown, expired, revoked, another family); a token it refuses for an account, IP or context reason is not revoked by logout, so revoke a person's client tokens when you disable the account. In your integration test, assert `me.features.serverLogout: true`. The route uses the per-token and per-IP limiters you already have; your stateless firewall on `^%nowo_chat_kit.client_api.v1_path_prefix%/` covers it.
 - **Clients.** `me.features` gains `serverLogout`; `unreadTotalCapped` is `false` at exactly 200 conversations.
 - A custom `ChatClientApiGuard` construction (not the container's) gains an optional last argument `$revoker`.
 

@@ -261,8 +261,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - **Client API logout** (Beacon Desktop): `POST <prefix>/chat/v1/logout` signs a native client out. See [API.md](API.md#logout).
   - It revokes the presented token only, through the new optional host port `ChatClientTokenRevokerInterface::revoke(string $bearer, ChatClientRequest $request)` (`client_api.token_revoker`; Beacon: TimeTrack `ClientFamilyTokenAuthenticator::revoke('chat', …)`). Other tokens, devices and sessions are never touched; a token the resolver does not accept never reaches the revoker.
-  - Always `204` with no body, also for a token that was already revoked, has expired or is unknown (no oracle); `401` only without a Bearer header. POST only. Per-IP and per-token budgets apply (`429` + `Retry-After`). No scope, context or reachability check: a token may always be given up. A revoker failure propagates (never a false success).
-  - New event `ChatClientLoggedOutEvent` (`tokenId`, `userPublicId`, `revoked`, `ipPrefix`; never the token), dispatched after the revocation.
+  - Always `204` with no body, also for a token that was already revoked, has expired or is unknown (no oracle); `401` only without a usable Bearer token (absent, blank, over 4096 bytes). POST only. The per-IP budget and a per-token logout budget on its own key apply (`429` + `Retry-After`), so the token's read traffic can never keep its sign-out at 429 (audit ZCB-L1). No scope, context or reachability check: a token may always be given up. A revoker failure propagates (never a false success).
+  - New event `ChatClientLoggedOutEvent` (`tokenId`, `userPublicId`, `revoked`, `ipPrefix`; never the token), dispatched after the revocation (twice for one token when two logouts race: deduplicate on `tokenId`, audit ZCB-I4).
+  - A token the resolver refuses is not revoked: resolvers refuse only for reasons of the token, or hosts revoke client tokens when disabling an account (contract lines, audit ZCB-I2). Audit ZCB-I1/I3/I5 doc lines (429 of a still-valid token, 401 wording, Beacon checklist).
   - Without a revoker the route still answers `204` but only the client forgets the token; `me.features.serverLogout` (new) says whether logout revokes on the server.
   - OpenAPI `chat-client-v1.yaml` 1.1.0 documents the route and `serverLogout`.
 

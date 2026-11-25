@@ -32,7 +32,7 @@ whom).
 | --- | --- | --- |
 | JSON API `/chat/api/*` (GET + POST / PATCH / DELETE) | `ChatApiController` | Signed-in users only (401 otherwise) |
 | 2.4 client API `<prefix>/chat/v1/*` (Bearer; GET + `POST …/read`) | `ChatClientApiController`, `ChatClientApiGuard` | Off without `client_api.principal_resolver`. Every request is checked in this order: per-IP budget, the host's token resolver, reachability, per-token and per-person budgets, scope `chat:read`, then the context checked by the host's policy. No session, cookie or CSRF (the Bearer token is no ambient credential). Same access rules as the web UI (`ChatVoter::decide()`). Unknown, foreign and out-of-context uuids answer 404. Bodies are tokens, never HTML; references are filtered per reader (neutral placeholder); link previews are per reader. Refusals dispatch `ChatClientApiDeniedEvent` (ids only). |
-| 2.4.1 client API logout `POST <prefix>/chat/v1/logout` | `ChatClientApiController::logout()`, `ChatClientApiGuard::logout()` | POST only. Per-IP budget, Bearer token, the host's resolver, per-token budget, then the host's optional `ChatClientTokenRevokerInterface` revokes the presented token only. `204` without body for every token (valid, revoked, expired, unknown): no oracle; `401` only without a Bearer header. No scope/context/reachability check (a token may always be given up). A revoker failure propagates (never a false success). `ChatClientLoggedOutEvent` (token id, user public id, `revoked`, IP prefix) after the revocation; never the token. Without a revoker: client-side sign-out only (`me.features.serverLogout: false`). |
+| 2.4.1 client API logout `POST <prefix>/chat/v1/logout` | `ChatClientApiController::logout()`, `ChatClientApiGuard::logout()` | POST only. Per-IP budget, Bearer token, the host's resolver, a per-token logout budget on its own key (ZCB-L1), then the host's optional `ChatClientTokenRevokerInterface` revokes the presented token only. `204` without body for every token (valid, revoked, expired, unknown): no oracle; `401` only without a usable Bearer token (absent, blank, > 4096 bytes). No scope/context/reachability check (a token may always be given up). A revoker failure propagates (never a false success). `ChatClientLoggedOutEvent` (token id, user public id, `revoked`, IP prefix) after the revocation; never the token. Without a revoker: client-side sign-out only (`me.features.serverLogout: false`). |
 | Full-page chat `/chat/`, `/chat/{uuid}` (GET + form POST) | `ChatPageController`, `ChatPageMessageType` | Signed-in users only (403 otherwise) |
 | Message bodies (Markdown, ≤ 4000 characters), reactions, support context (path + label) | API / page | Conversation members |
 | Host-written refusal text (`ChatChannelOpeningEvent::deny()`) | `/chat/api/channel` → the asking user's dock, as text | Deployer's code |
@@ -131,10 +131,13 @@ dependencies current. Security fixes are released as patch versions of the suppo
   `POST <prefix>/chat/v1/logout`. It must revoke the presented token only (never the person's other tokens, devices
   or sessions, never a token of another client family), be idempotent (already revoked, expired or unknown: no-op),
   commit in its own write unit and let failures propagate. The route answers `204` for every token the resolver does
-  not accept, so it is no token oracle; it runs the per-IP and per-token budgets and dispatches
+  not accept, so it is no token oracle (only a still-valid token can get the per-token `429`); it runs the per-IP
+  budget and a per-token logout budget on its own key, which read traffic cannot spend (audit ZCB-L1), and dispatches
   `ChatClientLoggedOutEvent` (token id and user public id, never the token). Without a revoker, logout only clears the
   client side and the token stays valid until it expires (`me.features.serverLogout: false`): configure one when your
-  tokens live long.
+  tokens live long. A token your resolver refuses is not revoked by logout: refuse only for reasons of the token, or
+  revoke a person's client tokens when you disable the account (audit ZCB-I2). Concurrent logouts may dispatch the
+  event twice for one token (ZCB-I4).
 
 - **Mercure:** strong publisher secret, **no anonymous subscribers** in production, HTTPS. The subscriber JWT travels as
   an `authorization` query parameter — prefer the hub cookie when same-site, or scrub hub / proxy access logs.

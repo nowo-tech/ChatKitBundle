@@ -178,8 +178,9 @@ final readonly class ChatClientApiGuard
 
     /**
      * 2.4.1: `POST logout`. Revokes the presented token only, through the host's revoker, and dispatches
-     * ChatClientLoggedOutEvent. Runs the per-IP budget, the Bearer check and the per-token budget (429 + Retry-After);
-     * an absent or malformed Authorization header answers 401 as on every route. A token the resolver does not accept
+     * ChatClientLoggedOutEvent. Runs the per-IP budget, the Bearer check and a per-token logout budget of its own
+     * (`per_token_per_minute`, separate from the token's read budget: audit ZCB-L1; 429 + Retry-After); no usable Bearer
+     * token (absent, blank or longer than 4096 bytes) answers 401 as on every route. A token the resolver does not accept
      * now (unknown, expired, revoked, another client family) returns silently: the caller answers the same 204 (no
      * oracle), nothing is revoked and no event is dispatched. Reachability, scope and context are not checked: a
      * person whose account is inactive, whose token lacks `chat:read` or whose membership is gone may always give
@@ -207,7 +208,8 @@ final readonly class ChatClientApiGuard
         if (!$principal instanceof ChatClientPrincipal) {
             return;
         }
-        $this->consume($this->tokenLimiter, 'nowo_chat_client_token_' . hash('sha256', $principal->tokenId), $principal, $ipPrefix);
+        // Audit ZCB-L1: logout has its own per-token budget, so the token's read traffic can never starve its sign-out.
+        $this->consume($this->tokenLimiter, 'nowo_chat_client_logout_' . hash('sha256', $principal->tokenId), $principal, $ipPrefix);
         $this->revoker?->revoke($bearer, $clientRequest);
         $this->events?->dispatch(new ChatClientLoggedOutEvent($principal->tokenId, $principal->user->getChatPublicId(), $this->revokes(), $ipPrefix));
     }

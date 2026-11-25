@@ -10,13 +10,16 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestAccessPolicy;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientTokenRevoker;
 use Nowo\ChatKitBundle\Tests\Support\ClientApiCalls;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
+use Psr\Container\ContainerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 
 use function array_column;
 use function array_map;
 use function assert;
 use function gc_collect_cycles;
+use function hash;
 use function memory_get_usage;
 
 /**
@@ -79,6 +82,23 @@ final class ChatClientApiLogoutTest extends DatabaseTestCase
         self::assertSame($ana->getChatPublicId(), $this->loggedOut[0]->userPublicId);
         self::assertTrue($this->loggedOut[0]->revoked);
         self::assertSame('198.51.100.0/24', $this->loggedOut[0]->ipPrefix);
+    }
+
+    public function testReadTrafficNeverStarvesTheRevocation(): void
+    {
+        // Audit ZCB-L1: with the token's read budget spent, logout still answers 204 and revokes.
+        $this->tokens()->grant('busy', $this->user('Ana'), id: 'tok-busy-revoke');
+        $services = $this->kernel->getContainer()->get('test.service_container');
+        assert($services instanceof ContainerInterface);
+        $limiter = $services->get('limiter.nowo_chat_client_token');
+        self::assertInstanceOf(RateLimiterFactoryInterface::class, $limiter);
+        $limiter->create('nowo_chat_client_token_' . hash('sha256', 'tok-busy-revoke'))->consume(100_000);
+        self::assertError($this->call('GET', '/api/chat/v1/me', 'busy'), 429, 'rate_limited');
+
+        self::assertNoContent($this->call('POST', self::LOGOUT, 'busy'));
+        self::assertSame(['busy'], array_column($this->get(TestClientTokenRevoker::class)->calls, 'bearer'));
+        self::assertTrue($this->loggedOut[0]->revoked);
+        self::assertArrayNotHasKey('busy', $this->tokens()->tokens);
     }
 
     public function testEveryOtherTokenGetsTheSame204(): void

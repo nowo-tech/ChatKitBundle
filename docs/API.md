@@ -167,20 +167,31 @@ Since 2.4.1, `POST <prefix>/chat/v1/logout` signs the client out. Only `POST` is
   the revoker.
 - **Always `204` with no body**, also when the token was already revoked, has expired or is unknown. These cases are
   never told apart (no oracle), so a client may retry a logout freely, for example after a timeout. The only other
-  answers are `401 invalid_token` when no `Authorization: Bearer` header is sent at all, and `429 rate_limited`.
-- **The per-IP and per-token budgets apply**, as on every route (unknown tokens spend the per-IP budget). On `429` the
-  token is not revoked yet: retry after `Retry-After`. The person's own read and action budgets are not spent.
+  answers are `401 invalid_token` when there is no usable Bearer token (header absent, blank, or a token longer than
+  4096 bytes: the shape of the header, never the token; audit ZCB-I3), and `429 rate_limited`.
+- **The per-IP budget and a per-token logout budget apply.** Unknown tokens spend the per-IP budget only. A still-valid
+  token can get `429` when its own logout budget is spent, which an unknown token never gets; this tells nothing that
+  `GET me` would not (audit ZCB-I1). The per-token logout budget (`per_token_per_minute`) has a key of its own,
+  separate from the token's budget on the other routes, so read traffic with the same token (a copied token, a client
+  in a reload loop) can never keep its sign-out at `429` (audit ZCB-L1). On `429` the token is not revoked yet: retry
+  after `Retry-After`. The person's own read and action budgets are not spent.
+- **A token the resolver refuses is not revoked.** The answer is the same `204`. Resolvers should refuse only for
+  reasons of the token itself (unknown, expired, revoked, another family), or the host revokes a person's client tokens
+  when it disables the account; a token refused for an account, IP or context reason would otherwise survive a logout
+  (audit ZCB-I2).
 - **No scope, context or account check.** A token without `chat:read`, a bound token whose membership is gone or the
   token of an account that can no longer use the chat may always be given up. The context header is ignored.
 - **A failed revocation is never a success.** If the revoker throws (database down, lock conflict) the error
   propagates (`5xx`, or `409` when the host maps it), no event is dispatched, and the client retries.
 - After the revoker returned, `Nowo\ChatKitBundle\Event\ChatClientLoggedOutEvent` is dispatched for the host's audit log,
   with the `tokenId`, the `userPublicId`, `revoked` and the `/24` or `/64` `ipPrefix`. It never carries the token. A
-  logout with a token the resolver does not accept dispatches nothing.
+  logout with a token the resolver does not accept dispatches nothing. Two concurrent logouts of one token can both
+  revoke (idempotently) and dispatch the event twice: deduplicate on `tokenId` if needed (audit ZCB-I4).
 - **Without a token revoker** the route still answers `204`, but nothing is revoked: the client only forgets its token,
   which stays valid until it expires or is revoked in the host's UI. `me.features.serverLogout` is `false` then (and the
   event has `revoked: false`), so a client can tell the person to revoke the device in the web UI. Hosts that issue
-  long-lived tokens should configure a revoker.
+  long-lived tokens should configure a revoker. This fail-open default is deliberate (audit ZCB-I5: the build does not
+  fail without a revoker).
 
 ## Realtime
 
@@ -303,6 +314,11 @@ final readonly class ClientTokenRevoker implements ChatClientTokenRevokerInterfa
 ```
 
 Configure `realtime_events: ids` together with the context policy.
+
+Beacon checklist for logout (audit ZCB-I5): set `client_api.token_revoker` to the revoker above; assert
+`me.features.serverLogout === true` in the integration test (and that a `POST logout` makes the next request 401);
+Beacon Desktop shows the "revoke this device in the web" hint when it is `false`. Confirm that the chat resolver
+refuses only for reasons of the token, or that disabling an account revokes its client tokens (audit ZCB-I2).
 
 Listen to `ChatClientApiDeniedEvent` to audit refusals, the same way the TimeTrack client API refusals are audited
 (`client_api: chat`), and to `ChatClientLoggedOutEvent` to audit sign-outs.

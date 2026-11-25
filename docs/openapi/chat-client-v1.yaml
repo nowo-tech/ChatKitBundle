@@ -257,11 +257,13 @@ paths:
       summary: Signs the client out (2.4.1); the host revokes the presented token, and only it
       description: >-
         Revokes the Bearer token of the request through the host's token revoker (client_api.token_revoker): never the
-        person's other tokens or devices. Always 204 with no body when an Authorization Bearer header is present, also
-        for a token that was already revoked, has expired or is unknown (never an oracle): a client may retry it. No
-        scope, context or account check (a token may always be given up); the context header is ignored. The per-IP and
-        per-token budgets apply (429 + Retry-After: retry later, the token is not revoked yet). Without a revoker the
-        answer is still 204 but the token stays valid until it expires (me.features.serverLogout is false).
+        person's other tokens or devices. Always 204 with no body when a usable Bearer token is sent, also for a token
+        that was already revoked, has expired or is unknown (never an oracle): a client may retry it. A token the
+        resolver refuses is not revoked. No scope, context or account check (a token may always be given up); the
+        context header is ignored. The per-IP budget and a per-token logout budget of its own (separate from the
+        token's budget on the other routes) apply: 429 + Retry-After, retry later, the token is not revoked yet; only
+        a still-valid token can get the per-token 429. Without a revoker the answer is still 204 but the token stays
+        valid until it expires (me.features.serverLogout is false).
       responses:
         '204':
           description: Signed out (or nothing to sign out). No body.
@@ -324,7 +326,7 @@ components:
     Unauthorized:
       description: >-
         invalid_token (missing, unknown, expired or revoked token, or an account that cannot use the chat). POST /logout
-        answers 401 only when no Bearer token is sent.
+        answers 401 only when there is no usable Bearer token (header absent, blank, or a token over 4096 bytes).
       headers:
         WWW-Authenticate: { schema: { type: string } }
       content:

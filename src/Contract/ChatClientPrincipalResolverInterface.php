@@ -19,6 +19,10 @@ use Nowo\ChatKitBundle\Model\ChatClientRequest;
  * client family (a `time` token on the chat API): the API answers 401 `invalid_token`. A token without
  * {@see ChatClientPrincipal::SCOPE_READ} answers 403 `insufficient_scope`.
  *
+ * 2.4.1 (logout, audit ZCB-I2): `POST logout` asks this resolver too, and only a token it accepts reaches
+ * ChatClientTokenRevokerInterface. Refuse only for reasons of the token itself, or revoke a person's client tokens when
+ * you disable the account; a token refused for an account, IP or context reason is not revoked by logout.
+ *
  * The context: return the principal with `contextKey` set when the token was bound to one tenant at approval. A host
  * whose clients choose the tenant per request (a header) implements ChatClientContextPolicyInterface as well.
  */
