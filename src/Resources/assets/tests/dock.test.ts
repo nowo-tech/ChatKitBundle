@@ -637,8 +637,24 @@ describe('ChatDock', () => {
     expect(thread.typingLabel()).toBe('T a typing');
     api.conversations.mockClear();
     realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-a', status: 'away' });
+    // 2.4.1 (audit ZBWv-I3): a burst of status changes reloads the list once, after the window.
+    realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-b', status: 'dnd' });
+    realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-c', status: 'dnd' });
     await flush();
-    expect(api.conversations).toHaveBeenCalled();
+    expect(api.conversations).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1500);
+    await flush();
+    expect(api.conversations).toHaveBeenCalledTimes(1);
+    // The next burst gets its own reload.
+    realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-a', status: 'dnd' });
+    await vi.advanceTimersByTimeAsync(1500);
+    await flush();
+    expect(api.conversations).toHaveBeenCalledTimes(2);
+    // A pending reload is dropped with the dock.
+    realtimeHandlers?.onEvent({ type: 'status', userUuid: 'peer-a', status: 'away' });
+    dock.destroy();
+    await vi.advanceTimersByTimeAsync(1500);
+    expect(api.conversations).toHaveBeenCalledTimes(2);
   });
 
   it('opens conversations from data-nowo-chat-open links (support with context, people, channels)', async () => {
