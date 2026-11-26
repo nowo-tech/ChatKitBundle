@@ -827,9 +827,6 @@ jobs:
         with:
           php-version: '8.4'
           tools: composer:v2
-          # The floor job checks behaviour, not coverage: without a driver PHPUnit skips the HTML report, which outgrew
-          # the suite's 512M memory_limit with 2.6.
-          coverage: none
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress --no-interaction
@@ -844,4 +841,6 @@ jobs:
 
       - name: Tests at the floor
         timeout-minutes: 20
-        run: composer test
+        # Behaviour, not coverage: the HTML report outgrew the suite's 512M memory_limit with 2.6 (the Code Coverage job
+        # keeps it).
+        run: composer test -- --no-coverage
