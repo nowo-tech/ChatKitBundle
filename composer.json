@@ -74,6 +74,7 @@
         "nowo-tech/phpstan-frankenphp": "^1.4",
         "nowo-tech/runtime-setting-contract": "^1.0",
         "nowo-tech/search-kit-bundle": "^1.10",
+        "nowo-tech/storage-kit-bundle": "^2.2",
         "phpstan/phpstan": "^2.1",
         "phpstan/phpstan-doctrine": "^2.0",
         "phpstan/phpstan-phpunit": "^2.0",
@@ -90,13 +91,15 @@
     "suggest": {
         "symfony/mercure-bundle": "Realtime delivery of messages, presence, typing and read receipts (default ChatRealtimeInterface)",
         "minishlink/web-push": "Web Push notifications when the app is not open (implement ChatPushSenderInterface)",
-        "symfony/messenger": "Asynchronous push fan-out",
+        "symfony/messenger": "Asynchronous push fan-out; required for attachments (2.7: the scan and the object removal run in Messenger workers)",
         "nowo-tech/runtime-setting-contract": "^1.0 — for runtime.retention_days (1.32): the retention read from a runtime setting (.env or database, changed live with nowo:runtime-setting:set)",
-        "nowo-tech/search-kit-bundle": "^1.10 — for search_kit.enabled: chat messages (1.37) and conversations (1.38) as groups of the Ctrl/⌘+K palette and its results page"
+        "nowo-tech/search-kit-bundle": "^1.10 — for search_kit.enabled: chat messages (1.37) and conversations (1.38) as groups of the Ctrl/⌘+K palette and its results page",
+        "nowo-tech/storage-kit-bundle": "^2.2 — for attachments.enabled (2.7): chat files stored through its generic-file ports, with a mandatory scan (also needs symfony/messenger)"
     },
     "conflict": {
         "nowo-tech/runtime-setting-contract": "<1.0 || >=2.0",
-        "nowo-tech/search-kit-bundle": "<1.10 || >=2.0"
+        "nowo-tech/search-kit-bundle": "<1.10 || >=2.0",
+        "nowo-tech/storage-kit-bundle": "<2.2 || >=3.0"
     },
     "autoload": {
         "psr-4": {

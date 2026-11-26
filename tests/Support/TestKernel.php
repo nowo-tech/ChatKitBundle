@@ -6,6 +6,8 @@ namespace Nowo\ChatKitBundle\Tests\Support;
 
 use Doctrine\Bundle\DoctrineBundle\DoctrineBundle;
 use Doctrine\DBAL\Driver\Connection;
+use Nowo\ChatKitBundle\Attachment\Message\RemoveChatAttachmentObjects;
+use Nowo\ChatKitBundle\Attachment\Message\ScanChatAttachment;
 use Nowo\ChatKitBundle\Contract\ChatAccessPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
@@ -17,6 +19,8 @@ use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeTransportInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\Tests\Support\Attachment\InMemoryStorage;
+use Nowo\ChatKitBundle\Tests\Support\Attachment\TestScanner;
 use Nowo\ChatKitBundle\Tests\Support\Card\TestComposerActionProvider;
 use Nowo\ChatKitBundle\Tests\Support\Card\TestMenuSlotProvider;
 use Nowo\ChatKitBundle\Tests\Support\Card\TestNoteCardProvider;
@@ -50,6 +54,14 @@ use Nowo\RuntimeSettingContract\Bridge\Symfony\NowoRuntimeSettingBundle;
 use Nowo\RuntimeSettingContract\InMemory\InMemoryRuntimeSettingStore;
 use Nowo\SearchKitBundle\Test\QueryCounter as SearchKitQueryCounter;
 use Nowo\SearchKitBundle\Test\QueryCountingMiddleware as SearchKitQueryCountingMiddleware;
+use Nowo\StorageKitBundle\Context\FileContextInterface;
+use Nowo\StorageKitBundle\Download\FileDeliveryResponder;
+use Nowo\StorageKitBundle\Download\FileRangeDeliveryInterface;
+use Nowo\StorageKitBundle\Download\FileReaderInterface;
+use Nowo\StorageKitBundle\Lifecycle\FileRemoverInterface;
+use Nowo\StorageKitBundle\Reference\FileReferencesInterface;
+use Nowo\StorageKitBundle\Reference\FileUris;
+use Nowo\StorageKitBundle\Upload\FileUploaderInterface;
 use Nowo\TransactionContract\TransactionRunnerInterface;
 use Nowo\UiKitBundle\NowoUiKitBundle;
 use Psr\Log\LoggerInterface;
@@ -75,6 +87,7 @@ use function dirname;
 use function is_string;
 use function str_repeat;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
+use function Symfony\Component\DependencyInjection\Loader\Configurator\tagged_iterator;
 
 /**
  * Kernel for integration and functional tests: SQLite in memory, the test user, in-memory contracts and the
@@ -113,6 +126,7 @@ final class TestKernel extends Kernel
         private readonly bool $hostFixtures = false,
         private readonly ?string $removedPortsFixture = null,
         private readonly bool $cardProviders = false,
+        private readonly bool $attachments = false,
     ) {
         // Own environment for the routing.controllers-only host: its container class must not collide with the
         // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir). 2.0: likewise
@@ -196,7 +210,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), $this->usesHostFixtures(), $this->authorBadges, $this->scriptedRunner, $this->runtimeSettings, $this->uiKitContextMenus, $this->removedPortsFixture, $this->cardProviders])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), $this->usesHostFixtures(), $this->authorBadges, $this->scriptedRunner, $this->runtimeSettings, $this->uiKitContextMenus, $this->removedPortsFixture, $this->cardProviders, $this->attachments])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -289,6 +303,21 @@ final class TestKernel extends Kernel
             // when no `logger` service exists).
             $services->set('logger', RecordingLogger::class);
             $services->alias(LoggerInterface::class, 'logger');
+        }
+        // 2.7 (spec 259): StorageKit's generic-file ports in memory, the test scanner, and the scan / removal messages on
+        // an in-memory transport the tests drain themselves.
+        if ($this->attachments) {
+            $services->set(InMemoryStorage::class)->args([tagged_iterator(FileContextInterface::TAG)]);
+            foreach ([FileUploaderInterface::class, FileRemoverInterface::class, FileReaderInterface::class, FileRangeDeliveryInterface::class, FileReferencesInterface::class] as $port) {
+                $services->alias($port, InMemoryStorage::class);
+            }
+            $services->set(FileUris::class);
+            $services->set(FileDeliveryResponder::class);
+            $services->set(TestScanner::class);
+            $container->extension('framework', ['messenger' => [
+                'transports' => ['chat_attachments' => 'in-memory://'],
+                'routing'    => [ScanChatAttachment::class => 'chat_attachments', RemoveChatAttachmentObjects::class => 'chat_attachments'],
+            ]]);
         }
         if ($this->sidebarProviders) {
             $services->set(TestSidebarProvider::class)->autoconfigure();

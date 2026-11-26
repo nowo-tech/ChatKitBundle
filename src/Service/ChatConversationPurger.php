@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Service;
 
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentCleanup;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
@@ -37,8 +38,8 @@ use function array_values;
  * that hangs on it goes, children before parents (no database cascade is relied on): the mention, reaction, saved,
  * link-index, previous-text and thread-read rows of its messages, the read times and the participant rows, the pinned
  * links, the messages (thread replies before their roots) and the conversation. Forwards of its messages in other
- * conversations keep their neutral "Forwarded" marker (the pointers become null). ChatKit stores no files (no
- * attachments, no StorageKit objects), so nothing is left outside the database.
+ * conversations keep their neutral "Forwarded" marker (the pointers become null). 2.7: the conversation's
+ * attachments are marked deleted in the same unit and their StorageKit objects removed after the commit.
  *
  * Idempotent under concurrency (REQ-RUNTIME-003): a second call for the same conversation waits on the row lock and
  * then finds it gone (false), never an error. Stateless (FrankenPHP worker mode).
@@ -57,12 +58,14 @@ final readonly class ChatConversationPurger
      * @param ChatConversationRepository $conversations Finds and locks the conversation
      * @param TransactionRunnerInterface|null $transactions ChatKit's runner; null builds the default one
      * @param EventDispatcherInterface|null $events Receives ChatConversationDeletedEvent; null dispatches none
+     * @param ChatAttachmentCleanup|null $attachments 2.7 (spec 259): the conversation's files go too; null: attachments off
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
         private ChatConversationRepository $conversations,
         ?TransactionRunnerInterface $transactions = null,
         private ?EventDispatcherInterface $events = null,
+        private ?ChatAttachmentCleanup $attachments = null,
     ) {
         $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
     }
@@ -109,6 +112,7 @@ final readonly class ChatConversationPurger
         if ($messageIds === null) {
             return false;
         }
+        $this->attachments?->afterCommit();
         // After the commit: the bulk deletes bypassed ChatKit's manager, so every managed instance of a deleted row is
         // detached (a later find() answers null, in this request and in the next one of a worker), and managed rows
         // elsewhere that pointed at them (forwards) drop the pointer the database dropped. Nothing else is detached.
@@ -127,6 +131,8 @@ final readonly class ChatConversationPurger
         if (!$this->conversations->lockActivity($conversation) instanceof DateTimeImmutable) {
             return null;
         }
+        // 2.7 (spec 259): its files (drafts included) are deleted in this unit; their objects go after the commit.
+        $this->attachments?->forConversation($id, new DateTimeImmutable());
         $qb         = $this->entityManager->createQueryBuilder(...);
         $messageIds = array_values(array_map(intval(...), $qb()->select('m.id')->from(ChatMessage::class, 'm')
             ->where('IDENTITY(m.conversation) = :c')->setParameter('c', $id)->getQuery()->getSingleColumnResult()));

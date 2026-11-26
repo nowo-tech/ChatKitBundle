@@ -107,6 +107,8 @@ return static function (ContainerConfigurator $container): void {
     $services->load('Nowo\\ChatKitBundle\\', '../../')
         ->exclude([
             '../../{Controller,DependencyInjection,Entity,Enum,Event,Model,Contract,Resources}',
+            // 2.7 (spec 259): registered by the extension only with `attachments.enabled` (they need StorageKit 2.2).
+            '../../Attachment',
             '../../NowoChatKitBundle.php',
             '../../Repository',
             '../../Push/DeliverChatPushMessage.php',

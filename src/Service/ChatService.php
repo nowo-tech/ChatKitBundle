@@ -11,6 +11,7 @@ use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use LogicException;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentCleanup;
 use Nowo\ChatKitBundle\AutoReply\ChatAutoReplier;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
@@ -97,6 +98,7 @@ final readonly class ChatService implements ChatServiceInterface
      * @param ChatThreadReadRepository|null $threadReads 1.36: thread followers and read cursors; null records none
      * @param ChatMessageRevisionRepository|null $revisions 1.36: previous texts of edited messages; null keeps none
      * @param ChatMenuOptions|null $menuOptions 1.36: whether edit history is kept (`message_menu.edit_history`)
+     * @param ChatAttachmentCleanup|null $attachmentCleanup 2.7 (spec 259): a deleted message's files go with it; null: attachments off
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -120,6 +122,7 @@ final readonly class ChatService implements ChatServiceInterface
         private ?ChatThreadReadRepository $threadReads = null,
         private ?ChatMessageRevisionRepository $revisions = null,
         private ?ChatMenuOptions $menuOptions = null,
+        private ?ChatAttachmentCleanup $attachmentCleanup = null,
     ) {
         // 1.30: the container passes the runner bound to TransactionRunnerInterface; direct construction gets the default.
         $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
@@ -233,6 +236,7 @@ final readonly class ChatService implements ChatServiceInterface
      * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit
      * @param string|null $cardContext 2.6 (audit ZCI-M1): the client API context of the write (card `canShare()` scope)
      * @param bool $cardApi 2.6 (audit ZCI-M1): written through the client API (card `canShare()` scope)
+     * @param bool $allowEmpty 2.7 (spec 259): an empty text is accepted (the caller attaches files in `$after`)
      *
      * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link` or (2.6) `card_not_allowed`
      *
@@ -240,9 +244,9 @@ final readonly class ChatService implements ChatServiceInterface
      *
      * @internal
      */
-    public function sendWith(ChatUserInterface $author, ChatConversation $conversation, string $body, ?Closure $before = null, ?Closure $after = null, ?string $cardContext = null, bool $cardApi = false): ChatMessage
+    public function sendWith(ChatUserInterface $author, ChatConversation $conversation, string $body, ?Closure $before = null, ?Closure $after = null, ?string $cardContext = null, bool $cardApi = false, bool $allowEmpty = false): ChatMessage
     {
-        [[$message, $mentioned]] = $this->postAll($author, [new ChatDraft($conversation, $body, null, null, $cardContext, $cardApi)], $before, $after);
+        [[$message, $mentioned]] = $this->postAll($author, [new ChatDraft($conversation, $body, null, null, $cardContext, $cardApi, $allowEmpty)], $before, $after);
         // 1.11: automatic replies of the other person (direct) or of the people mentioned (channels), after the commit.
         try {
             $this->autoReplies?->afterSend($message, array_values($mentioned));
@@ -425,9 +429,9 @@ final readonly class ChatService implements ChatServiceInterface
     public function deleteWith(ChatUserInterface $by, ChatMessage $message, ?Closure $before = null, ?Closure $after = null): void
     {
         // A deleted message leaves the pinned bar.
-        $wasPinned           = $message->getPinnedAt() instanceof DateTimeImmutable;
-        $now                 = $this->clock->now();
-        [$message, $deleted] = $this->write(function () use ($by, $message, $now, $before, $after): array {
+        $wasPinned                   = $message->getPinnedAt() instanceof DateTimeImmutable;
+        $now                         = $this->clock->now();
+        [$message, $deleted, $files] = $this->write(function () use ($by, $message, $now, $before, $after): array {
             if ($before instanceof Closure && $before() !== true) {
                 throw new ChatIdempotencyConflict();
             }
@@ -441,7 +445,7 @@ final readonly class ChatService implements ChatServiceInterface
                     $after([$message]);
                 }
 
-                return [$message, false];
+                return [$message, false, false];
             }
             $message->delete($by, $now);
             $message->pin(null, null);
@@ -453,7 +457,9 @@ final readonly class ChatService implements ChatServiceInterface
             $this->links?->forget($message);
             // 1.36: a deleted message keeps no text (its previous ones go too), and a deleted reply leaves the count.
             $this->revisions?->deleteFor([(int) $message->getId()]);
-            $root = $message->getThreadRoot();
+            // 2.7 (spec 259): its files are deleted in the same unit (their objects go after the commit).
+            $files = $this->attachmentCleanup?->forMessages([(int) $message->getId()], $now) === true;
+            $root  = $message->getThreadRoot();
             if ($root instanceof ChatMessage) {
                 $this->entityManager->flush();
                 $this->messageRepository?->countReply($root, -1, null);
@@ -463,10 +469,13 @@ final readonly class ChatService implements ChatServiceInterface
                 $after([$message]);
             }
 
-            return [$message, true];
+            return [$message, true, $files];
         });
         if (!$deleted) {
             return;
+        }
+        if ($files) {
+            $this->attachmentCleanup?->afterCommit();
         }
         $this->notifier->messageUpdated($message);
         $root = $message->getThreadRoot();
@@ -868,7 +877,7 @@ final readonly class ChatService implements ChatServiceInterface
         foreach ($drafts as $draft) {
             $conversation = $draft->conversation;
             $forward      = $draft->forwardOf instanceof ChatMessage;
-            $body         = $this->normalize($draft->body);
+            $body         = $this->normalize($draft->body, $draft->allowEmpty);
             $body         = $this->links?->normalizeCards($body) ?? $body;
             // A forward keeps its #reference tokens: they are resolved for each reader of the target (the neutral chip
             // for whoever may not open them), and it mentions nobody.
@@ -1032,10 +1041,10 @@ final readonly class ChatService implements ChatServiceInterface
         return false;
     }
 
-    private function normalize(string $body): string
+    private function normalize(string $body, bool $allowEmpty = false): string
     {
         $body = trim(str_replace(["\r\n", "\r"], "\n", ChatMarkdownRenderer::clean($body)));
-        if ($body === '') {
+        if ($body === '' && !$allowEmpty) {
             throw new InvalidArgumentException('empty');
         }
         if (mb_strlen($body) > ChatMessage::MAX_LENGTH) {

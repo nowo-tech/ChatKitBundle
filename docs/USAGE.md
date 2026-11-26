@@ -18,6 +18,7 @@
 - [Mentions](#mentions)
 - [References](#references)
 - [Typed cards and host slots (2.6)](#typed-cards-and-host-slots-26)
+- [Attachments (2.7)](#attachments-27)
 - [Link previews](#link-previews)
 - [Profile pictures](#profile-pictures)
 - [Author badges](#author-badges)
@@ -1210,6 +1211,137 @@ confirms. The text never leaves the browser before that.
 - *Reply*, *Quote*, *Copy text*, the list preview, the pins bar and the screen-reader announcement read a secret card
   as the generic "🔑 Shared a secret" line, and another card as `#Title`: never facts, badges or actions.
 - An inserted card goes to the composer only while the dialog its action opened is open.
+
+## Attachments (2.7)
+
+Spec 259 block B. Off by default (`attachments.enabled`). Files are stored through nowo-tech/storage-kit-bundle ^2.2 in
+the StorageKit file context `chat` (context id = the conversation uuid), and every file is scanned by **your** scanner
+before anyone else can see it. There is no fail-open path: unscanned, blocked or failed files are never served.
+
+### Setting it up
+
+```bash
+composer require nowo-tech/storage-kit-bundle:^2.2 symfony/messenger
+```
+
+```yaml
+# config/packages/nowo_chat_kit.yaml
+nowo_chat_kit:
+  profiles:
+    default:
+      attachments:
+        enabled: true
+        scanner: App\Chat\ClamAvScanner          # required (the build fails without it)
+        scope_resolver: App\Chat\TenantBuckets   # optional: bucket scope and owner per conversation
+        max_bytes: '%env(int:CHAT_ATTACHMENTS_MAX_BYTES)%'   # 25 MiB by default, per instance
+
+# config/packages/messenger.yaml — the scan must never run in a web request
+framework:
+  messenger:
+    routing:
+      'Nowo\ChatKitBundle\Attachment\Message\ScanChatAttachment': async
+      'Nowo\ChatKitBundle\Attachment\Message\RemoveChatAttachmentObjects': async
+```
+
+Run `messenger:consume async` and, from cron every minute or two, `nowo:chat:attachments:sweep`.
+
+```php
+use Nowo\ChatKitBundle\Contract\ChatAttachmentScannerInterface;
+use Nowo\ChatKitBundle\Enum\ChatScanOutcome;
+use Nowo\ChatKitBundle\Model\ChatScanSubject;
+use Nowo\ChatKitBundle\Model\ChatScanVerdict;
+
+final readonly class ClamAvScanner implements ChatAttachmentScannerInterface
+{
+    public function scan(ChatScanSubject $subject): ChatScanVerdict
+    {
+        // clamd INSTREAM with connect / read timeouts under $subject->timeoutSeconds; stream $subject->stream in chunks.
+        // Answer Clean, Infected (with the signature), Unscannable or Retry; throwing counts as Retry.
+        return new ChatScanVerdict(ChatScanOutcome::Clean, 'clamav-1.4');
+    }
+}
+```
+
+### How a file travels
+
+1. **Upload** (`POST <chat prefix>/api/conversations/{uuid}/attachments`, multipart `file`, optional
+   `Idempotency-Key`; client API: `chat:write` and a required key). The name is sanitized (NFC, no control or bidi
+   characters, no path separators, at most 255 bytes); the **server** decides the type: ext-fileinfo's magic and the
+   extension's allow-list must agree (`type_mismatch` otherwise), and the stored type comes from the allow-list. Office
+   files are recognised by their first ZIP / OLE header, never decompressed. The bytes go to StorageKit **before** any
+   lock; then one short unit writes the row. The file is a **draft**: only its uploader sees it.
+2. **Scan** (Messenger). A compare-and-set takes the file's lease, your scanner reads a bounded stream, and a second
+   compare-and-set writes the verdict: `clean`, `blocked` (infected; unscannable unless `scan.unscannable: allow`), or
+   back to `uploaded` with a backoff (30 s, 2 min, 10 min, 30 min, 2 h) and `failed` after `scan.max_attempts`. The
+   uploader's open clients get a realtime `attachment` event (ids and the state).
+3. **Send.** `POST …/messages` with `attachments: [uuid…]` (the text may be empty). Under the conversation's lock each
+   file must be a clean draft of the author in this conversation, or the whole send is refused (`409
+   attachment_not_ready`, `422 attachment_invalid`). The dock waits until every file is clean ("send when ready").
+4. **Read.** Message payloads carry `attachments` (clean files only: uuid, name, extension, mediaType, kind, size,
+   state). The dock asks `GET <chat prefix>/api/attachments/{uuid}` for a URL signed for the reader at click time; the
+   client API embeds `urls.original` and `expiresAt` per token and context.
+5. **Download** (`GET <chat prefix>/files/{uuid}/original?e=…&s=…`). Signature and expiry (5 minutes), the reader's
+   live access (reachable, member, the message not deleted), the clean state and the download budget are checked on
+   every request; every refusal is the same empty 404. StorageKit's `FileRangeDeliveryInterface` serves it: a 302 to a
+   bucket URL pre-signed for 60 s, or the stream (`Range` → 206). Always `nosniff`, `default-src 'none'; sandbox` and
+   `attachment`; audio and video may play inline.
+6. **Gone.** Removing a draft or a sent file (its message's deleter), deleting the message, the retention purge, a
+   conversation purge and a GDPR erasure mark the rows `deleted` in their own unit; the StorageKit objects are removed
+   after the commit (Messenger `RemoveChatAttachmentObjects`, and the sweep for whatever a lost message left).
+
+### File types
+
+Groups (`attachments.types`): `image` (PNG, JPEG, GIF, WebP), `pdf`, `text` (txt, log, csv, tsv), `markdown`, `code`
+(about 30 source extensions, always stored as `text/plain`: an `.html` file is text, never a page), `office` (OOXML,
+ODF, legacy OLE), `audio` (mp3, m4a, aac, ogg, opus, wav), `video` (mp4, webm). `archive` (zip, 7z, gz, tar) is
+opt-in. SVG, HTML pages and executables are in no group; `extra_types` adds an extension as kind `other` (always a
+download; the sniffed type must equal the declared one).
+
+### Service for DDD hosts
+
+`Nowo\ChatKitBundle\Contract\ChatAttachmentsInterface` (by public uuid, views only): `upload()`, `drafts()`,
+`attachmentsOf()`, `find()`, `downloadUrl()`, `remove()`, `send()` (a message with files; an optional idempotency
+key) and `block()` (a moderator or a re-scan: clean → blocked, objects removed). `ChatMessagingInterface::send()` is
+unchanged (adding a parameter to an interface would break its implementations).
+
+### Events
+
+`ChatAttachmentUploadedEvent`, `ChatAttachmentScannedEvent` (state, outcome, engine, signature: for the audit only),
+`ChatAttachmentBlockedEvent` (`scan` or `host`), `ChatAttachmentRemovedEvent`, `ChatAttachmentDownloadedEvent` (only
+with `audit_downloads`) and `ChatAttachmentScanOverdueEvent` (the 5-minute alert hook of the sweep). All after the
+commit, ids and scalars only, never a file name.
+
+### Limits
+
+`max_bytes` (the smallest of it, PHP's `upload_max_filesize` / `post_max_size` and StorageKit's
+`upload.files.max_bytes` wins), `max_per_message` (10), `max_pending_per_user` (20 drafts), `pending_ttl_hours` (24),
+`limits.uploads_per_minute` (20), `limits.upload_bytes_per_hour` (500 MiB), `limits.downloads_per_minute` (600).
+
+### Not in 2.7
+
+Previews (image thumbnails and lightbox, PDF thumbnail and viewer, Markdown / text / code cards), link unfurls, the
+*Files and links* tab and file names in push are 2.8. Forwarding a message with files is refused (`has_attachments`).
+
+### "Send as a secret" (2.7, D-20261126-11)
+
+A host whose before-send detector flags a secret may let the person hand the draft to its own secret dialog:
+
+1. `web_ui.dock.secret_handoff: true`, **and** a listener that answers the probe on pages where the dialog exists:
+
+   ```js
+   document.addEventListener('nowo-chat:secret-handoff-probe', (event) => event.preventDefault());
+   ```
+
+2. In the detector (`nowo-chat:before-send`, cancelable), call `event.detail.warn()` for the dock's inline warning
+   (*Send as a secret*, *Send anyway*, *Cancel*; the first only with both opt-ins) or call `event.detail.handOff()`
+   from your own button (present only with both opt-ins).
+3. Listen to `nowo-chat:secret-handoff` (`detail: {text, conversation, kind}`; `kind` is `send`, `thread` or `edit`):
+   open your dialog prefilled with `text`, and after sealing insert the `one_time_secret` card with
+   `nowo-chat:insert-card`. The dock has cleared the draft and its stored copy and sent nothing; call
+   `event.preventDefault()` to keep the draft instead.
+
+The text never leaves the browser through ChatKit. This is the one deliberate exception to "a host dialog never
+receives the draft" ([SECURITY.md](SECURITY.md)). Without the opt-in the dock behaves exactly as in 2.6.
 
 ## Link previews
 

@@ -22,6 +22,7 @@ CSRF, it is unversioned, and native clients must not use it.
 - [Limits](#limits)
 - [Errors](#errors)
 - [Worker mode and concurrency](#worker-mode-and-concurrency)
+- [Attachments (2.7)](#attachments-27)
 - [Implementing the ports (Beacon)](#implementing-the-ports-beacon)
 
 ## Turning it on
@@ -387,6 +388,29 @@ statement). `ChatClientApiWritesTest` writes 120 times on one kernel (two people
 races two worker processes on MySQL 8.4, MariaDB 11.4 and PostgreSQL 16 (CI): duplicate sends under one key (one message
 per key), concurrent reactions of one person (never two rows) and two senders (read cursors and unread counters never
 set back). See [CONCURRENCY.md](CONCURRENCY.md).
+
+## Attachments (2.7)
+
+While `me.features.attachments` is true (the host turned `attachments.enabled` on), see
+[openapi/chat-client-v1.yaml](openapi/chat-client-v1.yaml) (1.4.0):
+
+- `me.limits.attachments`: `maxBytes` (the largest file accepted now), `maxPerMessage`, `kinds`, `extensions`.
+- Messages carry `attachments`: the **clean** files only, each `{uuid, name, extension, mediaType, kind, size, state,
+  urls: {original}, expiresAt}`. `name` is user content: render it as text. The URL is signed for this token and
+  context and expires after 5 minutes; ask `GET attachments/{uuid}` again for a fresh one.
+- `GET files/{uuid}/original?e&s` downloads: send the Bearer token (and the context header) too; the signature binds
+  the token id and the context, and access is checked again. 302 to a bucket URL valid 60 seconds, or the bytes (206 for
+  a single `Range`). Every refusal is an empty 404.
+- Uploads (BD-4; `chat:write`, `client_api.writes`, `Idempotency-Key` per token and conversation):
+  `POST conversations/{uuid}/attachments` (multipart `file`) answers a draft (`state: uploaded`); only its uploader
+  sees it until the scan ends (`clean`, `blocked` or `failed`; poll `GET attachments/{uuid}` or
+  `GET conversations/{uuid}/attachments/drafts`, or listen to the `attachment` realtime event: ids and the state, to the
+  uploader only). Then `POST conversations/{uuid}/messages` with `attachments: [uuid…]` (the text may be empty).
+  Refusals: `400 invalid_file|empty_file|invalid_file_name|content_encoding_refused`, `409 attachment_not_ready`,
+  `413 file_too_large`, `415 file_type_not_allowed|type_mismatch`, `422 attachment_invalid|too_many_attachments|
+  too_many_pending|idempotency_mismatch`, `429 rate_limited`, `503 storage_unavailable`.
+- `DELETE attachments/{uuid}` removes a draft or a file of the caller's own message (edit window); 204, idempotent.
+- A message with files cannot be forwarded in v1.
 
 ## Implementing the ports (Beacon)
 

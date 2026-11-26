@@ -457,6 +457,16 @@
             <button type="button" class="nowo-chat-confirm__yes" data-part="confirm">Delete</button>
         </span>
     </template>
+        <template data-nowo-chat-template="secret-warning">
+        <div class="nowo-chat-secret-warning" role="group" aria-label="Secret warning" data-testid="nowo-chat-secret-warning">
+            <p class="nowo-chat-secret-warning__text" role="alert" data-part="text"></p>
+            <div class="nowo-chat-secret-warning__actions">
+                <button type="button" class="nowo-ui-btn nowo-ui-btn--primary btn btn-primary" data-part="handoff" data-testid="nowo-chat-secret-handoff">Send as a secret</button>
+                <button type="button" class="nowo-ui-btn nowo-ui-btn--secondary btn btn-outline-secondary" data-part="send">Send anyway</button>
+                <button type="button" class="nowo-ui-btn nowo-ui-btn--secondary btn btn-outline-secondary" data-part="cancel">Cancel</button>
+            </div>
+        </div>
+    </template>
         <template data-nowo-chat-template="pending">
         <article class="nowo-chat-msg nowo-chat-msg--mine nowo-chat-msg--pending">
             <div class="nowo-chat-msg__content">

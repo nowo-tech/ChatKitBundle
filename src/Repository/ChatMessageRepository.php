@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Repository;
 
+use Closure;
 use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\ArrayParameterType;
@@ -217,10 +218,12 @@ class ChatMessageRepository extends ServiceEntityRepository
      *
      * @param DateTimeImmutable $cutoff Messages created before this are deleted
      * @param int $batchSize Maximum number of messages per batch
+     * @param (Closure(list<int>): void)|null $beforeDelete 2.7: called with the batch's message ids (thread replies
+     *                                                      included) before they are deleted (their files are marked)
      *
      * @return int The number of messages deleted
      */
-    public function purgeOlderThan(DateTimeImmutable $cutoff, int $batchSize): int
+    public function purgeOlderThan(DateTimeImmutable $cutoff, int $batchSize, ?Closure $beforeDelete = null): int
     {
         $ids = $this->createQueryBuilder('m')
             ->select('m.id')
@@ -240,6 +243,9 @@ class ChatMessageRepository extends ServiceEntityRepository
             ->getQuery()
             ->getSingleColumnResult();
         $ids = array_values(array_unique([...$ids, ...$replies]));
+        if ($beforeDelete instanceof Closure) {
+            $beforeDelete(array_values(array_map(intval(...), $ids)));
+        }
         ChatKitSavepoint::write($this->getEntityManager(), fn (): mixed => $this->getEntityManager()->createQueryBuilder()
             ->delete(ChatMessageRevision::class, 'rv')
             ->where('IDENTITY(rv.message) IN (:ids)')

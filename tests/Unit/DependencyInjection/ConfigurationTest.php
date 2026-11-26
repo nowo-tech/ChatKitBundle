@@ -46,7 +46,8 @@ final class ConfigurationTest extends TestCase
             'auto_reply_interval_hours' => 4,
             'max_pins'                  => 20,
             'auto_away_minutes'         => 10,
-            'dock'                      => ['overlay' => 'hide', 'watch_aria_modal' => false],
+            'dock'                      => ['overlay' => 'hide', 'watch_aria_modal' => false, 'secret_handoff' => false],
+            'attachments'               => ['enabled' => false, 'scanner' => null, 'scope_resolver' => null, 'max_bytes' => 26_214_400, 'max_per_message' => 10, 'max_pending_per_user' => 20, 'pending_ttl_hours' => 24, 'types' => ['image', 'pdf', 'text', 'markdown', 'code', 'office', 'audio', 'video'], 'extra_types' => [], 'scan' => ['timeout_seconds' => 60, 'lease_seconds' => 300, 'max_attempts' => 5, 'unscannable' => 'block', 'alert_after_seconds' => 300], 'download' => ['url_ttl_seconds' => 300, 'bind_session' => true, 'storage_ttl_seconds' => 60], 'audit_downloads' => false, 'limits' => ['uploads_per_minute' => 20, 'upload_bytes_per_hour' => 524_288_000, 'downloads_per_minute' => 600]],
             'links'                     => ['enabled' => true, 'max_pinned' => 20, 'allow_http' => false, 'channel_managers' => 'members', 'providers' => Configuration::DEFAULT_LINK_PROVIDERS],
             'client_api'                => ['principal_resolver' => null, 'context_policy' => null, 'token_revoker' => null, 'writes' => false, 'prefix' => '/api', 'context_header' => 'X-Chat-Context', 'limits' => ['per_ip_per_minute' => 300, 'per_token_per_minute' => 60, 'writes_per_token_per_minute' => 30]],
             'search'                    => ['enabled' => false, 'dock_entry' => true, 'conversation_entry' => true, 'fulltext' => true, 'postgresql_config' => 'simple', 'mysql_min_token_length' => 3, 'min_query_length' => 2, 'max_query_length' => 200, 'page_size' => 20],
@@ -150,7 +151,7 @@ final class ConfigurationTest extends TestCase
     {
         $config = $this->process([['profiles' => ['default' => ['dock' => ['overlay' => 'inert', 'watch_aria_modal' => true]]]]]);
 
-        self::assertSame(['overlay' => 'inert', 'watch_aria_modal' => true], $config['profiles']['default']['dock']);
+        self::assertSame(['overlay' => 'inert', 'watch_aria_modal' => true, 'secret_handoff' => false], $config['profiles']['default']['dock']);
     }
 
     public function testUnknownDockOverlayModeIsRejected(): void

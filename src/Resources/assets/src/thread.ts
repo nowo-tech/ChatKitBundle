@@ -19,10 +19,12 @@ import { openSearchDialog } from './search-dialog';
 import { ThreadPanel } from './thread-panel';
 import { SupportPanel } from './support';
 import { loadDialogRuntime } from './sidebar';
-import { beforeSend, CardTray, type CardRef, dialogUrl, openSlotDialog, selectionIn, sendSlotPayload, setCardTarget, slashAction, slotFor, withCards } from './slots';
+import { AttachmentTray, downloadFile, renderFiles } from './attachments';
+import { handOffSecret, secretHandoffAvailable, showSecretWarning } from './secret-handoff';
+import { beforeSend, type BeforeSendExtras, CardTray, type CardRef, type SendKind, dialogUrl, openSlotDialog, selectionIn, sendSlotPayload, setCardTarget, slashAction, slotFor, withCards } from './slots';
 import { customStatus, statusLabel } from './status';
 import { part, text, type Templates } from './templates';
-import type { ChatConfig, ChatMessage, ComposerAction, ConversationSlots, ConversationSummary, MenuSlot, LinkPreview, PendingMessage, Reader, ThreadSummary } from './types';
+import type { AttachmentState, ChatConfig, ChatMessage, ComposerAction, ConversationSlots, ConversationSummary, MenuSlot, LinkPreview, PendingMessage, Reader, ThreadSummary } from './types';
 
 /** What a conversation window needs from the dock that hosts it (ChatDock). */
 export interface ThreadHost {
@@ -239,6 +241,8 @@ export class ThreadView {
   private readonly support: SupportPanel;
   /** 2.6 (spec 259): the cards waiting in the composer (null without `slots` settings). */
   private readonly cardTray: CardTray | null = null;
+  /** 2.7 (spec 259): the composer's files (null while attachments are off). */
+  private readonly attachmentTray: AttachmentTray | null = null;
   /** 2.6: the conversation's card types, composer actions and message menu slots. */
   private slots: ConversationSlots = { cardTypes: [], composerActions: [], menuSlots: [] };
 
@@ -367,6 +371,27 @@ export class ThreadView {
         loadDialogRuntime(slotSettings.dialogRuntime);
       }
       void this.loadSlots();
+    }
+    // 2.7 (spec 259): attachments (absent while they are off).
+    const attachmentSettings = host.config.attachments;
+    if (attachmentSettings !== undefined) {
+      this.attachmentTray = new AttachmentTray({
+        i18n,
+        settings: attachmentSettings,
+        api: host.api,
+        conversationUuid: () => this.summary.uuid,
+        icon: (name, size) => host.templates.icon(name, size ?? 16),
+        changed: () => this.updateComposerState(),
+        focusAfterRemove: () => this.input.focus(),
+      });
+      const field = this.composer.querySelector('.nowo-chat-composer__field');
+      if (field !== null) {
+        field.before(this.attachmentTray.element);
+      } else {
+        this.composer.prepend(this.attachmentTray.element);
+      }
+      const tools = this.composer.querySelector('[data-part="composer-tools"]') ?? this.composer;
+      tools.prepend(this.attachmentTray.button, this.attachmentTray.input);
     }
     this.support = new SupportPanel(
       {
@@ -1655,7 +1680,8 @@ export class ThreadView {
         return;
       }
       // 2.6 (audit ZCI-L4): the host's before-send check runs for edits too; sendAnyway() saves as is.
-      if (!force && beforeSend(this.dockRoot(), this.summary.uuid, body, () => void save(true), 'edit')) {
+      const saveAnyway = (): void => void save(true);
+      if (!force && beforeSend(this.dockRoot(), this.summary.uuid, body, saveAnyway, 'edit', this.secretExtras(body, 'edit', saveAnyway, stop, form))) {
         return;
       }
       part<HTMLButtonElement>(form, 'save').disabled = true;
@@ -1770,7 +1796,8 @@ export class ThreadView {
       return;
     }
     const body = withCards(text, cards);
-    if (body === '' || !this.summary.canSend) {
+    const tray = this.attachmentTray;
+    if ((body === '' && tray?.hasFiles !== true) || !this.summary.canSend) {
       return;
     }
     if (body.length > this.host.config.maxLength) {
@@ -1778,20 +1805,32 @@ export class ThreadView {
       return;
     }
     // 2.6: the host may warn first (`nowo-chat:before-send`, e.g. a secret in the text); sendAnyway() sends as is.
-    if (!force && beforeSend(this.dockRoot(), this.summary.uuid, text, () => void this.submit(true))) {
+    // 2.7: it may show the dock's warning, and offer "Send as a secret" when the host opted in to the hand-off.
+    const sendAnyway = (): void => void this.submit(true);
+    if (!force && text !== '' && beforeSend(this.dockRoot(), this.summary.uuid, text, sendAnyway, 'send', this.secretExtras(text, 'send', sendAnyway, () => this.clearComposer(), this.composer))) {
       return;
     }
+    // 2.7: send when ready — every file clean first; a blocked or failed one is removed by the person.
+    if (tray?.hasFiles === true && !tray.ready) {
+      if (tray.rejected || !(await tray.waitUntilReady())) {
+        this.flashNotice(t(this.host.config.i18n, 'attachment.blocked'));
+        return;
+      }
+    }
+    const files = tray?.uuids ?? [];
     const pending: PendingMessage = {
       clientId: `c${Date.now()}${Math.random().toString(36).slice(2, 7)}`,
       body,
       createdAt: new Date().toISOString(),
       status: 'sending',
+      ...(files.length > 0 ? { attachments: files } : {}),
     };
     this.pending.push(pending);
     this.input.value = '';
     this.mention.reset();
     this.reference?.reset();
     this.cardTray?.reset();
+    tray?.reset();
     this.host.saveDraft(this.summary.uuid, '');
     this.autoGrow();
     this.updateComposerState();
@@ -1809,7 +1848,7 @@ export class ThreadView {
     pending.status = 'sending';
     this.render();
     try {
-      this.settle(pending, await this.host.api.send(this.summary.uuid, pending.body));
+      this.settle(pending, await (pending.attachments === undefined ? this.host.api.send(this.summary.uuid, pending.body) : this.host.api.send(this.summary.uuid, pending.body, pending.attachments)));
     } catch (error) {
       const echoed = this.echoOf(pending, error);
       if (echoed !== undefined) {
@@ -1826,6 +1865,9 @@ export class ThreadView {
         pending.error = t(i18n, 'too_long', { max: this.host.config.maxLength });
       } else if (code === 'card_not_allowed') {
         pending.error = t(i18n, 'card_not_allowed');
+      } else if (code === 'attachment_not_ready' || code === 'attachment_invalid' || code === 'too_many_attachments') {
+        // 2.7: a file was removed, blocked or is still being checked.
+        pending.error = t(i18n, 'attachment.failed');
       } else if (code === 'read_only') {
         pending.error = t(i18n, 'read_only');
         this.applySummary({ ...this.summary, canSend: false });
@@ -2091,6 +2133,14 @@ export class ThreadView {
       }
     }
 
+    // 2.7 (spec 259): the message's files (name and size as text; Download asks for a URL signed for this reader).
+    const files = message.deleted ? [] : (message.attachments ?? []);
+    if (files.length > 0) {
+      bubble.hidden = message.html === '';
+      bubble.after(renderFiles(files, i18n, (name, size) => templates.icon(name, size ?? 16), (uuid) => {
+        downloadFile(this.host.api, uuid).catch(() => this.flashNotice(t(i18n, 'error')));
+      }));
+    }
     if (!message.deleted && message.forwarded !== undefined) {
       // 1.36: a forward says so; its source only when the viewer may read it (the server decides).
       const from = message.forwarded.from === 'channel' && message.forwarded.label !== null ? t(i18n, 'forwarded_from_channel', { name: message.forwarded.label }) : message.forwarded.from === 'direct' ? t(i18n, 'forwarded_from_direct') : t(i18n, 'forwarded');
@@ -2261,7 +2311,8 @@ export class ThreadView {
         // 1.36
         thread: offered.thread === true && (endpoints.thread ?? '') !== '',
         // 2.6: a message with typed cards is not forwarded in v1 (the server refuses it too).
-        forward: offered.forward === true && (endpoints.forward ?? '') !== '' && message.hasCards !== true,
+        // 2.7 (Q-259-8 A): nor one with files.
+        forward: offered.forward === true && (endpoints.forward ?? '') !== '' && message.hasCards !== true && (message.attachments?.length ?? 0) === 0,
       },
       saved,
       reply: message.threadRootUuid !== undefined,
@@ -2611,7 +2662,7 @@ export class ThreadView {
       returnTo: article,
       rootChanged: (root) => this.update(root),
       // 2.6 (audit ZCI-L4): the host's before-send check runs for thread replies too.
-      beforeSend: (text, sendAnyway) => beforeSend(this.dockRoot(), this.summary.uuid, text, sendAnyway, 'thread'),
+      beforeSend: (text, sendAnyway, clear, anchor) => beforeSend(this.dockRoot(), this.summary.uuid, text, sendAnyway, 'thread', this.secretExtras(text, 'thread', sendAnyway, clear ?? ((): void => undefined), anchor ?? this.composer)),
       closed: () => {
         if (this.threadPanel === panel) {
           this.threadPanel = null;
@@ -2993,6 +3044,56 @@ export class ThreadView {
    *
    * @returns The root element.
    */
+  /**
+   * 2.7 (spec 259): a state of one of the viewer's own files (realtime `attachment` event).
+   *
+   * @param uuid Attachment uuid.
+   * @param state New state.
+   */
+  attachmentState(uuid: string, state: AttachmentState): void {
+    this.attachmentTray?.setState(uuid, state);
+  }
+
+  /**
+   * 2.7 (D-20261126-11): the extras of a `nowo-chat:before-send`: the dock's inline warning, and "Send as a secret"
+   * when the host opted in (configuration flag and the probe answered). The hand-off clears the draft (and its stored
+   * copy) unless the host cancels the event; nothing is sent.
+   *
+   * @param text The text about to be sent.
+   * @param kind Where it comes from.
+   * @param sendAnyway Sends it without asking again.
+   * @param clear Empties the draft after a hand-off.
+   * @param anchor Where the warning goes.
+   * @returns The extras.
+   */
+  private secretExtras(text: string, kind: SendKind, sendAnyway: () => void, clear: () => void, anchor: HTMLElement): BeforeSendExtras {
+    const root = this.dockRoot();
+    const handOff = secretHandoffAvailable(root, this.host.config.dock?.secretHandoff === true)
+      ? (): void => {
+          if (handOffSecret(root, this.summary.uuid, text, kind)) {
+            clear();
+          }
+        }
+      : undefined;
+    return {
+      ...(handOff === undefined ? {} : { handOff }),
+      warn: (message?: string): void => {
+        showSecretWarning(anchor, this.host.templates, { i18n: this.host.config.i18n, message, handOff, sendAnyway, done: () => this.input.focus() });
+      },
+    };
+  }
+
+  /** 2.7: empties the composer and purges its stored draft (a secret handed off is never kept or sent). */
+  private clearComposer(): void {
+    this.input.value = '';
+    this.mention.reset();
+    this.reference?.reset();
+    this.cardTray?.reset();
+    this.host.saveDraft(this.summary.uuid, '');
+    this.autoGrow();
+    this.updateComposerState();
+  }
+
   private dockRoot(): HTMLElement {
     return this.element.closest<HTMLElement>('[data-nowo-chat-config]') ?? document.querySelector<HTMLElement>('[data-nowo-chat-config]') ?? this.element;
   }
@@ -3001,7 +3102,8 @@ export class ThreadView {
     const length = this.input.value.trim().length;
     const max = this.host.config.maxLength;
     const cards = this.cardTray?.items.length ?? 0;
-    this.sendBtn.disabled = (length === 0 && cards === 0) || length > max || !this.summary.canSend;
+    const files = this.attachmentTray?.hasFiles === true ? 1 : 0;
+    this.sendBtn.disabled = (length === 0 && cards === 0 && files === 0) || length > max || !this.summary.canSend;
     const remaining = max - this.input.value.length;
     this.counter.hidden = remaining > 200;
     this.counter.textContent = String(remaining);

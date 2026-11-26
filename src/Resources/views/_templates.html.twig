@@ -424,6 +424,18 @@
             <button type="button" class="nowo-chat-confirm__yes" data-part="confirm">{{ 'chat.delete'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
         </span>
     </template>
+    {# 2.7 (D-20261126-11): the inline secret warning a host may ask for from nowo-chat:before-send (detail.warn()). Primary
+       first (house rule); "Send as a secret" is removed by the dock unless the host opted in to the hand-off. #}
+    <template data-nowo-chat-template="secret-warning">
+        <div class="nowo-chat-secret-warning" role="group" aria-label="{{ 'chat.secret_handoff.label'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-testid="nowo-chat-secret-warning">
+            <p class="nowo-chat-secret-warning__text" role="alert" data-part="text"></p>
+            <div class="nowo-chat-secret-warning__actions">
+                <button type="button" class="{{ nowo_ui_class('btn_primary', 'NowoChatKitBundle') }}" data-part="handoff" data-testid="nowo-chat-secret-handoff">{{ 'chat.secret_handoff.send'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                <button type="button" class="{{ nowo_ui_class('btn_secondary', 'NowoChatKitBundle') }}" data-part="send">{{ 'chat.secret_handoff.send_anyway'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+                <button type="button" class="{{ nowo_ui_class('btn_secondary', 'NowoChatKitBundle') }}" data-part="cancel">{{ 'chat.cancel'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+            </div>
+        </div>
+    </template>
     {# A message sent from here, not yet confirmed by the server. #}
     <template data-nowo-chat-template="pending">
         <article class="nowo-chat-msg nowo-chat-msg--mine nowo-chat-msg--pending">

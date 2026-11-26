@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Twig;
 
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentOptions;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentTypes;
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Badge\ChatAuthorBadges;
 use Nowo\ChatKitBundle\Card\ChatCards;
@@ -110,7 +112,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
      * @param ClockInterface $clock Clock for the user's own status (expiry)
      * @param array<string, mixed> $statusPresets Suggested custom statuses (`status_presets`, 1.12: `quick` and `more`)
      * @param ChatAvatars|null $avatars 1.16: the user's own picture (`me.avatarUrl`); null gives null
-     * @param array{overlay?: string, watch_aria_modal?: bool} $dock 1.17: dock reaction to modal overlays (`dock`)
+     * @param array{overlay?: string, watch_aria_modal?: bool, secret_handoff?: bool} $dock 1.17: dock reaction to modal overlays (`dock`); 2.7: `secret_handoff`
      * @param ChatLinks|null $links 1.19: pinned links, link cards and the Links panel (`links`); null or disabled hides them
      * @param string|null $channelsUrl 1.24: host page to browse or create channels (`web_ui.channels_url`); null: no link
      * @param ChatCurrentUserPort|null $currentUser 1.24: the signed-in user's chat participant; null: the security user when it implements ChatUserInterface
@@ -148,7 +150,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly ClockInterface $clock = new Clock(),
         private readonly array $statusPresets = Configuration::DEFAULT_STATUS_PRESETS,
         private readonly ?ChatAvatars $avatars = null,
-        private readonly array $dock = ['overlay' => 'hide', 'watch_aria_modal' => false],
+        private readonly array $dock = ['overlay' => 'hide', 'watch_aria_modal' => false, 'secret_handoff' => false],
         private readonly ?ChatLinks $links = null,
         private readonly ?string $channelsUrl = null,
         private readonly ?ChatCurrentUserPort $currentUser = null,
@@ -163,6 +165,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly bool $searchDockEntry = false,
         private readonly bool $searchConversationEntry = false,
         private readonly ?ChatCards $cards = null,
+        private readonly ?ChatAttachmentOptions $attachmentOptions = null,
+        private readonly ?ChatAttachmentTypes $attachmentTypes = null,
     ) {
     }
 
@@ -337,6 +341,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'dock' => [
                 'overlay'        => $this->dock['overlay'] ?? 'hide',
                 'watchAriaModal' => $this->dock['watch_aria_modal'] ?? false,
+                // 2.7 (D-20261126-11): "Send as a secret" may be offered (the host must also answer the probe event).
+                'secretHandoff' => $this->dock['secret_handoff'] ?? false,
             ],
             // 1.19: links (absent when the feature is off).
             'links' => $this->linksConfig(),
@@ -344,7 +350,30 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         ] + ($this->channelsUrl === null || preg_match(Configuration::CHANNELS_URL_PATTERN, $this->channelsUrl) !== 1 ? [] : ['channelsUrl' => $this->channelsUrl])
             + $this->sidebarConfig()
             + $this->contextMenuConfig()
-            + $this->slotsConfig();
+            + $this->slotsConfig()
+            + $this->attachmentsConfig();
+    }
+
+    /**
+     * 2.7 (spec 259): `attachments` (only while they are on): the upload, drafts and file endpoints, the effective size
+     * limit, files per message and the allowed extensions (the picker's `accept`).
+     *
+     * @return array{attachments?: array<string, mixed>}
+     */
+    private function attachmentsConfig(): array
+    {
+        if (!$this->attachmentOptions instanceof ChatAttachmentOptions || !$this->attachmentTypes instanceof ChatAttachmentTypes) {
+            return [];
+        }
+
+        return ['attachments' => [
+            'upload'        => $this->pattern('nowo_chat_api_attachment_upload'),
+            'drafts'        => $this->pattern('nowo_chat_api_attachment_drafts'),
+            'attachment'    => $this->pattern('nowo_chat_api_attachment'),
+            'maxBytes'      => $this->attachmentOptions->effectiveMaxBytes(),
+            'maxPerMessage' => $this->attachmentOptions->maxPerMessage,
+            'extensions'    => $this->attachmentTypes->extensions(),
+        ]];
     }
 
     /**

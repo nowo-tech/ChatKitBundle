@@ -36,6 +36,8 @@ final readonly class TablePrefixListener
      * `nowo_chat_kit.doctrine.tables` map and one `nowo_chat_kit.doctrine.table.<key>` parameter per table.
      */
     public const array TABLES = [
+        // 2.7: chat attachments (spec 259).
+        'attachment'        => 'nowo_chat_attachment',
         'conversation'      => 'nowo_chat_conversation',
         'conversation_link' => 'nowo_chat_conversation_link',
         // 1.36: idempotency keys, edit history and thread read state (alphabetical, as the schema lists them).

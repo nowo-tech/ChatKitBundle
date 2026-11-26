@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Command;
 
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentCleanup;
 use Nowo\ChatKitBundle\Contract\RetentionPolicyProviderInterface;
 use Nowo\ChatKitBundle\Repository\ChatConversationLinkRepository;
 use Nowo\ChatKitBundle\Repository\ChatIdempotencyKeyRepository;
@@ -25,7 +26,10 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Throwable;
 
+use function array_filter;
+use function array_values;
 use function count;
+use function is_int;
 use function sprintf;
 
 use const DATE_ATOM;
@@ -51,6 +55,7 @@ final class ChatPurgeCommand extends Command
      * @param RetentionPolicyProviderInterface|null $retention 1.31: the host's retention, asked again on every run (null: `$retentionDays` only)
      * @param ChatReadMarkRepository|null $readMarks 1.35: read times older than the window go too (message info)
      * @param ChatIdempotencyKeyRepository|null $idempotencyKeys 1.36: `Idempotency-Key`s older than a day go too
+     * @param ChatAttachmentCleanup|null $attachments 2.7 (spec 259): the files of purged messages go too
      */
     public function __construct(
         private readonly ChatMessageRepository $messages,
@@ -61,6 +66,7 @@ final class ChatPurgeCommand extends Command
         private readonly ?RetentionPolicyProviderInterface $retention = null,
         private readonly ?ChatReadMarkRepository $readMarks = null,
         private readonly ?ChatIdempotencyKeyRepository $idempotencyKeys = null,
+        private readonly ?ChatAttachmentCleanup $attachments = null,
     ) {
         parent::__construct();
     }
@@ -88,7 +94,14 @@ final class ChatPurgeCommand extends Command
             }
             $this->logger->info('Chat purge started.', ['retention_days' => $days, 'cutoff' => $cutoff->format(DATE_ATOM), 'max_batches' => $max]);
             for ($batch = 0; $batch < $max; ++$batch) {
-                $count = $this->messages->purgeOlderThan($cutoff, self::BATCH);
+                $files = false;
+                $mark  = $this->attachments instanceof ChatAttachmentCleanup ? function (array $ids) use ($now, &$files): void {
+                    $files = $this->attachments?->forMessages(array_values(array_filter($ids, is_int(...))), $now) === true || $files;
+                } : null;
+                $count = $this->messages->purgeOlderThan($cutoff, self::BATCH, $mark);
+                if ($files) {
+                    $this->attachments?->afterCommit();
+                }
                 $deleted += $count;
                 if ($count < self::BATCH) {
                     break;

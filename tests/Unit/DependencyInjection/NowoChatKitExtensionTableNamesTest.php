@@ -27,6 +27,7 @@ final class NowoChatKitExtensionTableNamesTest extends TestCase
         $container = $this->load([]);
 
         self::assertSame([
+            'attachment'        => 'nowo_chat_attachment',
             'conversation'      => 'nowo_chat_conversation',
             'conversation_link' => 'nowo_chat_conversation_link',
             'idempotency'       => 'nowo_chat_idempotency',

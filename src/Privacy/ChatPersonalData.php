@@ -12,6 +12,7 @@ use Doctrine\ORM\Query;
 use Doctrine\ORM\QueryBuilder;
 use InvalidArgumentException;
 use LogicException;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentCleanup;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatUserReferenceDirectoryInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
@@ -118,6 +119,7 @@ final readonly class ChatPersonalData
      * @param EventDispatcherInterface|null $events Receives {@see ChatMentionsErasedEvent} (1.18); null dispatches none
      * @param LoggerInterface|null $logger Logs a failed `message_updated` broadcast after the commit (1.18); null logs nothing
      * @param TransactionRunnerInterface|null $transactions 1.30: runs the erasures; null uses ChatKit's default runner
+     * @param ChatAttachmentCleanup|null $attachments 2.7 (spec 259): exports and erases the person's uploads; null: attachments off
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -132,6 +134,7 @@ final readonly class ChatPersonalData
         private ChatUserReferences $refs = new ChatUserReferences(),
         private ?ChatDirectoryInterface $directory = null,
         ?TransactionRunnerInterface $transactions = null,
+        private ?ChatAttachmentCleanup $attachments = null,
     ) {
         $this->transactions = $transactions ?? new ChatKitTransactionRunner($entityManager);
     }
@@ -263,7 +266,10 @@ final readonly class ChatPersonalData
             'thread_reads' => $threadReads,
             'forwards'     => $forwards,
             'revisions'    => $revisions,
-        ];
+        ] + ($this->attachments instanceof ChatAttachmentCleanup ? [
+            // 2.7 (spec 259): the person's uploads (the bytes come from StorageKit's export, joined by `storage_uuid`).
+            'attachments' => $this->attachments->export($user),
+        ] : []);
     }
 
     /**
@@ -344,6 +350,8 @@ final readonly class ChatPersonalData
         // and leaves no transaction open).
         [$erasure, $removedLinks] = ChatKitWrites::runRecovering($this->transactions, $this->entityManager, function () use ($qb, $user): array {
             $erasure = $this->scrubMentions($user, self::ERASED_MENTION);
+            // 2.7 (spec 259): every file the person uploaded is deleted (sent or not) and forgets them.
+            $this->attachments?->forUploader($user, $this->clock->now());
             $this->keepModeratedState($user);
             foreach ([[ChatMessage::class, 'pinnedBy'], [ChatMessage::class, 'deletedBy'], [ChatConversation::class, 'assignee'], [ChatConversation::class, 'resolvedBy']] as [$entity, $field]) {
                 $this->byUser($qb()->update($entity, 'x')->set($this->refs->field('x', $field), ':none')->setParameter('none', null), 'x', $entity, $field, $user)
@@ -389,6 +397,8 @@ final readonly class ChatPersonalData
             // Every support ticket of the user (and the intake draft), with its messages (1.27: exactly this user's).
             $tickets = array_filter($this->conversations->findBy($this->refs->criteria('supportOwner', $user)), static fn (ChatConversation $support): bool => ChatUserReferences::same($support->getSupportOwner(), $user));
             foreach ($tickets as $support) {
+                // 2.7: the ticket's files (other people's too) go with it.
+                $this->attachments?->forConversation((int) $support->getId(), $this->clock->now());
                 $messageIds = $qb()->select('m.id')->from(ChatMessage::class, 'm')->where('m.conversation = :c')->setParameter('c', $support)->getQuery()->getSingleColumnResult();
                 if ($messageIds !== []) {
                     $qb()->delete(ChatReaction::class, 'r')->where('IDENTITY(r.message) IN (:ids)')->setParameter('ids', $messageIds)->getQuery()->execute();
@@ -421,6 +431,8 @@ final readonly class ChatPersonalData
             ChatKitManagedRows::refreshManaged($this->entityManager, $class);
         }
 
+        // 2.7: the objects of the deleted files go after the commit (the sweep catches up when this fails).
+        $this->attachments?->afterCommit();
         // Audit FT-L2: the event first (host re-index, skipped report), then the best-effort broadcast.
         $this->dispatchErased($erasure);
         $this->publishRewritten($erasure->messageIds);

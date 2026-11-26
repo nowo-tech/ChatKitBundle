@@ -43,6 +43,14 @@ export const DIALOG_LOADED = 'nowo-ui:remote-form:loaded';
 /** UiKit's remote dialog: it closed (bubbles, on the dialog). */
 export const DIALOG_CLOSED = 'nowo-ui:remote-form:closed';
 
+/** 2.7: what a `nowo-chat:before-send` may also offer the host. */
+export interface BeforeSendExtras {
+  /** Shows the dock's inline secret warning (optional host text). */
+  warn?: (message?: string) => void;
+  /** Hands the draft to the host (`nowo-chat:secret-handoff`); only with the host's opt-in. */
+  handOff?: () => void;
+}
+
 /** Where a `nowo-chat:before-send` comes from: the composer, a thread reply or an edit (audit ZCI-L4). */
 export type SendKind = 'send' | 'thread' | 'edit';
 
@@ -258,20 +266,26 @@ export function bindInsertCard(root: HTMLElement): () => void {
  * @param text The text about to be sent.
  * @param sendAnyway Sends the same text without the event.
  * @param kind Where the text is sent from.
+ * @param extra 2.7: the dock's inline warning and (with the host's opt-in) the secret hand-off.
  * @returns True when the host cancelled the send.
  */
-export function beforeSend(root: HTMLElement, conversationUuid: string, text: string, sendAnyway: () => void, kind: SendKind = 'send'): boolean {
+export function beforeSend(root: HTMLElement, conversationUuid: string, text: string, sendAnyway: () => void, kind: SendKind = 'send', extra: BeforeSendExtras = {}): boolean {
   let used = false;
+  const once = (run: () => void): (() => void) => (): void => {
+    if (!used) {
+      used = true;
+      run();
+    }
+  };
   const detail = Object.freeze({
     conversationUuid,
     text,
     kind,
-    sendAnyway: (): void => {
-      if (!used) {
-        used = true;
-        sendAnyway();
-      }
-    },
+    sendAnyway: once(sendAnyway),
+    // 2.7 (D-20261126-11): the dock's own inline warning (Cancel / Send anyway, and "Send as a secret" when offered).
+    ...(extra.warn === undefined ? {} : { warn: extra.warn }),
+    // 2.7: present only when the host opted in to the hand-off (flag and probe): hands the draft over in the browser.
+    ...(extra.handOff === undefined ? {} : { handOff: once(extra.handOff) }),
   });
   return !root.dispatchEvent(new CustomEvent(BEFORE_SEND, { detail, cancelable: true, bubbles: true }));
 }

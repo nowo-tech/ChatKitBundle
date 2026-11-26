@@ -1660,6 +1660,18 @@ describe('ChatDock', () => {
       expect(api.pinnedLinks).toHaveBeenCalledTimes(1);
     });
 
+    it('2.7: an attachment event reaches the open window only', async () => {
+      const { dock } = mount([summary('a')], { endpoints, i18n: i18nPlus });
+      await dock.start();
+      await dock.open(summary('a'));
+      const window = (dock as unknown as { windows: Map<string, { attachmentState: (uuid: string, state: string) => void }> }).windows.get('a');
+      const changed = vi.spyOn(window as { attachmentState: (uuid: string, state: string) => void }, 'attachmentState');
+      realtimeHandlers?.onEvent({ type: 'attachment', conversationUuid: 'a', attachmentUuid: 'f1', state: 'clean' });
+      realtimeHandlers?.onEvent({ type: 'attachment', conversationUuid: 'closed', attachmentUuid: 'f2', state: 'blocked' });
+      expect(changed).toHaveBeenCalledTimes(1);
+      expect(changed).toHaveBeenCalledWith('f1', 'clean');
+    });
+
     it('1.35: unread and saved events reach the open window; a window\'s mark unread reloads the list', async () => {
       const { dock } = mount([summary('a')], { endpoints, i18n: i18nPlus });
       await dock.start();

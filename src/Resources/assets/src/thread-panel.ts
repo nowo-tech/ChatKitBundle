@@ -39,8 +39,11 @@ export interface ThreadPanelOptions {
   rootChanged?: (root: ChatMessage) => void;
   /** The panel closed. */
   closed?: () => void;
-  /** 2.6 (audit ZCI-L4): asks the host before a reply (`nowo-chat:before-send`); true when the host cancelled it. */
-  beforeSend?: (text: string, sendAnyway: () => void) => boolean;
+  /**
+   * 2.6 (audit ZCI-L4): asks the host before a reply (`nowo-chat:before-send`); true when the host cancelled it. 2.7:
+   * `clear` empties the reply box (a secret handed off) and `anchor` is where the dock's warning goes.
+   */
+  beforeSend?: (text: string, sendAnyway: () => void, clear?: () => void, anchor?: HTMLElement) => boolean;
 }
 
 /** The open thread panel of a conversation window. */
@@ -201,7 +204,10 @@ export class ThreadPanel {
       return;
     }
     // 2.6 (audit ZCI-L4): the host may warn first; sendAnyway() sends the text as it is now.
-    if (!force && this.options.beforeSend?.(body, () => void this.submit(true)) === true) {
+    const clear = (): void => {
+      this.input.value = '';
+    };
+    if (!force && this.options.beforeSend?.(body, () => void this.submit(true), clear, this.input.closest('form') ?? this.input) === true) {
       return;
     }
     // The same text keeps its key: a retry after a lost answer is one reply.

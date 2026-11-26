@@ -85,6 +85,8 @@ export interface ChatMessage {
   references?: Reference[];
   /** 2.6: the message holds typed cards (it cannot be forwarded in v1). */
   hasCards?: boolean;
+  /** 2.7 (spec 259): the message's clean files (present while attachments are on). */
+  attachments?: AttachmentStub[];
   /** Viewer-neutral realtime payload: its reference cards are fetched for the viewer (`GET` the message). */
   refsPending?: boolean;
   /** 1.36: a forward: where it came from (`from`/`label` only when the viewer may read the source; else "Forwarded"). */
@@ -230,6 +232,8 @@ export interface PendingMessage {
   createdAt: string;
   status: 'sending' | 'failed';
   error?: string;
+  /** 2.7: the clean drafts sent with it. */
+  attachments?: string[];
 }
 
 export interface Contact {
@@ -387,7 +391,33 @@ export type RealtimeEvent =
   | { type: 'links'; conversationUuid: string }
   | { type: 'unread'; conversationUuid: string; readUpTo: number | null }
   | { type: 'saved'; conversationUuid: string; messageUuid: string; saved: boolean }
-  | { type: 'thread'; conversationUuid: string; rootUuid: string; replyCount: number; lastReplyAt: string | null };
+  | { type: 'thread'; conversationUuid: string; rootUuid: string; replyCount: number; lastReplyAt: string | null }
+  /** 2.7 (spec 259): one of the viewer's own attachments changed state (ids and the state only). */
+  | { type: 'attachment'; conversationUuid: string; attachmentUuid: string; state: AttachmentState };
+
+/** 2.7 (spec 259): where a file is in its life (readers only ever see `clean`). */
+export type AttachmentState = 'uploaded' | 'scanning' | 'clean' | 'blocked' | 'failed';
+
+/** 2.7: a file as the server describes it (no URL: downloads are signed per reader on demand). */
+export interface AttachmentStub {
+  uuid: string;
+  name: string;
+  extension: string;
+  mediaType: string;
+  kind: string;
+  size: number;
+  state: AttachmentState;
+}
+
+/** 2.7: the dock's attachment endpoints (`__uuid__`: conversation, or attachment for `attachment`) and limits. */
+export interface AttachmentSettings {
+  upload: string;
+  drafts: string;
+  attachment: string;
+  maxBytes: number;
+  maxPerMessage: number;
+  extensions: string[];
+}
 
 /** 1.17: `hide` (invisible and inert), `inert` (painted, inert) or `none` (1.16 behaviour). */
 export type DockOverlayMode = 'hide' | 'inert' | 'none';
@@ -508,7 +538,9 @@ export interface ChatConfig {
    * 1.17: what the floating dock does while the page shows a modal overlay (`dock` config; absent before 1.17 = `hide`
    * without the watcher). Driven by the `nowo:overlay-open` / `nowo:overlay-close` events and `html[data-nowo-overlay]`.
    */
-  dock?: { overlay?: DockOverlayMode; watchAriaModal?: boolean };
+  dock?: { overlay?: DockOverlayMode; watchAriaModal?: boolean; secretHandoff?: boolean };
+  /** 2.7 (spec 259): attachments (absent while they are off). */
+  attachments?: AttachmentSettings;
   /** 1.19: pinned links and the links panel (absent or `enabled: false`: no links UI). */
   links?: LinksSettings;
   /** 1.25: the full-page chat opens the most recent conversation (`web_ui.page.open_recent`; absent = no). */

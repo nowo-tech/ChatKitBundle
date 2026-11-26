@@ -120,7 +120,7 @@
                                         <div class="nowo-chat-bubble nowo-chat-bubble--deleted">{{ (message.moderated ? 'chat.moderated_message' : (message.mine ? 'chat.deleted_message_mine' : 'chat.deleted_message'))|trans }}</div>
                                     {% else %}
                                         {# Server-sanitised Markdown render (escape-first, closed tag set). #}
-                                        <div class="nowo-chat-bubble">{{ message.html|raw }}</div>
+                                        {% if (message.attachments ?? []) is not empty %}<ul class="nowo-chat-files" role="list">{% for file in message.attachments %}<li class="nowo-chat-file" data-kind="{{ file.kind }}"><a class="nowo-chat-file__link" href="{{ file.url }}" download rel="noopener noreferrer">{{ file.name }}</a> <span class="nowo-chat-file__size">{{ (file.size / 1024)|round(0, 'ceil') }} KB</span></li>{% endfor %}</ul>{% endif %}<div class="nowo-chat-bubble">{{ message.html|raw }}</div>
                                     {% endif %}
                                     <span class="nowo-chat-msg__meta"><time datetime="{{ message.createdAt }}" title="{{ message.createdAt|date('Y-m-d H:i:s') }}">{{ message.createdAt|date('Y-m-d H:i') }}</time>{% if message.edited and not message.deleted %} · {{ 'chat.edited'|trans }}{% endif %}</span>
                                 </div>
