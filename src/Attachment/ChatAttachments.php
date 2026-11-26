@@ -271,7 +271,7 @@ final readonly class ChatAttachments implements ChatAttachmentsInterface
         }
         $route = $api ? 'nowo_chat_api_v1_file' : 'nowo_chat_file';
 
-        return new ChatAttachmentUrl($this->urls->generate($route, ['uuid' => $row['uuid'], 'variant' => self::ORIGINAL] + $query), (new DateTimeImmutable())->setTimestamp($expires));
+        return new ChatAttachmentUrl($this->urls->generate($route, ['uuid' => $row['uuid'], 'variant' => self::ORIGINAL] + $query), $this->clock->now()->setTimestamp($expires));
     }
 
     /**
@@ -473,7 +473,7 @@ final readonly class ChatAttachments implements ChatAttachmentsInterface
             $this->logger?->warning('ChatKit: the attachment policy failed; the files are refused.', ['policy' => $this->policy::class, 'exception' => $exception::class]);
             $allowed = false;
         }
-        if ($allowed !== true) {
+        if (!$allowed) {
             throw new ChatAttachmentRefused(ChatAttachmentRefused::NOT_ALLOWED);
         }
     }

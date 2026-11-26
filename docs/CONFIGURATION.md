@@ -291,7 +291,7 @@ nowo_chat_kit:
           alert_after_seconds: 300     # ChatAttachmentScanOverdueEvent threshold (QB-259-2)
         download:
           url_ttl_seconds: 300         # signed URL lifetime
-          bind_session: true           # web URLs need the reader's session
+          bind_session: true           # web URLs need the reader's session (false: 5-minute bearer links with v=<public id>, see below)
           storage_ttl_seconds: 60      # StorageKit's pre-signed bucket URL
         audit_downloads: false         # ChatAttachmentDownloadedEvent
         limits:
@@ -302,6 +302,8 @@ nowo_chat_kit:
         dock:
           secret_handoff: false        # 2.7: "Send as a secret" (also needs the host's probe listener)
 ```
+
+With `download.bind_session: false` (audit ZCO-L3) a web URL needs no session: it carries the reader's public id in `v=` and, for its lifetime (`url_ttl_seconds`, 5 minutes by default), is a **bearer link** — whoever holds it downloads as that reader (spending that reader's budget), and the public id reaches access and proxy logs. Access is still re-checked live for that reader. Keep it `true` unless a non-session client (a native webview) needs it, and then keep `url_ttl_seconds` short.
 
 The size limit is the smallest of `max_bytes`, PHP `upload_max_filesize` / `post_max_size` and StorageKit
 `upload.files.max_bytes`; keep the web server's request body limit (Caddy / FrankenPHP `request_body max_size`) at or

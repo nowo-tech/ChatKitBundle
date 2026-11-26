@@ -28,6 +28,7 @@ use function in_array;
 use function is_array;
 use function is_int;
 use function is_string;
+use function sort;
 
 /**
  * 2.7 (spec 259 block B, REQ-RUNTIME-003): every read and write of the attachment rows, through DBAL on ChatKit's
@@ -213,10 +214,21 @@ class ChatAttachmentRepository extends ServiceEntityRepository
         if ($uuids === []) {
             return [];
         }
-        $rows = $this->connection()->fetchAllAssociative(
-            'SELECT ' . self::COLUMNS . ' FROM ' . $this->table() . ' a WHERE a.uuid IN (?) ORDER BY a.id ' . $this->lockClause(),
+        // Audit ZCO-I1: the ids first (no lock), then the rows locked by primary key in id order. A `uuid IN (…)` lock
+        // would follow the uuid index on InnoDB (MySQL / MariaDB), not the id order the other writers use.
+        $ids = array_values(array_map(intval(...), $this->connection()->fetchFirstColumn(
+            'SELECT a.id FROM ' . $this->table() . ' a WHERE a.uuid IN (?)',
             [array_values($uuids)],
             [ArrayParameterType::STRING],
+        )));
+        if ($ids === []) {
+            return [];
+        }
+        sort($ids);
+        $rows = $this->connection()->fetchAllAssociative(
+            'SELECT ' . self::COLUMNS . ' FROM ' . $this->table() . ' a WHERE a.id IN (?) ORDER BY a.id ' . $this->lockClause(),
+            [$ids],
+            [ArrayParameterType::INTEGER],
         );
         $found = [];
         foreach ($rows as $row) {

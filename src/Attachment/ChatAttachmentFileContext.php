@@ -14,6 +14,7 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\StorageKitBundle\Context\FileContextTarget;
 use Nowo\StorageKitBundle\Context\GenericFileContextInterface;
+use Nowo\StorageKitBundle\Context\SquareImageContextInterface;
 
 use function array_values;
 use function in_array;
@@ -28,11 +29,17 @@ use function in_array;
  *   conversation uuid).
  * - `existing()` answers the conversations that still exist (StorageKit orphans the files of a deleted one).
  *
+ * - Audit ZCO-L1: it also carries StorageKit's `SquareImageContextInterface` marker (an empty interface), borrowed
+ *   only for its refusal: StorageKit's HTTP upload route (`POST <prefix>/upload/chat/{uuid}`, `ImageUploader::
+ *   uploadImage()`) and `UploadEndpoint::config()` then refuse the `chat` context like an unknown one (404), so files
+ *   reach the chat bucket only through ChatKit's own upload (`FileUploaderInterface::uploadFile()`, which does not look
+ *   at the marker). Follow-up: a dedicated "server-only" marker in StorageKit 2.3.
+ *
  * Stateless.
  *
  * @internal
  */
-final readonly class ChatAttachmentFileContext implements GenericFileContextInterface
+final readonly class ChatAttachmentFileContext implements GenericFileContextInterface, SquareImageContextInterface
 {
     /**
      * @param ChatConversationRepository $conversations Conversations by uuid

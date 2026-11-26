@@ -1681,7 +1681,7 @@ export class ThreadView {
       }
       // 2.6 (audit ZCI-L4): the host's before-send check runs for edits too; sendAnyway() saves as is.
       const saveAnyway = (): void => void save(true);
-      if (!force && beforeSend(this.dockRoot(), this.summary.uuid, body, saveAnyway, 'edit', this.secretExtras(body, 'edit', saveAnyway, stop, form))) {
+      if (!force && beforeSend(this.dockRoot(), this.summary.uuid, body, saveAnyway, 'edit', this.secretExtras(body, 'edit', stop, form))) {
         return;
       }
       part<HTMLButtonElement>(form, 'save').disabled = true;
@@ -1807,7 +1807,7 @@ export class ThreadView {
     // 2.6: the host may warn first (`nowo-chat:before-send`, e.g. a secret in the text); sendAnyway() sends as is.
     // 2.7: it may show the dock's warning, and offer "Send as a secret" when the host opted in to the hand-off.
     const sendAnyway = (): void => void this.submit(true);
-    if (!force && text !== '' && beforeSend(this.dockRoot(), this.summary.uuid, text, sendAnyway, 'send', this.secretExtras(text, 'send', sendAnyway, () => this.clearComposer(), this.composer))) {
+    if (!force && text !== '' && beforeSend(this.dockRoot(), this.summary.uuid, text, sendAnyway, 'send', this.secretExtras(text, 'send', () => this.clearComposer(), this.composer))) {
       return;
     }
     // 2.7: send when ready — every file clean first; a blocked or failed one is removed by the person.
@@ -2662,7 +2662,7 @@ export class ThreadView {
       returnTo: article,
       rootChanged: (root) => this.update(root),
       // 2.6 (audit ZCI-L4): the host's before-send check runs for thread replies too.
-      beforeSend: (text, sendAnyway, clear, anchor) => beforeSend(this.dockRoot(), this.summary.uuid, text, sendAnyway, 'thread', this.secretExtras(text, 'thread', sendAnyway, clear ?? ((): void => undefined), anchor ?? this.composer)),
+      beforeSend: (text, sendAnyway, clear, anchor) => beforeSend(this.dockRoot(), this.summary.uuid, text, sendAnyway, 'thread', this.secretExtras(text, 'thread', clear ?? ((): void => undefined), anchor ?? this.composer)),
       closed: () => {
         if (this.threadPanel === panel) {
           this.threadPanel = null;
@@ -3061,12 +3061,11 @@ export class ThreadView {
    *
    * @param text The text about to be sent.
    * @param kind Where it comes from.
-   * @param sendAnyway Sends it without asking again.
    * @param clear Empties the draft after a hand-off.
    * @param anchor Where the warning goes.
    * @returns The extras.
    */
-  private secretExtras(text: string, kind: SendKind, sendAnyway: () => void, clear: () => void, anchor: HTMLElement): BeforeSendExtras {
+  private secretExtras(text: string, kind: SendKind, clear: () => void, anchor: HTMLElement): BeforeSendExtras {
     const root = this.dockRoot();
     const handOff = secretHandoffAvailable(root, this.host.config.dock?.secretHandoff === true)
       ? (): void => {
@@ -3077,8 +3076,8 @@ export class ThreadView {
       : undefined;
     return {
       ...(handOff === undefined ? {} : { handOff }),
-      warn: (message?: string): void => {
-        showSecretWarning(anchor, this.host.templates, { i18n: this.host.config.i18n, message, handOff, sendAnyway, done: () => this.input.focus() });
+      warn: (message, actions): void => {
+        showSecretWarning(anchor, this.host.templates, { i18n: this.host.config.i18n, message, handOff: actions.handOff, sendAnyway: actions.sendAnyway, done: () => this.input.focus() });
       },
     };
   }

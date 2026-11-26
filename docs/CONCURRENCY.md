@@ -41,9 +41,9 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | 2.7 C1 scan claim | `UPDATE … SET state='scanning', state_token=?, lease_until=?, scan_attempts+1 WHERE id=? AND attempts left AND (uploaded and due OR scanning with an expired lease)`: one worker per file | Messenger replay and the sweep are no-ops |
 | 2.7 scan | outside any transaction and lock; StorageKit's bounded stream, closed in `finally` | |
 | 2.7 C2 verdict | `UPDATE … WHERE id=? AND state='scanning' AND state_token=?`: a verdict whose lease was lost (file removed, lease taken over) is discarded; a retry goes back to `uploaded` with a backoff under the same guard | Messenger `DelayStamp`, then the sweep |
-| 2.7 U2 send with files | the send unit's conversation lock first, then the files `SELECT … FOR UPDATE ORDER BY id` (lock order conversation → attachments → message), each a clean draft of the author here, else the whole send is refused (`409 attachment_not_ready`, `422 attachment_invalid`) | the send's `Idempotency-Key` |
+| 2.7 U2 send with files | the send unit's conversation lock first, then the files: their ids read by uuid (no lock), then `SELECT … WHERE id IN (…) ORDER BY id FOR UPDATE` by primary key, so InnoDB and PostgreSQL both lock them in id order like every other attachment writer (audit ZCO-I1; lock order conversation → attachments → message), each a clean draft of the author here, else the whole send is refused (`409 attachment_not_ready`, `422 attachment_invalid`) | the send's `Idempotency-Key` |
 | 2.7 C3 remove / C4 block | the conversation lock, the row re-read `FOR UPDATE`, then a compare-and-set (`deleted`; `clean` → `blocked`); a draft a send attached meanwhile is left to its message; objects removed after the commit | idempotent |
-| 2.7 files with their message | message delete, retention purge, conversation purge and GDPR erasure mark the rows `deleted` in their own unit; objects removed after the commit (Messenger), the sweep removes what a lost message left | re-run safe |
+| 2.7 files with their message | message delete, conversation purge and GDPR erasure mark the rows `deleted` in the same unit as the change; the retention purge marks them in its own statement just before the batch's message delete (audit ZCO-I3, fails toward deletion of data already due); objects removed after the commit (Messenger), the sweep removes what a lost message left | re-run safe |
 | 2.7 sweep (`nowo:chat:attachments:sweep`) | each step its own statement or batch of 200 (fail exhausted scans, re-queue due ones, delete stale drafts, remove objects); a lock wait exits 75 (`CONFLICT_001`) | re-run safe |
 | 1.36 forward | every target checked first; one unit claims the `Idempotency-Key` (savepoint insert on the unique `(user, key)`), then locks the target conversations in id order and writes the comment and the copy of each | `Idempotency-Key` (required): a replay answers the first forward |
 | 1.36 thread reply | the `Idempotency-Key` claim, the conversation row lock (as send, without moving its activity), then an atomic `thread_reply_count + 1` on the root | `Idempotency-Key` (required) |
@@ -149,6 +149,8 @@ request: the request's `CommitMark` (taken at `kernel.request` with `commit_dete
   the cap). No file is served unscanned either way.
 - **2.7: a reader whose membership ends between the check and the end of a stream keeps the bytes already sent**; every
   new request is checked again. A file blocked after a download cannot be recalled.
+- **2.7: a draft remove that loses the race to a send answers success** (audit ZCO-I2): the file was sent with the
+  message and stays there; the composer shows it on its next refresh. Data stays consistent.
 - **2.7: no content dedup.** The same file sent twice is stored twice (one row, one object keeps deletion simple).
 
 - **1.37: a first MySQL / MariaDB FULLTEXT index blocks message writes while it builds** (InnoDB rebuilds the table).

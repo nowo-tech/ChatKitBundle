@@ -58,6 +58,7 @@ final class ChatAttachmentController extends AbstractController
      * @param ChatAttachmentOptions|null $options The limits
      * @param ChatAttachmentTypes|null $types The allowed extensions (the picker's `accept`)
      * @param ChatCurrentUserPort|null $currentUser Who the signed-in user is in the chat
+     * @param RateLimiterFactoryInterface|null $actionLimiter Audit ZCO-L2: the person's action budget (shared with the dock's other writes)
      */
     public function __construct(
         private readonly ChatAccess $access,
@@ -71,6 +72,8 @@ final class ChatAttachmentController extends AbstractController
         private readonly ?ChatAttachmentOptions $options = null,
         private readonly ?ChatAttachmentTypes $types = null,
         private readonly ?ChatCurrentUserPort $currentUser = null,
+        #[Autowire(service: 'limiter.nowo_chat_action')]
+        private readonly ?RateLimiterFactoryInterface $actionLimiter = null,
     ) {
     }
 
@@ -156,6 +159,7 @@ final class ChatAttachmentController extends AbstractController
     {
         $attachments = $this->on();
         $user        = $this->writer($request);
+        $this->deny($this->actionLimiter?->create('nowo_chat_action_' . $user->getChatPublicId())->consume()->isAccepted() === false, 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
         try {
             // @igor-ignore - a write of the attachment rows (database), not a change of the service's state.
             $attachments->remove($user, $uuid);

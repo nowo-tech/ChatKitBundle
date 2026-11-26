@@ -273,14 +273,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   nowo-tech/storage-kit-bundle ^2.2 (context `chat`, context id = the conversation uuid) with a **mandatory, fail-closed
   scan**: a file is a draft only its uploader sees until the host's `ChatAttachmentScannerInterface` says clean; an
   infected or unscannable file is blocked, a scanner that keeps failing leaves it `failed`; nothing unscanned is ever
-  served. Only clean drafts can be sent (send when ready), files go with their message (delete, retention purge,
-  conversation purge, GDPR erasure) and their StorageKit objects are removed after the commit. See
+  served. Only clean drafts can be sent (send when ready), files go with their message (delete, conversation purge
+  and GDPR erasure in the same unit of work; the retention purge just before each batch's message delete) and their
+  StorageKit objects are removed after the commit. See
   [USAGE.md](USAGE.md#attachments-27).
   - Ports: `ChatAttachmentScannerInterface` (required with attachments; the build fails without it),
     `ChatAttachmentScopeResolverInterface` (optional, QB-259-3: the bucket scope and owner of a conversation),
     `ChatAttachmentPolicyInterface` (optional, FR-010, `attachments.policy`: when set, attaching is denied unless it
     allows; asked on upload and again on send; `403 attachments_not_allowed`).
   - API downloads always need the Bearer token besides the signature; moderators hide files with `block()` only.
+  - Audit ZCO: StorageKit's own HTTP upload route refuses the chat context (L1); the dock's remove spends the action
+    budget (L2); `download.bind_session: false` documented as bearer links (L3); send locks files by primary key in id
+    order on every database (I1); the dock's warning shares the once-guarded actions of `detail` (I4); lease and backoff
+    times keep the clock's timezone (I5).
   - Service: `ChatAttachmentsInterface` (upload, drafts, attachmentsOf, find, downloadUrl, remove, send, block).
   - Events (ids only, after the commit): `ChatAttachmentUploadedEvent`, `ChatAttachmentScannedEvent`,
     `ChatAttachmentBlockedEvent`, `ChatAttachmentRemovedEvent`, `ChatAttachmentDownloadedEvent`

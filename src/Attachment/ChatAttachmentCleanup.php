@@ -16,10 +16,12 @@ use Throwable;
 use function count;
 
 /**
- * 2.7 (spec 259 §9, §16): files go with their message. The chat's own deletions (a message deleted, a retention purge,
- * a conversation purged, a person erased) call {@see self::forMessages()} / {@see self::forConversation()} /
- * {@see self::forUploader()} **inside their unit of work**, so the rows are `deleted` exactly when the messages go, and
- * {@see self::afterCommit()} after it to queue the removal of the StorageKit objects
+ * 2.7 (spec 259 §9, §16): files go with their message. A message deleted, a conversation purged and a person erased call
+ * {@see self::forMessages()} / {@see self::forConversation()} / {@see self::forUploader()} **inside their unit of work**,
+ * so the rows are `deleted` exactly when the messages go; the retention purge calls {@see self::forMessages()} in its own
+ * statement just before each batch's message delete (audit ZCO-I3: a crash in between only marks files of messages
+ * past the cutoff, deleted by the next run). Each then calls {@see self::afterCommit()} to queue the removal of the
+ * StorageKit objects
  * ({@see RemoveChatAttachmentObjects}). A lost message leaves nothing behind for long: the sweep removes the
  * objects of every `deleted` row.
  *

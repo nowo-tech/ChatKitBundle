@@ -150,7 +150,8 @@ final readonly class ChatAttachmentScan
     /** A time `$seconds` after `$now` (a new immutable value). */
     private function later(DateTimeImmutable $now, int $seconds): DateTimeImmutable
     {
-        return (new DateTimeImmutable())->setTimestamp($now->getTimestamp() + $seconds);
+        // Audit ZCO-I5: the clock's own timezone (the DATETIME columns store the wall time of that zone).
+        return $now->setTimestamp($now->getTimestamp() + $seconds);
     }
 
     private function retryLater(int $id, int $delay): void

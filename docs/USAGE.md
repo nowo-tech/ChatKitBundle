@@ -1284,10 +1284,17 @@ final readonly class ClamAvScanner implements ChatAttachmentScannerInterface
    live access (reachable, member, the message not deleted), the clean state and the download budget are checked on
    every request; every refusal is the same empty 404. StorageKit's `FileRangeDeliveryInterface` serves it: a 302 to a
    bucket URL pre-signed for 60 s, or the stream (`Range` → 206). Always `nosniff`, `default-src 'none'; sandbox` and
-   `attachment`; audio and video may play inline.
-6. **Gone.** Removing a draft or a sent file (its message's deleter), deleting the message, the retention purge, a
-   conversation purge and a GDPR erasure mark the rows `deleted` in their own unit; the StorageKit objects are removed
-   after the commit (Messenger `RemoveChatAttachmentObjects`, and the sweep for whatever a lost message left).
+   `attachment`; audio and video may play inline. With `download.bind_session: false` (audit ZCO-L3) a web URL needs no session: it carries the reader's public id in `v=` and, for its lifetime (`url_ttl_seconds`, 5 minutes by default), is a **bearer link** — whoever holds it downloads as that reader (spending that reader's budget), and the public id reaches access and proxy logs. Access is still re-checked live for that reader. Keep it `true` unless a non-session client (a native webview) needs it, and then keep `url_ttl_seconds` short.
+   Client API downloads always need the Bearer token too (owner decision 2026-11-26).
+6. **Gone.** Removing a draft or a sent file (its message's deleter), deleting the message, a conversation purge and
+   a GDPR erasure mark the rows `deleted` in the same unit of work as the change; the retention purge marks them in
+   its own statement just before deleting the batch's messages (audit ZCO-I3: a crash in between only marks files of
+   messages that are past the cutoff anyway; the next run deletes those messages). The StorageKit objects are removed
+   after the commit (Messenger `RemoveChatAttachmentObjects`, and the sweep for whatever a lost message left). Open
+   clients are told about a message delete, a remove and a block (`message_updated`); after an erasure or a purge the
+   file cards stay until the next load and a click gets the uniform 404 (audit ZCO-I6).
+7. **StorageKit's own upload route refuses the chat context** (audit ZCO-L1): `POST <storage prefix>/upload/chat/{uuid}`
+   answers 404, so chat files come only through ChatKit's upload.
 
 ### File types
 

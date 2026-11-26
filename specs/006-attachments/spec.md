@@ -36,7 +36,8 @@ OK): "Send as a secret". Previews, unfurls and the Files and links tab are 2.8.0
   sandbox CSP, `attachment`.
 - **FR-ATT-005**: message payloads (dock, API, realtime `full`) carry clean files only; the dock shows file cards and a
   draft tray; the uploader gets an `attachment` realtime event.
-- **FR-ATT-006**: files go with their message (delete, purges, erasure) in the same unit; objects removed after the
+- **FR-ATT-006**: files go with their message (delete, conversation purge, erasure in the same unit; the retention purge
+  just before each batch's delete); objects removed after the
   commit (Messenger, sweep).
 - **FR-ATT-007**: GDPR export lists the person's uploads (StorageKit uuids for the bytes); erasure deletes them.
 - **FR-ATT-008**: limits: size (smallest of config, PHP, StorageKit), per message, drafts per person, uploads per

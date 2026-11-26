@@ -95,4 +95,29 @@ describe('secret hand-off (2.7, D-20261126-11)', () => {
     expect(handOff).toHaveBeenCalledTimes(1);
     expect(send).not.toHaveBeenCalled();
   });
+
+  it('gives the dock warning the same once-guarded actions as detail (audit ZCO-I4)', () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    const handOff = vi.fn();
+    const send = vi.fn();
+    const warn = vi.fn();
+    let detail: { warn: () => void; handOff: () => void; sendAnyway: () => void } | null = null;
+    root.addEventListener(BEFORE_SEND, (event) => {
+      detail = (event as CustomEvent).detail;
+    });
+    beforeSend(root, 'c1', 'x', send, 'send', { warn, handOff });
+    detail!.warn();
+    const actions = warn.mock.calls[0]?.[1] as { sendAnyway: () => void; handOff: () => void };
+    actions.sendAnyway();
+    detail!.handOff();
+    actions.handOff();
+    detail!.sendAnyway();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(handOff).not.toHaveBeenCalled();
+    // Without the hand-off the warning gets no handOff action.
+    beforeSend(root, 'c1', 'x', send, 'send', { warn });
+    detail!.warn();
+    expect('handOff' in (warn.mock.calls[1]?.[1] as object)).toBe(false);
+  });
 });
