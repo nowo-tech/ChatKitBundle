@@ -79,6 +79,7 @@ const ICONS: Record<string, string> = {
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />',
   // #reference cards and `/` commands.
   lock: '<rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" />',
+  key: '<circle cx="8" cy="15" r="4" /><path d="m11 12 9-9M17 6l3 3M14 9l2 2" />',
   issue: '<path d="M9 9V7a3 3 0 0 1 6 0v2" /><rect x="7" y="9" width="10" height="11" rx="5" /><path d="M4 13h3M17 13h3M5 19l2.5-2M19 19l-2.5-2M12 12v5" />',
   task: '<rect x="4" y="4" width="16" height="16" rx="3" /><path d="m8.5 12 2.5 2.5 4.5-5" />',
   project: '<path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Z" />',

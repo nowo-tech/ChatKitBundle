@@ -65,6 +65,9 @@ whom).
 | **Abuse / DoS** | Sliding-window rate limits per user: send, actions, typing, reads, buzz (per conversation and per minute); 4000-character bodies; edit / delete window 15 minutes; paging limits on every list; purge in bounded batches. |
 | **Tampered async messages** | Messenger messages carry ids only; handlers are registered with `sign: true` and re-check reachability, settings, mute, read state and open tabs at delivery. |
 | **Shared devices** | Chat browser storage is cleared on logout links / forms and when the API answers 401 or is redirected (a firewall sending the expired session to its login page). |
+| **Secrets in typed cards (2.6, spec 259)** | A card is stored as `#[…](type:id)`: neutral title, opaque host id, never a value, key, vault title or link. The secret value never reaches ChatKit: the create / reveal dialogs are host pages, the *Save to vault* selection is handed to the dialog in the browser (`nowo-chat:slot-payload`, never a URL or a request), and the before-send detector runs in the browser. For `isSecret()` cards the title is never in `body`, `body_html` (an empty slot), `search_text` (`#…`), edit history, export, the hub (`full` and `ids`), push, digest, conversation previews or `lastMessage.preview` ("🔑 Shared a secret"), or events (`ChatCardSharedEvent` carries ids). In the browser, *Reply*, *Quote*, *Copy text*, the list preview, the pins bar and the screen-reader announcement read a secret card as the generic line, never its title or facts (audit ZCI-M2, ZCI-L2). Tested by SC-001 (`ChatCardsApiTest`: no table, push payload or hub payload holds a card title or a host sentinel). |
+| **Card sharing and rendering (2.6)** | `canShare()` is asked per card on send, outside any lock; one refusal refuses the whole message (`card_not_allowed`), so an unshareable card never becomes plain text with its id. Cards are rendered per reader and per request (scope: person, conversation, context, API flag), memoised for the request only; ids the provider did not answer, answers that are not `ChatCard`s, and provider exceptions all mean "hidden" / "deny" (logged with the provider class only). Edits keep the cards as sent; forwards of messages with cards are refused. Card texts are clipped plain text without control or bidi characters, escaped in HTML; action URLs are same-origin paths only (`//host`, schemes and backslashes are refused at construction). |
+| **Host slots (2.6)** | Composer action, menu slot and card dialog URLs are same-origin paths; the dock adds only `conversation`, `message` and `card=type:id` (references, never values). The slot routes (`GET …/slots`, `GET …/cards/{type}/{id}`) need VIEW on the conversation (404 otherwise) and are rate limited at the reference search rate (the slots route in its own bucket); the card route answers 404 for anything the caller may not see. Composer actions are offered only to someone who may write. The insert-card event is accepted only for a composer whose action opened the dialog, while that dialog is open, for a known card type and a well-formed id; the server checks `canShare()` again on send, with the scope the author writes from (the client API flag and context). A menu slot's selection is handed to its own dialog only, never after that dialog closed. |
 | **Worker-mode state leaks** | No per-request data in shared services (see [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md)); Igor audit in `release-check`. |
 
 ## Secrets and cryptography
@@ -131,6 +134,14 @@ dependencies current. Security fixes are released as patch versions of the suppo
   **2.5 writes.** Keep `client_api.writes` off until your token approval can grant `chat:write` explicitly; the resolver
   must return `chat:write` only for tokens the person approved for writing (existing read tokens stay read-only). Audit
   `ChatClientApiWriteEvent` (deduplicate on `replayed`; a listener that throws turns a committed write into a 500).
+
+  **2.6 typed cards and slots.** Your card providers decide everything about a card: answer `canShare()` from live
+  data (deny by default), leave out of `render()` every id the reader may not even know about, and never put a secret,
+  a decryption key or a link that holds one in a card id, title, fact or action URL. `render()` must have no side
+  effect (it runs on every read, push and digest). Your dialog pages are ordinary pages of your application: check
+  the person and the conversation again (they get only ids in the URL), protect their forms with CSRF, and never read
+  the composer. A one-time secret's key stays server-side (Beacon: DoctrineEncrypt, bound to the conversation, released
+  by the *Reveal* page after a live membership check).
 
   **2.4.1 logout.** Your optional `ChatClientTokenRevokerInterface` (`client_api.token_revoker`) backs
   `POST <prefix>/chat/v1/logout`. It must revoke the presented token only (never the person's other tokens, devices

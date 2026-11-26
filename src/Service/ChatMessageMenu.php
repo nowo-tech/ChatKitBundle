@@ -139,11 +139,12 @@ final readonly class ChatMessageMenu implements ChatMessageActionsInterface
     }
 
     /**
-     * @throws InvalidArgumentException `idempotency_key_invalid`
+     * @throws InvalidArgumentException `idempotency_key_invalid` (2.6, audit ZCG-v-I1: also a key in the client API's
+     *                                  `client:` namespace, in any letter case)
      */
     private function assertKey(string $key): void
     {
-        if (!ChatIdempotency::isValidKey($key)) {
+        if (!ChatIdempotency::isValidKey($key) || ChatIdempotency::isClientKey($key)) {
             throw new InvalidArgumentException('idempotency_key_invalid');
         }
     }

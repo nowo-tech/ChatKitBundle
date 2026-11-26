@@ -28,6 +28,10 @@ declare(strict_types=1);
  * `capichat` sends as Ana (worker a) or as Luis (worker b), each with its own keys (the unread counters and read
  * cursors of two senders).
  *
+ * 2.6 (spec 259, REQ-RUNTIME-003): with the test card providers: `cardsend` sends a message with a typed card (canShare
+ * asked outside the unit), `carddel` deletes Ana's newest message that still holds a card (card create against delete),
+ * `cardread` reads the newest messages as Luis with their cards rendered (a reader against the deletions).
+ *
  * Prints one JSON line: {ok, failures, poisoned, closed}.
  */
 
@@ -40,6 +44,8 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Service\ChatForwarder;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
 use Nowo\ChatKitBundle\Service\ChatMessaging;
+use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatThreads;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientPrincipalResolver;
@@ -59,6 +65,7 @@ $mode                           = $warm ? substr((string) $mode, 5) : $mode;
 $menuModes                      = ['menu', 'savecap', 'unread', 'readonly', 'optout'];
 $threadModes                    = ['forward', 'thread', 'edit', 'delreply', 'delroot'];
 $clientModes                    = ['capisend', 'capireact', 'capichat'];
+$cardModes                      = ['cardsend', 'carddel', 'cardread'];
 $kernel                         = new TestKernel(match (true) {
     in_array($mode, $menuModes, true)   => ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true, 'max_per_user' => $mode === 'savecap' ? 1 : 500], 'message_info' => ['enabled' => true]]]]],
     in_array($mode, $threadModes, true) => ['profiles' => ['default' => ['message_menu' => ['forward' => ['enabled' => true], 'threads' => ['enabled' => true], 'edit_history' => ['enabled' => true, 'max_revisions' => 200]]]]],
@@ -67,7 +74,7 @@ $kernel                         = new TestKernel(match (true) {
         'limits'     => ['reads_per_minute' => 100_000, 'actions_per_minute' => 100_000, 'send_per_minute' => 100_000],
     ]]],
     default => [],
-});
+}, cardProviders: in_array($mode, $cardModes, true));
 $kernel->boot();
 $container = $kernel->getContainer();
 $registry  = $container->get('doctrine');
@@ -153,7 +160,11 @@ for ($i = 0; $i < (int) $calls; ++$i) {
         'capisend'  => 'capisend',
         'capireact' => $tag === 'a' || $i % 2 === 0 ? 'capiput' : 'capidelete',
         'capichat'  => 'capichat',
-        default     => 'send',
+        // 2.6
+        'cardsend' => 'cardsend',
+        'carddel'  => 'carddel',
+        'cardread' => 'cardread',
+        default    => 'send',
     };
     try {
         $ana   = $em()->getRepository(TestUser::class)->findOneBy(['name' => 'ana']) ?? throw new RuntimeException('ana');
@@ -183,7 +194,27 @@ for ($i = 0; $i < (int) $calls; ++$i) {
             'capiput'    => $api('PUT', '/conversations/' . $dm->getUuid() . '/messages/' . $first()->getUuid() . '/reactions/' . rawurlencode('👍'), 'luis', null, $tag . '-' . $i),
             'capidelete' => $api('DELETE', '/conversations/' . $dm->getUuid() . '/messages/' . $first()->getUuid() . '/reactions/' . rawurlencode('👍'), 'luis', null, $tag . '-' . $i),
             'capichat'   => $api('POST', '/conversations/' . $dm->getUuid() . '/messages', $tag === 'a' ? 'ana' : 'luis', '{"text":"' . $tag . ' ' . $i . '"}', $tag . '-' . $i),
-            'optout'     => (static function () use ($settings, $luis, $i): void {
+            'cardsend'   => $chat->send($ana, $dm, 'card ' . $i . "\n\n#[…](note:n" . $i . ')'),
+            'carddel'    => (static function () use ($em, $chat, $ana, $dm): void {
+                $carded = $em()->createQueryBuilder()->select('m')->from(ChatMessage::class, 'm')
+                    ->where('m.conversation = :dm AND m.deletedAt IS NULL AND m.body LIKE :card')->setParameter('dm', $dm)->setParameter('card', '%(note:%')
+                    ->orderBy('m.id', 'DESC')->setMaxResults(1)->getQuery()->getResult();
+                $carded === [] ? usleep(2000) : $chat->delete($ana, $carded[0]);
+            })(),
+            'cardread' => (static function () use ($em, $testServices, $luis, $dm): void {
+                $presenter  = $testServices->get(ChatPresenter::class);
+                $references = $testServices->get(ChatReferences::class);
+                assert($presenter instanceof ChatPresenter && $references instanceof ChatReferences);
+                $page = $em()->getRepository(ChatMessage::class)->findBy(['conversation' => $dm], ['id' => 'DESC'], 20);
+                $references->prime($luis, $page);
+                foreach ($page as $message) {
+                    $view = $presenter->message($message, $luis);
+                    if ($message->isDeleted() && $view['references'] !== []) {
+                        throw new RuntimeException('a deleted message showed a card');
+                    }
+                }
+            })(),
+            'optout' => (static function () use ($settings, $luis, $i): void {
                 $mine = $settings->forUser($luis);
                 $mine->setShareReadTimes($i % 2 === 0);
                 $settings->save($mine);

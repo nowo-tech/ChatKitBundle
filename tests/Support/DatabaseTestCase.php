@@ -31,7 +31,7 @@ abstract class DatabaseTestCase extends TestCase
 
     protected function setUp(): void
     {
-        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges(), $this->hostTransactionRunner(), $this->runtimeSettings(), $this->uiKitContextMenus(), $this->hostFixtures());
+        $this->kernel = new TestKernel($this->chatKitConfig(), false, $this->sidebarProviders(), $this->grantReferences(), $this->twinPorts(), $this->authorBadges(), $this->hostTransactionRunner(), $this->runtimeSettings(), $this->uiKitContextMenus(), $this->hostFixtures(), null, $this->cardProviders());
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
@@ -103,6 +103,14 @@ abstract class DatabaseTestCase extends TestCase
      * 1.29: whether the kernel aliases ChatAuthorBadgeProviderInterface to TestAuthorBadgeProvider.
      */
     protected function authorBadges(): bool
+    {
+        return false;
+    }
+
+    /**
+     * 2.6 (spec 259): whether the kernel registers the test card, composer action and message menu slot providers.
+     */
+    protected function cardProviders(): bool
     {
         return false;
     }

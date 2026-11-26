@@ -41,6 +41,30 @@ function respond(body: unknown, ok = true, status = 200) {
 describe('chat api client', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('reads the slots of a conversation and one card (2.6)', async () => {
+    const off = new ChatApi(config);
+    vi.stubGlobal('fetch', vi.fn());
+    expect(await off.slots('c 1')).toEqual({ cardTypes: [], composerActions: [], menuSlots: [] });
+    expect(await off.card('c', 'note', 'n1')).toBeNull();
+
+    const slotted = { ...config, slots: { endpoint: '/s/__uuid__', card: '/k/__uuid__/__type__/__id__', dialog: 'd' } } as unknown as ChatConfig;
+    const answer = { cardTypes: [], composerActions: [], menuSlots: [] };
+    let fetchMock = respond(answer);
+    vi.stubGlobal('fetch', fetchMock);
+    const api = new ChatApi(slotted);
+    expect(await api.slots('c 1')).toEqual(answer);
+    expect(fetchMock).toHaveBeenCalledWith('/s/c%201', expect.anything());
+
+    fetchMock = respond({ card: { type: 'note', id: 'n1', title: 'T' } });
+    vi.stubGlobal('fetch', fetchMock);
+    expect((await api.card('c', 'note', 'n 1'))?.title).toBe('T');
+    expect(fetchMock).toHaveBeenCalledWith('/k/c/note/n%201', expect.anything());
+    vi.stubGlobal('fetch', respond({ error: 'not_found' }, false, 404));
+    expect(await api.card('c', 'note', 'n1')).toBeNull();
+    vi.stubGlobal('fetch', respond({ error: 'rate_limited' }, false, 429));
+    await expect(api.card('c', 'note', 'n1')).rejects.toMatchObject({ status: 429 });
+  });
+
   it('reports a refused CSRF token once and sends no later write (1.22.1)', async () => {
     const fetchMock = respond({ error: 'invalid_csrf' }, false, 403);
     vi.stubGlobal('fetch', fetchMock);

@@ -22,6 +22,8 @@ use function in_array;
 use function is_string;
 use function json_encode;
 use function preg_match;
+use function strlen;
+use function strncasecmp;
 use function usort;
 
 use const JSON_THROW_ON_ERROR;
@@ -64,6 +66,18 @@ final readonly class ChatIdempotency
     public static function isValidKey(mixed $key): bool
     {
         return is_string($key) && preg_match('/^[A-Za-z0-9_.:-]{1,' . ChatIdempotencyKey::MAX_KEY_LENGTH . '}$/', $key) === 1;
+    }
+
+    /**
+     * 2.6 (audit ZCG-v-I1): whether a key is in the client API's namespace (`client:`, any letter case). The check is
+     * case-insensitive because `idempotency_key` has no binary collation: under the MySQL / MariaDB default collations
+     * `CLIENT:<hex>` folds onto a stored client key at the unique index.
+     *
+     * @param string $key The key
+     */
+    public static function isClientKey(string $key): bool
+    {
+        return strncasecmp($key, self::CLIENT_PREFIX, strlen(self::CLIENT_PREFIX)) === 0;
     }
 
     /**

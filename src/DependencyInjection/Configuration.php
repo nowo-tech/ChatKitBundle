@@ -14,12 +14,12 @@ use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 
-use function array_diff;
 use function array_filter;
 use function array_key_exists;
 use function array_unique;
 use function count;
 use function implode;
+use function in_array;
 use function is_array;
 use function is_string;
 use function preg_match;
@@ -54,6 +54,9 @@ final class Configuration implements ConfigurationInterface
 
     /** 1.35: items of the message menu, in their default order (`message_menu.order`). */
     public const array MESSAGE_MENU_ITEMS = ['reply', 'thread', 'quote', 'forward', 'copy_text', 'copy_link', 'save', 'mark_unread', 'pin', 'info', 'edit', 'delete'];
+
+    /** 2.6 (spec 259): a host slot in `message_menu.order`. */
+    public const string MENU_SLOT_PATTERN = '/^slot:[a-z][a-z0-9_-]{0,31}\z/';
 
     /** 1.35: default quick reactions of the message menu. */
     public const array DEFAULT_QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -104,6 +107,8 @@ final class Configuration implements ConfigurationInterface
         // 1.25: sidebar rows of private channels and the "add" actions.
         'lock' => 'tabler:lock',
         'plus' => 'tabler:plus',
+        // 2.6 (spec 259): typed cards (vault items, one-time secrets).
+        'key' => 'tabler:key',
     ];
 
     /**
@@ -768,12 +773,12 @@ final class Configuration implements ConfigurationInterface
                     ->end()
                 ->end()
                 ->arrayNode('order')
-                    ->info('Order of the menu items (a subset hides the others). Known: ' . implode(', ', self::MESSAGE_MENU_ITEMS) . '.')
+                    ->info('Order of the menu items (a subset hides the others). Known: ' . implode(', ', self::MESSAGE_MENU_ITEMS) . '. 2.6: `slot:<key>` places a host slot (ChatMessageMenuSlotProviderInterface); slots not listed come last.')
                     ->scalarPrototype()->end()
                     ->defaultValue(self::MESSAGE_MENU_ITEMS)
                     ->validate()
-                        ->ifTrue(static fn (array $order): bool => array_diff($order, self::MESSAGE_MENU_ITEMS) !== [] || count(array_unique($order)) !== count($order))
-                        ->thenInvalid('message_menu.order takes each of ' . implode(', ', self::MESSAGE_MENU_ITEMS) . ' at most once, got %s.')
+                        ->ifTrue(static fn (array $order): bool => array_filter($order, static fn (mixed $item): bool => !in_array($item, self::MESSAGE_MENU_ITEMS, true) && (!is_string($item) || preg_match(self::MENU_SLOT_PATTERN, $item) !== 1)) !== [] || count(array_unique($order)) !== count($order))
+                        ->thenInvalid('message_menu.order takes each of ' . implode(', ', self::MESSAGE_MENU_ITEMS) . ' (or `slot:<key>`) at most once, got %s.')
                     ->end()
                 ->end()
             ->end()

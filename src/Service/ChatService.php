@@ -23,6 +23,7 @@ use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatParticipant;
 use Nowo\ChatKitBundle\Entity\ChatReaction;
 use Nowo\ChatKitBundle\Enum\SupportStatus;
+use Nowo\ChatKitBundle\Event\ChatCardSharedEvent;
 use Nowo\ChatKitBundle\Event\ChatChannelOpeningEvent;
 use Nowo\ChatKitBundle\Event\ChatMentionEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageDeletedEvent;
@@ -213,7 +214,7 @@ final readonly class ChatService implements ChatServiceInterface
      * @param ChatConversation $conversation The conversation
      * @param string $body Raw Markdown text
      *
-     * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link` (1.19: a link card with a link that is not accepted)
+     * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link` or (2.6) `card_not_allowed` (1.19: a link card with a link that is not accepted)
      *
      * @return ChatMessage The stored message
      */
@@ -230,16 +231,18 @@ final readonly class ChatService implements ChatServiceInterface
      * @param string $body Raw Markdown text
      * @param (Closure(): bool)|null $before First statement of the unit; false aborts it (ChatIdempotencyConflict)
      * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit
+     * @param string|null $cardContext 2.6 (audit ZCI-M1): the client API context of the write (card `canShare()` scope)
+     * @param bool $cardApi 2.6 (audit ZCI-M1): written through the client API (card `canShare()` scope)
      *
-     * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link`
+     * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link` or (2.6) `card_not_allowed`
      *
      * @return ChatMessage The stored message
      *
      * @internal
      */
-    public function sendWith(ChatUserInterface $author, ChatConversation $conversation, string $body, ?Closure $before = null, ?Closure $after = null): ChatMessage
+    public function sendWith(ChatUserInterface $author, ChatConversation $conversation, string $body, ?Closure $before = null, ?Closure $after = null, ?string $cardContext = null, bool $cardApi = false): ChatMessage
     {
-        [[$message, $mentioned]] = $this->postAll($author, [new ChatDraft($conversation, $body)], $before, $after);
+        [[$message, $mentioned]] = $this->postAll($author, [new ChatDraft($conversation, $body, null, null, $cardContext, $cardApi)], $before, $after);
         // 1.11: automatic replies of the other person (direct) or of the people mentioned (channels), after the commit.
         try {
             $this->autoReplies?->afterSend($message, array_values($mentioned));
@@ -267,7 +270,7 @@ final readonly class ChatService implements ChatServiceInterface
      * @param (Closure(): bool)|null $before First statement of the unit; false aborts it
      * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit
      *
-     * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link` or (a root deleted meanwhile) `not_threadable`; nothing is written
+     * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link`, (2.6) `card_not_allowed` or (a root deleted meanwhile) `not_threadable`; nothing is written
      * @throws ChatIdempotencyConflict When `$before` refused the unit; nothing is written
      *
      * @return list<ChatMessage> The stored messages, in order
@@ -314,7 +317,7 @@ final readonly class ChatService implements ChatServiceInterface
      * @param ChatMessage $message The message to edit
      * @param string $body New raw Markdown text
      *
-     * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link`
+     * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link` or (2.6) `card_not_allowed`
      */
     public function edit(ChatMessage $message, string $body): void
     {
@@ -333,7 +336,7 @@ final readonly class ChatService implements ChatServiceInterface
      * @param (Closure(): bool)|null $before First statement of the unit; false aborts it (ChatIdempotencyConflict)
      * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit, with the message
      *
-     * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link`
+     * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link` or (2.6) `card_not_allowed`
      * @throws ChatIdempotencyConflict When `$before` refused the unit; nothing is written
      *
      * @internal
@@ -343,8 +346,14 @@ final readonly class ChatService implements ChatServiceInterface
         $body   = $this->normalize($body);
         $body   = $this->links?->normalizeCards($body) ?? $body;
         $author = $message->getAuthor();
+        // 2.6 (spec 259): an edit changes the text only; the message's cards stay as they were sent (not asked again).
+        $shared = [];
+        if ($this->references instanceof ChatReferences) {
+            $body   = $this->references->keepCards($message->getBody(), $body);
+            $shared = array_map(static fn (array $card): string => $card['type'] . ':' . $card['id'], $this->references->cardTokens($message->getBody()));
+        }
         // A reference the author may no longer open (or a forged one) is kept as plain text.
-        $body                       = $author instanceof ChatUserInterface ? ($this->references?->validate($message->getConversation(), $author, $body) ?? $body) : $body;
+        $body                       = $author instanceof ChatUserInterface ? ($this->references?->validate($message->getConversation(), $author, $body, $shared) ?? $body) : $body;
         [$body, $mentioned, $group] = $author instanceof ChatUserInterface && $this->mentions instanceof ChatMentions
             ? $this->mentions->resolve($message->getConversation(), $author, $body, $message->getMentionAll())
             : [$body, [], null];
@@ -863,7 +872,7 @@ final readonly class ChatService implements ChatServiceInterface
             $body         = $this->links?->normalizeCards($body) ?? $body;
             // A forward keeps its #reference tokens: they are resolved for each reader of the target (the neutral chip
             // for whoever may not open them), and it mentions nobody.
-            $body                       = $forward ? $body : ($this->references?->validate($conversation, $author, $body) ?? $body);
+            $body                       = $forward ? $body : ($this->references?->validate($conversation, $author, $body, [], $draft->cardContext, $draft->cardApi) ?? $body);
             [$body, $mentioned, $group] = $forward ? [$body, [], null] : ($this->mentions?->resolve($conversation, $author, $body) ?? [$body, [], null]);
             // 1.28 (audit PV-D7): a look-alike refusal of the author's participant row comes before any write.
             $this->checkMember($conversation, $author);
@@ -947,6 +956,10 @@ final readonly class ChatService implements ChatServiceInterface
             }
             if ($mentioned !== []) {
                 $this->events?->dispatch(new ChatMentionEvent($message, $mentioned, $conversation));
+            }
+            // 2.6 (spec 259): one event per typed card, ids only (a forward never holds cards).
+            foreach ($message->isForwarded() ? [] : $this->references?->cardTokens($message->getBody()) ?? [] as $card) {
+                $this->events?->dispatch(new ChatCardSharedEvent($card['type'], $card['id'], $conversation->getUuid(), $message->getUuid(), $author->getChatPublicId()));
             }
             $result[] = [$message, $mentioned];
         }

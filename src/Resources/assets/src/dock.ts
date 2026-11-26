@@ -951,7 +951,7 @@ export class ChatDock implements ThreadHost {
       const counted = summary.lastMessageId ?? 0;
       summary.lastMessageAt = last.createdAt;
       summary.lastMessageId = Math.max(counted, last.id);
-      summary.lastMessage = { preview: plain(last.html).slice(0, 90), deleted: last.deleted, moderated: last.moderated, buzz: last.kind === 'buzz', pin: last.kind === 'pin', mine: last.mine, authorName: last.authorName };
+      summary.lastMessage = { preview: plain(last.html, false, t(this.config.i18n, 'card_secret')).slice(0, 90), deleted: last.deleted, moderated: last.moderated, buzz: last.kind === 'buzz', pin: last.kind === 'pin', mine: last.mine, authorName: last.authorName };
       const view = this.windows.get(uuid);
       if (view !== undefined && view.isMinimised) {
         summary.unread += fresh.filter((message) => !message.mine && message.id > counted).length;
@@ -1470,7 +1470,7 @@ export class ChatDock implements ThreadHost {
         void this.refreshList();
       } else {
         summary.lastMessageAt = message.createdAt;
-        summary.lastMessage = { preview: plain(message.html).slice(0, 90), deleted: false, buzz: message.kind === 'buzz', pin: message.kind === 'pin', mine: message.mine, authorName: message.authorName };
+        summary.lastMessage = { preview: plain(message.html, false, t(this.config.i18n, 'card_secret')).slice(0, 90), deleted: false, buzz: message.kind === 'buzz', pin: message.kind === 'pin', mine: message.mine, authorName: message.authorName };
         summary.unread += message.mine ? 0 : 1;
         this.renderList();
       }

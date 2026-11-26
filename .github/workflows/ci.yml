@@ -841,4 +841,6 @@ jobs:
 
       - name: Tests at the floor
         timeout-minutes: 20
-        run: composer test
+        # Behaviour, not coverage: the HTML report outgrew the suite's 512M memory_limit with 2.6 (the Code Coverage job
+        # keeps it).
+        run: composer test -- --no-coverage

@@ -83,6 +83,8 @@ export interface ChatMessage {
   mentionsMe?: boolean;
   /** #references the viewer may open (the editor turns their cards back into tokens). */
   references?: Reference[];
+  /** 2.6: the message holds typed cards (it cannot be forwarded in v1). */
+  hasCards?: boolean;
   /** Viewer-neutral realtime payload: its reference cards are fetched for the viewer (`GET` the message). */
   refsPending?: boolean;
   /** 1.36: a forward: where it came from (`from`/`label` only when the viewer may read the source; else "Forwarded"). */
@@ -139,6 +141,62 @@ export interface Reference {
   subtitle: string;
   badge: string;
   tone: string;
+  /** 2.6 (spec 259): a typed card (state, facts, actions); absent for references. */
+  card?: CardView;
+}
+
+/** 2.6 (spec 259): what a typed card adds to its reference (plain text; same-origin URLs). */
+export interface CardView {
+  state: 'open' | 'locked';
+  facts: { label: string; value: string }[];
+  actions: { key: string; label: string; kind: string; url: string; dialog: boolean }[];
+}
+
+/** 2.6: a card type of the conversation (composer chips, the insert check). */
+export interface CardType {
+  key: string;
+  label: string;
+  icon: string;
+  secret: boolean;
+}
+
+/** 2.6: a host action of the composer. */
+export interface ComposerAction {
+  key: string;
+  label: string;
+  icon: string;
+  slash: string | null;
+  dialogUrl: string;
+}
+
+/** 2.6: a host item of the message menu. */
+export interface MenuSlot {
+  key: string;
+  label: string;
+  icon: string;
+  target: 'message' | 'selection' | 'card';
+  cardTypes: string[];
+  ownOnly: boolean;
+  dialogUrl: string;
+}
+
+/** 2.6: what the host adds to one conversation (`GET …/slots`). */
+export interface ConversationSlots {
+  cardTypes: CardType[];
+  composerActions: ComposerAction[];
+  menuSlots: MenuSlot[];
+}
+
+/** 2.6: the `slots` section of the dock configuration (only with a card, action or slot provider). */
+export interface SlotSettings {
+  /** `GET` the slots of a conversation (`__uuid__`). */
+  endpoint: string;
+  /** `GET` one card for the writer (`__uuid__`, `__type__`, `__id__`). */
+  card: string;
+  /** Id of the host dialog. */
+  dialog: string;
+  /** UiKit's dialog runtime, loaded by the dock when the page lacks it. */
+  dialogRuntime?: string;
 }
 
 /** A `/` command: one type of item the conversation may refer to. */
@@ -457,6 +515,8 @@ export interface ChatConfig {
   openRecent?: boolean;
   /** 1.25: the grouped sidebar (absent: the 1.24 list everywhere). */
   sidebar?: SidebarSettings;
+  /** 2.6 (spec 259): typed cards and host slots (absent: none). */
+  slots?: SlotSettings;
   i18n: Record<string, string>;
 }
 

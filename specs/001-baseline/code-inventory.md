@@ -1,8 +1,8 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-11-26 (2.5.0: 325 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
-**Production units**: **313/313** table rows below (2.5.0: +1 client API writes unit, `ChatClientApiWriteEvent`; `ChatClientApiController`, `ChatClientApiGuard`, `ChatService`, `ChatClientPrincipal`, `Configuration`, `NowoChatKitExtension` and `services.php` extended, `specs/004-client-api-writes/`; 2.4.1: +2 logout units, `ChatClientTokenRevokerInterface` and `ChatClientLoggedOutEvent`; 2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 325 files** the audit command returns (2026-11-26) are named in this file (some rows group several files or repeat one file under two sections)  
+**Last audited**: 2026-11-26 (2.6.0: 342 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
+**Production units**: **330/330** table rows below (2.6.0: +17 typed card and host slot units, see the last section; `ChatReferences`, `ChatReference`, `ChatService`, `ChatForwarder`, `ChatPresenter`, `ChatIdempotency`, `ChatMessageMenu`, `ChatPushDispatcher`, `ChatDigestDispatcher`, `ChatMessageSearch`, `ChatMessageTokens`, `ChatApiController`, `ChatClientApiController`, `ChatDockExtension`, `Configuration`, `NowoChatKitExtension`, the templates, `thread.ts`, `api.ts`, `index.ts`, `types.ts`, `dom.ts`, `message-menu.ts`, `nowo-chat.css` and the translations extended, `specs/005-secret-cards-slots/`; 2.5.0: +1 client API writes unit, `ChatClientApiWriteEvent`; `ChatClientApiController`, `ChatClientApiGuard`, `ChatService`, `ChatClientPrincipal`, `Configuration`, `NowoChatKitExtension` and `services.php` extended, `specs/004-client-api-writes/`; 2.4.1: +2 logout units, `ChatClientTokenRevokerInterface` and `ChatClientLoggedOutEvent`; 2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 342 files** the audit command returns (2026-11-26) are named in this file (some rows group several files or repeat one file under two sections)  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -45,7 +45,8 @@
 | Message search (1.37) | 17 |
 | Sources added 1.34–2.2 (sweep 2026-11-22) | 54 |
 | Client API v1 (2.4, 2.4.1, 2.5) | 16 |
-| **Total** | **325** |
+| Typed cards and host slots (2.6) | 17 |
+| **Total** | **342** |
 
 ## Bundle, configuration & DI
 
@@ -495,3 +496,25 @@ The 54 files below were added by releases 1.34–2.2 without an inventory row. T
 | `src/Model/ChatClientRequest.php` | 2.4: a client API request as the host ports see it | FR-CAPI-001 |
 | `src/Model/ChatClientContext.php` | 2.4: a tenant a person may use | FR-CAPI-001 |
 | `src/Model/ChatClientConversationRef.php` | 2.4: what the context policy learns about a conversation | FR-CAPI-001 |
+
+## Typed cards and host slots (2.6)
+
+| File | Role | Spec |
+| --- | --- | --- |
+| `src/Card/ChatCards.php` | 2.6: card, composer action and menu slot providers: isolation (deny on failure), unique keys, batched renders | FR-CARD-001, FR-SLOT-001, FR-SLOT-002 |
+| `src/Contract/ChatCardProviderInterface.php` | 2.6: host port of a typed card type (`canShare()`, `render()`, `isSecret()`) | FR-CARD-001 |
+| `src/Contract/ChatComposerActionProviderInterface.php` | 2.6: host port of composer actions | FR-SLOT-001 |
+| `src/Contract/ChatMessageMenuSlotProviderInterface.php` | 2.6: host port of message menu slots | FR-SLOT-002 |
+| `src/Enum/ChatCardState.php` | 2.6: Open or Locked | FR-CARD-003 |
+| `src/Enum/ChatCardActionKind.php` | 2.6: open, request_access, host | FR-CARD-003 |
+| `src/Enum/ChatMenuSlotTarget.php` | 2.6: message, selection, card | FR-SLOT-002 |
+| `src/Event/ChatCardSharedEvent.php` | 2.6: a card was shared (ids only), after the commit | FR-CARD-006 |
+| `src/Model/ChatCard.php` | 2.6: a card as one reader sees it (plain text, ≤ 4 facts, ≤ 3 actions) | FR-CARD-003 |
+| `src/Model/ChatCardAction.php` | 2.6: a card action (same-origin path, optional dialog) | FR-CARD-003 |
+| `src/Model/ChatCardFact.php` | 2.6: a card fact (plain text) | FR-CARD-003 |
+| `src/Model/ChatCardScope.php` | 2.6: who asks, where (scalars: person, conversation, context, API flag) | FR-CARD-001 |
+| `src/Model/ChatCardText.php` | 2.6: shared text, key and path rules of the card and slot value objects | FR-CARD-003 |
+| `src/Model/ChatComposerAction.php` | 2.6: a composer action (key, label, icon, dialog path, slash alias) | FR-SLOT-001 |
+| `src/Model/ChatComposerScope.php` | 2.6: the scope of composer actions and menu slots (scalars) | FR-SLOT-001, FR-SLOT-002 |
+| `src/Model/ChatMenuSlot.php` | 2.6: a message menu slot (target, card types, own only, dialog path) | FR-SLOT-002 |
+| `src/Resources/assets/src/slots.ts` | 2.6: dock side of cards and slots: card tray, insert-card, slot dialog, selection payload, before-send | FR-SLOT-001..003 |

@@ -365,7 +365,13 @@
                             {% set _items = _items|merge([{separator: true, attr: {'data-part': 'menu-separator'}}]) %}
                         {% endif %}
                         {% set _group = item.group %}
-                        {% set _items = _items|merge([{label: _labels[item.name]|trans({}, _t, nowo_chat_locale), danger: item.name == 'delete', attr: {'data-part': 'menu-' ~ item.name|replace({_: '-'}), hidden: 'hidden'}}]) %}
+                        {% if item.name == 'slot' %}
+                            {# 2.6 (spec 259): the place of a host slot (message_menu.order `slot:<key>`; an empty key: the
+                               model the dock clones for slots not listed). The dock sets the label and shows it. #}
+                            {% set _items = _items|merge([{label: '', attr: {'data-part': 'menu-slot', 'data-slot-key': item.key, hidden: 'hidden'}}]) %}
+                        {% else %}
+                            {% set _items = _items|merge([{label: _labels[item.name]|trans({}, _t, nowo_chat_locale), danger: item.name == 'delete', attr: {'data-part': 'menu-' ~ item.name|replace({_: '-'}), hidden: 'hidden'}}]) %}
+                        {% endif %}
                     {% endfor %}
                     <span class="nowo-chat-msg__menu" data-part="menu" hidden>
                         {{ include('@NowoUiKitBundle/partials/_kebab.html.twig', {

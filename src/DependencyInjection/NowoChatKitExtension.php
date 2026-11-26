@@ -7,6 +7,9 @@ namespace Nowo\ChatKitBundle\DependencyInjection;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiGuard;
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiRouteLoader;
+use Nowo\ChatKitBundle\Contract\ChatCardProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatComposerActionProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatMessageMenuSlotProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatReferenceProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatSidebarSectionProviderInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Compiler\PrivateEntityManagerPass;
@@ -240,6 +243,10 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $container->registerForAutoconfiguration(ChatReferenceProviderInterface::class)->addTag(ChatReferenceProviderInterface::TAG);
         // 1.25: sidebar sections, likewise (priority through #[AsTaggedItem] or the tag's `priority`).
         $container->registerForAutoconfiguration(ChatSidebarSectionProviderInterface::class)->addTag(ChatSidebarSectionProviderInterface::TAG);
+        // 2.6 (spec 259): typed cards, composer actions and message menu slots, likewise.
+        $container->registerForAutoconfiguration(ChatCardProviderInterface::class)->addTag(ChatCardProviderInterface::TAG);
+        $container->registerForAutoconfiguration(ChatComposerActionProviderInterface::class)->addTag(ChatComposerActionProviderInterface::TAG);
+        $container->registerForAutoconfiguration(ChatMessageMenuSlotProviderInterface::class)->addTag(ChatMessageMenuSlotProviderInterface::TAG);
 
         $loader = new PhpFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.php');

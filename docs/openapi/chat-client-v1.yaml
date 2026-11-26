@@ -1,12 +1,13 @@
-# ChatKitBundle client API v1 (2.4; 2.5 writes). Kept in step with the routes by ChatClientApiOpenApiTest. See docs/API.md.
+# ChatKitBundle client API v1 (2.4; 2.5 writes; 2.6 typed cards). Kept in step with the routes by ChatClientApiOpenApiTest. See docs/API.md.
 openapi: 3.1.0
 info:
   title: ChatKitBundle client API
-  version: 1.2.0
+  version: 1.3.0
   description: >-
     Stateless chat API for native clients (Beacon Desktop): reads, the reader's own read marks, (2.4.1) logout and
     (2.5) writes: send, thread reply, reactions, edit and delete of one's own message (scope chat:write, off until
-    client_api.writes; me.features tells which). Bearer tokens of the host (ChatKit issues none); off until the host configures client_api.principal_resolver. Paths are relative to
+    client_api.writes; me.features tells which) and (2.6, spec 259) typed cards: a `card` object on reference tokens,
+    a `cards` field on send and thread reply, and the host's composer actions on a conversation. Bearer tokens of the host (ChatKit issues none); off until the host configures client_api.principal_resolver. Paths are relative to
     <client_api.prefix>/chat/v1 (default /api/chat/v1). Every request names its context in the context header
     (client_api.context_header; Beacon X-Beacon-Context) when the host has a context policy. Responses are never
     cached. Unknown, foreign or out-of-context uuids answer 404, never 403.
@@ -103,6 +104,19 @@ paths:
                             type: object
                             properties:
                               send: { type: boolean, description: 'Whether the caller may post here (the write routes follow the same rule).' }
+                          composerActions:
+                            type: array
+                            description: >-
+                              2.6 (spec 259): the host's composer actions for the caller (none without write rights or
+                              while writes are off). Their dialogs are web pages: a native client builds its own flow.
+                            items:
+                              type: object
+                              required: [key, label, icon, slash]
+                              properties:
+                                key: { type: string, pattern: '^[a-z][a-z0-9_-]{0,31}$' }
+                                label: { type: string }
+                                icon: { type: string }
+                                slash: { type: [string, 'null'] }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Error' }
@@ -165,7 +179,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WriteBody' }
+            schema: { $ref: '#/components/schemas/WriteBodyCards' }
       responses:
         '201':
           description: Sent
@@ -322,7 +336,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WriteBody' }
+            schema: { $ref: '#/components/schemas/WriteBodyCards' }
       responses:
         '201':
           description: Replied
@@ -584,7 +598,7 @@ components:
             reactions: { type: boolean, description: '2.5: PUT/DELETE …/reactions/{emoji} is offered.' }
             editOwn: { type: boolean, description: '2.5: PATCH of one''s own message is offered.' }
             deleteOwn: { type: boolean, description: '2.5: DELETE of one''s own message is offered.' }
-            cards: { type: boolean, description: '2.6 (spec 259): typed card references in a write body; false in 2.5 (text only).' }
+            cards: { type: boolean, description: '2.6 (spec 259): true when the host has card providers — reference tokens may carry a `card` object and send / thread reply take `cards`; false in 2.5 (text only).' }
             search: { type: boolean }
             attachments: { type: boolean }
             serverLogout:
@@ -617,6 +631,54 @@ components:
       additionalProperties: false
       properties:
         text: { type: string, maxLength: 4000 }
+    WriteBodyCards:
+      type: object
+      description: >-
+        2.6 (spec 259): a send or a thread reply. `text` as in WriteBody; `cards` only when me.features.cards is true
+        (else 422 unsupported_field). Each card is appended after the text as its own paragraph; the host is asked
+        whether the person may share it here, and one refused card refuses the whole write (422 card_not_allowed).
+        422 invalid_cards for a malformed list.
+      required: [text]
+      additionalProperties: false
+      properties:
+        text: { type: string, maxLength: 4000, description: May be empty when cards are given. }
+        cards:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            required: [type, id]
+            additionalProperties: false
+            properties:
+              type: { type: string, pattern: '^[a-z][a-z0-9_-]{0,31}$' }
+              id: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
+    CardView:
+      type: object
+      description: 2.6 (spec 259) — what a typed card adds to its reference token. Plain text; same-origin paths.
+      required: [state, facts, actions]
+      properties:
+        state: { type: string, enum: [open, locked] }
+        facts:
+          type: array
+          maxItems: 4
+          items:
+            type: object
+            required: [label, value]
+            properties:
+              label: { type: string }
+              value: { type: string }
+        actions:
+          type: array
+          maxItems: 3
+          items:
+            type: object
+            required: [key, label, kind, url, dialog]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              kind: { type: string, enum: [open, request_access, host] }
+              url: { type: string, description: A same-origin path of the host (a web page). }
+              dialog: { type: boolean }
     Written:
       type: object
       required: [message, replayed]
@@ -780,7 +842,8 @@ components:
       description: >-
         text (text, marks: bold|italic|strike), break, code (text), mention (userUuid, name), link (url: http(s) or
         mailto, text, card, provider), reference (visible true: refType, id, typeLabel, icon, title, url or null,
-        subtitle, badge, tone; visible false: text only — the neutral "not visible" placeholder, R2).
+        subtitle, badge, tone; 2.6: a typed card also has `card` (CardView); visible false: text only — the neutral
+        "not visible" placeholder, R2). `card` is a boolean on link tokens (a link card) and a CardView on references.
       properties:
         type: { type: string, enum: [text, break, code, mention, link, reference] }
         text: { type: string }
@@ -788,7 +851,10 @@ components:
         userUuid: { type: string }
         name: { type: string }
         url: { type: [string, 'null'] }
-        card: { type: boolean }
+        card:
+          oneOf:
+            - { type: boolean }
+            - { $ref: '#/components/schemas/CardView' }
         provider:
           type: object
           properties:

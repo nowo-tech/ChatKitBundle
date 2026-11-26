@@ -53,6 +53,17 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | 1.37 `search_text` (audit VA2-1) | written by the entity with the text it derives from, in the same unit of work as send, edit, delete and GDPR erasure (no extra statement, no extra lock); the full-text index follows inside the database | — |
 | 1.37 `nowo:chat:search-backfill` | batches by id, one short connection-level transaction each (DBAL only: no entity manager flushed, cleared or reset); `UPDATE … WHERE search_text IS NULL`, so a concurrent send or edit always wins; a lock wait timeout, deadlock or `lock_timeout` rolls the batch back and stops with `CONFLICT_001` (exit 75), the batches before it kept | `--after-id` resumes; re-run safe |
 | 1.37 `nowo:chat:search-index --force` | one DDL statement outside any transaction (`CREATE INDEX CONCURRENTLY` cannot run in one; MySQL commits DDL itself); a lock wait timeout, deadlock or `lock_timeout` stops it with `CONFLICT_001` (exit 75): no usable index was built; on PostgreSQL an INVALID index may remain until `--force` runs again, which drops it before building (if that build fails too, no index is left); PostgreSQL search keeps working without it (slower), MySQL / MariaDB search needs it | re-run safe |
+| 2.6 send with typed cards | `canShare()` of every card is asked **before** the unit (REQ-RUNTIME-003 rule 9: no host call under a lock); the send unit is then the plain send's (conversation row lock first). A refusal writes nothing. `ChatCardSharedEvent` after the commit | the client resends (with its `Idempotency-Key`: a replay) |
+| 2.6 edit of a message with cards | as edit: the cards are the stored message's (read before the unit), never asked again; the text is compared under the conversation lock | the same text again is no edit |
+| 2.6 card render | read-only, per request: no lock, no write; a card deleted, revoked or burnt between two requests is rendered as the host answers on the next one | — |
+
+2.6 typed cards (spec 259): a message with cards is written by the same unit as any send, so a card send racing the
+deletion of its conversation or of earlier messages queues on the conversation's row lock. `ConcurrentWritersTest`
+races card sends against deletes (`testCardSendsAgainstDeletes`: every call answers, no deleted message keeps a card
+token, every live card message is whole) and card reads against sends and deletes (`testCardReadsAgainstDeletes`: every
+read answers, a deleted message never shows a card) with two worker processes. Revealing a one-time secret is a host
+page (Beacon) and never a ChatKit write: its race with a membership removal is the host's (the reveal checks live
+membership), while ChatKit never memoises a card across requests (`ChatCardsWorkerTest`).
 
 2.5 client API writes (send, thread reply, reactions, edit and delete of one's own message) are `ChatService`'s own units
 of work, the dock's: the conversation's row is locked first (one lock order), the `Idempotency-Key` (scoped to the token
@@ -106,6 +117,8 @@ request: the request's `CommitMark` (taken at `kernel.request` with `commit_dete
 - `tests/Integration/Service/ChatMessageActionsTest` covers saving the same message twice and repeated mark unread.
 - 1.36: `ConcurrentWritersTest` also sends one forward from two workers under one key (one copy), concurrent replies
   in one thread (the count matches the replies) and concurrent edits of one message (every previous text is kept once).
+- 2.6: `ConcurrentWritersTest` also races card sends against deletes and card reads against sends and deletes;
+  `ChatCardsWorkerTest` grants and revokes a card every request on one kernel.
 - 2.0: `ConcurrentWritersTest` also purges the same channel conversations from two workers at once (every call
   answers, nothing of them is left).
 - 1.37: `tests/Database/MessageSearchDatabaseTest` also runs the backfill while a second session holds a row of the
