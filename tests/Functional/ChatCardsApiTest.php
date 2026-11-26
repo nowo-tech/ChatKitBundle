@@ -4,18 +4,33 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
+use Nowo\ChatKitBundle\Digest\ChatDigestDispatcher;
+use Nowo\ChatKitBundle\Digest\SendChatDigestMessage;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
 use Nowo\ChatKitBundle\Event\ChatCardSharedEvent;
 use Nowo\ChatKitBundle\Model\ChatChannel;
+use Nowo\ChatKitBundle\Model\ChatDigestItem;
+use Nowo\ChatKitBundle\Realtime\ChatPresence;
+use Nowo\ChatKitBundle\Repository\ChatConversationRepository;
+use Nowo\ChatKitBundle\Repository\ChatMessageRepository;
+use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
+use Nowo\ChatKitBundle\Security\ChatAccess;
+use Nowo\ChatKitBundle\Service\ChatMarkdownRenderer;
+use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Tests\Support\Card\TestVaultCardProvider;
+use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingDigestSender;
+use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingLogger;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingPushSender;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestDirectory;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -28,12 +43,14 @@ use function array_unique;
 use function array_values;
 use function assert;
 use function count;
+use function implode;
 use function json_decode;
 use function json_encode;
 use function substr_count;
 
 use const JSON_INVALID_UTF8_SUBSTITUTE;
 use const JSON_THROW_ON_ERROR;
+use const JSON_UNESCAPED_UNICODE;
 
 /**
  * 2.6 (spec 259): typed cards, composer actions and message menu slots through the dock's JSON API. A secret card is
@@ -42,6 +59,9 @@ use const JSON_THROW_ON_ERROR;
  */
 final class ChatCardsApiTest extends DatabaseTestCase
 {
+    /** SC-001: the secret card's title, a title typed in the text and the host's marker (in every rendered card). */
+    private const array LEAKS = ['Prod root DB', 'Typed title', TestVaultCardProvider::SENTINEL];
+
     private KernelBrowser $client;
 
     /** @var list<ChatCardSharedEvent> */
@@ -127,8 +147,14 @@ final class ChatCardsApiTest extends DatabaseTestCase
         self::assertStringContainsString('Shared a secret', $push);
         self::assertStringNotContainsString('Prod root DB', $push);
         self::assertStringContainsString('#Release notes', $push, 'a card that is not a secret reads its title');
-        // SC-001: no table holds the title or the host's sentinel.
-        $this->assertNoTableHolds(['Prod root DB', TestVaultCardProvider::SENTINEL, 'Typed title']);
+        // SC-001: no table holds the title, the typed title or the host's marker (every rendered card carries it).
+        self::assertStringContainsString(TestVaultCardProvider::SENTINEL, $sent['html'], 'the author\'s own card shows the marker');
+        $this->assertNoTableHolds(self::LEAKS);
+        // The digest of the locked and the hidden reader: the generic line or the neutral text, never the title.
+        $digest = $this->digest($luis, $hidden);
+        self::assertStringContainsString('Shared a secret', $digest);
+        self::assertStringContainsString('Content not visible', $digest);
+        $this->assertNothingHolds(['digest' => $digest]);
 
         // Luis sees the cards locked (with Request access in the dialog), Hal the neutral chip.
         $this->login($luis);
@@ -164,6 +190,20 @@ final class ChatCardsApiTest extends DatabaseTestCase
         $this->client->request(Request::METHOD_POST, $base . '/messages/' . $sent['uuid'] . '/forward', server: ['HTTP_X_CSRF_TOKEN' => $config['csrf'], 'CONTENT_TYPE' => 'application/json', 'HTTP_IDEMPOTENCY_KEY' => 'fw-1'], content: json_encode(['targets' => [['conversationUuid' => $dm->getUuid()]]], JSON_THROW_ON_ERROR));
         self::assertSame(422, $this->client->getResponse()->getStatusCode());
         self::assertSame('card_not_allowed', $this->decode()['error']);
+
+        // SC-001, after every send, render, edit and refusal above: tables, log records, push and hub payloads and the
+        // dispatched events.
+        $logger = $this->kernel->getContainer()->get('logger');
+        self::assertInstanceOf(RecordingLogger::class, $logger);
+        self::assertNotSame([], $logger->lines, 'the kernel logs through the recording logger');
+        self::assertCount(3, $this->shared);
+        $this->assertNoTableHolds(self::LEAKS);
+        $this->assertNothingHolds([
+            'logs'   => implode("\n", $logger->lines),
+            'push'   => json_encode($this->get(RecordingPushSender::class)->sent, JSON_THROW_ON_ERROR),
+            'hub'    => json_encode($realtime->published, JSON_THROW_ON_ERROR),
+            'events' => json_encode($this->shared, JSON_THROW_ON_ERROR),
+        ]);
     }
 
     public function testSlotsAndTheComposerChip(): void
@@ -217,6 +257,47 @@ final class ChatCardsApiTest extends DatabaseTestCase
         $this->get(TestVaultCardProvider::class)->names[$user->getChatPublicId()] = $name;
 
         return $user;
+    }
+
+    /**
+     * The unread digest of these readers, as ChatKit hands it to the host's sender (conversation titles and previews).
+     */
+    private function digest(TestUser ...$readers): string
+    {
+        $sender     = new RecordingDigestSender();
+        $dispatcher = new ChatDigestDispatcher(
+            $this->get(TestDirectory::class),
+            $this->get(ChatConversationRepository::class),
+            $this->get(ChatMessageRepository::class),
+            $this->get(ChatUserSettingsRepository::class),
+            $this->get(ChatPresence::class),
+            $this->get(ChatAccess::class),
+            $this->get(ChatPresenter::class),
+            new ChatMarkdownRenderer(),
+            $sender,
+            new ArrayAdapter(),
+            '/inbox?chat={uuid}',
+            60,
+            $this->get(ChatReferences::class),
+        );
+        foreach ($readers as $reader) {
+            $dispatcher(new SendChatDigestMessage((int) $reader->getId()));
+        }
+        self::assertCount(count($readers), $sender->sent, 'one digest per reader');
+
+        return json_encode(array_map(static fn (array $sent): array => array_map(static fn (ChatDigestItem $item): array => (array) $item, $sent['items']), $sender->sent), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * @param array<string, string> $places place => what it holds
+     */
+    private function assertNothingHolds(array $places): void
+    {
+        foreach ($places as $place => $dump) {
+            foreach (self::LEAKS as $needle) {
+                self::assertStringNotContainsString($needle, $dump, $place);
+            }
+        }
     }
 
     private function enablePush(TestUser $user): void

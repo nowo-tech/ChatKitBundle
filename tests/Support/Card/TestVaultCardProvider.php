@@ -23,7 +23,10 @@ use function str_starts_with;
  */
 final class TestVaultCardProvider implements ChatCardProviderInterface
 {
-    /** The sentinel a host dialog would hold: it must never reach ChatKit (SC-001). */
+    /**
+     * A host marker carried by every rendered card (a fact the reader's own card shows): SC-001 checks it never leaves
+     * that card (tables, logs, push, digest, hub, events).
+     */
     public const string SENTINEL = 'S3NT1NEL-hunter2-value';
 
     /** @var list<array{string, string, string, string}> [method, viewerPublicId, ids, `web` or `api:<context>`] */
@@ -73,8 +76,8 @@ final class TestVaultCardProvider implements ChatCardProviderInterface
                 continue;
             }
             $cards[$id] = str_starts_with($name, 'Locked')
-                ? new ChatCard(ChatCardState::Locked, 'Prod root DB', 'Project X vault', '', 'neutral', [new ChatCardFact('Vault', 'Project X')], [new ChatCardAction('request_access', 'Request access', ChatCardActionKind::RequestAccess, '/vault/' . $id . '/request', true)])
-                : new ChatCard(ChatCardState::Open, 'Prod root DB', 'Project X vault', 'Shared', 'success', [new ChatCardFact('Vault', 'Project X'), new ChatCardFact('Expires', 'Never')], [new ChatCardAction('open', 'Open', ChatCardActionKind::Open, '/vault/' . $id)]);
+                ? new ChatCard(ChatCardState::Locked, 'Prod root DB', 'Project X vault', '', 'neutral', [new ChatCardFact('Vault', 'Project X'), new ChatCardFact('Marker', self::SENTINEL)], [new ChatCardAction('request_access', 'Request access', ChatCardActionKind::RequestAccess, '/vault/' . $id . '/request', true)])
+                : new ChatCard(ChatCardState::Open, 'Prod root DB', 'Project X vault', 'Shared', 'success', [new ChatCardFact('Vault', 'Project X'), new ChatCardFact('Expires', 'Never'), new ChatCardFact('Marker', self::SENTINEL)], [new ChatCardAction('open', 'Open', ChatCardActionKind::Open, '/vault/' . $id)]);
         }
         // Something that was not asked is dropped by ChatKit.
         $cards['zz'] = new ChatCard(ChatCardState::Open, 'Not asked');

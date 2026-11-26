@@ -138,6 +138,12 @@ composer update nowo-tech/chat-kit-bundle
   window template without `data-part="composer-tools"` gets the action buttons at the top of the composer.
 - **Constructors.** A custom construction (not the container's) of `ChatReferences`, `ChatApiController`,
   `ChatClientApiController`, `ChatDockExtension` or `ChatMessageTokens` gains optional last arguments.
+- **Deliberate v1 limits of cards.** An edit changes the text only: the message keeps its cards as sent and
+  `canShare()` is not asked again (cards are fixed at send). A message that holds cards cannot be forwarded
+  (`422 card_not_allowed`; the dock hides *Forward*). Both are the safer option and match Q-259 (no forward of messages
+  with attachments in v1); a host that needs another card in a message sends a new message.
+- **One generic line for secret cards.** Push, digest, previews and search read "🔑 Shared a secret"
+  (`chat.card_secret`) for every `isSecret()` card type; there is no per-type line such as "Shared a vault item".
 - **Idempotency keys (audit ZCG-v-I1).** The dock and the DDD facade (`ChatMessageMenu::forward()`,
   `replyInThread()`) now refuse keys starting with `client:` in any letter case (`CLIENT:…`). Host code that generated
   such keys must use another prefix.

@@ -22,6 +22,7 @@ use Nowo\ChatKitBundle\Tests\Support\Card\TestMenuSlotProvider;
 use Nowo\ChatKitBundle\Tests\Support\Card\TestNoteCardProvider;
 use Nowo\ChatKitBundle\Tests\Support\Card\TestVaultCardProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\CountingAvatarResolver;
+use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingLogger;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingPushSender;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
 use Nowo\ChatKitBundle\Tests\Support\Chat\TestAccessPolicy;
@@ -51,6 +52,7 @@ use Nowo\SearchKitBundle\Test\QueryCounter as SearchKitQueryCounter;
 use Nowo\SearchKitBundle\Test\QueryCountingMiddleware as SearchKitQueryCountingMiddleware;
 use Nowo\TransactionContract\TransactionRunnerInterface;
 use Nowo\UiKitBundle\NowoUiKitBundle;
+use Psr\Log\LoggerInterface;
 use ReflectionMethod;
 use Symfony\Bundle\FrameworkBundle\FrameworkBundle;
 use Symfony\Bundle\FrameworkBundle\Kernel\MicroKernelTrait;
@@ -283,6 +285,10 @@ final class TestKernel extends Kernel
             foreach ([TestVaultCardProvider::class, TestNoteCardProvider::class, TestComposerActionProvider::class, TestMenuSlotProvider::class] as $class) {
                 $services->set($class)->autoconfigure();
             }
+            // SC-001: every log record of the kernel is captured (the framework's default logger is only registered
+            // when no `logger` service exists).
+            $services->set('logger', RecordingLogger::class);
+            $services->alias(LoggerInterface::class, 'logger');
         }
         if ($this->sidebarProviders) {
             $services->set(TestSidebarProvider::class)->autoconfigure();
