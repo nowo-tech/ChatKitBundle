@@ -398,7 +398,8 @@ While `me.features.attachments` is true (the host turned `attachments.enabled` o
 - Messages carry `attachments`: the **clean** files only, each `{uuid, name, extension, mediaType, kind, size, state,
   urls: {original}, expiresAt}`. `name` is user content: render it as text. The URL is signed for this token and
   context and expires after 5 minutes; ask `GET attachments/{uuid}` again for a fresh one.
-- `GET files/{uuid}/original?e&s` downloads: send the Bearer token (and the context header) too; the signature binds
+- `GET files/{uuid}/original?e&s` downloads: send the Bearer token (and the context header) too — always (owner
+  decision 2026-11-26): download with `fetch()` and show a blob URL, never a bare `<img src>` / `<video src>`; the signature binds
   the token id and the context, and access is checked again. 302 to a bucket URL valid 60 seconds, or the bytes (206 for
   a single `Range`). Every refusal is an empty 404.
 - Uploads (BD-4; `chat:write`, `client_api.writes`, `Idempotency-Key` per token and conversation):
@@ -406,7 +407,8 @@ While `me.features.attachments` is true (the host turned `attachments.enabled` o
   sees it until the scan ends (`clean`, `blocked` or `failed`; poll `GET attachments/{uuid}` or
   `GET conversations/{uuid}/attachments/drafts`, or listen to the `attachment` realtime event: ids and the state, to the
   uploader only). Then `POST conversations/{uuid}/messages` with `attachments: [uuid…]` (the text may be empty).
-  Refusals: `400 invalid_file|empty_file|invalid_file_name|content_encoding_refused`, `409 attachment_not_ready`,
+  Refusals: `403 attachments_not_allowed` (the host's attach policy, on upload and on send),
+  `400 invalid_file|empty_file|invalid_file_name|content_encoding_refused`, `409 attachment_not_ready`,
   `413 file_too_large`, `415 file_type_not_allowed|type_mismatch`, `422 attachment_invalid|too_many_attachments|
   too_many_pending|idempotency_mismatch`, `429 rate_limited`, `503 storage_unavailable`.
 - `DELETE attachments/{uuid}` removes a draft or a file of the caller's own message (edit window); 204, idempotent.

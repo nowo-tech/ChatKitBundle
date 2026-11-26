@@ -1297,6 +1297,14 @@ ODF, legacy OLE), `audio` (mp3, m4a, aac, ogg, opus, wav), `video` (mp4, webm). 
 opt-in. SVG, HTML pages and executables are in no group; `extra_types` adds an extension as kind `other` (always a
 download; the sniffed type must equal the declared one).
 
+### Who may attach (FR-010)
+
+Optional: implement `Nowo\ChatKitBundle\Contract\ChatAttachmentPolicyInterface::mayAttach(ChatComposerScope $scope)`
+and set `attachments.policy`. Attaching is then denied unless it answers true; it is asked on every upload and again on
+every send that carries files, with the person, the conversation (kind, channel key) and the client API context. A
+refusal (or an exception) is `403 attachments_not_allowed`. Without it, whoever may write in a conversation may attach.
+Moderators hide a file with `block()`; there is no per-file removal by moderators.
+
 ### Service for DDD hosts
 
 `Nowo\ChatKitBundle\Contract\ChatAttachmentsInterface` (by public uuid, views only): `upload()`, `drafts()`,

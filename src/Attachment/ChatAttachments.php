@@ -10,6 +10,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use Nowo\ChatKitBundle\Attachment\Message\ScanChatAttachment;
+use Nowo\ChatKitBundle\Contract\ChatAttachmentPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatAttachmentsInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatAttachment;
@@ -21,6 +22,7 @@ use Nowo\ChatKitBundle\Event\ChatAttachmentRemovedEvent;
 use Nowo\ChatKitBundle\Event\ChatAttachmentUploadedEvent;
 use Nowo\ChatKitBundle\Model\ChatAttachmentUrl;
 use Nowo\ChatKitBundle\Model\ChatAttachmentView;
+use Nowo\ChatKitBundle\Model\ChatComposerScope;
 use Nowo\ChatKitBundle\Model\ChatMessageView;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
 use Nowo\ChatKitBundle\Realtime\ChatNotifier;
@@ -109,6 +111,7 @@ final readonly class ChatAttachments implements ChatAttachmentsInterface
      * @param EventDispatcherInterface|null $events Receives the attachment events
      * @param ClockInterface $clock Every time written
      * @param LoggerInterface|null $logger Logs failed reference / scan dispatches (ids only)
+     * @param ChatAttachmentPolicyInterface|null $policy FR-010: who may attach where; null: whoever may write
      */
     public function __construct(
         private EntityManagerInterface $entityManager,
@@ -135,15 +138,17 @@ final readonly class ChatAttachments implements ChatAttachmentsInterface
         private ?EventDispatcherInterface $events = null,
         private ClockInterface $clock = new Clock(),
         private ?LoggerInterface $logger = null,
+        private ?ChatAttachmentPolicyInterface $policy = null,
     ) {
     }
 
     /**
      * {@inheritDoc}
      */
-    public function upload(ChatUserInterface $uploader, string $conversationUuid, string $path, string $name, ?string $idempotencyKey = null): ChatAttachmentView
+    public function upload(ChatUserInterface $uploader, string $conversationUuid, string $path, string $name, ?string $idempotencyKey = null, ?string $contextKey = null): ChatAttachmentView
     {
-        $conversation       = $this->writable($uploader, $conversationUuid);
+        $conversation = $this->writable($uploader, $conversationUuid);
+        $this->assertMayAttach($uploader, $conversation, $contextKey);
         $uploaderKey        = (string) ChatUserReferences::key($uploader);
         [$name, $extension] = ChatAttachmentTypes::sanitizeName($name) ?? throw new ChatAttachmentRefused(ChatAttachmentRefused::INVALID_FILE_NAME);
         if ($path === '' || !StoredFileSource::isLocal($path) || is_link($path) || !is_file($path)) {
@@ -344,6 +349,8 @@ final readonly class ChatAttachments implements ChatAttachmentsInterface
         if ($uuids === []) {
             return $this->chat->sendWith($author, $conversation, $body, $before, $after, $cardContext, $cardApi);
         }
+        // FR-010: asked again on send (a permission withdrawn since the upload refuses the files).
+        $this->assertMayAttach($author, $conversation, $cardContext);
         $authorKey = (string) ChatUserReferences::key($author);
         $attach    = function (array $messages) use ($uuids, $authorKey, $conversation, $after): void {
             $message = $messages[0] ?? null;
@@ -447,6 +454,27 @@ final readonly class ChatAttachments implements ChatAttachmentsInterface
             if ($row['state'] !== ChatAttachmentState::Clean->value || !$this->rows->attach($row['id'], (int) $message->getId(), $position, $now)) {
                 throw new ChatAttachmentRefused(ChatAttachmentRefused::INVALID);
             }
+        }
+    }
+
+    /**
+     * FR-010: the host's attach policy, when it has one (deny unless it allows; an exception is a refusal).
+     *
+     * @throws ChatAttachmentRefused `attachments_not_allowed`
+     */
+    private function assertMayAttach(ChatUserInterface $user, ChatConversation $conversation, ?string $contextKey): void
+    {
+        if (!$this->policy instanceof ChatAttachmentPolicyInterface) {
+            return;
+        }
+        try {
+            $allowed = $this->policy->mayAttach(new ChatComposerScope($user->getChatPublicId(), $conversation->getUuid(), $conversation->getKind()->value, $conversation->getChannelKey(), $contextKey));
+        } catch (Throwable $exception) {
+            $this->logger?->warning('ChatKit: the attachment policy failed; the files are refused.', ['policy' => $this->policy::class, 'exception' => $exception::class]);
+            $allowed = false;
+        }
+        if ($allowed !== true) {
+            throw new ChatAttachmentRefused(ChatAttachmentRefused::NOT_ALLOWED);
         }
     }
 

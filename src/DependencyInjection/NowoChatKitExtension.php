@@ -343,7 +343,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      * 2.7 (spec 259 block B): the attachment services, only with `attachments.enabled` (the `Attachment` namespace is
      * never autoloaded). The build fails without nowo-tech/storage-kit-bundle ^2.2, symfony/messenger or a scanner.
      *
-     * @param array{enabled: bool, scanner: string|null, scope_resolver: string|null, max_bytes: int, max_per_message: int, max_pending_per_user: int, pending_ttl_hours: int, types: list<string>, extra_types: array<string, string>, scan: array{timeout_seconds: int, lease_seconds: int, max_attempts: int, unscannable: string, alert_after_seconds: int}, download: array{url_ttl_seconds: int, bind_session: bool, storage_ttl_seconds: int}, audit_downloads: bool, limits: array<string, int>} $attachments
+     * @param array{enabled: bool, scanner: string|null, policy: string|null, scope_resolver: string|null, max_bytes: int, max_per_message: int, max_pending_per_user: int, pending_ttl_hours: int, types: list<string>, extra_types: array<string, string>, scan: array{timeout_seconds: int, lease_seconds: int, max_attempts: int, unscannable: string, alert_after_seconds: int}, download: array{url_ttl_seconds: int, bind_session: bool, storage_ttl_seconds: int}, audit_downloads: bool, limits: array<string, int>} $attachments
      *
      * @throws InvalidConfigurationException When a requirement is missing
      */
@@ -396,7 +396,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $define(ChatAttachmentFileContext::class)
             ->setArgument('$scopes', $attachments['scope_resolver'] === null ? null : new Reference($attachments['scope_resolver']))
             ->addTag(FileContextInterface::TAG);
-        $define(ChatAttachments::class);
+        $define(ChatAttachments::class)->setArgument('$policy', $attachments['policy'] === null ? null : new Reference($attachments['policy']));
         $container->setAlias(ChatAttachmentsInterface::class, ChatAttachments::class)->setPublic(true);
         $define(ChatAttachmentDownloads::class)->setArgument('$limiter', new Reference('limiter.nowo_chat_attachment_download', ContainerInterface::NULL_ON_INVALID_REFERENCE));
         $define(ChatAttachmentsSweepCommand::class)->addTag('console.command');

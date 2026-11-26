@@ -28,11 +28,12 @@ interface ChatAttachmentsInterface
      * @param string $path A local regular file the caller owns (an uploaded temporary file); it is read, never moved
      * @param string $name The client's file name (sanitized; never trusted for the type)
      * @param string|null $idempotencyKey Makes a retry answer the first upload (`[A-Za-z0-9_.:-]{1,80}`)
+     * @param string|null $contextKey The client API context of the request (for ChatAttachmentPolicyInterface); null on the web
      *
-     * @throws ChatAttachmentRefused `empty_file`, `invalid_file_name`, `file_too_large`, `file_type_not_allowed`, `type_mismatch`, `too_many_pending`, `idempotency_mismatch`, `storage_unavailable`, `read_only`
+     * @throws ChatAttachmentRefused `attachments_not_allowed`, `empty_file`, `invalid_file_name`, `file_too_large`, `file_type_not_allowed`, `type_mismatch`, `too_many_pending`, `idempotency_mismatch`, `storage_unavailable`, `read_only`
      * @throws ChatNotFoundException When the conversation is unknown or not readable by the uploader
      */
-    public function upload(ChatUserInterface $uploader, string $conversationUuid, string $path, string $name, ?string $idempotencyKey = null): ChatAttachmentView;
+    public function upload(ChatUserInterface $uploader, string $conversationUuid, string $path, string $name, ?string $idempotencyKey = null, ?string $contextKey = null): ChatAttachmentView;
 
     /**
      * The uploader's drafts in a conversation (any state but deleted), oldest first.
@@ -81,7 +82,7 @@ interface ChatAttachmentsInterface
      * @param list<string> $attachmentUuids Draft uuids, in the order they appear in the message
      * @param string|null $idempotencyKey Makes a retry answer the first message
      *
-     * @throws ChatAttachmentRefused `attachment_not_ready`, `attachment_invalid`, `too_many_attachments`
+     * @throws ChatAttachmentRefused `attachments_not_allowed`, `attachment_not_ready`, `attachment_invalid`, `too_many_attachments`
      * @throws ChatNotFoundException When the conversation is unknown or not readable
      */
     public function send(ChatUserInterface $author, string $conversationUuid, string $body, array $attachmentUuids, ?string $idempotencyKey = null): ChatMessageView;

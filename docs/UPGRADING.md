@@ -193,14 +193,19 @@ composer update nowo-tech/chat-kit-bundle
 4. **Workers and limits (QB-259-6).** Route `ScanChatAttachment` and `RemoveChatAttachmentObjects` to an async
    transport; set PHP `upload_max_filesize` / `post_max_size` and Caddy/FrankenPHP `request_body max_size` to ≥ 25 MB;
    keep `max_input_time` and the Caddy write timeout above a 25 MB upload at your slowest supported link.
-5. **Permissions (FR-010, deny by default).** ChatKit lets anyone who may write in a conversation attach files there.
-   To restrict it per role, gate the attach permission in your `ChatAccessPolicyInterface` / channel write policy, or
-   keep `attachments.enabled: false` per instance until the permission catalogue entry exists. (No ChatKit port for a
-   separate "attach files" permission in 2.7; see the open question in the PR.)
+5. **Permissions (FR-010, deny by default; owner decision 2026-11-26).** Implement
+   `ChatAttachmentPolicyInterface::mayAttach(ChatComposerScope)` over your permission catalogue ("attach files" per
+   role) and set `attachments.policy: <service id>`. With it, attaching is **denied unless it allows**; it is asked on
+   every upload and again on every send that carries files (a permission withdrawn after the upload refuses the send),
+   with the client API context in `contextKey`, and a refusal is `403 attachments_not_allowed` on both, dock and client
+   API alike. An exception counts as a refusal. Without the port, whoever may write may attach (2.7 default).
+   Moderators have no per-file removal: they hide a file for everyone with `ChatAttachmentsInterface::block()` (owner
+   decision 2026-11-26); a file of a sent message is otherwise removed only by its message's author (edit window).
 6. **Push (QB-259-8, one `push_preview` switch).** A message of files only reads "📎 Attachment"; file names never go
    to push or digest in 2.7 (names in push are 2.8 material behind the same switch).
 7. **Desktop (QB-259-4).** BD-3 is read-only: read `me.features.attachments`, show `message.attachments` with
-   `urls.original` (signed for the token and context, 5 minutes; the download request carries the Bearer token too) and
+   `urls.original` (signed for the token and context, 5 minutes; the download request **must** carry the Bearer token
+   too — owner decision 2026-11-26: Desktop downloads with `fetch()` and a blob URL, never a bare `<img src>`) and
    ask `GET attachments/{uuid}` again when `expiresAt` has passed. Uploads come with BD-4 (`POST
    conversations/{uuid}/attachments`, `chat:write`, `Idempotency-Key`).
 8. **CSP.** Downloads are `attachment` (`nosniff`, `default-src 'none'; sandbox`); with a redirect-delivered StorageKit

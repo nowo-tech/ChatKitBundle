@@ -20,6 +20,7 @@ use Nowo\ChatKitBundle\Contract\ChatRealtimeTransportInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
 use Nowo\ChatKitBundle\Tests\Support\Attachment\InMemoryStorage;
+use Nowo\ChatKitBundle\Tests\Support\Attachment\TestAttachmentPolicy;
 use Nowo\ChatKitBundle\Tests\Support\Attachment\TestScanner;
 use Nowo\ChatKitBundle\Tests\Support\Card\TestComposerActionProvider;
 use Nowo\ChatKitBundle\Tests\Support\Card\TestMenuSlotProvider;
@@ -314,6 +315,7 @@ final class TestKernel extends Kernel
             $services->set(FileUris::class);
             $services->set(FileDeliveryResponder::class);
             $services->set(TestScanner::class);
+            $services->set(TestAttachmentPolicy::class);
             $container->extension('framework', ['messenger' => [
                 'transports' => ['chat_attachments' => 'in-memory://'],
                 'routing'    => [ScanChatAttachment::class => 'chat_attachments', RemoveChatAttachmentObjects::class => 'chat_attachments'],

@@ -43,6 +43,9 @@ OK): "Send as a secret". Previews, unfurls and the Files and links tab are 2.8.0
   minute, bytes per hour, downloads per minute.
 - **FR-ATT-009**: events after the commit, ids only: uploaded, scanned, blocked, removed, downloaded (opt-in).
 - **FR-ATT-010**: no forward of a message with files (`has_attachments`).
+- **FR-ATT-011** (owner decision 2026-11-26): optional `ChatAttachmentPolicyInterface`; with it, attaching is denied
+  unless it allows, asked on upload and again on send (`403 attachments_not_allowed`, a failing port denies); without it
+  whoever may write may attach. API downloads keep the Bearer requirement; moderators use `block()` only.
 - **FR-HANDOFF-001**: `nowo-chat:before-send` gains `warn()` and, with both opt-ins (`web_ui.dock.secret_handoff` and a
   probe listener), `handOff()`; the hand-off dispatches `nowo-chat:secret-handoff` `{text, conversation, kind}` in the
   browser, clears the draft and its stored copy and sends nothing; without the opt-ins the dock is as in 2.6.

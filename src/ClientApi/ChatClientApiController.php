@@ -763,7 +763,7 @@ final readonly class ChatClientApiController
         $this->deny($this->uploadLimiter?->create('nowo_chat_upload_' . $person)->consume()->isAccepted() === false, 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
         $this->deny($this->bytesLimiter?->create('nowo_chat_upload_bytes_' . $person)->consume(max(1, intdiv((int) $file->getSize() + 1023, 1024)))->isAccepted() === false, 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
         try {
-            $view = $attachments->upload($user, $conversation->getUuid(), $file->getPathname(), $file->getClientOriginalName(), self::scopedKey($call, $conversation, $key));
+            $view = $attachments->upload($user, $conversation->getUuid(), $file->getPathname(), $file->getClientOriginalName(), self::scopedKey($call, $conversation, $key), $call->contextKey);
         } catch (ChatAttachmentRefused $refused) {
             throw new ChatApiException($refused->error, $refused->status, $refused);
         } catch (ChatNotFoundException) {

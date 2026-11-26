@@ -275,6 +275,7 @@ nowo_chat_kit:
       attachments:
         enabled: false                 # off by default
         scanner: ~                     # ChatAttachmentScannerInterface service id; required with enabled
+        policy: ~                      # ChatAttachmentPolicyInterface service id (FR-010): deny unless it allows; null: writers may attach
         scope_resolver: ~              # ChatAttachmentScopeResolverInterface service id (bucket scope and owner)
         max_bytes: 26214400            # 25 MiB; ceiling 100 MiB; also capped by PHP and StorageKit
         max_per_message: 10            # 1..20

@@ -8,5 +8,6 @@
 - [x] T005 Front end: tray, send when ready, file cards, downloads, realtime state, forward hidden; secret hand-off
       (probe, event, warning template, cleared draft, edit and thread kinds); CSS, icons, translations (7 locales)
 - [x] T006 Tests: unit, functional (SC-002, edges, routes, off), client API, worker memory, two-session races, Vitest
+- [x] T008 FR-010 attach policy port (owner decision 2026-11-26): upload and send checks, tests, docs
 - [x] T007 Docs: CHANGELOG, UPGRADING (Beacon adoption), USAGE, API, CONFIGURATION, CONCURRENCY, SECURITY, worker
       audit, ROADMAP, code inventory

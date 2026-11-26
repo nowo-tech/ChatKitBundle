@@ -28,6 +28,7 @@ final class ChatAttachmentRefused extends InvalidArgumentException
     public const string READ_ONLY            = 'read_only';
     public const string RATE_LIMITED         = 'rate_limited';
     public const string CONTENT_ENCODING     = 'content_encoding_refused';
+    public const string NOT_ALLOWED          = 'attachments_not_allowed';
 
     /** Code => HTTP status. */
     public const array STATUS = [
@@ -36,6 +37,7 @@ final class ChatAttachmentRefused extends InvalidArgumentException
         self::INVALID_FILE_NAME    => 400,
         self::CONTENT_ENCODING     => 400,
         self::READ_ONLY            => 403,
+        self::NOT_ALLOWED          => 403,
         self::NOT_READY            => 409,
         self::FILE_TOO_LARGE       => 413,
         self::TYPE_NOT_ALLOWED     => 415,

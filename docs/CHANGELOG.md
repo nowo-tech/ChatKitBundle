@@ -277,7 +277,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   conversation purge, GDPR erasure) and their StorageKit objects are removed after the commit. See
   [USAGE.md](USAGE.md#attachments-27).
   - Ports: `ChatAttachmentScannerInterface` (required with attachments; the build fails without it),
-    `ChatAttachmentScopeResolverInterface` (optional, QB-259-3: the bucket scope and owner of a conversation).
+    `ChatAttachmentScopeResolverInterface` (optional, QB-259-3: the bucket scope and owner of a conversation),
+    `ChatAttachmentPolicyInterface` (optional, FR-010, `attachments.policy`: when set, attaching is denied unless it
+    allows; asked on upload and again on send; `403 attachments_not_allowed`).
+  - API downloads always need the Bearer token besides the signature; moderators hide files with `block()` only.
   - Service: `ChatAttachmentsInterface` (upload, drafts, attachmentsOf, find, downloadUrl, remove, send, block).
   - Events (ids only, after the commit): `ChatAttachmentUploadedEvent`, `ChatAttachmentScannedEvent`,
     `ChatAttachmentBlockedEvent`, `ChatAttachmentRemovedEvent`, `ChatAttachmentDownloadedEvent`
