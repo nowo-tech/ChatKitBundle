@@ -274,6 +274,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - **Audit.** New event `ChatClientApiWriteEvent` (`action`, `tokenId`, `userPublicId`, `conversationUuid`, `messageUuid`, `replayed`, `contextKey`, `ipPrefix`; never the token or the text).
   - Error codes: 400 `idempotency_key_required`, `idempotency_key_invalid`; 403 `read_only`, `edit_forbidden`, `delete_forbidden`; 422 `unsupported_field`, `invalid_text`, `empty_text`, `text_too_long`, `invalid_link`, `invalid_reaction`, `not_threadable`, `not_reactable`, `idempotency_mismatch`.
   - OpenAPI `chat-client-v1.yaml` 1.2.0. Container parameter `nowo_chat_kit.client_api.writes`.
+  - Audit ZCG (before release): the reaction emoji must be accepted UTF-8 before it is hashed (a raw byte answered 500, L1); write routes check `chat:read` + `chat:write` before spending the write, action or the dock's send budget (L2); a thread reply's root must be in the authorised conversation (I4); emoji path up to 64 bytes and write bodies up to 48 KB (I3); the dock refuses `Idempotency-Key`s starting with `client:`, the client API's namespace (I5).
 
 ### Changed
 
@@ -281,7 +282,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Tests
 
-- Client API writes end to end (`ChatClientApiWritesTest`, `ChatClientApiWritesEdgeTest`): every route and refusal code, replays and mismatches, key scope per token and conversation, posting rights and context, side effects (unread counters, mentions, Web Push, ids-only hints, events), a 120-write worker loop on one kernel, a host chat service without writes, threads off, replays of purged messages, lost key claims.
+- Client API writes end to end (`ChatClientApiWritesTest`, `ChatClientApiWritesEdgeTest`): every route and refusal code, replays and mismatches, key scope per token and conversation, posting rights and context, side effects (unread counters, mentions, Web Push, ids-only hints, events), a 120-write worker loop on one kernel, a host chat service without writes, threads off, replays of purged messages, lost key claims; audit ZCG: raw-byte emojis, a read token leaving the dock budgets untouched, messages of another conversation, a closed ticket, the edit window.
 - REQ-RUNTIME-003 with two worker processes on MySQL 8.4, MariaDB 11.4 and PostgreSQL 16 (`ConcurrentWritersTest`): duplicate sends under one key, concurrent reactions of one person, two senders' read cursors and unread counters.
 
 ## [2.4.1] - 2026-11-26

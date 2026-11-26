@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
+use DateTimeImmutable;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
+use Nowo\ChatKitBundle\Enum\SupportStatus;
 use Nowo\ChatKitBundle\Event\ChatClientApiWriteEvent;
 use Nowo\ChatKitBundle\Event\ChatMentionEvent;
 use Nowo\ChatKitBundle\Event\ChatMessageSentEvent;
@@ -19,8 +21,10 @@ use Nowo\ChatKitBundle\Tests\Support\Chat\TestChannelProvider;
 use Nowo\ChatKitBundle\Tests\Support\ClientApiCalls;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 
 use function array_column;
 use function array_filter;
@@ -29,6 +33,7 @@ use function array_map;
 use function array_values;
 use function assert;
 use function count;
+use function hash;
 use function implode;
 use function json_encode;
 use function rawurlencode;
@@ -294,6 +299,77 @@ final class ChatClientApiWritesTest extends DatabaseTestCase
         self::assertError($this->write('PATCH', $url, 'ana', ['text' => 'back'], 'd-8'), 403, 'edit_forbidden');
         $actions = array_map(static fn (ChatClientApiWriteEvent $e): string => $e->action, array_values(array_filter($this->events, static fn (object $e): bool => $e instanceof ChatClientApiWriteEvent)));
         self::assertSame(['edit', 'edit', 'edit', 'delete', 'delete'], $actions);
+    }
+
+    public function testAReadTokenSpendsNoWriteOrDockBudget(): void
+    {
+        // Audit ZCG-L2: refused for its scopes before the write, action and send budgets (the send budget is the dock's).
+        $dm = $this->dm($this->ana, $this->luis);
+        for ($i = 0; $i < 5; ++$i) {
+            self::assertError($this->write('POST', $this->messages($dm), 'ana-read', ['text' => 'x'], 'ro-' . $i), 403, 'insufficient_scope');
+        }
+        $person = $this->ana->getChatPublicId();
+        foreach (['limiter.nowo_chat_send' => 'nowo_chat_send_' . $person, 'limiter.nowo_chat_action' => 'nowo_chat_action_' . $person, 'limiter.nowo_chat_client_write' => 'nowo_chat_client_write_' . hash('sha256', 'tok-ana-read')] as $service => $key) {
+            $container = $this->kernel->getContainer()->get('test.service_container');
+            assert($container instanceof ContainerInterface);
+            $factory = $container->get($service);
+            assert($factory instanceof RateLimiterFactoryInterface);
+            self::assertSame(100_000, $factory->create($key)->consume(0)->getRemainingTokens(), $service);
+        }
+    }
+
+    public function testAReactionPathMustBeAnAcceptedUtf8Emoji(): void
+    {
+        // Audit ZCG-L1: a non-UTF-8 segment or an emoji the server does not accept is refused, never a 500 from the
+        // request hash (the controller itself answers 422 for raw bytes: ChatClientApiWritesEdgeTest).
+        $dm      = $this->dm($this->ana, $this->luis);
+        $message = $this->get(ChatService::class)->send($this->luis, $dm, 'hi');
+        foreach (['%FF', '%C3', 'x', rawurlencode('🦄')] as $i => $emoji) {
+            $response = $this->write('PUT', $this->messages($dm) . '/' . $message->getUuid() . '/reactions/' . $emoji, 'ana', null, 'u-' . $i);
+            // A non-UTF-8 segment may already stop at the router (404, depending on the Symfony version); never a 500.
+            self::assertContains($response->getStatusCode(), $i < 2 ? [404, 422] : [422], $emoji);
+        }
+        self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_reaction'));
+    }
+
+    public function testAMessageOfAnotherConversationIsNotFound(): void
+    {
+        // Audit ZCG-I1: a message uuid of conversation B under conversation A's path.
+        $mine    = $this->dm($this->ana, $this->luis);
+        $other   = $this->dm($this->ana, $this->bea);
+        $foreign = $this->get(ChatService::class)->send($this->ana, $other, 'elsewhere');
+        $base    = $this->messages($mine) . '/' . $foreign->getUuid();
+        self::assertError($this->write('POST', $base . '/thread', 'ana', ['text' => 'x'], 'f-1'), 404, 'not_found');
+        self::assertError($this->write('PUT', $base . '/reactions/' . rawurlencode('👍'), 'ana', null, 'f-2'), 404, 'not_found');
+        self::assertError($this->write('PATCH', $base, 'ana', ['text' => 'x'], 'f-3'), 404, 'not_found');
+        self::assertError($this->write('DELETE', $base, 'ana', null, 'f-4'), 404, 'not_found');
+
+        // Audit ZCG-I4: a reply whose root lies in another conversation (never written by ChatKit) is not replied to.
+        $root  = $this->get(ChatService::class)->send($this->luis, $mine, 'root');
+        $reply = $this->get(ChatService::class)->send($this->luis, $mine, 'reply');
+        $this->em->getConnection()->executeStatement('UPDATE nowo_chat_message SET thread_root_id = ? WHERE id = ?', [$foreign->getId(), $reply->getId()]);
+        $this->em->clear();
+        self::assertError($this->write('POST', $this->messages($mine) . '/' . $reply->getUuid() . '/thread', 'ana', ['text' => 'x'], 'f-5'), 404, 'not_found');
+        self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message WHERE body = ?', ['x']));
+        self::assertNotNull($root->getId());
+    }
+
+    public function testAClosedTicketAndTheEditWindow(): void
+    {
+        // Audit ZCG-I1: a closed support ticket is read-only; one's own message after the 15-minute window is not editable.
+        $ticket = $this->get(ChatService::class)->openSupport($this->ana);
+        $old    = $this->get(ChatService::class)->send($this->ana, $ticket, 'help');
+        $ticket->changeSupportStatus(SupportStatus::Closed, $this->ana, new DateTimeImmutable());
+        $this->em->flush();
+        self::assertError($this->write('POST', $this->messages($ticket), 'ana', ['text' => 'x'], 'c-1'), 403, 'read_only');
+
+        $dm   = $this->dm($this->ana, $this->luis);
+        $mine = $this->get(ChatService::class)->send($this->ana, $dm, 'old');
+        $this->em->getConnection()->executeStatement('UPDATE nowo_chat_message SET created_at = ? WHERE id = ?', [(new DateTimeImmutable('-16 minutes'))->format('Y-m-d H:i:s'), $mine->getId()]);
+        $this->em->clear();
+        self::assertError($this->write('PATCH', $this->messages($dm) . '/' . $mine->getUuid(), 'ana', ['text' => 'new'], 'c-2'), 403, 'edit_forbidden');
+        self::assertError($this->write('DELETE', $this->messages($dm) . '/' . $mine->getUuid(), 'ana', null, 'c-3'), 403, 'delete_forbidden');
+        self::assertNotNull($old->getId());
     }
 
     public function testOnOneKernelNothingOfAWriteStays(): void

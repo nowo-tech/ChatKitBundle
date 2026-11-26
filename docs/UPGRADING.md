@@ -133,6 +133,7 @@ composer update nowo-tech/chat-kit-bundle
   No migration: the `Idempotency-Key`s use the existing `nowo_chat_idempotency` table (purged by `nowo:chat:purge`). Your stateless firewall on `^%nowo_chat_kit.client_api.v1_path_prefix%/` covers the new routes. Listen to `ChatClientApiWriteEvent` to audit client writes. See [API.md, "Writes"](API.md#writes-25).
 - **Clients.** `me.features.send` is now `true` when writes are on; `me` gains `features.threadReply`, `reactions`, `editOwn`, `deleteOwn`, `cards`, `limits.textMaxLength`, `editWindowSeconds`, `idempotencyKeyMaxLength` and `reactions`. A client that compared `me.features` exactly must accept the new keys.
 - A custom `ChatClientApiGuard` or `ChatClientApiController` construction (not the container's) gains optional last arguments.
+- **Dock `Idempotency-Key`.** The dock's API now refuses keys starting with `client:` (400 `idempotency_key_invalid`): that prefix is the client API's namespace. The bundled dock never sends one.
 
 ## To 2.4.1
 

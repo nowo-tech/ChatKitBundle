@@ -180,7 +180,7 @@ client what this server offers (`send`, `threadReply`, `reactions`, `editOwn`, `
 |---|---|---|
 | Send | `POST conversations/{uuid}/messages` `{text}` | `ChatVoter::SEND`: read-only channels (`ChatChannel::$readOnly`, `ChatChannelWritePolicyInterface`), blocked direct messages (`canWriteDirect()`), closed tickets → `403 read_only` |
 | Thread reply | `POST conversations/{uuid}/messages/{messageUuid}/thread` `{text}` | SEND, then `ChatVoter::THREAD` (a shown text message of the main timeline) → `422 not_threadable`. A reply's uuid replies in its root's thread. `404` while threads are off |
-| Reaction | `PUT` / `DELETE …/messages/{messageUuid}/reactions/{emoji}` | SEND, then `ChatVoter::REACT` (no line, buzz or tombstone) → `422 not_reactable`. The emoji is URL-encoded and must be in `me.reactions.accepted` → `422 invalid_reaction` |
+| Reaction | `PUT` / `DELETE …/messages/{messageUuid}/reactions/{emoji}` | SEND, then `ChatVoter::REACT` (no line, buzz or tombstone) → `422 not_reactable`. The emoji is URL-encoded UTF-8 (at most 64 bytes) and must be in `me.reactions.accepted` → `422 invalid_reaction` (also for bytes that are not UTF-8; the router may answer `404` first) |
 | Edit own | `PATCH …/messages/{messageUuid}` `{text}` | SEND, then `ChatVoter::EDIT`: own message, within `limits.editWindowSeconds` (15 min), not a buzz or tombstone → `403 edit_forbidden` |
 | Delete own | `DELETE …/messages/{messageUuid}` | `ChatVoter::DELETE`: own message within the window → `403 delete_forbidden`. One's own message that is already deleted answers its tombstone again |
 
@@ -194,14 +194,18 @@ client what this server offers (`send`, `threadReply`, `reactions`, `editOwn`, `
   policy's `includes()`), and the message must belong to it; anything else is `404` (audited), never `403`.
 - **Answers** are the same `Message` rows as `GET …/messages/{messageUuid}` (tokens, never HTML). Reactions answer the
   message's `{emoji, count, mine}` after the change, never who reacted.
+- **Scopes before budgets.** A token without `chat:read` + `chat:write` is refused right after the per-IP and per-token
+  budgets, before it spends the write, action or send budget, so a read-only device can never use up the person's dock
+  send budget (audit ZCG-L2).
 - **Audit.** After each write (and each replay) `Nowo\ChatKitBundle\Event\ChatClientApiWriteEvent` is dispatched with the
   `action` (`send`, `thread_reply`, `reaction_add`, `reaction_remove`, `edit`, `delete`), `tokenId`, `userPublicId`,
   `conversationUuid`, `messageUuid`, `replayed`, `contextKey` and the `/24`–`/64` `ipPrefix`: never the token, the text or
-  the emoji.
+  the emoji. A replay dispatches it again with `replayed: true`: deduplicate audit rows on it. Listeners must not throw:
+  the write is already committed, and an exception would turn it into a `500` (the client's retry then replays).
 
 ### Request body
 
-A write body is a JSON object (at most 32 KB) with **one field, `text`** (a string; Markdown as in the dock; at most
+A write body is a JSON object (at most 48 KB: a 4000-character text fits even fully `\uXXXX`-escaped) with **one field, `text`** (a string; Markdown as in the dock; at most
 `limits.textMaxLength` = 4000 characters after trimming). Any other field answers `422 unsupported_field` and nothing is
 written: a field is never silently dropped.
 
@@ -216,8 +220,8 @@ meaning, and a body with `text` only stays valid in every later v1 version.
 Every write needs an `Idempotency-Key` header: a client-generated id of **this write** (a UUID v4/v7 fits; 1–80
 characters of `[A-Za-z0-9_.:-]`). Missing: `400 idempotency_key_required`; malformed: `400 idempotency_key_invalid`.
 
-- **Deduplicated per token and conversation** (the stored key is a hash of the token id, the conversation uuid and the
-  key), for 24 hours (`nowo:chat:purge` removes older keys). Another device of the same person, or another conversation,
+- **Deduplicated per token and conversation** (the stored key is `client:` + a hash of the token id, the conversation uuid
+  and the key; the dock refuses keys starting with `client:`, so its own keys never meet these, audit ZCG-I5), for 24 hours (`nowo:chat:purge` removes older keys). Another device of the same person, or another conversation,
   never collides.
 - **The same key and the same request** (route, message, text or emoji) answer what the first one wrote, with
   `replayed: true` (send and thread reply: `200` instead of `201`) and **nothing written again**. Two attempts racing each

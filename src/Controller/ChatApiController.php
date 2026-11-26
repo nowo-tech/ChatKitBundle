@@ -74,6 +74,7 @@ use function is_int;
 use function is_string;
 use function max;
 use function min;
+use function str_starts_with;
 use function strlen;
 
 use const DATE_ATOM;
@@ -826,7 +827,8 @@ final class ChatApiController extends AbstractController
         $key = $request->headers->get(ChatIdempotency::HEADER);
         try {
             if ($key !== null && $this->chat instanceof ChatService && $this->idempotency instanceof ChatIdempotency) {
-                $this->deny(!ChatIdempotency::isValidKey($key), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
+                // 2.5 (audit ZCG-I5): `client:` is the client API's namespace of stored keys.
+                $this->deny(!ChatIdempotency::isValidKey($key) || str_starts_with($key, ChatIdempotency::CLIENT_PREFIX), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
                 $chat                  = $this->chat;
                 [$messages, $replayed] = $this->idempotency->run($user, $key, ChatIdempotency::hash(['send', $conversation->getUuid(), $body]), static fn (Closure $before, Closure $after): array => [$chat->sendWith($user, $conversation, $body, $before, $after)]);
                 $this->deny($messages === [], 'not_found', Response::HTTP_NOT_FOUND);
@@ -1833,7 +1835,7 @@ final class ChatApiController extends AbstractController
     {
         $key = $request->headers->get(ChatIdempotency::HEADER);
         $this->deny($key === null || !$this->idempotency instanceof ChatIdempotency, 'idempotency_key_required', Response::HTTP_BAD_REQUEST);
-        $this->deny(!ChatIdempotency::isValidKey($key), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
+        $this->deny(!ChatIdempotency::isValidKey($key) || str_starts_with((string) $key, ChatIdempotency::CLIENT_PREFIX), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
 
         return (string) $key;
     }

@@ -66,6 +66,7 @@ use function is_array;
 use function is_int;
 use function is_string;
 use function json_decode;
+use function mb_check_encoding;
 use function min;
 use function preg_match;
 use function strlen;
@@ -115,8 +116,11 @@ final readonly class ChatClientApiController
 
     private const int MAX_JSON_BODY_BYTES = 4096;
 
-    /** 2.5: largest JSON body of a write (as the web UI's): a text of ChatMessage::MAX_LENGTH characters fits escaped. */
-    private const int MAX_WRITE_BODY_BYTES = 32_768;
+    /**
+     * 2.5: largest JSON body of a write: a text of ChatMessage::MAX_LENGTH characters fits even fully `\uXXXX`-escaped
+     * (12 bytes per non-BMP character: 48 000), with room for the key and braces (audit ZCG-I3).
+     */
+    private const int MAX_WRITE_BODY_BYTES = 49_152;
 
     /** 2.5: the fields a write body may hold (`text`); 2.6 adds typed card references (see docs/API.md, "Writes"). */
     public const array WRITE_FIELDS = ['text'];
@@ -538,6 +542,10 @@ final readonly class ChatClientApiController
         $user         = $call->principal->user;
         $conversation = $this->find($request, $call, $uuid);
         $message      = $this->findMessage($request, $call, $conversation, $messageUuid);
+        // Audit ZCG-I4 (defence in depth): the reply goes to its root's conversation, which must be the authorised one.
+        if (ChatThreads::rootOf($message)->getConversation()->getId() !== $conversation->getId()) {
+            $this->guard->notFound($request, $call);
+        }
         $this->deny(!$this->voter->decide(ChatVoter::SEND, $conversation, $user), 'read_only', Response::HTTP_FORBIDDEN);
         $this->deny(!$this->voter->decide(ChatVoter::THREAD, $message, $user), 'not_threadable', Response::HTTP_UNPROCESSABLE_ENTITY);
         [$reply, $replayed] = $this->writing(static fn (): array => $threads->reply($user, $message, $text, self::scopedKey($call, $conversation, $key)));
@@ -561,7 +569,7 @@ final readonly class ChatClientApiController
      *
      * @return JsonResponse `{reactions, replayed}` (`reactions`: the message's `{emoji, count, mine}` after the change)
      */
-    #[Route('/conversations/{uuid}/messages/{messageUuid}/reactions/{emoji}', name: 'reaction', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID, 'emoji' => '[^/]{1,32}'], methods: ['PUT', 'DELETE'])]
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/reactions/{emoji}', name: 'reaction', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID, 'emoji' => '[^/]{1,64}'], methods: ['PUT', 'DELETE'])]
     public function reaction(string $uuid, string $messageUuid, string $emoji, Request $request): JsonResponse
     {
         $call                 = $this->guard->authenticate($request, ChatClientPrincipal::SCOPE_WRITE, ChatClientApiGuard::BUDGET_ACTION);
@@ -573,6 +581,8 @@ final readonly class ChatClientApiController
         $message              = $this->findMessage($request, $call, $conversation, $messageUuid);
         $this->deny(!$this->voter->decide(ChatVoter::SEND, $conversation, $user), 'read_only', Response::HTTP_FORBIDDEN);
         $this->deny(!$this->voter->decide(ChatVoter::REACT, $message, $user), 'not_reactable', Response::HTTP_UNPROCESSABLE_ENTITY);
+        // Audit ZCG-L1: before the request hash (JSON): a non-UTF-8 path segment or an emoji the server does not accept.
+        $this->deny(!mb_check_encoding($emoji, 'UTF-8') || !in_array($emoji, $this->acceptedReactions, true), 'invalid_reaction', Response::HTTP_UNPROCESSABLE_ENTITY);
         [, $replayed] = $this->writing(static fn (): array => $idempotency->run(
             $user,
             self::scopedKey($call, $conversation, $key),
@@ -730,11 +740,11 @@ final readonly class ChatClientApiController
     private static function scopedKey(ChatClientCall $call, ChatConversation $conversation, string $key): string
     {
         // Neither part can hold a line break (token ids and keys are restricted, uuids fixed): the join is unambiguous.
-        return 'client:' . hash('sha256', $call->principal->tokenId . "\n" . $conversation->getUuid() . "\n" . $key);
+        return ChatIdempotency::CLIENT_PREFIX . hash('sha256', $call->principal->tokenId . "\n" . $conversation->getUuid() . "\n" . $key);
     }
 
     /**
-     * 2.5: the `text` of a write body (JSON object, at most 32 KB). Any other field is refused (422
+     * 2.5: the `text` of a write body (JSON object, at most 48 KB). Any other field is refused (422
      * `unsupported_field`), so a client written for a later version (2.6 card references) never has part of its message
      * silently dropped; `text` must be a string (422 `invalid_text`). Emptiness and length are the service's (422
      * `empty_text`, `text_too_long`).
@@ -1070,7 +1080,7 @@ final readonly class ChatClientApiController
     }
 
     /**
-     * The JSON object of the body (at most 4 KB, 2.5: 32 KB for a write); 400 `invalid_json` otherwise.
+     * The JSON object of the body (at most 4 KB, 2.5: 48 KB for a write); 400 `invalid_json` otherwise.
      *
      * @return array<string, mixed>
      */

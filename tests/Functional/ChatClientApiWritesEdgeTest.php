@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Functional;
 
+use InvalidArgumentException;
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiController;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -67,6 +68,16 @@ final class ChatClientApiWritesEdgeTest extends DatabaseTestCase
         $this->refused(404, 'not_found', fn () => $controller->send($dm->getUuid(), $this->request('POST', '/x', ['text' => 'hi'])));
     }
 
+    public function testRawBytesAsAnEmojiAreAnInvalidReaction(): void
+    {
+        // Audit ZCG-L1: whatever the router lets through, the controller refuses a non-UTF-8 emoji before hashing it.
+        $dm      = $this->dm();
+        $message = $this->get(ChatService::class)->send($this->luis, $dm, 'hi');
+        foreach (["\xFF", "\xC3", "\xF0\x9F"] as $bytes) {
+            $this->refused(422, 'invalid_reaction', fn () => $this->get(ChatClientApiController::class)->reaction($dm->getUuid(), $message->getUuid(), $bytes, $this->request('PUT', '/x')));
+        }
+    }
+
     public function testThreadRepliesNeedThreads(): void
     {
         $dm   = $this->dm();
@@ -128,6 +139,13 @@ final class ChatClientApiWritesEdgeTest extends DatabaseTestCase
         self::assertInstanceOf(ChatMessage::class, $stored);
         self::assertSame(['keep me', false], [$stored->getBody(), $stored->isDeleted()]);
         self::assertSame(0, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_reaction'));
+        // The service refuses an emoji it does not accept by itself too (the API checks it first).
+        try {
+            $chat->setReaction($this->luis, $message, 'nope', true);
+            self::fail('accepted');
+        } catch (InvalidArgumentException $refused) {
+            self::assertSame('reaction', $refused->getMessage());
+        }
     }
 
     /**

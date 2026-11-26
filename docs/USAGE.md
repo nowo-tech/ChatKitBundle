@@ -928,7 +928,7 @@ the same service as the dock. See [API.md, "Writes"](API.md#writes-25).
 | Event | When | Typical use |
 | --- | --- | --- |
 | `ChatMessageSentEvent` | a message or buzz was stored and published | counters, bots, audit |
-| `ChatClientApiWriteEvent` | 2.5: a client wrote through the client API (action, token id, conversation and message uuids, `replayed`; never the text or the token) | audit which device wrote |
+| `ChatClientApiWriteEvent` | 2.5: a client wrote through the client API (action, token id, conversation and message uuids, `replayed`; never the text or the token). Dispatched again on an Idempotency-Key replay (`replayed: true`); listeners must not throw (the write is committed) | audit which device wrote |
 | `ChatMessageDeletedEvent` | a message was deleted (by its author; `moderated` is true only on tombstones from before 1.4) | audit |
 | `ChatSupportStatusChangedEvent` | a support thread was resolved (`by` = agent) or reopened (`by` = owner) | inbox counters, notifications |
 | `SupportTicketCreatedEvent` | a requester chose a topic and a ticket opened (`ticket`, `requester`) | notify the support agents |

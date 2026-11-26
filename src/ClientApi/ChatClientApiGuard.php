@@ -60,7 +60,8 @@ use const FILTER_VALIDATE_IP;
  * revoked token as for a revoked one (not an oracle).
  *
  * 2.5: the write routes (scope `chat:write`) answer 404 while `client_api.writes` is off (as if they did not exist), and
- * otherwise run the same steps with, at step 5, the token's write budget too (`writes_per_token_per_minute`, own key)
+ * otherwise run the same steps, with the scopes checked right after the per-token budget (audit ZCG-L2: before any write,
+ * action or send budget is spent) and, at step 5, the token's write budget too (`writes_per_token_per_minute`, own key)
  * and, at step 6, the person's action budget (plus the send budget for new messages, as the web UI). A write token must
  * hold `chat:read` as well (it reads back what it wrote).
  */
@@ -213,6 +214,11 @@ final readonly class ChatClientApiGuard
             $this->deny('invalid_token', Response::HTTP_UNAUTHORIZED, $principal, $ipPrefix, ['WWW-Authenticate' => 'Bearer error="invalid_token"'], 'account_inactive');
         }
         $this->consume($this->tokenLimiter, 'nowo_chat_client_token_' . hash('sha256', $principal->tokenId), $principal, $ipPrefix);
+        if ($write) {
+            // Audit ZCG-L2: a token without the write scopes is refused before it spends any write, action or send
+            // budget (the send budget is the person's dock budget). The IP and token budgets above still throttle probing.
+            $this->requireScopes($principal, [ChatClientPrincipal::SCOPE_READ, ChatClientPrincipal::SCOPE_WRITE], $ipPrefix);
+        }
         if ($write && $this->writeLimiter instanceof RateLimiterFactoryInterface) {
             // 2.5: writes have a per-token budget of their own on top of the token's request budget.
             $this->consume($this->writeLimiter, 'nowo_chat_client_write_' . hash('sha256', $principal->tokenId), $principal, $ipPrefix);
@@ -227,11 +233,8 @@ final readonly class ChatClientApiGuard
             // The web UI's send budget (same key): a client cannot send faster than the person could in the dock.
             $this->consume($this->sendLimiter, 'nowo_chat_send_' . $person, $principal, $ipPrefix);
         }
-        $needed = $write ? [ChatClientPrincipal::SCOPE_READ, ChatClientPrincipal::SCOPE_WRITE] : [$scope];
-        foreach ($needed as $one) {
-            if (!$principal->hasScope($one)) {
-                $this->deny('insufficient_scope', Response::HTTP_FORBIDDEN, $principal, $ipPrefix, ['WWW-Authenticate' => sprintf('Bearer error="insufficient_scope", scope="%s"', implode(' ', $needed))]);
-            }
+        if (!$write) {
+            $this->requireScopes($principal, [$scope], $ipPrefix);
         }
 
         $call = new ChatClientCall($principal, $this->context($principal, $header, $ipPrefix));
@@ -386,6 +389,20 @@ final readonly class ChatClientApiGuard
         }
 
         return $header;
+    }
+
+    /**
+     * 403 `insufficient_scope` unless the token holds every scope (named together in `WWW-Authenticate`).
+     *
+     * @param list<string> $needed
+     */
+    private function requireScopes(ChatClientPrincipal $principal, array $needed, ?string $ipPrefix): void
+    {
+        foreach ($needed as $one) {
+            if (!$principal->hasScope($one)) {
+                $this->deny('insufficient_scope', Response::HTTP_FORBIDDEN, $principal, $ipPrefix, ['WWW-Authenticate' => sprintf('Bearer error="insufficient_scope", scope="%s"', implode(' ', $needed))]);
+            }
+        }
     }
 
     /**

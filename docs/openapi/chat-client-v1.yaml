@@ -497,8 +497,8 @@ components:
       name: emoji
       in: path
       required: true
-      description: The emoji, URL-encoded (one of me.reactions.accepted).
-      schema: { type: string, maxLength: 32 }
+      description: The emoji, URL-encoded UTF-8 (one of me.reactions.accepted; at most 64 bytes decoded). Anything else is 422 invalid_reaction.
+      schema: { type: string, maxLength: 64 }
     IdempotencyKey:
       name: Idempotency-Key
       in: header

@@ -322,8 +322,11 @@ final readonly class ChatService implements ChatServiceInterface
     }
 
     /**
-     * 2.5: edit() with the statements an `Idempotency-Key` adds to its unit of work (client API v1). The same text again
-     * writes nothing and claims no key (nothing to repeat).
+     * 2.5: edit() with the statements an `Idempotency-Key` adds to its unit of work (client API v1). The message never
+     * changes for the same text. When the text read before the unit already equals it, nothing runs and no key is
+     * claimed (the client's retry gets the same 200 again); once the unit runs, `$before` claims the key whatever it
+     * finds under the lock (another edit committed the same text meanwhile, or the message was deleted), and `$after`
+     * completes it with the message, so a replay answers it (audit ZCG-I2).
      *
      * @param ChatMessage $message The message to edit
      * @param string $body New raw Markdown text

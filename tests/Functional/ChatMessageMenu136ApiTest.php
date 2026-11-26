@@ -196,6 +196,8 @@ final class ChatMessageMenu136ApiTest extends DatabaseTestCase
         self::assertNotContains($ticket->getUuid(), array_column($this->decode()['targets'], 'conversationUuid'));
         // Into a ticket: agents only.
         $this->keyed(Request::METHOD_POST, $base . '/forward', $csrf, 'k-6', 403, ['targets' => [['conversationUuid' => $ticket->getUuid()]]]);
+        // 2.5 (audit ZCG-I5): the client API's key namespace is refused on the dock.
+        self::assertSame('idempotency_key_invalid', $this->keyed(Request::METHOD_POST, $base . '/forward', $csrf, 'client:abc', 400, ['targets' => [['conversationUuid' => $ticket->getUuid()]]])['error']);
         // To someone Ana may not write to.
         $stranger = $this->user('Stranger Sam');
         $this->keyed(Request::METHOD_POST, $base . '/forward', $csrf, 'k-7', 403, ['targets' => [['contactUuid' => $stranger->getChatPublicId()]]]);
