@@ -1,7 +1,12 @@
 /**
  * The shipped IIFE entry (`nowo-chat.js`) logs the house "script loaded" line exactly once when it is evaluated.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// REQ-ASSETS-005: every test starts with an empty once-guard registry.
+beforeEach(() => {
+  delete (globalThis as { __nowoScriptBannerNames?: unknown }).__nowoScriptBannerNames;
+});
 
 describe('iife entry', () => {
   afterEach(() => {

@@ -313,6 +313,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   constructors gain optional trailing arguments (no BC break).
 - Dev: nowo-tech/storage-kit-bundle ^2.2 (require-dev; `suggest` + `conflict <2.2 || >=3.0`), GD in the dev image.
 
+### Fixed
+
+- The `📦 [name] script loaded` console banner now prints once per page, even when the script is loaded twice: per-name once-guard (a `Set` on `globalThis`) in `logger.ts`, with a Vitest test and rebuilt assets (REQ-ASSETS-005).
+
 ### Tests
 
 - Two-session races on MySQL 8.4, MariaDB 11.4 and PostgreSQL 16 (verdict vs remove, a second worker, a late verdict

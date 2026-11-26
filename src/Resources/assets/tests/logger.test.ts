@@ -5,6 +5,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBundleLogger } from '../src/logger';
 
+// REQ-ASSETS-005: every test starts with an empty once-guard registry.
+beforeEach(() => {
+  delete (globalThis as { __nowoScriptBannerNames?: unknown }).__nowoScriptBannerNames;
+});
+
 describe('createBundleLogger', () => {
   let consoleLog: ReturnType<typeof vi.fn>;
   let consoleDebug: ReturnType<typeof vi.fn>;
