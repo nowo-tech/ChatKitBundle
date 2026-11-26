@@ -29,7 +29,7 @@
     (event) => {
       const field = event.target instanceof Element ? event.target.querySelector('[data-demo-selection]') : null;
       if (field !== null && event.detail && typeof event.detail.selection === 'string') {
-        field.value = event.detail.selection;
+        field.textContent = event.detail.selection;
       }
     },
     true,

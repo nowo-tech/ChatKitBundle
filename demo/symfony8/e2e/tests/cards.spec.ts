@@ -97,7 +97,7 @@ test.describe('typed cards and slots (2.6)', () => {
     await expect(item).toHaveText('Save to vault');
     await item.click();
     const field = page.getByTestId('demo-vault-value');
-    await expect(field).toHaveValue(text);
+    await expect(field).toHaveText(text);
     expect(requests.some((url) => url.includes(text))).toBe(false);
   });
 });
