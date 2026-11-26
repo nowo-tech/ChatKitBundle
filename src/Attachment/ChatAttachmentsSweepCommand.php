@@ -6,11 +6,11 @@ namespace Nowo\ChatKitBundle\Attachment;
 
 use DateInterval;
 use DateTimeImmutable;
-use Doctrine\DBAL\Exception\RetryableException;
 use Nowo\ChatKitBundle\Attachment\Message\ScanChatAttachment;
 use Nowo\ChatKitBundle\Event\ChatAttachmentScanOverdueEvent;
 use Nowo\ChatKitBundle\Repository\ChatAttachmentRepository;
 use Nowo\TransactionContract\TransientStorageFailure;
+use Nowo\TransactionDoctrine\TransientFailureClassifier;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\Clock;
@@ -22,6 +22,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Messenger\MessageBusInterface;
+use Throwable;
 
 use function count;
 use function max;
@@ -104,7 +105,11 @@ final class ChatAttachmentsSweepCommand extends Command
                 }
             }
             $this->alert($now);
-        } catch (RetryableException|TransientStorageFailure $conflict) {
+        } catch (Throwable $conflict) {
+            // A lock wait or deadlock (MySQL 1205 / 1213, PostgreSQL 55P03 / 40P01, …): transaction-doctrine's classifier.
+            if (!$conflict instanceof TransientStorageFailure && !(new TransientFailureClassifier())->isTransient($conflict)) {
+                throw $conflict;
+            }
             $this->logger?->warning('ChatKit: the attachment sweep met a lock conflict (CONFLICT_001); run it again.', ['exception' => $conflict::class]);
             (new SymfonyStyle($input, $output))->warning('CONFLICT_001: a lock conflict stopped the sweep; nothing half-done was left. Run it again.');
 

@@ -503,12 +503,12 @@ class ChatAttachmentRepository extends ServiceEntityRepository
     }
 
     /**
-     * The parameter type of the uploader column: an integer id in relation mode, a reference string in id mode (no
-     * native return type: DBAL 3's ParameterType constants are integers).
+     * The Doctrine type name of the uploader column's value: an integer id in relation mode, a reference string in id
+     * mode (a type name, valid with DBAL 3 and 4 alike: DBAL 3's ParameterType constants are integers).
      */
-    private function userType(int|string $uploaderKey): ParameterType
+    private function userType(int|string $uploaderKey): string
     {
-        return is_int($this->refs->sqlValue($uploaderKey)) ? ParameterType::INTEGER : ParameterType::STRING;
+        return is_int($this->refs->sqlValue($uploaderKey)) ? Types::INTEGER : Types::STRING;
     }
 
     /** The exclusive row lock clause of the platform ('' on SQLite: a writing transaction locks the database). */

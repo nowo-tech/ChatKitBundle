@@ -232,6 +232,19 @@ final class ChatAttachmentsLifecycleTest extends DatabaseTestCase
         $tester = new CommandTester(new ChatAttachmentsSweepCommand($failing, new ChatAttachmentOptions(), $this->get(ChatAttachmentObjects::class), null, null, logger: new NullLogger()));
         self::assertSame(ChatAttachmentsSweepCommand::CONFLICT, $tester->execute([]));
         self::assertStringContainsString('CONFLICT_001', $tester->getDisplay());
+        // Anything else is not a conflict: it propagates.
+        $broken = new class extends ChatAttachmentRepository {
+            public function __construct()
+            {
+            }
+
+            public function failExhausted(DateTimeImmutable $now, int $maxAttempts): array
+            {
+                throw new RuntimeException('disk full');
+            }
+        };
+        $this->expectExceptionObject(new RuntimeException('disk full'));
+        (new CommandTester(new ChatAttachmentsSweepCommand($broken, new ChatAttachmentOptions(), $this->get(ChatAttachmentObjects::class))))->execute([]);
     }
 
     public function testClientApiRefusalsOnUnreadableConversationsAndStorage(): void
