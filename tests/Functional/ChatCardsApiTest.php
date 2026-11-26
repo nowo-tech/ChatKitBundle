@@ -248,7 +248,8 @@ final class ChatCardsApiTest extends DatabaseTestCase
             self::assertSame(404, $this->client->getResponse()->getStatusCode(), 'a stranger: 404 like reading');
         }
 
-        // Audit ZCI-I3: the slots route is rate limited like the reference search (120 a minute by default).
+        // Audit ZCI-I3: the slots route is rate limited like the reference search (120 a minute by default); ZCI-v-I1:
+        // in its own bucket (the card route above, which shares the reference budget, does not count).
         $this->login($ana);
         $statuses = [];
         for ($i = 0; $i < 125; ++$i) {

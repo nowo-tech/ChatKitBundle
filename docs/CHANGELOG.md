@@ -301,10 +301,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - ZCI-L4: `nowo-chat:before-send` also runs for thread replies and edits (`kind`).
   - ZCI-I1: an inserted card goes to the composer only while the dialog its action opened is open (cleared on UiKit's `nowo-ui:remote-form:closed` or the native `close`).
   - ZCI-I2: the selection of a menu slot is handed over again on UiKit's `nowo-ui:remote-form:loaded`, never after the dialog closed or after 10 s.
-  - ZCI-I3: `GET …/slots` is rate limited like the reference search and the card route (429 `rate_limited`).
+  - ZCI-I3: `GET …/slots` is rate limited at the reference search rate (429 `rate_limited`).
   - ZCI-I4: documented: `render()` may be asked for ids no message holds; decide from the item's own access rules or its binding to the conversation, never from membership alone.
   - ZCI-I5: the edit history renders cards in the message's conversation (the generic line or the card, as in the timeline), no longer "Content not visible" for everyone.
   - ZCI-I6: documented in UPGRADING: do not remove a card provider while messages hold its cards.
+  - ZCI-v-L1: the client API thread GET renders typed cards with the request's context key too (it passed none).
+  - ZCI-v-I1: `GET …/slots` has its own rate-limit bucket (same rate as the reference search), so typing in the #reference picker never makes the slots load fail.
 - Secret cards: the leak matrix of spec 259 §14.4, each case with a test (SC-001: no table, log record, push payload, digest, hub payload or dispatched `ChatCardSharedEvent` holds a secret card's title, a title typed in the text or a host marker carried by every rendered card). Every provider call is isolated: an exception or a wrong answer denies, and is logged with the provider class only (never ids or texts).
 
 ### Tests

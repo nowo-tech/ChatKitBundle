@@ -805,8 +805,9 @@ final class ChatApiController extends AbstractController
         $conversation = $this->find($uuid, ChatVoter::VIEW);
         $cards        = $this->cards;
         $this->deny(!$cards instanceof ChatCards || !$cards->hasSlots(), 'not_found', Response::HTTP_NOT_FOUND);
-        // Audit ZCI-I3: every provider is asked per request; the same budget as the reference search and the card route.
-        $this->deny(!$this->referenceLimiter->create('nowo_chat_reference_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        // Audit ZCI-I3: every provider is asked per request, so it is rate limited at the reference search's rate; audit
+        // ZCI-v-I1: in its own bucket, so typing in the #reference picker never makes the slots load fail (429).
+        $this->deny(!$this->referenceLimiter->create('nowo_chat_slots_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
         assert($cards instanceof ChatCards);
         $scope = ChatCards::composerScope($user, $conversation, $this->isGranted(ChatVoter::SEND, $conversation));
 

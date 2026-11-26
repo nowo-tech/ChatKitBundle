@@ -436,7 +436,8 @@ final readonly class ChatClientApiController
         $user = $call->principal->user;
         $root = ChatThreads::rootOf($message);
         $page = $threads->page($user, $root, $before, $after);
-        $rows = $this->presentMessages($user, [$root, ...$page['replies']]);
+        // Audit ZCI-v-L1: typed cards of the thread rendered with the request's context, as in the timeline.
+        $rows = $this->presentMessages($user, [$root, ...$page['replies']], $call->contextKey);
 
         return $this->json([
             'root'       => $rows[0],

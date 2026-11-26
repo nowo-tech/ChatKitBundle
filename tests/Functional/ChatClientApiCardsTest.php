@@ -18,6 +18,7 @@ use function array_column;
 use function array_filter;
 use function array_map;
 use function array_merge;
+use function array_unique;
 use function array_values;
 use function json_encode;
 
@@ -103,6 +104,13 @@ final class ChatClientApiCardsTest extends DatabaseTestCase
         $root  = self::decode($sent)['message']['uuid'];
         $reply = $this->write('POST', $this->messages($dm) . '/' . $root . '/thread', 'ana', ['text' => 'see', 'cards' => [['type' => 'note', 'id' => 'n1']]], 'k-5');
         self::assertSame(201, $reply->getStatusCode(), (string) $reply->getContent());
+        // Audit ZCI-v-L1: the thread GET renders the root's card with the API scope and the request's context.
+        $provider        = $this->get(TestVaultCardProvider::class);
+        $provider->calls = [];
+        $this->ok('GET', $this->messages($dm) . '/' . $root . '/thread', 'luis');
+        $renders = array_values(array_filter($provider->calls, static fn (array $call): bool => $call[0] === 'render'));
+        self::assertNotSame([], $renders);
+        self::assertSame(['api:personal'], array_values(array_unique(array_column($renders, 3))));
         self::assertError($this->write('PATCH', $this->messages($dm) . '/' . $root, 'ana', ['text' => 'x', 'cards' => []], 'k-6'), 422, 'unsupported_field');
         $edited = $this->write('PATCH', $this->messages($dm) . '/' . $root, 'ana', ['text' => 'now with text'], 'k-7');
         self::assertSame(200, $edited->getStatusCode(), (string) $edited->getContent());
