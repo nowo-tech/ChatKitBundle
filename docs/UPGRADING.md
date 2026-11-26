@@ -112,6 +112,29 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+To **2.5.0** from **2.4.x** (minor, nothing to change unless you opt in):
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+- **Client API writes (optional).** Off by default. To let native clients write (Beacon Desktop BD-3), set `client_api.writes: true` and make your `ChatClientPrincipalResolverInterface` return the `chat:write` scope (next to `chat:read`) only for tokens the person approved for writing:
+
+  ```yaml
+  nowo_chat_kit:
+      profiles:
+          default:
+              client_api:
+                  principal_resolver: App\Chat\ClientTokens
+                  writes: true
+                  limits: { writes_per_token_per_minute: 30 }
+  ```
+
+  No migration: the `Idempotency-Key`s use the existing `nowo_chat_idempotency` table (purged by `nowo:chat:purge`). Your stateless firewall on `^%nowo_chat_kit.client_api.v1_path_prefix%/` covers the new routes. Listen to `ChatClientApiWriteEvent` to audit client writes. See [API.md, "Writes"](API.md#writes-25).
+- **Clients.** `me.features.send` is now `true` when writes are on; `me` gains `features.threadReply`, `reactions`, `editOwn`, `deleteOwn`, `cards`, `limits.textMaxLength`, `editWindowSeconds`, `idempotencyKeyMaxLength` and `reactions`. A client that compared `me.features` exactly must accept the new keys.
+- A custom `ChatClientApiGuard` or `ChatClientApiController` construction (not the container's) gains optional last arguments.
+- **Dock `Idempotency-Key`.** The dock's API now refuses keys starting with `client:` (400 `idempotency_key_invalid`): that prefix is the client API's namespace. The bundled dock never sends one.
+
 ## To 2.4.1
 
 From **2.4.0**:

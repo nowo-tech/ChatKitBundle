@@ -538,6 +538,10 @@ final class Configuration implements ConfigurationInterface
                     ->info('2.4.1: service id of a Nowo\\ChatKitBundle\\Contract\\ChatClientTokenRevokerInterface: POST <prefix>/chat/v1/logout revokes the presented token (only it). null: logout still answers 204, but only the client forgets the token (me.features.serverLogout false).')
                     ->defaultNull()
                 ->end()
+                ->booleanNode('writes')
+                    ->info('2.5: the write routes (send, thread reply, reactions, edit and delete of one\'s own message) for tokens holding chat:write. false: they answer 404 and me.features.send is false, whatever scopes a token holds.')
+                    ->defaultFalse()
+                ->end()
                 ->scalarNode('prefix')
                     ->info('Path the API is mounted under (the API answers at <prefix>/chat/v1). Exposed as %nowo_chat_kit.client_api.v1_path_prefix% for security.yaml.')
                     ->defaultValue('/api')
@@ -560,6 +564,7 @@ final class Configuration implements ConfigurationInterface
                     ->children()
                         ->integerNode('per_ip_per_minute')->defaultValue(300)->min(1)->info('Requests per client IP (IPv6: per /64) and minute, checked before the token.')->end()
                         ->integerNode('per_token_per_minute')->defaultValue(60)->min(1)->info('Requests per token and minute.')->end()
+                        ->integerNode('writes_per_token_per_minute')->defaultValue(30)->min(1)->info('2.5: write requests per token and minute (on top of per_token_per_minute and the person\'s send and action budgets).')->end()
                     ->end()
                 ->end()
             ->end()
@@ -570,6 +575,10 @@ final class Configuration implements ConfigurationInterface
             ->validate()
                 ->ifTrue(static fn (array $config): bool => $config['token_revoker'] !== null && $config['principal_resolver'] === null)
                 ->thenInvalid('client_api.token_revoker needs client_api.principal_resolver (the API is off without it).')
+            ->end()
+            ->validate()
+                ->ifTrue(static fn (array $config): bool => $config['writes'] === true && $config['principal_resolver'] === null)
+                ->thenInvalid('client_api.writes needs client_api.principal_resolver (the API is off without it).')
             ->end();
 
         return $node;

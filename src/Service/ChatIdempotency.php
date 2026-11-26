@@ -38,6 +38,9 @@ final readonly class ChatIdempotency
     /** The request header. */
     public const string HEADER = 'Idempotency-Key';
 
+    /** 2.5: prefix of the keys the client API stores (scoped to token and conversation); the dock refuses it (ZCG-I5). */
+    public const string CLIENT_PREFIX = 'client:';
+
     /** Hours a key is kept. */
     public const int TTL_HOURS = 24;
 

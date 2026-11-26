@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\ClientApi;
 
+use Closure;
 use DateTimeImmutable;
+use InvalidArgumentException;
 use JsonException;
 use Nowo\ChatKitBundle\Contract\ChatClientContextPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
+use Nowo\ChatKitBundle\Entity\ChatIdempotencyKey;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Event\ChatClientApiWriteEvent;
 use Nowo\ChatKitBundle\Http\ChatApiException;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatClientContext;
@@ -31,7 +35,9 @@ use Nowo\ChatKitBundle\Repository\ChatReactionRepository;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
+use Nowo\ChatKitBundle\Service\ChatIdempotency;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatThreads;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\Clock;
@@ -47,17 +53,20 @@ use function array_flip;
 use function array_intersect_key;
 use function array_is_list;
 use function array_key_exists;
+use function array_keys;
 use function array_map;
 use function array_slice;
 use function array_sum;
 use function array_unique;
 use function array_values;
 use function count;
+use function hash;
 use function in_array;
 use function is_array;
 use function is_int;
 use function is_string;
 use function json_decode;
+use function mb_check_encoding;
 use function min;
 use function preg_match;
 use function strlen;
@@ -108,8 +117,30 @@ final readonly class ChatClientApiController
     private const int MAX_JSON_BODY_BYTES = 4096;
 
     /**
+     * 2.5: largest JSON body of a write: a text of ChatMessage::MAX_LENGTH characters fits even fully `\uXXXX`-escaped
+     * (12 bytes per non-BMP character: 48 000), with room for the key and braces (audit ZCG-I3).
+     */
+    private const int MAX_WRITE_BODY_BYTES = 49_152;
+
+    /** 2.5: the fields a write body may hold (`text`); 2.6 adds typed card references (see docs/API.md, "Writes"). */
+    public const array WRITE_FIELDS = ['text'];
+
+    /** 2.5: the write codes of the service, as the client API answers them (422). */
+    private const array WRITE_ERRORS = [
+        'empty'                => 'empty_text',
+        'too_long'             => 'text_too_long',
+        'invalid_link'         => 'invalid_link',
+        'reaction'             => 'invalid_reaction',
+        'not_threadable'       => 'not_threadable',
+        'idempotency_mismatch' => 'idempotency_mismatch',
+    ];
+
+    /**
      * @param string $realtimeEvents `full` or `ids` (the profile's `realtime_events`): what hub events carry
      * @param ChatThreads|null $threads Thread reads (`message_menu.threads`); null or off: the thread route answers 404
+     * @param ChatIdempotency|null $idempotency 2.5: the `Idempotency-Key` of the writes; null: no write route
+     * @param list<string> $acceptedReactions 2.5: every emoji the server accepts as a reaction (`me.reactions.accepted`)
+     * @param list<string> $quickReactions 2.5: the configured `reactions` (`me.reactions.quick`)
      */
     public function __construct(
         private ChatClientApiGuard $guard,
@@ -131,6 +162,9 @@ final readonly class ChatClientApiController
         private string $realtimeEvents = 'full',
         private ClockInterface $clock = new Clock(),
         private ?ChatThreads $threads = null,
+        private ?ChatIdempotency $idempotency = null,
+        private array $acceptedReactions = [],
+        private array $quickReactions = [],
     ) {
     }
 
@@ -151,6 +185,9 @@ final readonly class ChatClientApiController
         $contexts = $policy instanceof ChatClientContextPolicyInterface ? $policy->contextsFor($call->principal) : [];
         $this->presenter->primeAvatars([$user]);
 
+        $writes  = $this->writable();
+        $threads = $this->threads instanceof ChatThreads && $this->threads->enabled();
+
         return $this->json([
             'apiVersion' => self::VERSION,
             'user'       => [
@@ -165,16 +202,29 @@ final readonly class ChatClientApiController
             'features' => [
                 'realtime'       => $this->realtime->isEnabled(),
                 'realtimeEvents' => $this->realtimeEvents,
-                'send'           => false,
-                'search'         => false,
-                'attachments'    => false,
+                // 2.5: the write routes this server offers to a token holding chat:write (false: they answer 404).
+                'send'        => $writes,
+                'threadReply' => $writes && $threads,
+                'reactions'   => $writes,
+                'editOwn'     => $writes,
+                'deleteOwn'   => $writes,
+                'search'      => false,
+                'attachments' => false,
+                // 2.6 (spec 259): typed card references in a write body. false: a body holds `text` only.
+                'cards' => false,
                 // 2.4.1: whether `POST logout` revokes the token on the server (else the client only forgets it).
                 'serverLogout' => $this->guard->revokes(),
             ],
             'limits' => [
                 'conversationsPageMax' => self::CONVERSATIONS_PAGE_MAX,
                 'messagesPageMax'      => self::MESSAGES_PAGE_MAX,
+                // 2.5: the longest text (characters), the edit/delete window of one's own messages and the longest key.
+                'textMaxLength'           => ChatMessage::MAX_LENGTH,
+                'editWindowSeconds'       => ChatMessage::EDIT_WINDOW_SECONDS,
+                'idempotencyKeyMaxLength' => ChatIdempotencyKey::MAX_KEY_LENGTH,
             ],
+            // 2.5: the reactions a client may set: the quick row and every accepted emoji.
+            'reactions' => ['quick' => $this->quickReactions, 'accepted' => $this->acceptedReactions],
         ]);
     }
 
@@ -254,7 +304,7 @@ final readonly class ChatClientApiController
 
         return $this->json(['conversation' => $row + [
             'membersCount' => count($this->recipients->of($conversation)),
-            // What the caller may do in the web UI; v1 itself is read-only.
+            // What the caller may do here (2.5: the write routes, when the server offers them, follow the same rule).
             'permissions' => ['send' => $row['canSend']],
         ]]);
     }
@@ -431,6 +481,313 @@ final readonly class ChatClientApiController
         $this->guard->logout($request);
 
         return new Response(null, Response::HTTP_NO_CONTENT, ['Cache-Control' => 'no-store, private', 'X-Content-Type-Options' => 'nosniff']);
+    }
+
+    /**
+     * 2.5: sends a message to the conversation, exactly as the web UI does: the same posting rights (read-only channels,
+     * blocked direct messages, closed tickets: 403 `read_only`), the same pipeline (mentions resolved, #references
+     * validated, links, support status, unread counters, realtime, Web Push, digest, search index, events). Needs
+     * `chat:write` (and `chat:read`), `client_api.writes` and an `Idempotency-Key` (per token and conversation): a
+     * retry with the same key and text answers the first message (200, `replayed: true`) without a second one.
+     *
+     * @param string $uuid Conversation uuid
+     * @param Request $request JSON body `{text}`, header `Idempotency-Key`
+     *
+     * @return JsonResponse `{message, replayed}`: 201 (200 for a replay)
+     */
+    #[Route('/conversations/{uuid}/messages', name: 'send', requirements: ['uuid' => self::UUID], methods: ['POST'])]
+    public function send(string $uuid, Request $request): JsonResponse
+    {
+        $call                 = $this->guard->authenticate($request, ChatClientPrincipal::SCOPE_WRITE, ChatClientApiGuard::BUDGET_SEND);
+        [$chat, $idempotency] = $this->writers();
+        $key                  = $this->idempotencyKey($request);
+        $text                 = $this->text($request);
+        $user                 = $call->principal->user;
+        $conversation         = $this->find($request, $call, $uuid);
+        $this->deny(!$this->voter->decide(ChatVoter::SEND, $conversation, $user), 'read_only', Response::HTTP_FORBIDDEN);
+        [$messages, $replayed] = $this->writing(static fn (): array => $idempotency->run(
+            $user,
+            self::scopedKey($call, $conversation, $key),
+            ChatIdempotency::hash(['client:send', $conversation->getUuid(), $text]),
+            static fn (Closure $before, Closure $after): array => [$chat->sendWith($user, $conversation, $text, $before, $after)],
+        ));
+        $message = $messages[0] ?? $this->guard->notFound($request, $call);
+        $this->guard->written($request, $call, ChatClientApiWriteEvent::SEND, $conversation->getUuid(), $message->getUuid(), $replayed);
+
+        return $this->json(['message' => $this->presentMessages($user, [$message])[0], 'replayed' => $replayed], $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
+    }
+
+    /**
+     * 2.5: replies in the thread of a message (a reply's uuid replies in its root's thread), with the send pipeline
+     * (followers notified, Web Push to them). 404 while threads are off; 403 `read_only` without posting rights; 422
+     * `not_threadable` for a message that takes no thread (a line, a bot message, a tombstone). `Idempotency-Key` as send.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid The root's (or a reply's) uuid
+     * @param Request $request JSON body `{text}`, header `Idempotency-Key`
+     *
+     * @return JsonResponse `{message, root, replayed}`: 201 (200 for a replay)
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/thread', name: 'thread_reply', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['POST'])]
+    public function threadReply(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $call = $this->guard->authenticate($request, ChatClientPrincipal::SCOPE_WRITE, ChatClientApiGuard::BUDGET_SEND);
+        $this->writers();
+        $threads = $this->threads;
+        if (!$threads instanceof ChatThreads || !$threads->enabled()) {
+            throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
+        }
+        $key          = $this->idempotencyKey($request);
+        $text         = $this->text($request);
+        $user         = $call->principal->user;
+        $conversation = $this->find($request, $call, $uuid);
+        $message      = $this->findMessage($request, $call, $conversation, $messageUuid);
+        // Audit ZCG-I4 (defence in depth): the reply goes to its root's conversation, which must be the authorised one.
+        if (ChatThreads::rootOf($message)->getConversation()->getId() !== $conversation->getId()) {
+            $this->guard->notFound($request, $call);
+        }
+        $this->deny(!$this->voter->decide(ChatVoter::SEND, $conversation, $user), 'read_only', Response::HTTP_FORBIDDEN);
+        $this->deny(!$this->voter->decide(ChatVoter::THREAD, $message, $user), 'not_threadable', Response::HTTP_UNPROCESSABLE_ENTITY);
+        [$reply, $replayed] = $this->writing(static fn (): array => $threads->reply($user, $message, $text, self::scopedKey($call, $conversation, $key)));
+        $root               = ChatThreads::rootOf($reply);
+        $this->guard->written($request, $call, ChatClientApiWriteEvent::THREAD_REPLY, $conversation->getUuid(), $reply->getUuid(), $replayed);
+        $rows = $this->presentMessages($user, [$reply, $root]);
+
+        return $this->json(['message' => $rows[0], 'root' => $rows[1], 'replayed' => $replayed], $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
+    }
+
+    /**
+     * 2.5: sets (`PUT`) or removes (`DELETE`) the caller's reaction with the emoji of the path (URL-encoded; one of
+     * `me.reactions.accepted`, else 422 `invalid_reaction`). Idempotent by itself: setting a reaction one has, or
+     * removing one one does not have, changes nothing and publishes nothing; an `Idempotency-Key` is still required.
+     * 403 `read_only` without posting rights; 422 `not_reactable` for a line, a buzz or a tombstone.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param string $emoji The emoji
+     * @param Request $request Header `Idempotency-Key`, no body
+     *
+     * @return JsonResponse `{reactions, replayed}` (`reactions`: the message's `{emoji, count, mine}` after the change)
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}/reactions/{emoji}', name: 'reaction', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID, 'emoji' => '[^/]{1,64}'], methods: ['PUT', 'DELETE'])]
+    public function reaction(string $uuid, string $messageUuid, string $emoji, Request $request): JsonResponse
+    {
+        $call                 = $this->guard->authenticate($request, ChatClientPrincipal::SCOPE_WRITE, ChatClientApiGuard::BUDGET_ACTION);
+        [$chat, $idempotency] = $this->writers();
+        $key                  = $this->idempotencyKey($request);
+        $user                 = $call->principal->user;
+        $on                   = $request->getMethod() === Request::METHOD_PUT;
+        $conversation         = $this->find($request, $call, $uuid);
+        $message              = $this->findMessage($request, $call, $conversation, $messageUuid);
+        $this->deny(!$this->voter->decide(ChatVoter::SEND, $conversation, $user), 'read_only', Response::HTTP_FORBIDDEN);
+        $this->deny(!$this->voter->decide(ChatVoter::REACT, $message, $user), 'not_reactable', Response::HTTP_UNPROCESSABLE_ENTITY);
+        // Audit ZCG-L1: before the request hash (JSON): a non-UTF-8 path segment or an emoji the server does not accept.
+        $this->deny(!mb_check_encoding($emoji, 'UTF-8') || !in_array($emoji, $this->acceptedReactions, true), 'invalid_reaction', Response::HTTP_UNPROCESSABLE_ENTITY);
+        [, $replayed] = $this->writing(static fn (): array => $idempotency->run(
+            $user,
+            self::scopedKey($call, $conversation, $key),
+            ChatIdempotency::hash(['client:reaction', $message->getUuid(), $emoji, $on]),
+            static function (Closure $before, Closure $after) use ($chat, $user, $message, $emoji, $on): array {
+                $chat->setReaction($user, $message, $emoji, $on, $before, $after);
+
+                return [$message];
+            },
+        ));
+        $this->guard->written($request, $call, $on ? ChatClientApiWriteEvent::REACTION_ADD : ChatClientApiWriteEvent::REACTION_REMOVE, $conversation->getUuid(), $message->getUuid(), $replayed);
+        $mid = (int) $message->getId();
+
+        return $this->json(['reactions' => $this->reactionCounts($this->reactions->summaryFor([$mid])[$mid] ?? [], $user), 'replayed' => $replayed]);
+    }
+
+    /**
+     * 2.5: edits one of the caller's own messages within the edit window, as the web UI (403 `read_only` without
+     * posting rights, 403 `edit_forbidden` for someone else's message, a buzz, a tombstone or after the window). The
+     * same text again changes nothing. `Idempotency-Key` as send.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request JSON body `{text}`, header `Idempotency-Key`
+     *
+     * @return JsonResponse `{message, replayed}`
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}', name: 'edit', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['PATCH'])]
+    public function edit(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $call                 = $this->guard->authenticate($request, ChatClientPrincipal::SCOPE_WRITE, ChatClientApiGuard::BUDGET_ACTION);
+        [$chat, $idempotency] = $this->writers();
+        $key                  = $this->idempotencyKey($request);
+        $text                 = $this->text($request);
+        $user                 = $call->principal->user;
+        $conversation         = $this->find($request, $call, $uuid);
+        $message              = $this->findMessage($request, $call, $conversation, $messageUuid);
+        $this->deny(!$this->voter->decide(ChatVoter::SEND, $conversation, $user), 'read_only', Response::HTTP_FORBIDDEN);
+        $this->deny(!$this->voter->decide(ChatVoter::EDIT, $message, $user), 'edit_forbidden', Response::HTTP_FORBIDDEN);
+        [, $replayed] = $this->writing(static fn (): array => $idempotency->run(
+            $user,
+            self::scopedKey($call, $conversation, $key),
+            ChatIdempotency::hash(['client:edit', $message->getUuid(), $text]),
+            static function (Closure $before, Closure $after) use ($chat, $message, $text): array {
+                $chat->editWith($message, $text, $before, $after);
+
+                return [$message];
+            },
+        ));
+        // The key promises this message (its uuid is in the request hash): the one read above, as the write left it.
+        $this->guard->written($request, $call, ChatClientApiWriteEvent::EDIT, $conversation->getUuid(), $message->getUuid(), $replayed);
+
+        return $this->json(['message' => $this->presentMessages($user, [$message])[0], 'replayed' => $replayed]);
+    }
+
+    /**
+     * 2.5: deletes one of the caller's own messages within the edit window, as the web UI (nobody deletes someone else's
+     * message: 403 `delete_forbidden`). Deleting one's own message that is already deleted answers its tombstone again
+     * (idempotent). `Idempotency-Key` as send.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $messageUuid Message uuid
+     * @param Request $request Header `Idempotency-Key`, no body
+     *
+     * @return JsonResponse `{message, replayed}` (the tombstone)
+     */
+    #[Route('/conversations/{uuid}/messages/{messageUuid}', name: 'delete', requirements: ['uuid' => self::UUID, 'messageUuid' => self::UUID], methods: ['DELETE'])]
+    public function delete(string $uuid, string $messageUuid, Request $request): JsonResponse
+    {
+        $call                 = $this->guard->authenticate($request, ChatClientPrincipal::SCOPE_WRITE, ChatClientApiGuard::BUDGET_ACTION);
+        [$chat, $idempotency] = $this->writers();
+        $key                  = $this->idempotencyKey($request);
+        $user                 = $call->principal->user;
+        $conversation         = $this->find($request, $call, $uuid);
+        $message              = $this->findMessage($request, $call, $conversation, $messageUuid);
+        $again                = $message->isDeleted() && $message->isAuthoredBy($user);
+        $this->deny(!$again && !$this->voter->decide(ChatVoter::DELETE, $message, $user), 'delete_forbidden', Response::HTTP_FORBIDDEN);
+        [, $replayed] = $this->writing(static fn (): array => $idempotency->run(
+            $user,
+            self::scopedKey($call, $conversation, $key),
+            ChatIdempotency::hash(['client:delete', $message->getUuid()]),
+            static function (Closure $before, Closure $after) use ($chat, $user, $message): array {
+                $chat->deleteWith($user, $message, $before, $after);
+
+                return [$message];
+            },
+        ));
+        $this->guard->written($request, $call, ChatClientApiWriteEvent::DELETE, $conversation->getUuid(), $message->getUuid(), $replayed);
+
+        return $this->json(['message' => $this->presentMessages($user, [$message])[0], 'replayed' => $replayed]);
+    }
+
+    /**
+     * 2.5: the services of the writes; 404 while `client_api.writes` is off or the host replaced ChatKit's chat service
+     * (its writes cannot join an Idempotency-Key's unit of work).
+     *
+     * @return array{ChatService, ChatIdempotency}
+     */
+    private function writers(): array
+    {
+        $chat        = $this->chat;
+        $idempotency = $this->idempotency;
+        if (!$this->writable() || !$chat instanceof ChatService || !$idempotency instanceof ChatIdempotency) {
+            throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
+        }
+
+        return [$chat, $idempotency];
+    }
+
+    /** 2.5: whether this server offers the write routes. */
+    private function writable(): bool
+    {
+        return $this->guard->writes() && $this->chat instanceof ChatService && $this->idempotency instanceof ChatIdempotency;
+    }
+
+    /**
+     * 2.5: runs a write, answering the service's refusals as 422 with the client API's codes.
+     *
+     * @template T
+     *
+     * @param Closure(): T $write
+     *
+     * @return T
+     */
+    private function writing(Closure $write): mixed
+    {
+        try {
+            return $write();
+        } catch (InvalidArgumentException $refused) {
+            $code = $refused->getMessage();
+            if ($code === 'not_found') {
+                throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND, $refused);
+            }
+
+            throw new ChatApiException(self::WRITE_ERRORS[$code] ?? 'invalid_request', Response::HTTP_UNPROCESSABLE_ENTITY, $refused);
+        }
+    }
+
+    /**
+     * 2.5: the required `Idempotency-Key` header: 1–80 characters of `[A-Za-z0-9_.:-]` (a UUID fits); 400 otherwise.
+     */
+    private function idempotencyKey(Request $request): string
+    {
+        $key = $request->headers->get(ChatIdempotency::HEADER);
+        $this->deny($key === null, 'idempotency_key_required', Response::HTTP_BAD_REQUEST);
+        $this->deny(!ChatIdempotency::isValidKey($key), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
+
+        return (string) $key;
+    }
+
+    /**
+     * 2.5: the stored key: the client's key scoped to the token and the conversation (a key reused by another device
+     * of the person, or in another conversation, is another key). A hash, so it fits the column whatever the token id.
+     */
+    private static function scopedKey(ChatClientCall $call, ChatConversation $conversation, string $key): string
+    {
+        // Neither part can hold a line break (token ids and keys are restricted, uuids fixed): the join is unambiguous.
+        return ChatIdempotency::CLIENT_PREFIX . hash('sha256', $call->principal->tokenId . "\n" . $conversation->getUuid() . "\n" . $key);
+    }
+
+    /**
+     * 2.5: the `text` of a write body (JSON object, at most 48 KB). Any other field is refused (422
+     * `unsupported_field`), so a client written for a later version (2.6 card references) never has part of its message
+     * silently dropped; `text` must be a string (422 `invalid_text`). Emptiness and length are the service's (422
+     * `empty_text`, `text_too_long`).
+     */
+    private function text(Request $request): string
+    {
+        $data  = $this->payload($request, self::MAX_WRITE_BODY_BYTES);
+        $extra = array_keys(array_diff_key($data, array_flip(self::WRITE_FIELDS)));
+        $this->deny($extra !== [], 'unsupported_field', Response::HTTP_UNPROCESSABLE_ENTITY);
+        $text = $data['text'] ?? null;
+        if (!is_string($text)) {
+            throw new ChatApiException('invalid_text', Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return $text;
+    }
+
+    /** 2.5: the message of exactly this uuid in the (already visible) conversation; anything else 404 (audited). */
+    private function findMessage(Request $request, ChatClientCall $call, ChatConversation $conversation, string $messageUuid): ChatMessage
+    {
+        $message = $this->messages->findOneInConversation($conversation, $messageUuid);
+        if (!$message instanceof ChatMessage || $message->getUuid() !== $messageUuid) {
+            $this->guard->notFound($request, $call);
+        }
+
+        return $message;
+    }
+
+    /**
+     * Reactions as the reader sees them: counts and whether they reacted, never who.
+     *
+     * @param array<string, list<string>> $reactions emoji => public ids
+     *
+     * @return list<array{emoji: string, count: int, mine: bool}>
+     */
+    private function reactionCounts(array $reactions, ChatUserInterface $user): array
+    {
+        $counts = [];
+        foreach ($reactions as $emoji => $people) {
+            $counts[] = ['emoji' => (string) $emoji, 'count' => count($people), 'mine' => in_array($user->getChatPublicId(), $people, true)];
+        }
+
+        return $counts;
     }
 
     /**
@@ -618,11 +975,8 @@ final readonly class ChatClientApiController
      */
     private function messageRow(ChatMessage $message, array $view, ?array $body, array $reactions, ChatUserInterface $user): array
     {
-        $counts = [];
-        foreach ($reactions as $emoji => $people) {
-            $counts[] = ['emoji' => (string) $emoji, 'count' => count($people), 'mine' => in_array($user->getChatPublicId(), $people, true)];
-        }
-        $row = [
+        $counts = $this->reactionCounts($reactions, $user);
+        $row    = [
             'id'     => $view['id'],
             'uuid'   => $view['uuid'],
             'kind'   => $view['kind'],
@@ -726,14 +1080,14 @@ final readonly class ChatClientApiController
     }
 
     /**
-     * The JSON object of the body (at most 4 KB); 400 `invalid_json` otherwise.
+     * The JSON object of the body (at most 4 KB, 2.5: 48 KB for a write); 400 `invalid_json` otherwise.
      *
      * @return array<string, mixed>
      */
-    private function payload(Request $request): array
+    private function payload(Request $request, int $maxBytes = self::MAX_JSON_BODY_BYTES): array
     {
         $content = $request->getContent();
-        $this->deny(strlen($content) > self::MAX_JSON_BODY_BYTES, 'invalid_json', Response::HTTP_BAD_REQUEST);
+        $this->deny(strlen($content) > $maxBytes, 'invalid_json', Response::HTTP_BAD_REQUEST);
         try {
             $data = json_decode($content, true, 8, JSON_THROW_ON_ERROR);
         } catch (JsonException) {

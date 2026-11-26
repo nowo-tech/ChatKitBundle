@@ -84,13 +84,25 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertSame('personal', $me['context']);
         // The host's labels lose their control and bidirectional characters.
         self::assertSame([['key' => 'personal', 'label' => 'Personal'], ['key' => 'org:acme', 'label' => 'Acme']], $me['contexts']);
-        self::assertSame(['realtime' => true, 'realtimeEvents' => 'ids', 'send' => false, 'search' => false, 'attachments' => false, 'serverLogout' => false], $me['features']);
-        self::assertSame(['conversationsPageMax' => 100, 'messagesPageMax' => 100], $me['limits']);
+        self::assertSame(['realtime' => true, 'realtimeEvents' => 'ids', 'send' => false, 'threadReply' => false, 'reactions' => false, 'editOwn' => false, 'deleteOwn' => false, 'search' => false, 'attachments' => false, 'cards' => false, 'serverLogout' => false], $me['features']);
+        self::assertSame(['conversationsPageMax' => 100, 'messagesPageMax' => 100, 'textMaxLength' => 4000, 'editWindowSeconds' => 900, 'idempotencyKeyMaxLength' => 80], $me['limits']);
+        self::assertSame(['👍', '❤️', '😂', '😮', '😢', '🎉'], $me['reactions']['quick']);
         // The resolver saw the request without its token, and the raw context header.
         $request = $this->tokens()->requests[0];
         self::assertSame('personal', $request->requestedContext);
         self::assertSame('203.0.113.9', $request->clientIp);
         self::assertSame('/api/chat/v1/me', $request->request->path);
+    }
+
+    public function testWritesAreOffByDefault(): void
+    {
+        // 2.5: `client_api.writes` is false by default: the write routes answer 404 whatever the token holds.
+        $this->tokens()->grant('rw', $this->ana, [ChatClientPrincipal::SCOPE_READ, ChatClientPrincipal::SCOPE_WRITE], null, 'tok-rw');
+        $conversation = $this->get(ChatService::class)->openDirect($this->ana, $this->luis);
+        $url          = self::API . '/conversations/' . $conversation->getUuid() . '/messages';
+        self::assertError($this->call('POST', $url, 'rw', 'personal', '{"text":"hi"}', ['Idempotency-Key' => 'k1']), 404, 'not_found');
+        self::assertFalse($this->kernel->getContainer()->getParameter('nowo_chat_kit.client_api.writes'));
+        self::assertFalse($this->ok('GET', self::API . '/me', 'rw')['features']['send']);
     }
 
     public function testEveryRefusalHasAStableCodeAndAnEvent(): void

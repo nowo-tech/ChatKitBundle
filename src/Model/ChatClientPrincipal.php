@@ -21,7 +21,11 @@ final readonly class ChatClientPrincipal
     /** Read conversations, messages, read marks (Q-BD-8) and the realtime subscriber token. */
     public const string SCOPE_READ = 'chat:read';
 
-    /** Reserved for the write routes of a later version (send, edit, mute). No v1 route needs it. */
+    /**
+     * 2.5: the write routes (send, thread reply, reactions, edit and delete of one's own message), together with
+     * {@see self::SCOPE_READ}, while the host turned them on (`client_api.writes`). A token holds it only when the host's
+     * resolver says so: tokens approved for reading stay read-only.
+     */
     public const string SCOPE_WRITE = 'chat:write';
 
     /** A token id or a context key: 1–128 visible ASCII characters (letters, digits, `.`, `_`, `:`, `-`), starting with a letter or digit. */

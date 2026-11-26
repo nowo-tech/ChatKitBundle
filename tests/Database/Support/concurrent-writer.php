@@ -22,6 +22,12 @@ declare(strict_types=1);
  * ChatMessagingInterface::purgeChannel() (both workers the same ones, at the same moment: one deletes, the other finds
  * nothing; neither throws).
  *
+ * 2.5 (client API v1 writes, REQ-RUNTIME-003): through the client API's HTTP kernel with Bearer tokens (one worker
+ * request per call): `capisend` sends as Ana with the key `same-<n>` in both workers (a duplicate send under retry: one
+ * message per key); `capireact` sets (worker a) or sets and removes in turn (worker b) Luis's 👍 on the first message;
+ * `capichat` sends as Ana (worker a) or as Luis (worker b), each with its own keys (the unread counters and read
+ * cursors of two senders).
+ *
  * Prints one JSON line: {ok, failures, poisoned, closed}.
  */
 
@@ -29,15 +35,21 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
+use Nowo\ChatKitBundle\Model\ChatClientPrincipal;
 use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Service\ChatForwarder;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
 use Nowo\ChatKitBundle\Service\ChatMessaging;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatThreads;
+use Nowo\ChatKitBundle\Tests\Support\Chat\TestClientPrincipalResolver;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Nowo\ChatKitBundle\Tests\Support\TestKernel;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\HttpKernelInterface;
+use Symfony\Component\HttpKernel\TerminableInterface;
 
 require dirname(__DIR__, 3) . '/vendor/autoload.php';
 
@@ -46,10 +58,15 @@ $warm                           = str_starts_with((string) $mode, 'warm-');
 $mode                           = $warm ? substr((string) $mode, 5) : $mode;
 $menuModes                      = ['menu', 'savecap', 'unread', 'readonly', 'optout'];
 $threadModes                    = ['forward', 'thread', 'edit', 'delreply', 'delroot'];
+$clientModes                    = ['capisend', 'capireact', 'capichat'];
 $kernel                         = new TestKernel(match (true) {
     in_array($mode, $menuModes, true)   => ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true, 'max_per_user' => $mode === 'savecap' ? 1 : 500], 'message_info' => ['enabled' => true]]]]],
     in_array($mode, $threadModes, true) => ['profiles' => ['default' => ['message_menu' => ['forward' => ['enabled' => true], 'threads' => ['enabled' => true], 'edit_history' => ['enabled' => true, 'max_revisions' => 200]]]]],
-    default                             => [],
+    in_array($mode, $clientModes, true) => ['profiles' => ['default' => [
+        'client_api' => ['principal_resolver' => TestClientPrincipalResolver::class, 'writes' => true, 'limits' => ['per_ip_per_minute' => 100_000, 'per_token_per_minute' => 100_000, 'writes_per_token_per_minute' => 100_000]],
+        'limits'     => ['reads_per_minute' => 100_000, 'actions_per_minute' => 100_000, 'send_per_minute' => 100_000],
+    ]]],
+    default => [],
 });
 $kernel->boot();
 $container = $kernel->getContainer();
@@ -69,6 +86,19 @@ $boundary = $container->get(ChatRequestBoundaryListener::class);
 assert($boundary instanceof ChatRequestBoundaryListener);
 $messaging = $container->get(ChatMessaging::class);
 assert($messaging instanceof ChatMessaging);
+$http = $container->get('http_kernel');
+assert($http instanceof HttpKernelInterface && $http instanceof TerminableInterface);
+$testServices = $container->get('test.service_container');
+assert($testServices instanceof ContainerInterface);
+// 2.5: one client API request of this worker (Bearer token, JSON body, Idempotency-Key); a 2xx is a success.
+$api = static function (string $method, string $uri, string $token, ?string $body, string $key) use ($http): void {
+    $request  = Request::create('/api/chat/v1' . $uri, $method, [], [], [], ['REMOTE_ADDR' => '203.0.113.9', 'HTTP_AUTHORIZATION' => 'Bearer ' . $token, 'HTTP_IDEMPOTENCY_KEY' => $key, 'CONTENT_TYPE' => 'application/json'], $body);
+    $response = $http->handle($request);
+    $http->terminate($request, $response);
+    if ($response->getStatusCode() >= 300) {
+        throw new RuntimeException('HTTP ' . $response->getStatusCode() . ' ' . $response->getContent());
+    }
+};
 $em = static function () use ($registry): EntityManagerInterface {
     $manager = $registry->getManager();
     assert($manager instanceof EntityManagerInterface);
@@ -85,6 +115,14 @@ if ($warm) {
     echo json_encode(['ok' => 0, 'failures' => [], 'poisoned' => 0, 'closed' => 0]);
 
     return;
+}
+if (in_array($mode, $clientModes, true)) {
+    $tokens = $testServices->get(TestClientPrincipalResolver::class);
+    assert($tokens instanceof TestClientPrincipalResolver);
+    foreach (['ana', 'luis'] as $name) {
+        $tokens->grant($name, $em()->getRepository(TestUser::class)->findOneBy(['name' => $name]) ?? throw new RuntimeException($name), [ChatClientPrincipal::SCOPE_READ, ChatClientPrincipal::SCOPE_WRITE], null, 'tok-' . $name);
+    }
+    $em()->clear();
 }
 while (microtime(true) < (float) $start) {
     usleep(1000);
@@ -111,7 +149,11 @@ for ($i = 0; $i < (int) $calls; ++$i) {
         'delroot'  => $i === intdiv((int) $calls, 2) ? 'delroot' : 'idle',
         // 2.0: both workers purge the same channel conversations in the same order.
         'purge' => 'purge',
-        default => 'send',
+        // 2.5: client API writes.
+        'capisend'  => 'capisend',
+        'capireact' => $tag === 'a' || $i % 2 === 0 ? 'capiput' : 'capidelete',
+        'capichat'  => 'capichat',
+        default     => 'send',
     };
     try {
         $ana   = $em()->getRepository(TestUser::class)->findOneBy(['name' => 'ana']) ?? throw new RuntimeException('ana');
@@ -136,8 +178,12 @@ for ($i = 0; $i < (int) $calls; ++$i) {
             'delroot'  => $chat->delete($ana, $first()),
             'idle'     => usleep(2000),
             // True for the worker that deleted it, false for the one that found it gone: both are success.
-            'purge'  => $messaging->purgeChannel('room:race-' . $i),
-            'optout' => (static function () use ($settings, $luis, $i): void {
+            'purge'      => $messaging->purgeChannel('room:race-' . $i),
+            'capisend'   => $api('POST', '/conversations/' . $dm->getUuid() . '/messages', 'ana', '{"text":"same ' . $i . '"}', 'same-' . $i),
+            'capiput'    => $api('PUT', '/conversations/' . $dm->getUuid() . '/messages/' . $first()->getUuid() . '/reactions/' . rawurlencode('👍'), 'luis', null, $tag . '-' . $i),
+            'capidelete' => $api('DELETE', '/conversations/' . $dm->getUuid() . '/messages/' . $first()->getUuid() . '/reactions/' . rawurlencode('👍'), 'luis', null, $tag . '-' . $i),
+            'capichat'   => $api('POST', '/conversations/' . $dm->getUuid() . '/messages', $tag === 'a' ? 'ana' : 'luis', '{"text":"' . $tag . ' ' . $i . '"}', $tag . '-' . $i),
+            'optout'     => (static function () use ($settings, $luis, $i): void {
                 $mine = $settings->forUser($luis);
                 $mine->setShareReadTimes($i % 2 === 0);
                 $settings->save($mine);

@@ -103,7 +103,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      */
     public function prepend(ContainerBuilder $container): void
     {
-        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>, doctrine: array{user_reference: string}, client_api: array{limits: array{per_ip_per_minute: int, per_token_per_minute: int}}}>} $config */
+        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>, doctrine: array{user_reference: string}, client_api: array{limits: array{per_ip_per_minute: int, per_token_per_minute: int, writes_per_token_per_minute: int}}}>} $config */
         $config  = (new Processor())->processConfiguration(new Configuration(), $this->prependableConfigs($container));
         $profile = $config['profiles'][$config['default_profile']];
         $this->prependDoctrine($container, $config['default_profile'], $profile['user_class'], $profile['doctrine']['user_reference']);
@@ -130,6 +130,8 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 // 2.4: the client API's own budgets (per IP before the token, per token after it).
                 'nowo_chat_client_ip'    => $limiter($profile['client_api']['limits']['per_ip_per_minute'], '1 minute'),
                 'nowo_chat_client_token' => $limiter($profile['client_api']['limits']['per_token_per_minute'], '1 minute'),
+                // 2.5: the client API's write budget per token.
+                'nowo_chat_client_write' => $limiter($profile['client_api']['limits']['writes_per_token_per_minute'], '1 minute'),
             ],
         ]);
 
@@ -301,8 +303,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      * message bodies off the hub (`realtime_events: ids`); with `full` the build fails. The web dock works with both.
      *
      * 2.4.1: the host's token revoker (`client_api.token_revoker`) goes on the guard too (`POST logout`).
+     * 2.5: `client_api.writes` turns the write routes on (guard), exposed as `nowo_chat_kit.client_api.writes`.
      *
-     * @param array{principal_resolver: string|null, context_policy: string|null, token_revoker: string|null, prefix: string, context_header: string} $clientApi The processed `client_api` options
+     * @param array{principal_resolver: string|null, context_policy: string|null, token_revoker: string|null, writes: bool, prefix: string, context_header: string} $clientApi The processed `client_api` options
      * @param string $realtimeEvents The profile's `realtime_events`
      *
      * @throws InvalidConfigurationException When a context policy is configured with `realtime_events: full`
@@ -320,6 +323,9 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         $guard->setArgument('$resolver', $clientApi['principal_resolver'] === null ? null : new Reference($clientApi['principal_resolver']));
         $guard->setArgument('$contexts', $clientApi['context_policy'] === null ? null : new Reference($clientApi['context_policy']));
         $guard->setArgument('$revoker', $clientApi['token_revoker'] === null ? null : new Reference($clientApi['token_revoker']));
+        // 2.5: the write routes (deny by default: client_api.writes).
+        $guard->setArgument('$writes', $clientApi['principal_resolver'] !== null && $clientApi['writes']);
+        $container->setParameter(Configuration::ALIAS . '.client_api.writes', $clientApi['principal_resolver'] !== null && $clientApi['writes']);
     }
 
     /**

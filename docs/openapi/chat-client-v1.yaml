@@ -1,11 +1,12 @@
-# ChatKitBundle client API v1 (2.4). Kept in step with the routes by ChatClientApiOpenApiTest. See docs/API.md.
+# ChatKitBundle client API v1 (2.4; 2.5 writes). Kept in step with the routes by ChatClientApiOpenApiTest. See docs/API.md.
 openapi: 3.1.0
 info:
   title: ChatKitBundle client API
-  version: 1.1.0
+  version: 1.2.0
   description: >-
-    Stateless, read-only chat API for native clients (Beacon Desktop), plus the reader's own read marks and (2.4.1)
-    logout. Bearer tokens of the host (ChatKit issues none); off until the host configures client_api.principal_resolver. Paths are relative to
+    Stateless chat API for native clients (Beacon Desktop): reads, the reader's own read marks, (2.4.1) logout and
+    (2.5) writes: send, thread reply, reactions, edit and delete of one's own message (scope chat:write, off until
+    client_api.writes; me.features tells which). Bearer tokens of the host (ChatKit issues none); off until the host configures client_api.principal_resolver. Paths are relative to
     <client_api.prefix>/chat/v1 (default /api/chat/v1). Every request names its context in the context header
     (client_api.context_header; Beacon X-Beacon-Context) when the host has a context policy. Responses are never
     cached. Unknown, foreign or out-of-context uuids answer 404, never 403.
@@ -101,7 +102,7 @@ paths:
                           permissions:
                             type: object
                             properties:
-                              send: { type: boolean }
+                              send: { type: boolean, description: 'Whether the caller may post here (the write routes follow the same rule).' }
         '400': { $ref: '#/components/responses/Error' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Error' }
@@ -147,6 +148,42 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      operationId: send
+      summary: Sends a message (2.5, scope chat:write); the web UI's rules and side effects
+      description: >-
+        Same posting rights as the web UI (403 read_only: read-only channel, blocked direct message, closed ticket),
+        same pipeline (mentions resolved, #references validated, unread counters, realtime, Web Push, digest, search
+        index, events). The Idempotency-Key is required and deduplicated per token and conversation for 24 hours: the
+        same key and text answer the first message (200, replayed true); the same key with another text is 422
+        idempotency_mismatch. 404 while client_api.writes is off.
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WriteBody' }
+      responses:
+        '201':
+          description: Sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Written' }
+        '200':
+          description: A replay of the same Idempotency-Key (nothing written)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Written' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/WriteError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /conversations/{uuid}/messages/{messageUuid}:
     get:
       operationId: message
@@ -173,11 +210,64 @@ paths:
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/RateLimited' }
+    patch:
+      operationId: edit
+      summary: Edits one of the caller's own messages within the edit window (2.5, scope chat:write)
+      description: >-
+        403 read_only without posting rights; 403 edit_forbidden for someone else's message, a buzz, a tombstone or
+        after limits.editWindowSeconds. The same text again changes nothing. Idempotency-Key as send.
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+        - $ref: '#/components/parameters/MessageUuid'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WriteBody' }
+      responses:
+        '200':
+          description: Edited (or unchanged, or a replay)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Written' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/WriteError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      operationId: delete
+      summary: Deletes one of the caller's own messages within the edit window (2.5, scope chat:write)
+      description: >-
+        403 delete_forbidden for someone else's message (nobody deletes it) or after the window. Deleting one's own
+        message that is already deleted answers its tombstone again. Idempotency-Key as send.
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+        - $ref: '#/components/parameters/MessageUuid'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The tombstone (body null, deleted true)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Written' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/WriteError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /conversations/{uuid}/messages/{messageUuid}/thread:
     get:
       operationId: thread
       summary: A thread's root and a page of its replies (30, oldest first); a reply's uuid opens its root's thread
-      description: 404 while threads are off (message_menu.threads.enabled). Read-only; replying comes with the write routes.
+      description: 404 while threads are off (message_menu.threads.enabled). Replying is POST on the same path (2.5).
       parameters:
         - $ref: '#/components/parameters/Context'
         - $ref: '#/components/parameters/ConversationUuid'
@@ -216,6 +306,90 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Error' }
         '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      operationId: threadReply
+      summary: Replies in the thread of a message (2.5, scope chat:write); a reply's uuid replies in its root's thread
+      description: >-
+        404 while threads are off; 403 read_only without posting rights; 422 not_threadable for a message that takes no
+        thread (a line, a buzz, a bot message, a tombstone). Idempotency-Key as send.
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+        - $ref: '#/components/parameters/MessageUuid'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WriteBody' }
+      responses:
+        '201':
+          description: Replied
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Replied' }
+        '200':
+          description: A replay of the same Idempotency-Key (nothing written)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Replied' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/WriteError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /conversations/{uuid}/messages/{messageUuid}/reactions/{emoji}:
+    put:
+      operationId: addReaction
+      summary: Sets the caller's reaction (2.5, scope chat:write); idempotent
+      description: >-
+        The emoji is URL-encoded in the path and must be one of me.reactions.accepted (else 422 invalid_reaction).
+        Setting a reaction one already has changes and publishes nothing. 403 read_only without posting rights; 422
+        not_reactable for a line, a buzz or a tombstone. Idempotency-Key required (as send).
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+        - $ref: '#/components/parameters/MessageUuid'
+        - $ref: '#/components/parameters/Emoji'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The message's reactions after the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reacted' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/WriteError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      operationId: removeReaction
+      summary: Removes the caller's reaction (2.5, scope chat:write); idempotent
+      description: Removing a reaction one does not have changes and publishes nothing. Otherwise as PUT.
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+        - $ref: '#/components/parameters/MessageUuid'
+        - $ref: '#/components/parameters/Emoji'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The message's reactions after the change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reacted' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/WriteError' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /conversations/{uuid}/read:
     post:
@@ -299,7 +473,7 @@ components:
     bearer:
       type: http
       scheme: bearer
-      description: A token of the host's client token system holding the chat:read scope.
+      description: A token of the host's client token system holding the chat:read scope (writes, 2.5, chat:write too).
   parameters:
     Context:
       name: X-Chat-Context
@@ -314,12 +488,42 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    MessageUuid:
+      name: messageUuid
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Emoji:
+      name: emoji
+      in: path
+      required: true
+      description: The emoji, URL-encoded UTF-8 (one of me.reactions.accepted; at most 64 bytes decoded). Anything else is 422 invalid_reaction.
+      schema: { type: string, maxLength: 64 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        2.5: a client-generated id of this write (a UUID fits), deduplicated per token and conversation for 24 hours.
+        Send the same key again only to retry the same write (after a timeout, a lost answer, a 5xx, a 409 or a 429);
+        a new write needs a new key. Missing: 400 idempotency_key_required; malformed: 400 idempotency_key_invalid.
+      schema: { type: string, minLength: 1, maxLength: 80, pattern: '^[A-Za-z0-9_.:-]{1,80}$' }
   responses:
     Error:
       description: >-
         A refusal with a stable code: invalid_context, context_required, invalid_cursor, invalid_limit, invalid_json
-        (400); insufficient_scope, context_forbidden (403; also a token bound to a context with no context policy);
-        not_found (404, audited); invalid_message_id (422).
+        (400), idempotency_key_required, idempotency_key_invalid (400, writes); insufficient_scope,
+        context_forbidden (403; also a token bound to a context with no context policy), read_only, edit_forbidden,
+        delete_forbidden (403, writes); not_found (404, audited; also every write route while client_api.writes is
+        off); invalid_message_id (422).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    WriteError:
+      description: >-
+        2.5 write refusals (422): unsupported_field (a body field other than text, e.g. 2.6 cards on a 2.5 server),
+        invalid_text, empty_text, text_too_long, invalid_link, invalid_reaction, not_threadable, not_reactable,
+        idempotency_mismatch (the key was used for another write); invalid_message_id (read).
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -333,7 +537,9 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     RateLimited:
-      description: rate_limited (per IP, per token, or the person's own budget shared with the web UI).
+      description: >-
+        rate_limited (per IP, per token, 2.5 the token's write budget, or the person's own budgets shared with the web
+        UI). A write refused with 429 wrote nothing: retry after Retry-After with the same Idempotency-Key.
       headers:
         Retry-After: { schema: { type: integer } }
       content:
@@ -354,7 +560,7 @@ components:
         code: { type: string }
     Me:
       type: object
-      required: [apiVersion, user, scopes, context, contexts, features, limits]
+      required: [apiVersion, user, scopes, context, contexts, features, limits, reactions]
       properties:
         apiVersion: { type: integer, const: 1 }
         user: { $ref: '#/components/schemas/Person' }
@@ -373,7 +579,12 @@ components:
           properties:
             realtime: { type: boolean }
             realtimeEvents: { type: string, enum: [full, ids] }
-            send: { type: boolean }
+            send: { type: boolean, description: '2.5: POST conversations/{uuid}/messages is offered (needs chat:write).' }
+            threadReply: { type: boolean, description: '2.5: POST …/thread is offered (writes and threads on).' }
+            reactions: { type: boolean, description: '2.5: PUT/DELETE …/reactions/{emoji} is offered.' }
+            editOwn: { type: boolean, description: '2.5: PATCH of one''s own message is offered.' }
+            deleteOwn: { type: boolean, description: '2.5: DELETE of one''s own message is offered.' }
+            cards: { type: boolean, description: '2.6 (spec 259): typed card references in a write body; false in 2.5 (text only).' }
             search: { type: boolean }
             attachments: { type: boolean }
             serverLogout:
@@ -386,6 +597,53 @@ components:
           properties:
             conversationsPageMax: { type: integer }
             messagesPageMax: { type: integer }
+            textMaxLength: { type: integer, description: '2.5: longest text of a write, in characters.' }
+            editWindowSeconds: { type: integer, description: '2.5: one may edit or delete one''s own message this long after sending it.' }
+            idempotencyKeyMaxLength: { type: integer }
+        reactions:
+          type: object
+          description: 2.5 — the quick row and every emoji the server accepts as a reaction.
+          properties:
+            quick: { type: array, items: { type: string } }
+            accepted: { type: array, items: { type: string } }
+    WriteBody:
+      type: object
+      description: >-
+        2.5: the text only (Markdown as in the dock; @[Name](uuid) mentions and #[Title](type:id) references are resolved
+        by the server as in the web UI). Every other field is refused (422 unsupported_field), never dropped. 2.6 (spec
+        259) adds an optional typed card list (e.g. `cards: [{type, id}]`) behind me.features.cards; a 2.5 server
+        refuses it, so a client sends it only when me.features.cards is true. `text` stays the field of the text.
+      required: [text]
+      additionalProperties: false
+      properties:
+        text: { type: string, maxLength: 4000 }
+    Written:
+      type: object
+      required: [message, replayed]
+      properties:
+        message: { $ref: '#/components/schemas/Message' }
+        replayed: { type: boolean, description: True when an earlier request with the same Idempotency-Key wrote it. }
+    Replied:
+      type: object
+      required: [message, root, replayed]
+      properties:
+        message: { $ref: '#/components/schemas/Message' }
+        root: { $ref: '#/components/schemas/Message' }
+        replayed: { type: boolean }
+    Reacted:
+      type: object
+      required: [reactions, replayed]
+      properties:
+        reactions:
+          type: array
+          items:
+            type: object
+            required: [emoji, count, mine]
+            properties:
+              emoji: { type: string }
+              count: { type: integer }
+              mine: { type: boolean }
+        replayed: { type: boolean }
     Person:
       type: object
       required: [uuid, name, initials, avatarUrl]

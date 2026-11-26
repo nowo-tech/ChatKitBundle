@@ -215,6 +215,52 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
     }
 
     /**
+     * 2.5 (client API v1 writes, REQ-RUNTIME-003): two workers send the same messages under the same Idempotency-Keys
+     * (a client's retry racing its first attempt): one message per key, and every call answers (201 or the replay).
+     */
+    public function testClientApiDuplicateSendsUnderRetry(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('capisend', 'capisend');
+        $this->assertClean($a, $b);
+        self::assertSame(1 + self::CALLS, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_message'));
+        self::assertSame(self::CALLS, (int) $this->connection()->fetchOne("SELECT COUNT(DISTINCT body) FROM nowo_chat_message WHERE body LIKE 'same %'"));
+        self::assertSame(self::CALLS, (int) $this->connection()->fetchOne("SELECT COUNT(*) FROM nowo_chat_idempotency WHERE idempotency_key LIKE 'client:%'"));
+    }
+
+    /**
+     * 2.5: one person's reaction set from one worker and set and removed in turn from another (two devices): never two
+     * rows, every call answers.
+     */
+    public function testClientApiConcurrentReactions(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('capireact', 'capireact');
+        $this->assertClean($a, $b);
+        self::assertLessThanOrEqual(1, (int) $this->connection()->fetchOne('SELECT COUNT(*) FROM nowo_chat_reaction'));
+    }
+
+    /**
+     * 2.5: two people send to each other through the client API at the same moment: every message is stored, and each
+     * sender's read cursor is at least at their own newest message (never set back by the other's commit), so the
+     * unread counters count exactly the other person's newer messages.
+     */
+    public function testClientApiUnreadCountersOfTwoSenders(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('capichat', 'capichat');
+        $this->assertClean($a, $b);
+        $sql = $this->connection();
+        self::assertSame(1 + 2 * self::CALLS, (int) $sql->fetchOne('SELECT COUNT(*) FROM nowo_chat_message'));
+        foreach (['ana', 'luis'] as $name) {
+            $user   = (int) $sql->fetchOne('SELECT id FROM test_user WHERE name = ?', [$name]);
+            $own    = (int) $sql->fetchOne('SELECT MAX(id) FROM nowo_chat_message WHERE author_id = ?', [$user]);
+            $cursor = (int) $sql->fetchOne('SELECT last_read_message_id FROM nowo_chat_participant WHERE user_id = ?', [$user]);
+            self::assertGreaterThanOrEqual($own, $cursor, $name);
+        }
+    }
+
+    /**
      * @param array{ok: int, failures: array<string, int>, poisoned: int, closed: int} ...$writers
      */
     private function assertClean(array ...$writers): void

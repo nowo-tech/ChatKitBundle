@@ -318,6 +318,28 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function edit(ChatMessage $message, string $body): void
     {
+        $this->editWith($message, $body);
+    }
+
+    /**
+     * 2.5: edit() with the statements an `Idempotency-Key` adds to its unit of work (client API v1). The message never
+     * changes for the same text. When the text read before the unit already equals it, nothing runs and no key is
+     * claimed (the client's retry gets the same 200 again); once the unit runs, `$before` claims the key whatever it
+     * finds under the lock (another edit committed the same text meanwhile, or the message was deleted), and `$after`
+     * completes it with the message, so a replay answers it (audit ZCG-I2).
+     *
+     * @param ChatMessage $message The message to edit
+     * @param string $body New raw Markdown text
+     * @param (Closure(): bool)|null $before First statement of the unit; false aborts it (ChatIdempotencyConflict)
+     * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit, with the message
+     *
+     * @throws InvalidArgumentException `empty`, `too_long` or `invalid_link`
+     * @throws ChatIdempotencyConflict When `$before` refused the unit; nothing is written
+     *
+     * @internal
+     */
+    public function editWith(ChatMessage $message, string $body, ?Closure $before = null, ?Closure $after = null): void
+    {
         $body   = $this->normalize($body);
         $body   = $this->links?->normalizeCards($body) ?? $body;
         $author = $message->getAuthor();
@@ -333,22 +355,29 @@ final readonly class ChatService implements ChatServiceInterface
         $html                                   = $this->markdown->render($body);
         $now                                    = $this->clock->now();
         $history                                = $this->menuOptions?->historyEnabled() === true ? $this->revisions : null;
-        [$message, $added, $revision, $changed] = $this->write(function () use ($message, $body, $html, $now, $mentioned, $group, $history): array {
+        [$message, $added, $revision, $changed] = $this->write(function () use ($message, $body, $html, $now, $mentioned, $group, $history, $before, $after): array {
+            if ($before instanceof Closure && $before() !== true) {
+                throw new ChatIdempotencyConflict();
+            }
             $message = ChatKitWrites::attach($this->entityManager, $message);
             // The conversation's row first, as every unit of work that writes its rows (one lock order: audit QD-L2).
             $this->conversations->lockActivity($message->getConversation());
             // 1.36: the text another edit committed meanwhile is the previous text (read under the lock).
             $this->entityManager->refresh($message);
-            if ($body === $message->getBody() || $message->isDeleted()) {
-                return [$message, [], null, false];
+            $result = [$message, [], null, false];
+            if ($body !== $message->getBody() && !$message->isDeleted()) {
+                $revision = $history?->record($message, $message->getBody(), $now, $this->menuOptions?->maxRevisions() ?? 20);
+                $message->edit($body, $html, $now);
+                $message->mentionAll($group);
+                $added = $this->mentions?->sync($message, $mentioned) ?? [];
+                $this->links?->index($message);
+                $result = [$message, $added, $revision, true];
             }
-            $revision = $history?->record($message, $message->getBody(), $now, $this->menuOptions?->maxRevisions() ?? 20);
-            $message->edit($body, $html, $now);
-            $message->mentionAll($group);
-            $added = $this->mentions?->sync($message, $mentioned) ?? [];
-            $this->links?->index($message);
+            if ($after instanceof Closure) {
+                $after([$message]);
+            }
 
-            return [$message, $added, $revision, true];
+            return $result;
         });
         if (!$changed) {
             return;
@@ -369,16 +398,40 @@ final readonly class ChatService implements ChatServiceInterface
      */
     public function delete(ChatUserInterface $by, ChatMessage $message): void
     {
+        $this->deleteWith($by, $message);
+    }
+
+    /**
+     * 2.5: delete() with the statements an `Idempotency-Key` adds to its unit of work (client API v1).
+     *
+     * @param ChatUserInterface $by The user who deletes it
+     * @param ChatMessage $message The message
+     * @param (Closure(): bool)|null $before First statement of the unit; false aborts it (ChatIdempotencyConflict)
+     * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit, with the message
+     *
+     * @throws ChatIdempotencyConflict When `$before` refused the unit; nothing is written
+     *
+     * @internal
+     */
+    public function deleteWith(ChatUserInterface $by, ChatMessage $message, ?Closure $before = null, ?Closure $after = null): void
+    {
         // A deleted message leaves the pinned bar.
         $wasPinned           = $message->getPinnedAt() instanceof DateTimeImmutable;
         $now                 = $this->clock->now();
-        [$message, $deleted] = $this->write(function () use ($by, $message, $now): array {
+        [$message, $deleted] = $this->write(function () use ($by, $message, $now, $before, $after): array {
+            if ($before instanceof Closure && $before() !== true) {
+                throw new ChatIdempotencyConflict();
+            }
             $message = ChatKitWrites::attach($this->entityManager, $message);
             $this->conversations->lockActivity($message->getConversation());
             // 1.36 (audit UB-4): read again under the lock; a delete another request committed first is not repeated (a
             // reply would leave its root's count twice).
             $this->entityManager->refresh($message);
             if ($message->isDeleted()) {
+                if ($after instanceof Closure) {
+                    $after([$message]);
+                }
+
                 return [$message, false];
             }
             $message->delete($by, $now);
@@ -396,6 +449,9 @@ final readonly class ChatService implements ChatServiceInterface
                 $this->entityManager->flush();
                 $this->messageRepository?->countReply($root, -1, null);
                 $this->entityManager->refresh($root);
+            }
+            if ($after instanceof Closure) {
+                $after([$message]);
             }
 
             return [$message, true];
@@ -483,6 +539,62 @@ final readonly class ChatService implements ChatServiceInterface
         });
         $reactions = $this->reactionsOf($message);
         $this->notifier->messageUpdated($message, $reactions);
+
+        return $reactions;
+    }
+
+    /**
+     * 2.5 (client API v1): sets (`$on`) or removes the user's reaction with the emoji, idempotently: adding a reaction the
+     * user already has, or removing one they do not have, writes nothing and publishes nothing. Read again under the
+     * conversation's row lock, so two devices never add it twice (and a concurrent add is kept: savepoint insert).
+     *
+     * @param ChatUserInterface $user The reacting user
+     * @param ChatMessage $message The message
+     * @param string $emoji One of the accepted emojis
+     * @param bool $on True to set it, false to remove it
+     * @param (Closure(): bool)|null $before First statement of the unit; false aborts it (ChatIdempotencyConflict)
+     * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit, with the message
+     *
+     * @throws InvalidArgumentException `reaction` when the emoji is not accepted
+     * @throws ChatIdempotencyConflict When `$before` refused the unit; nothing is written
+     *
+     * @return array<string, list<string>> the message's reactions after the change
+     *
+     * @internal
+     */
+    public function setReaction(ChatUserInterface $user, ChatMessage $message, string $emoji, bool $on, ?Closure $before = null, ?Closure $after = null): array
+    {
+        if (!in_array($emoji, $this->reactions, true)) {
+            throw new InvalidArgumentException('reaction');
+        }
+        if ($on && !$this->reactionRepository->findOneFor($message, $user, $emoji) instanceof ChatReaction) {
+            // Refused before any write when the read found a look-alike's reaction (folding user column).
+            $this->reactionRepository->assertInsertable($user);
+        }
+        $now                 = $this->clock->now();
+        [$message, $changed] = $this->write(function () use ($user, $message, $emoji, $on, $now, $before, $after): array {
+            if ($before instanceof Closure && $before() !== true) {
+                throw new ChatIdempotencyConflict();
+            }
+            $message = ChatKitWrites::attach($this->entityManager, $message);
+            $this->conversations->lockActivity($message->getConversation());
+            $existing = $this->reactionRepository->findOneFor($message, $user, $emoji);
+            $changed  = $on !== $existing instanceof ChatReaction;
+            if ($changed && $existing instanceof ChatReaction) {
+                $this->entityManager->remove($existing);
+            } elseif ($changed) {
+                $this->reactionRepository->claim($message, $user, $emoji, $now);
+            }
+            if ($after instanceof Closure) {
+                $after([$message]);
+            }
+
+            return [$message, $changed];
+        });
+        $reactions = $this->reactionsOf($message);
+        if ($changed) {
+            $this->notifier->messageUpdated($message, $reactions);
+        }
 
         return $reactions;
     }

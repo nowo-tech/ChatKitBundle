@@ -1,7 +1,9 @@
 # Client API v1
 
-Since **2.4.0**. A versioned, stateless JSON API for native clients (Beacon Desktop, phase BD-2). It is read-only, except
-for the reader's own read marks and, since **2.4.1**, logout (the host revokes the client's own token). The machine-readable reference is [`openapi/chat-client-v1.yaml`](openapi/chat-client-v1.yaml);
+Since **2.4.0**. A versioned, stateless JSON API for native clients (Beacon Desktop, phase BD-2). In 2.4 it is read-only,
+except for the reader's own read marks and, since **2.4.1**, logout (the host revokes the client's own token). Since
+**2.5.0** (Beacon Desktop BD-3) it also writes: send, thread replies, reactions, and edit and delete of one's own message
+(scope `chat:write`, off until `client_api.writes`; see [Writes](#writes-25)). The machine-readable reference is [`openapi/chat-client-v1.yaml`](openapi/chat-client-v1.yaml);
 a test keeps it in step with the routes.
 
 This API is not the dock's JSON API. The dock's API (`<chat prefix>/api/...`) is internal UI JSON: it uses the session and
@@ -14,6 +16,7 @@ CSRF, it is unversioned, and native clients must not use it.
 - [Tenant (context)](#tenant-context)
 - [Routes](#routes)
 - [Message bodies](#message-bodies)
+- [Writes (2.5)](#writes-25)
 - [Logout](#logout)
 - [Realtime](#realtime)
 - [Limits](#limits)
@@ -35,6 +38,7 @@ nowo_chat_kit:
                 principal_resolver: App\Chat\ClientTokens          # ChatClientPrincipalResolverInterface
                 context_policy: App\Chat\ClientContexts             # optional, ChatClientContextPolicyInterface
                 token_revoker: App\Chat\ClientTokenRevoker          # optional (2.4.1), ChatClientTokenRevokerInterface
+                writes: true                                        # optional (2.5): the write routes, for chat:write tokens
                 prefix: /api                                        # the API answers at /api/chat/v1
                 context_header: X-Beacon-Context
 ```
@@ -69,7 +73,10 @@ Do not enable credentialed CORS on this path. Native clients do not need CORS.
   **every** request. It returns a `ChatClientPrincipal` (the chat user, the token's scopes, a stable non-secret token id
   and, optionally, the context the token is bound to), or `null` for any token that is not a valid chat token now.
   `null` covers unknown, expired and revoked tokens, and tokens of another client family.
-- Scope `chat:read` covers every v1 route, read marks included (Q-BD-8). `chat:write` is reserved for later versions.
+- Scope `chat:read` covers every read route, read marks included (Q-BD-8).
+- Scope `chat:write` (2.5) opens the [write routes](#writes-25), together with `chat:read`, and only while the host turned
+  them on (`client_api.writes: true`). ChatKit grants no scope: a token holds `chat:write` only when the host's resolver
+  says so, so tokens approved for reading stay read-only.
 - A person the access policy no longer considers reachable (`ChatAccessPolicyInterface::isReachable()`) gets `401`.
 
 ## Tenant (context)
@@ -111,6 +118,11 @@ All paths are under `<prefix>/chat/v1`. All responses are sent with `Cache-Contr
 | `POST conversations/{uuid}/read` `{messageId}` | `{ok, readUpTo}` |
 | `GET realtime` | `{enabled, hubUrl, token, topic, expiresAt, events}` |
 | `POST logout` (2.4.1) | `204`, no body. See [Logout](#logout) |
+| `POST conversations/{uuid}/messages` `{text}` (2.5) | `201 {message, replayed}` (`200` for a replay). See [Writes](#writes-25) |
+| `POST conversations/{uuid}/messages/{messageUuid}/thread` `{text}` (2.5) | `201 {message, root, replayed}` (`200` for a replay) |
+| `PUT` / `DELETE conversations/{uuid}/messages/{messageUuid}/reactions/{emoji}` (2.5) | `200 {reactions, replayed}` |
+| `PATCH conversations/{uuid}/messages/{messageUuid}` `{text}` (2.5) | `200 {message, replayed}` |
+| `DELETE conversations/{uuid}/messages/{messageUuid}` (2.5) | `200 {message, replayed}` (the tombstone) |
 
 How the routes behave:
 
@@ -156,6 +168,79 @@ Markdown by the dock renderer's own rules. Render every string as a text node.
   `ChatLinkPreviewProviderInterface` is asked 10 URLs at a time, and anything it answers that was not asked is dropped.
 - `lastMessage.preview` in the conversation list is plain text for the reader. A reference the reader may not open reads
   "Content not visible".
+
+## Writes (2.5)
+
+Since 2.5.0 (Beacon Desktop BD-3) a client can write. **Off by default**: the routes answer `404` until the host sets
+`client_api.writes: true`, and then only for tokens holding both `chat:read` and `chat:write`. `me.features` tells a
+client what this server offers (`send`, `threadReply`, `reactions`, `editOwn`, `deleteOwn`; `threadReply` also needs
+`message_menu.threads.enabled`), so Desktop feature-detects instead of guessing.
+
+| Write | Route | Rule (same as the web UI) |
+|---|---|---|
+| Send | `POST conversations/{uuid}/messages` `{text}` | `ChatVoter::SEND`: read-only channels (`ChatChannel::$readOnly`, `ChatChannelWritePolicyInterface`), blocked direct messages (`canWriteDirect()`), closed tickets → `403 read_only` |
+| Thread reply | `POST conversations/{uuid}/messages/{messageUuid}/thread` `{text}` | SEND, then `ChatVoter::THREAD` (a shown text message of the main timeline) → `422 not_threadable`. A reply's uuid replies in its root's thread. `404` while threads are off |
+| Reaction | `PUT` / `DELETE …/messages/{messageUuid}/reactions/{emoji}` | SEND, then `ChatVoter::REACT` (no line, buzz or tombstone) → `422 not_reactable`. The emoji is URL-encoded UTF-8 (at most 64 bytes) and must be in `me.reactions.accepted` → `422 invalid_reaction` (also for bytes that are not UTF-8; the router may answer `404` first) |
+| Edit own | `PATCH …/messages/{messageUuid}` `{text}` | SEND, then `ChatVoter::EDIT`: own message, within `limits.editWindowSeconds` (15 min), not a buzz or tombstone → `403 edit_forbidden` |
+| Delete own | `DELETE …/messages/{messageUuid}` | `ChatVoter::DELETE`: own message within the window → `403 delete_forbidden`. One's own message that is already deleted answers its tombstone again |
+
+- **The web send, not a copy of it.** Every write goes through `ChatService` (the dock's own path): Markdown normalised,
+  `@[Name](uuid)` mentions resolved against the conversation's members (with the `@channel` / `@here` policy and budget),
+  `#[Title](type:id)` references validated for the author, link cards checked, support status moved, the author's read
+  cursor and everyone's unread counters, closed lists reopened, realtime (`ids` events), Web Push, the digest, the search
+  index, the links panel, and the events (`ChatMessageSentEvent`, `ChatMentionEvent`, `ChatThreadReplyEvent`,
+  `ChatMessageEditedEvent`, `ChatMessageDeletedEvent`) — exactly as when the person writes in the dock.
+- **Lookups first.** The conversation must be visible to the token's person **in the request's context** (the context
+  policy's `includes()`), and the message must belong to it; anything else is `404` (audited), never `403`.
+- **Answers** are the same `Message` rows as `GET …/messages/{messageUuid}` (tokens, never HTML). Reactions answer the
+  message's `{emoji, count, mine}` after the change, never who reacted.
+- **Scopes before budgets.** A token without `chat:read` + `chat:write` is refused right after the per-IP and per-token
+  budgets, before it spends the write, action or send budget, so a read-only device can never use up the person's dock
+  send budget (audit ZCG-L2).
+- **Audit.** After each write (and each replay) `Nowo\ChatKitBundle\Event\ChatClientApiWriteEvent` is dispatched with the
+  `action` (`send`, `thread_reply`, `reaction_add`, `reaction_remove`, `edit`, `delete`), `tokenId`, `userPublicId`,
+  `conversationUuid`, `messageUuid`, `replayed`, `contextKey` and the `/24`–`/64` `ipPrefix`: never the token, the text or
+  the emoji. A replay dispatches it again with `replayed: true`: deduplicate audit rows on it. Listeners must not throw:
+  the write is already committed, and an exception would turn it into a `500` (the client's retry then replays).
+
+### Request body
+
+A write body is a JSON object (at most 48 KB: a 4000-character text fits even fully `\uXXXX`-escaped) with **one field, `text`** (a string; Markdown as in the dock; at most
+`limits.textMaxLength` = 4000 characters after trimming). Any other field answers `422 unsupported_field` and nothing is
+written: a field is never silently dropped.
+
+**Forward compatibility with 2.6 (spec 259).** 2.6 adds typed card references (secret cards, later attachments) as a new
+optional field next to `text` (for example `cards: [{type, id}]`), advertised by `me.features.cards: true`. Because 2.5
+refuses unknown fields, a 2.6 client talking to a 2.5 server gets a clear `422 unsupported_field` instead of a message
+sent without its card. Clients send the new field only when `me.features.cards` is `true`; `text` keeps its name and
+meaning, and a body with `text` only stays valid in every later v1 version.
+
+### Idempotency-Key
+
+Every write needs an `Idempotency-Key` header: a client-generated id of **this write** (a UUID v4/v7 fits; 1–80
+characters of `[A-Za-z0-9_.:-]`). Missing: `400 idempotency_key_required`; malformed: `400 idempotency_key_invalid`.
+
+- **Deduplicated per token and conversation** (the stored key is `client:` + a hash of the token id, the conversation uuid
+  and the key; the dock refuses keys starting with `client:`, so its own keys never meet these, audit ZCG-I5), for 24 hours (`nowo:chat:purge` removes older keys). Another device of the same person, or another conversation,
+  never collides.
+- **The same key and the same request** (route, message, text or emoji) answer what the first one wrote, with
+  `replayed: true` (send and thread reply: `200` instead of `201`) and **nothing written again**. Two attempts racing each
+  other write once: the key is claimed in the write's own transaction; the second waits and replays.
+- **The same key with another request** answers `422 idempotency_mismatch`, nothing written.
+- **When to reuse a key.** Retry with the same key after a timeout, a lost connection, a `5xx`, `409` or `429`. Never
+  reuse a key for a new write. A `4xx` other than `409`/`429` wrote nothing: fix the request and use a new key.
+- **The `personal` retry.** A client that retries once in the `personal` context after `403 context_forbidden` (its
+  organization refused) may keep the key: the refusal happens before anything is written. The conversation must then be
+  in `personal` (direct messages and support are), otherwise `404`.
+- Reactions and deletes are idempotent by themselves as well: setting a reaction one has, removing one one does not have,
+  or deleting an already deleted own message changes nothing and publishes nothing.
+
+### Write budgets
+
+Writes spend the per-IP and per-token budgets, a **per-token write budget** of their own
+(`client_api.limits.writes_per_token_per_minute`, default 30) and the person's budgets shared with the web UI: the action
+budget for every write, plus the **send budget** (`limits.send_per_minute`, same key as the dock) for messages and thread
+replies. A spent budget answers `429 rate_limited` with `Retry-After`; nothing was written, so retry with the same key.
 
 ## Logout
 
@@ -230,7 +315,9 @@ These budgets come on top of the person's own budgets, which are shared with the
 | per IP (IPv6 per /64), checked before the token | 300/min | `client_api.limits.per_ip_per_minute` |
 | per token (by the principal's token id) | 60/min | `client_api.limits.per_token_per_minute` |
 | the person's reads | 600/min | `limits.reads_per_minute` |
-| the person's actions (read marks) | 240/min | `limits.actions_per_minute` |
+| the person's actions (read marks; 2.5: every write) | 240/min | `limits.actions_per_minute` |
+| per token, writes only (2.5) | 30/min | `client_api.limits.writes_per_token_per_minute` |
+| the person's sends (2.5: messages and thread replies, shared with the dock) | 30/min | `limits.send_per_minute` |
 
 When a budget is spent, the API answers `429 rate_limited` with `Retry-After`. Limiters live in the framework's
 rate-limiter cache pool. Share it across workers (for example in Redis).
@@ -251,12 +338,13 @@ Errors have the shape `{ok: false, error: <code>}`.
 
 | Status | Codes |
 |---|---|
-| 400 | `invalid_context`, `context_required`, `invalid_cursor`, `invalid_limit`, `invalid_json` |
+| 400 | `invalid_context`, `context_required`, `invalid_cursor`, `invalid_limit`, `invalid_json`; 2.5 writes: `idempotency_key_required`, `idempotency_key_invalid` |
 | 401 | `invalid_token` (with `WWW-Authenticate`) |
-| 403 | `insufficient_scope` (with `WWW-Authenticate`), `context_forbidden` |
-| 404 | `not_found` |
-| 409 | `unavailable` / `conflict` with `code` `CONFLICT_001` / `CONFLICT_002` (lock conflicts, see [CONCURRENCY.md](CONCURRENCY.md)) |
-| 422 | `invalid_message_id` |
+| 403 | `insufficient_scope` (with `WWW-Authenticate`; writes name `chat:read chat:write`), `context_forbidden`; 2.5 writes: `read_only`, `edit_forbidden`, `delete_forbidden` |
+| 404 | `not_found` (2.5: also every write route while `client_api.writes` is off) |
+| 405 | a method the route does not take (for example `POST …/reactions/{emoji}`) |
+| 409 | `unavailable` / `conflict` with `code` `CONFLICT_001` / `CONFLICT_002` (lock conflicts, see [CONCURRENCY.md](CONCURRENCY.md)); a write answered `409` wrote nothing: retry with the same key |
+| 422 | `invalid_message_id`; 2.5 writes: `unsupported_field`, `invalid_text`, `empty_text`, `text_too_long`, `invalid_link`, `invalid_reaction`, `not_threadable`, `not_reactable`, `idempotency_mismatch` |
 | 429 | `rate_limited` (with `Retry-After`) |
 
 Every refusal from the second step onwards, 404s included (reason `not_found`, audit ZBW-I2), dispatches `Nowo\ChatKitBundle\Event\ChatClientApiDeniedEvent` for the host's
@@ -275,6 +363,13 @@ The API keeps no request, user, token or tenant data in services (FrankenPHP wor
 `ChatClientApiWorkerTest` serves two people in two contexts for 500 rounds on one kernel. A reference grant flips every
 round, a token is signed out with `POST logout` half-way, and the test checks that memory stays flat. Read marks use the same locked,
 monotonic write as the web UI.
+
+2.5 writes keep nothing either: the key, the text and the call are locals of the request, and every write is
+`ChatService`'s own unit of work (the conversation's row lock first, the `Idempotency-Key` claimed as its first
+statement). `ChatClientApiWritesTest` writes 120 times on one kernel (two people, two tokens); `ConcurrentWritersTest`
+races two worker processes on MySQL 8.4, MariaDB 11.4 and PostgreSQL 16 (CI): duplicate sends under one key (one message
+per key), concurrent reactions of one person (never two rows) and two senders (read cursors and unread counters never
+set back). See [CONCURRENCY.md](CONCURRENCY.md).
 
 ## Implementing the ports (Beacon)
 
@@ -314,6 +409,13 @@ final readonly class ClientTokenRevoker implements ChatClientTokenRevokerInterfa
 ```
 
 Configure `realtime_events: ids` together with the context policy.
+
+**2.5 writes (BD-3).** Set `client_api.writes: true`, and let the chat family's device approval grant `chat:write`
+(next to `chat:read`) only when the person approves writing; existing tokens keep their scopes and stay read-only until
+re-approved. No schema change in ChatKit (the keys use the existing `nowo_chat_idempotency` table). Listen to
+`ChatClientApiWriteEvent` for the audit log (`client_api: chat`, action + token id). Beacon Desktop checks
+`me.features.send` (and `threadReply`, `reactions`, `editOwn`, `deleteOwn`) before showing the composer and actions, and
+`me.features.cards` before sending 2.6 cards.
 
 Beacon checklist for logout (audit ZCB-I5): set `client_api.token_revoker` to the revoker above; assert
 `me.features.serverLogout === true` in the integration test (and that a `POST logout` makes the next request 401);

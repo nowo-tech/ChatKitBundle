@@ -153,7 +153,10 @@ return static function (ContainerConfigurator $container): void {
     $services->set(ChatClientApiController::class)
         ->autoconfigure(false)
         ->tag('controller.service_arguments')
-        ->arg('$realtimeEvents', param('nowo_chat_kit.realtime_events'));
+        ->arg('$realtimeEvents', param('nowo_chat_kit.realtime_events'))
+        // 2.5: what `me` lists as reactions (the accepted ones; the configured ones are the quick row).
+        ->arg('$acceptedReactions', param('nowo_chat_kit.accepted_reactions'))
+        ->arg('$quickReactions', param('nowo_chat_kit.reactions'));
     $services->set(ChatClientApiRouteLoader::class)
         ->autoconfigure(false)
         ->args([param('nowo_chat_kit.client_api.enabled'), param('nowo_chat_kit.client_api.prefix')])
@@ -166,7 +169,10 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$readLimiter', service('limiter.nowo_chat_read'))
         ->arg('$actionLimiter', service('limiter.nowo_chat_action'))
         ->arg('$contextHeader', param('nowo_chat_kit.client_api.context_header'))
-        ->arg('$events', service('event_dispatcher')->nullOnInvalid());
+        ->arg('$events', service('event_dispatcher')->nullOnInvalid())
+        // 2.5: the write routes' budgets: per token, and the person's send budget shared with the web UI.
+        ->arg('$writeLimiter', service('limiter.nowo_chat_client_write'))
+        ->arg('$sendLimiter', service('limiter.nowo_chat_send'));
     $services->load('Nowo\\ChatKitBundle\\Repository\\', '../../Repository/')
         ->tag('doctrine.repository_service');
 
