@@ -76,6 +76,25 @@ export function visibleItems(rules: MessageMenuRules): Record<MessageMenuItem, b
   };
 }
 
+/** 2.6: what the copy paths show for a secret card when no translation is given. */
+export const SECRET_CARD_FALLBACK = '🔑';
+
+/**
+ * 2.6 (audit ZCI-M2): the only text a rendered typed card gives to Reply, Quote, Copy text and the previews: the generic
+ * secret line for a secret card (`data-card-secret="1"`, or any card that does not say it is not one), `#Title` for
+ * another card. Never its facts, badge or action labels.
+ *
+ * @param card The rendered card (`.nowo-chat-card`).
+ * @param secretLine The translated generic line (`card_secret`).
+ * @returns The text.
+ */
+export function cardText(card: Element, secretLine: string = SECRET_CARD_FALLBACK): string {
+  if (card.getAttribute('data-card-secret') !== '0') {
+    return secretLine;
+  }
+  return `#${card.querySelector('.nowo-chat-ref__title')?.textContent ?? ''}`;
+}
+
 /** 1.35: blocks whose text starts a new line in the copied text. */
 const BLOCKS = new Set(['P', 'DIV', 'LI', 'BLOCKQUOTE', 'PRE', 'UL', 'OL', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE', 'TR']);
 
@@ -85,9 +104,10 @@ const BLOCKS = new Set(['P', 'DIV', 'LI', 'BLOCKQUOTE', 'PRE', 'UL', 'OL', 'H1',
  * text is not its address is "text (address)", an image is its alt text; spaces inside a line are collapsed.
  *
  * @param root The rendered bubble.
+ * @param secretLine 2.6: the translated generic line of a secret card (audit ZCI-M2).
  * @returns The text.
  */
-export function plainText(root: Element): string {
+export function plainText(root: Element, secretLine: string = SECRET_CARD_FALLBACK): string {
   const lines: string[] = [];
   let line = '';
   const flush = (): void => {
@@ -111,9 +131,9 @@ export function plainText(root: Element): string {
       line += node.getAttribute('alt') ?? '';
       return;
     }
-    // 2.6: a typed card reads as its title (never its facts or actions).
+    // 2.6 (audit ZCI-M2): a typed card reads as the generic secret line, or `#Title` (never its facts or actions).
     if (node.classList.contains('nowo-chat-card')) {
-      line += `#${node.querySelector('.nowo-chat-ref__title')?.textContent ?? ''}`;
+      line += cardText(node, secretLine);
       return;
     }
     const block = BLOCKS.has(node.tagName);

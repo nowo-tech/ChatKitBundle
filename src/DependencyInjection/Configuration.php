@@ -56,7 +56,7 @@ final class Configuration implements ConfigurationInterface
     public const array MESSAGE_MENU_ITEMS = ['reply', 'thread', 'quote', 'forward', 'copy_text', 'copy_link', 'save', 'mark_unread', 'pin', 'info', 'edit', 'delete'];
 
     /** 2.6 (spec 259): a host slot in `message_menu.order`. */
-    public const string MENU_SLOT_PATTERN = '/^slot:[a-z][a-z0-9_-]{0,31}$/';
+    public const string MENU_SLOT_PATTERN = '/^slot:[a-z][a-z0-9_-]{0,31}\z/';
 
     /** 1.35: default quick reactions of the message menu. */
     public const array DEFAULT_QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];

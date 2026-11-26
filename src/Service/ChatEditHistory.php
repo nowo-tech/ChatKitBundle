@@ -85,7 +85,8 @@ final readonly class ChatEditHistory
     /**
      * The previous texts, newest first, rendered for the viewer (edit history on, the message not deleted: ChatVoter::HISTORY).
      * Never the stored Markdown (audit UB-1): a #reference keeps its title only for a viewer who may open the item; the
-     * HTML shows the neutral chip and the plain text the neutral placeholder otherwise.
+     * HTML shows the neutral chip and the plain text the neutral placeholder otherwise; a typed card (2.6) as in the
+     * timeline (a secret card's plain text is the generic line).
      *
      * @param ChatUserInterface $viewer The viewer ({@see self::mayRead()} said yes)
      * @param ChatMessage $message The message
@@ -94,11 +95,15 @@ final readonly class ChatEditHistory
      */
     public function revisions(ChatUserInterface $viewer, ChatMessage $message): array
     {
-        return array_map(function (ChatMessageRevision $revision) use ($viewer): array {
+        // 2.6 (audit ZCI-I5): typed cards are rendered in the message's conversation, as in the timeline (a secret card
+        // reads the generic line, a card the viewer may not see the neutral chip).
+        $conversation = $message->getConversation();
+
+        return array_map(function (ChatMessageRevision $revision) use ($viewer, $conversation): array {
             $body = $revision->getBody();
             $html = $this->markdown->render($body);
-            $html = $this->references?->fill($html, $body, $viewer)['html'] ?? $html;
-            $text = $this->references?->plainText($this->markdown, $body, $viewer, ChatMessage::MAX_LENGTH) ?? $this->markdown->plainText($body, ChatMessage::MAX_LENGTH);
+            $html = $this->references?->fill($html, $body, $viewer, $conversation)['html'] ?? $html;
+            $text = $this->references?->plainText($this->markdown, $body, $viewer, ChatMessage::MAX_LENGTH, null, $conversation) ?? $this->markdown->plainText($body, ChatMessage::MAX_LENGTH);
 
             return ['editedAt' => $revision->getEditedAt()->format(DATE_ATOM), 'text' => $text, 'html' => ChatMarkdownRenderer::stripAttributes($html)];
         }, $this->revisions->forMessage($message));

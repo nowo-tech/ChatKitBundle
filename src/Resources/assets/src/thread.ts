@@ -12,7 +12,7 @@ import { dayLabel, isNewDay, paintMessageTime, startsGroup, t, timeLabel } from 
 import { decodeMentions, markOwnMentions, MentionAutocomplete, mentionsViewer } from './mention';
 import { decodeReferences, ReferenceAutocomplete } from './reference';
 import { ConversationLinks, copyText, decodeLinkTokens, linksSettings, linkToken } from './links';
-import { plainText, quoteBlock, quoteOf, stripReservedAttributes, tidySeparators, visibleItems, type MessageMenuItem } from './message-menu';
+import { cardText, plainText, quoteBlock, quoteOf, SECRET_CARD_FALLBACK, stripReservedAttributes, tidySeparators, visibleItems, type MessageMenuItem } from './message-menu';
 import { openMessageInfo } from './message-info';
 import { openForwardDialog } from './forward-dialog';
 import { openSearchDialog } from './search-dialog';
@@ -487,7 +487,7 @@ export class ThreadView {
     if (latest === undefined) {
       this.pinsBar.replaceChildren();
     } else {
-      const excerpt = (message: ChatMessage): string => `${message.authorName}: ${plain(message.html).slice(0, 80)}`;
+      const excerpt = (message: ChatMessage): string => `${message.authorName}: ${plain(message.html, false, t(i18n, 'card_secret')).slice(0, 80)}`;
       // The visible excerpt is the accessible name (WCAG 2.5.3); the hint goes in the title.
       const show = h('button', { type: 'button', class: 'nowo-chat-pins__latest', title: t(i18n, 'pinned_show', { text: excerpt(latest) }) });
       show.append(this.host.templates.icon('pin', 14), h('span', { class: 'nowo-chat-pins__text', text: excerpt(latest) }));
@@ -1240,7 +1240,7 @@ export class ThreadView {
     }
     const last = fromOthers.at(-1);
     if (last !== undefined && !this.minimised) {
-      this.live.textContent = `${last.authorName}: ${plain(last.html)}`;
+      this.live.textContent = `${last.authorName}: ${plain(last.html, false, t(this.host.config.i18n, 'card_secret'))}`;
     }
     this.maybeMarkRead();
   }
@@ -1648,10 +1648,14 @@ export class ThreadView {
       article.replaceWith(this.renderMessage(current, article.classList.contains('nowo-chat-msg--group-start')));
     };
     /** Saves a non-blank edit; on failure, leaves the editor with an error notice. */
-    const save = async (): Promise<void> => {
+    const save = async (force = false): Promise<void> => {
       const mentioned = editMention.encode();
       const body = (editReference?.encode(mentioned) ?? mentioned).trim();
       if (body === '') {
+        return;
+      }
+      // 2.6 (audit ZCI-L4): the host's before-send check runs for edits too; sendAnyway() saves as is.
+      if (!force && beforeSend(this.dockRoot(), this.summary.uuid, body, () => void save(true), 'edit')) {
         return;
       }
       part<HTMLButtonElement>(form, 'save').disabled = true;
@@ -2399,7 +2403,7 @@ export class ThreadView {
    */
   private quote(message: ChatMessage, article: HTMLElement): void {
     const config = this.host.config;
-    const block = quoteBlock(message.authorName, plainText(part(article, 'bubble')), t(config.i18n, 'quote_wrote'), config.menu?.quoteMaxLength ?? 1000);
+    const block = quoteBlock(message.authorName, plainText(part(article, 'bubble'), t(config.i18n, 'card_secret')), t(config.i18n, 'quote_wrote'), config.menu?.quoteMaxLength ?? 1000);
     if (block === '' || this.input.disabled) {
       return;
     }
@@ -2416,7 +2420,7 @@ export class ThreadView {
    */
   private async copyPlainText(article: HTMLElement): Promise<void> {
     const i18n = this.host.config.i18n;
-    this.flashNotice(t(i18n, (await copyText(plainText(part(article, 'bubble')))) ? 'text_copied' : 'error'));
+    this.flashNotice(t(i18n, (await copyText(plainText(part(article, 'bubble'), t(i18n, 'card_secret')))) ? 'text_copied' : 'error'));
   }
 
   /**
@@ -2606,6 +2610,8 @@ export class ThreadView {
       maxLength: config.maxLength,
       returnTo: article,
       rootChanged: (root) => this.update(root),
+      // 2.6 (audit ZCI-L4): the host's before-send check runs for thread replies too.
+      beforeSend: (text, sendAnyway) => beforeSend(this.dockRoot(), this.summary.uuid, text, sendAnyway, 'thread'),
       closed: () => {
         if (this.threadPanel === panel) {
           this.threadPanel = null;
@@ -2640,7 +2646,8 @@ export class ThreadView {
    * @param article Its rendered line (the plain text of the bubble).
    */
   private replyTo(message: ChatMessage, article: HTMLElement): void {
-    const quote = quoteOf(message.authorName, part(article, 'bubble').textContent ?? '');
+    // Audit ZCI-M2: the same walker as Quote and Copy text (a card is its generic line or `#Title`, never its facts).
+    const quote = quoteOf(message.authorName, plainText(part(article, 'bubble'), t(this.host.config.i18n, 'card_secret')));
     if (quote === '' || this.input.disabled) {
       return;
     }
@@ -2867,15 +2874,18 @@ export class ThreadView {
   private openAction(action: ComposerAction): void {
     const settings = this.host.config.slots;
     const url = dialogUrl(action.dialogUrl, { conversation: this.summary.uuid });
+    const dialog = settings === undefined || url === null ? null : openSlotDialog(settings, url, action.label, this.element);
+    if (dialog === null) {
+      setCardTarget(null);
+      this.flashNotice(t(this.host.config.i18n, 'error'));
+      return;
+    }
+    // Audit ZCI-I1: only while this dialog is open (cleared when it closes).
     setCardTarget((card: CardRef) => {
       if (this.cardTray?.add(card) === true) {
         this.input.focus();
       }
-    });
-    if (settings === undefined || url === null || openSlotDialog(settings, url, action.label, this.element) === null) {
-      setCardTarget(null);
-      this.flashNotice(t(this.host.config.i18n, 'error'));
-    }
+    }, dialog);
   }
 
   /**
@@ -3033,15 +3043,17 @@ export function isLine(message: ChatMessage): boolean {
  *
  * @param html Message HTML from the server.
  * @param lines Keep line breaks (editor) instead of one line (previews).
+ * @param secretLine 2.6: the translated generic line of a secret card (audit ZCI-L2).
  * @returns The plain text, trimmed.
  */
-export function plain(html: string, lines = false): string {
+export function plain(html: string, lines = false, secretLine: string = SECRET_CARD_FALLBACK): string {
   const doc = new DOMParser().parseFromString(html.replace(/<br\s*\/?>/g, '\n').replace(/<\/(p|li|pre)>/g, '\n'), 'text/html');
   // Decorative emojis (support assistant lines) are aria-hidden: previews and the live region read only the text.
   doc.body.querySelectorAll('.nowo-chat-deco').forEach((emoji) => emoji.remove());
-  // 2.6: a typed card leaves the editor text (an edit keeps the message's cards on the server); elsewhere `#Title`.
+  // 2.6: a typed card leaves the editor text (an edit keeps the message's cards on the server); elsewhere (previews,
+  // the pins bar, the live region) the generic secret line or `#Title` (audit ZCI-L2).
   doc.body.querySelectorAll('.nowo-chat-card').forEach((card) => {
-    card.replaceWith(lines ? '' : `#${card.querySelector('.nowo-chat-ref__title')?.textContent ?? ''}`);
+    card.replaceWith(lines ? '' : cardText(card, secretLine));
   });
   // A #reference card reads `#Title`; the neutral chip of an item the viewer may not open, `[Content not visible]`.
   doc.body.querySelectorAll('.nowo-chat-ref').forEach((chip) => {

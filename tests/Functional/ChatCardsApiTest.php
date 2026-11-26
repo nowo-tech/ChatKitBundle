@@ -77,7 +77,7 @@ final class ChatCardsApiTest extends DatabaseTestCase
         return ['profiles' => ['default' => [
             'push'         => true,
             'push_preview' => true,
-            'message_menu' => ['forward' => ['enabled' => true], 'order' => ['reply', 'slot:report', 'forward', 'edit', 'delete']],
+            'message_menu' => ['forward' => ['enabled' => true], 'edit_history' => ['enabled' => true], 'order' => ['reply', 'slot:report', 'forward', 'edit', 'delete']],
         ]]];
     }
 
@@ -184,6 +184,11 @@ final class ChatCardsApiTest extends DatabaseTestCase
         self::assertTrue($edited['edited']);
         $asked = array_filter(array_slice($this->get(TestVaultCardProvider::class)->calls, $calls), static fn (array $call): bool => $call[0] === 'canShare');
         self::assertSame([], $asked);
+        // Audit ZCI-I5: the edit history renders the cards in the message's conversation, as the timeline does.
+        $revision = $this->getJson($base . '/messages/' . $sent['uuid'] . '/revisions')['revisions'][0];
+        self::assertStringContainsString('Shared a secret', $revision['text']);
+        self::assertStringNotContainsString('Content not visible', $revision['text']);
+        self::assertStringContainsString('nowo-chat-card--open', $revision['html']);
 
         // No forward of a message with cards in v1.
         $dm = $this->get(ChatService::class)->openDirect($ana, $luis);
@@ -242,6 +247,16 @@ final class ChatCardsApiTest extends DatabaseTestCase
             $this->client->request(Request::METHOD_GET, $base . $path);
             self::assertSame(404, $this->client->getResponse()->getStatusCode(), 'a stranger: 404 like reading');
         }
+
+        // Audit ZCI-I3: the slots route is rate limited like the reference search (120 a minute by default).
+        $this->login($ana);
+        $statuses = [];
+        for ($i = 0; $i < 125; ++$i) {
+            $this->client->request(Request::METHOD_GET, $base . '/slots');
+            $statuses[] = $this->client->getResponse()->getStatusCode();
+        }
+        self::assertSame([200, 429], array_values(array_unique($statuses)));
+        self::assertSame('rate_limited', $this->decode()['error']);
 
         // The dock: the slot dialog and the placed menu slot, then the model item for the others.
         $page = $this->client->request(Request::METHOD_GET, '/page');

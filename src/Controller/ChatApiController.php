@@ -791,7 +791,8 @@ final class ChatApiController extends AbstractController
     /**
      * 2.6 (spec 259): what the host adds to this conversation for the caller — the card types (composer chips and the
      * `nowo-chat:insert-card` check), the composer actions (only to someone who may write here) and the message menu
-     * slots. Same access as reading the conversation (unknown or foreign → 404); 404 without any card or slot provider.
+     * slots. Same access as reading the conversation (unknown or foreign → 404); 404 without any card or slot provider;
+     * rate limited like the reference search (429).
      *
      * @param string $uuid Conversation uuid
      *
@@ -804,6 +805,8 @@ final class ChatApiController extends AbstractController
         $conversation = $this->find($uuid, ChatVoter::VIEW);
         $cards        = $this->cards;
         $this->deny(!$cards instanceof ChatCards || !$cards->hasSlots(), 'not_found', Response::HTTP_NOT_FOUND);
+        // Audit ZCI-I3: every provider is asked per request; the same budget as the reference search and the card route.
+        $this->deny(!$this->referenceLimiter->create('nowo_chat_reference_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
         assert($cards instanceof ChatCards);
         $scope = ChatCards::composerScope($user, $conversation, $this->isGranted(ChatVoter::SEND, $conversation));
 

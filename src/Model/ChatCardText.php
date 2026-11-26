@@ -18,13 +18,13 @@ use function trim;
 final class ChatCardText
 {
     /** A card type, composer action or slot key: the reference key grammar. */
-    public const string KEY_PATTERN = '/^[a-z][a-z0-9_-]{0,31}$/';
+    public const string KEY_PATTERN = '/^[a-z][a-z0-9_-]{0,31}\z/';
 
     /** A card id: the reference id grammar (an opaque host id, never a secret on its own). */
-    public const string ID_PATTERN = '/^[A-Za-z0-9_-]{1,64}$/';
+    public const string ID_PATTERN = '/^[A-Za-z0-9_-]{1,64}\z/';
 
     /** A dock icon name. */
-    public const string ICON_PATTERN = '/^[A-Za-z][A-Za-z0-9_-]{0,39}$/';
+    public const string ICON_PATTERN = '/^[A-Za-z][A-Za-z0-9_-]{0,39}\z/';
 
     /** Control, line / paragraph separator and bidirectional characters (never shown). */
     private const string UNSAFE = '/[\p{Cc}\p{Zl}\p{Zp}\x{061C}\x{200B}\x{200E}\x{200F}\x{202A}-\x{202E}\x{2066}-\x{2069}\x{FEFF}]+/u';

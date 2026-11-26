@@ -20,12 +20,16 @@ final readonly class ChatDraft
      * @param string $body Raw Markdown
      * @param ChatMessage|null $threadRoot The thread it replies in (a reply to a reply goes to its root); null: main timeline
      * @param ChatMessage|null $forwardOf The message it forwards (its text, mentions already plain); null: the author's own text
+     * @param string|null $cardContext 2.6 (audit ZCI-M1): the client API context the author writes from (card `canShare()` scope)
+     * @param bool $cardApi 2.6 (audit ZCI-M1): written through the client API (card `canShare()` scope)
      */
     public function __construct(
         public ChatConversation $conversation,
         public string $body,
         public ?ChatMessage $threadRoot = null,
         public ?ChatMessage $forwardOf = null,
+        public ?string $cardContext = null,
+        public bool $cardApi = false,
     ) {
     }
 }

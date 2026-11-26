@@ -59,6 +59,11 @@ interface ChatCardProviderInterface
     /**
      * The cards as the reader sees them (Open or Locked); ids the reader may not even know about are left out.
      *
+     * Audit ZCI-I4: render() may be asked for ids no message of the conversation holds (the composer chip route takes
+     * any `type/id` in a conversation the reader can view). Decide from the item's own access rules or its binding to
+     * `$readerScope->conversationUuid` (Beacon: the share bound to the conversation), never from membership of the
+     * conversation alone.
+     *
      * @param ChatCardScope $readerScope The reader and the conversation
      * @param list<string> $ids At most 50 card ids
      *

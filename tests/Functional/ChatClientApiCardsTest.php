@@ -14,7 +14,10 @@ use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
 use Symfony\Component\HttpFoundation\Response;
 
+use function array_column;
 use function array_filter;
+use function array_map;
+use function array_merge;
 use function array_values;
 use function json_encode;
 
@@ -106,6 +109,61 @@ final class ChatClientApiCardsTest extends DatabaseTestCase
         $blocks = self::decode($edited)['message']['body']['blocks'];
         self::assertSame('now with text', $blocks[0]['tokens'][0]['text']);
         self::assertSame('vault_item', $blocks[1]['tokens'][0]['refType'], 'the card stays after the edit');
+    }
+
+    /**
+     * Audit ZCI-M1 / ZCI-L3: the client API asks `canShare()` and `render()` with the API scope and the token's context
+     * (a provider that refuses the API refuses the send and the thread reply, the dock still shares the card), and the
+     * conversation list preview is rendered with that scope too (no web-scope render on the API path).
+     */
+    public function testTheClientApiAsksTheHostWithTheApiScope(): void
+    {
+        $dm       = $this->get(ChatService::class)->openDirect($this->ana, $this->luis);
+        $provider = $this->get(TestVaultCardProvider::class);
+
+        self::assertError($this->write('POST', $this->messages($dm), 'ana', ['text' => 'x', 'cards' => [['type' => 'vault_item', 'id' => 'w1']]], 'm1-0'), 422, 'card_not_allowed');
+        self::assertContains(['canShare', $this->ana->getChatPublicId(), 'w1', 'api:personal'], $provider->calls);
+        $root = $this->write('POST', $this->messages($dm), 'ana', ['text' => 'root'], 'm1-1');
+        self::assertSame(201, $root->getStatusCode(), (string) $root->getContent());
+        $thread = $this->messages($dm) . '/' . self::decode($root)['message']['uuid'] . '/thread';
+        self::assertError($this->write('POST', $thread, 'ana', ['text' => 'see', 'cards' => [['type' => 'vault_item', 'id' => 'w1']]], 'm1-2'), 422, 'card_not_allowed');
+        self::assertSame(1, $this->rows(), 'nothing written by the refused send and reply');
+
+        // The dock (web scope) may share it.
+        $this->get(ChatService::class)->send($this->ana, $dm, '#[…](vault_item:w1)');
+        self::assertContains(['canShare', $this->ana->getChatPublicId(), 'w1', 'web'], $provider->calls);
+
+        // Luis reads it through the API: the card is hidden there, in the page and in the list preview (with the web
+        // scope he would read "🔑 Shared a secret").
+        $provider->calls = [];
+        $page            = $this->ok('GET', $this->messages($dm), 'luis');
+        $tokens          = array_merge(...array_map(static fn (array $row): array => $row['body']['blocks'][0]['tokens'], $page['messages']));
+        self::assertSame([false], array_column(array_values(array_filter($tokens, static fn (array $token): bool => $token['type'] === 'reference')), 'visible'));
+        $list = $this->ok('GET', self::API . '/conversations', 'luis');
+        self::assertStringContainsString('Content not visible', $list['conversations'][0]['lastMessage']['preview']);
+        self::assertStringNotContainsString('secret', $list['conversations'][0]['lastMessage']['preview']);
+        $renders = array_values(array_filter($provider->calls, static fn (array $call): bool => $call[0] === 'render'));
+        self::assertNotSame([], $renders);
+        self::assertSame([], array_values(array_filter($renders, static fn (array $call): bool => $call[3] !== 'api:personal')), 'no render with the web scope');
+    }
+
+    /**
+     * Audit ZCI-L1: more cards than the reference cap are refused before any host call; a card id with a trailing line
+     * break is malformed.
+     */
+    public function testTooManyCardsAreRefusedBeforeAskingTheHost(): void
+    {
+        $dm       = $this->get(ChatService::class)->openDirect($this->ana, $this->luis);
+        $provider = $this->get(TestVaultCardProvider::class);
+        $text     = '';
+        for ($i = 0; $i < 11; ++$i) {
+            $text .= ' #[x](vault_item:a' . $i . ')';
+        }
+        $provider->calls = [];
+        self::assertError($this->write('POST', $this->messages($dm), 'ana', ['text' => $text], 'l1-0'), 422, 'card_not_allowed');
+        self::assertSame([], array_values(array_filter($provider->calls, static fn (array $call): bool => $call[0] === 'canShare')), 'no host call');
+        self::assertError($this->write('POST', $this->messages($dm), 'ana', ['text' => 'x', 'cards' => [['type' => 'vault_item', 'id' => "v1\n"]]], 'l1-1'), 422, 'invalid_cards');
+        self::assertSame(0, $this->rows());
     }
 
     /**

@@ -18,8 +18,9 @@ use function str_starts_with;
 
 /**
  * `vault_item` (a secret card): `v1` "Prod root DB" open to every member who is not a "Locked …" or "Hidden …" person
- * (locked: Request access; hidden: left out); `v2` shareable by Ana only; `nope` never shareable. Every call is recorded
- * (test double only: the tests read it, a kernel per test).
+ * (locked: Request access; hidden: left out); `v2` shareable by Ana only; `nope` never shareable; `w1` web only (audit
+ * ZCI-M1 / ZCI-L3: never shared from, nor shown through, the client API). Every call is recorded (test double only: the
+ * tests read it, a kernel per test).
  */
 final class TestVaultCardProvider implements ChatCardProviderInterface
 {
@@ -60,7 +61,7 @@ final class TestVaultCardProvider implements ChatCardProviderInterface
         $this->calls[] = ['canShare', $authorScope->viewerPublicId, $id, self::where($authorScope)];
         $name          = $this->names[$authorScope->viewerPublicId] ?? '';
 
-        return $id === 'v1' || ($id === 'v2' && $name === 'Ana');
+        return $id === 'v1' || ($id === 'v2' && $name === 'Ana') || ($id === 'w1' && !$authorScope->api);
     }
 
     public function render(ChatCardScope $readerScope, array $ids): array
@@ -71,8 +72,8 @@ final class TestVaultCardProvider implements ChatCardProviderInterface
             return [];
         }
         $cards = [];
-        foreach (['v1', 'v2'] as $id) {
-            if (!in_array($id, $ids, true)) {
+        foreach (['v1', 'v2', 'w1'] as $id) {
+            if (!in_array($id, $ids, true) || ($id === 'w1' && $readerScope->api)) {
                 continue;
             }
             $cards[$id] = str_starts_with($name, 'Locked')

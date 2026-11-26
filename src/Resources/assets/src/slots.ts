@@ -6,8 +6,8 @@
  *   the dock root). The card shows as a chip above the composer and is sent as a token `#[…](type:id)` after the text.
  * - A message menu slot opens a host page with `?conversation=&message=(&card=type:id)`. A selection never goes in a
  *   URL or to the chat server: it is handed to the dialog element in the browser (`nowo-chat:slot-payload`).
- * - Before a send, `nowo-chat:before-send` (cancelable) lets the host warn about secrets in the text; `sendAnyway()`
- *   sends without asking again.
+ * - Before a send, a thread reply or an edit, `nowo-chat:before-send` (cancelable, `kind`) lets the host warn about
+ *   secrets in the text; `sendAnyway()` sends without asking again.
  *
  * The server checks everything again: `canShare()` on send (422 `card_not_allowed`), the host page checks the person.
  */
@@ -36,6 +36,27 @@ export const SLOT_PAYLOAD = 'nowo-chat:slot-payload';
 
 /** Cancelable event the dock dispatches on its root before a send. */
 export const BEFORE_SEND = 'nowo-chat:before-send';
+
+/** UiKit's remote dialog: its content has loaded (bubbles, on the dialog). */
+export const DIALOG_LOADED = 'nowo-ui:remote-form:loaded';
+
+/** UiKit's remote dialog: it closed (bubbles, on the dialog). */
+export const DIALOG_CLOSED = 'nowo-ui:remote-form:closed';
+
+/** Where a `nowo-chat:before-send` comes from: the composer, a thread reply or an edit (audit ZCI-L4). */
+export type SendKind = 'send' | 'thread' | 'edit';
+
+/**
+ * Calls `stop` once when the dialog closes (UiKit's closed event or the native `close`).
+ *
+ * @param dialog The dialog element.
+ * @param stop What to do.
+ * @param signal Removes the listeners when aborted.
+ */
+function onDialogClose(dialog: HTMLElement, stop: () => void, signal: AbortSignal): void {
+  dialog.addEventListener(DIALOG_CLOSED, stop, { once: true, signal });
+  dialog.addEventListener('close', stop, { once: true, signal });
+}
 
 /** A card picked in the composer. */
 export interface CardRef {
@@ -149,8 +170,9 @@ export function openSlotDialog(settings: SlotSettings, url: string, title: strin
 }
 
 /**
- * Hands a selection to the host dialog, in the browser only: now, and once more when the dialog's content arrives
- * (the remote page is loaded after the dialog opens).
+ * Hands a selection to the host dialog, in the browser only: now, and once more when the dialog's content has loaded
+ * (UiKit's `nowo-ui:remote-form:loaded`; the remote page arrives after the dialog opens). Audit ZCI-I2: never after the
+ * dialog closed or `waitMs` passed, so a later dialog never receives this selection.
  *
  * @param dialog The dialog element.
  * @param selection The selected text.
@@ -161,28 +183,52 @@ export function sendSlotPayload(dialog: HTMLElement, selection: string, waitMs =
     dialog.dispatchEvent(new CustomEvent(SLOT_PAYLOAD, { detail: Object.freeze({ selection }) }));
   };
   fire();
-  if (typeof MutationObserver === 'undefined') {
-    return;
-  }
-  const observer = new MutationObserver(() => {
-    observer.disconnect();
-    window.clearTimeout(timer);
-    fire();
-  });
-  const timer = window.setTimeout(() => observer.disconnect(), waitMs);
-  observer.observe(dialog, { childList: true, subtree: true });
+  const done = new AbortController();
+  const signal = AbortSignal.any([done.signal, AbortSignal.timeout(waitMs)]);
+  dialog.addEventListener(
+    DIALOG_LOADED,
+    () => {
+      done.abort();
+      fire();
+    },
+    { once: true, signal },
+  );
+  onDialogClose(dialog, () => done.abort(), signal);
 }
 
 /** Where an inserted card goes: the composer whose action opened the dialog. */
 let cardTarget: ((card: CardRef) => void) | null = null;
 
+/** Stops watching the dialog of the current target. */
+let cardTargetWatch: AbortController | null = null;
+
 /**
- * Sets (or clears) the composer an inserted card goes to.
+ * Sets (or clears) the composer an inserted card goes to. Audit ZCI-I1: with the dialog its action opened, the target
+ * is cleared when that dialog closes, so a later `nowo-chat:insert-card` (another dialog, another widget) is ignored.
  *
  * @param target The composer's insert function; null for none.
+ * @param dialog The dialog the composer's action opened.
  */
-export function setCardTarget(target: ((card: CardRef) => void) | null): void {
+export function setCardTarget(target: ((card: CardRef) => void) | null, dialog: HTMLElement | null = null): void {
+  cardTargetWatch?.abort();
+  cardTargetWatch = null;
   cardTarget = target;
+  if (target === null || dialog === null) {
+    return;
+  }
+  const watch = new AbortController();
+  cardTargetWatch = watch;
+  onDialogClose(
+    dialog,
+    () => {
+      watch.abort();
+      if (cardTarget === target) {
+        cardTarget = null;
+        cardTargetWatch = null;
+      }
+    },
+    watch.signal,
+  );
 }
 
 /**
@@ -205,19 +251,21 @@ export function bindInsertCard(root: HTMLElement): () => void {
 
 /**
  * Asks the host before a send (`nowo-chat:before-send`, cancelable). The text is read-only; `sendAnyway()` sends it
- * without asking again.
+ * without asking again. Audit ZCI-L4: asked for the composer, thread replies and edits (`kind`).
  *
  * @param root The dock root.
  * @param conversationUuid The conversation.
  * @param text The text about to be sent.
  * @param sendAnyway Sends the same text without the event.
+ * @param kind Where the text is sent from.
  * @returns True when the host cancelled the send.
  */
-export function beforeSend(root: HTMLElement, conversationUuid: string, text: string, sendAnyway: () => void): boolean {
+export function beforeSend(root: HTMLElement, conversationUuid: string, text: string, sendAnyway: () => void, kind: SendKind = 'send'): boolean {
   let used = false;
   const detail = Object.freeze({
     conversationUuid,
     text,
+    kind,
     sendAnyway: (): void => {
       if (!used) {
         used = true;

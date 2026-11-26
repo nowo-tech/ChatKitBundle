@@ -218,8 +218,9 @@ written: a field is never silently dropped.
 **Typed cards (2.6, spec 259).** When `me.features.cards` is `true`, a send or a thread reply may carry
 `cards: [{type, id}]` (at most 10, each object with exactly `type` and `id`, the reference grammar) next to `text`;
 `text` may then be empty. Each card is appended after the text as its own paragraph (`#[…](type:id)`), and the host is
-asked whether the person may share it here: one refused card refuses the whole write (`422 card_not_allowed`, nothing
-written). A malformed field is `422 invalid_cards`; a type that is not a card type is `422 card_not_allowed`. The
+asked whether the person may share it here, with the client API scope (`api: true` and the token's context key): one
+refused card refuses the whole write (`422 card_not_allowed`, nothing written). More than 10 cards in the text are
+refused before the host is asked. A malformed field is `422 invalid_cards`; a type that is not a card type is `422 card_not_allowed`. The
 `Idempotency-Key` covers the cards too (another card list under the same key is `422 idempotency_mismatch`). An edit
 (`PATCH`) takes `text` only (`cards` is `422 unsupported_field`): the message keeps its cards as sent. A message with
 cards is never forwarded. `GET conversations/{uuid}` lists `composerActions` (`key`, `label`, `icon`, `slash`) of the

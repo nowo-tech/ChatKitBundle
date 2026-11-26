@@ -1195,9 +1195,21 @@ dialog.addEventListener('nowo-chat:slot-payload', (event) => prefill(event.detai
 
 ### Before send
 
-The dock dispatches `nowo-chat:before-send` on its root (it bubbles) before every send:
-`{conversationUuid, text, sendAnyway()}`, frozen. Call `preventDefault()` to stop the send and warn (for example a
-password pasted as text), then `sendAnyway()` when the person confirms. The text never leaves the browser before that.
+The dock dispatches `nowo-chat:before-send` on its root (it bubbles) before every send, thread reply and edit:
+`{conversationUuid, text, kind, sendAnyway()}`, frozen, with `kind` one of `send`, `thread` or `edit`. Call
+`preventDefault()` to stop it and warn (for example a password pasted as text), then `sendAnyway()` when the person
+confirms. The text never leaves the browser before that.
+
+### Card provider rules
+
+- `render()` may be asked for ids that no message of the conversation holds yet (the composer chip route takes any
+  `type/id` in a conversation the reader can view). Decide from the item's own access rules, or its binding to
+  `$readerScope->conversationUuid`, never from membership of the conversation alone.
+- `canShare()` and `render()` get the scope the person writes or reads from: `api: true` and the token's `contextKey`
+  through the client API, `api: false` and no context in the dock.
+- *Reply*, *Quote*, *Copy text*, the list preview, the pins bar and the screen-reader announcement read a secret card
+  as the generic "🔑 Shared a secret" line, and another card as `#Title`: never facts, badges or actions.
+- An inserted card goes to the composer only while the dialog its action opened is open.
 
 ## Link previews
 

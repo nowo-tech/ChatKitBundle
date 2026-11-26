@@ -5,6 +5,8 @@ import {
   beforeSend,
   CardTray,
   cardToken,
+  DIALOG_CLOSED,
+  DIALOG_LOADED,
   dialogUrl,
   INSERT_CARD,
   isCardRef,
@@ -71,28 +73,54 @@ describe('slots', () => {
     expect(openSlotDialog(settings, 'https://evil.test/x', 'X', root)).toBeNull();
   });
 
-  it('hands the selection to the dialog now and when its content arrives', async () => {
-    vi.useFakeTimers();
+  it('hands the selection to the dialog now and once its content has loaded, never after it closed', async () => {
     const dialog = document.createElement('div');
     const seen: string[] = [];
     dialog.addEventListener(SLOT_PAYLOAD, (event) => seen.push((event as CustomEvent<{ selection: string }>).detail.selection));
     sendSlotPayload(dialog, 'secret text', 1000);
     expect(seen).toEqual(['secret text']);
+    // A loading state is no content: only UiKit's loaded event hands it over again, once.
     dialog.append(document.createElement('p'));
-    await Promise.resolve();
+    expect(seen).toEqual(['secret text']);
+    dialog.dispatchEvent(new CustomEvent(DIALOG_LOADED, { bubbles: true }));
+    dialog.dispatchEvent(new CustomEvent(DIALOG_LOADED, { bubbles: true }));
     expect(seen).toEqual(['secret text', 'secret text']);
+    // Closed before the content arrived (UiKit's event or the native one): the next dialog never gets it.
     sendSlotPayload(dialog, 'again', 1000);
-    vi.advanceTimersByTime(1001);
-    dialog.append(document.createElement('p'));
-    await Promise.resolve();
-    expect(seen).toEqual(['secret text', 'secret text', 'again']);
-    const observer = globalThis.MutationObserver;
-    // @ts-expect-error no MutationObserver
-    delete globalThis.MutationObserver;
-    sendSlotPayload(dialog, 'plain');
-    globalThis.MutationObserver = observer;
-    expect(seen.at(-1)).toBe('plain');
-    vi.useRealTimers();
+    dialog.dispatchEvent(new CustomEvent(DIALOG_CLOSED, { bubbles: true }));
+    dialog.dispatchEvent(new CustomEvent(DIALOG_LOADED, { bubbles: true }));
+    sendSlotPayload(dialog, 'native', 1000);
+    dialog.dispatchEvent(new Event('close'));
+    dialog.dispatchEvent(new CustomEvent(DIALOG_LOADED, { bubbles: true }));
+    expect(seen).toEqual(['secret text', 'secret text', 'again', 'native']);
+    // Past the wait: ignored.
+    sendSlotPayload(dialog, 'late', 5);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    dialog.dispatchEvent(new CustomEvent(DIALOG_LOADED, { bubbles: true }));
+    expect(seen.at(-1)).toBe('late');
+    expect(seen.filter((text) => text === 'late')).toHaveLength(1);
+  });
+
+  it('forgets the composer when the dialog its action opened closes', () => {
+    const root = document.createElement('div');
+    const dialog = document.createElement('dialog');
+    const got: unknown[] = [];
+    const stop = bindInsertCard(root);
+    setCardTarget((value) => got.push(value), dialog);
+    root.dispatchEvent(new CustomEvent(INSERT_CARD, { detail: { type: 'note', id: 'n1' } }));
+    dialog.dispatchEvent(new CustomEvent(DIALOG_CLOSED));
+    root.dispatchEvent(new CustomEvent(INSERT_CARD, { detail: { type: 'note', id: 'n2' } }));
+    expect(got).toEqual([{ type: 'note', id: 'n1' }]);
+    // A newer target is not cleared by the old dialog; the native close clears it too.
+    const other = document.createElement('dialog');
+    setCardTarget((value) => got.push(value), other);
+    setCardTarget((value) => got.push(['second', value]), dialog);
+    other.dispatchEvent(new Event('close'));
+    root.dispatchEvent(new CustomEvent(INSERT_CARD, { detail: { type: 'note', id: 'n3' } }));
+    dialog.dispatchEvent(new Event('close'));
+    root.dispatchEvent(new CustomEvent(INSERT_CARD, { detail: { type: 'note', id: 'n4' } }));
+    expect(got).toEqual([{ type: 'note', id: 'n1' }, ['second', { type: 'note', id: 'n3' }]]);
+    stop();
   });
 
   it('delivers inserted cards to the composer that opened the dialog', () => {
@@ -121,9 +149,11 @@ describe('slots', () => {
     });
     expect(beforeSend(root, 'c1', 'password=hunter2', again)).toBe(true);
     expect(detail).not.toBeNull();
-    const seen = detail as unknown as { text: string; conversationUuid: string; sendAnyway: () => void };
+    const seen = detail as unknown as { text: string; conversationUuid: string; kind: string; sendAnyway: () => void };
     expect(Object.isFrozen(seen)).toBe(true);
-    expect([seen.text, seen.conversationUuid]).toEqual(['password=hunter2', 'c1']);
+    expect([seen.text, seen.conversationUuid, seen.kind]).toEqual(['password=hunter2', 'c1', 'send']);
+    beforeSend(root, 'c1', 'x', again, 'edit');
+    expect((detail as unknown as { kind: string }).kind).toBe('edit');
     seen.sendAnyway();
     seen.sendAnyway();
     expect(again).toHaveBeenCalledTimes(1);

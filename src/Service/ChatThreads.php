@@ -103,12 +103,14 @@ final readonly class ChatThreads
      * @param ChatMessage $root The root (a main-timeline text message: ChatVoter::THREAD)
      * @param string $body Raw Markdown
      * @param string $key The `Idempotency-Key`
+     * @param string|null $cardContext 2.6 (audit ZCI-M1): the client API context of the write (card `canShare()` scope)
+     * @param bool $cardApi 2.6 (audit ZCI-M1): written through the client API (card `canShare()` scope)
      *
-     * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link`, `not_threadable`, `idempotency_mismatch`
+     * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link`, `not_threadable`, `idempotency_mismatch`, (2.6) `card_not_allowed`
      *
      * @return array{ChatMessage, bool} The reply, and whether an earlier request with the key created it
      */
-    public function reply(ChatUserInterface $author, ChatMessage $root, string $body, string $key): array
+    public function reply(ChatUserInterface $author, ChatMessage $root, string $body, string $key, ?string $cardContext = null, bool $cardApi = false): array
     {
         $root = self::rootOf($root);
         if (!$root->canStartThread()) {
@@ -118,7 +120,7 @@ final readonly class ChatThreads
             $author,
             $key,
             ChatIdempotency::hash(['thread', $root->getUuid(), $body]),
-            fn (Closure $before, Closure $after): array => $this->chat->post($author, [new ChatDraft($root->getConversation(), $body, $root)], $before, $after),
+            fn (Closure $before, Closure $after): array => $this->chat->post($author, [new ChatDraft($root->getConversation(), $body, $root, null, $cardContext, $cardApi)], $before, $after),
         );
 
         return [$messages[0] ?? throw new InvalidArgumentException('not_found'), $replayed];

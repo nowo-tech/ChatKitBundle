@@ -225,12 +225,14 @@ final class ChatReferences implements ResetInterface
      * @param ChatUserInterface $author The writer
      * @param string $body Normalized message Markdown
      * @param list<string> $alreadyShared 2.6: `type:id` of the cards the stored message already holds (an edit): not asked again
+     * @param string|null $contextKey 2.6 (audit ZCI-M1): the client API context of the write (null on the web)
+     * @param bool $api 2.6 (audit ZCI-M1): the write comes through the client API
      *
      * @throws InvalidArgumentException `card_not_allowed` (2.6): a card the author may not share here, or past MAX_REFERENCES
      *
      * @return string The body to store
      */
-    public function validate(ChatConversation $conversation, ChatUserInterface $author, string $body, array $alreadyShared = []): string
+    public function validate(ChatConversation $conversation, ChatUserInterface $author, string $body, array $alreadyShared = [], ?string $contextKey = null, bool $api = false): string
     {
         // 1.37 (audit VA4-1): no token title keeps a backtick, before the code spans are told apart.
         $body   = self::safeTitles($body);
@@ -241,18 +243,26 @@ final class ChatReferences implements ResetInterface
         $scope     = $this->scopeFor($conversation, $author);
         $ids       = [];
         $cardTypes = [];
+        $cardCount = 0;
         foreach ($tokens as $token) {
             if ($this->isCardType($token['type'])) {
                 $cardTypes[$token['type']] = true;
+                ++$cardCount;
 
                 continue;
             }
             $ids[$token['type']][$token['id']] = true;
         }
+        // 2.6 (audit ZCI-L1): every card counts towards the cap, so a message with more cards than MAX_REFERENCES is
+        // refused before any host call (at most MAX_REFERENCES canShare() calls per message).
+        if ($cardCount > self::MAX_REFERENCES) {
+            throw new InvalidArgumentException(self::CARD_NOT_ALLOWED);
+        }
         // 2.6 (spec 259, Q-259-9): every card must be shareable by the author here, or the whole message is refused
-        // (a card never becomes plain text: its opaque id would sit in the body). Asked once per card, outside any lock.
+        // (a card never becomes plain text: its opaque id would sit in the body). Asked once per card, outside any lock,
+        // with the scope the author writes from (audit ZCI-M1: the client API flag and context).
         if ($cardTypes !== []) {
-            $this->assertShareable($conversation, $author, $tokens, $alreadyShared);
+            $this->assertShareable(ChatCards::scope($author, $conversation, $contextKey, $api), $tokens, $alreadyShared);
         }
         $valid = [];
         foreach ($ids as $type => $set) {
@@ -442,10 +452,12 @@ final class ChatReferences implements ResetInterface
      * @param ChatUserInterface|null $viewer The reader; null for viewer-neutral payloads
      * @param ChatConversation|null $conversation 2.6: the message's conversation (typed cards are rendered in it; without
      *                                            it every card is the neutral chip)
+     * @param string|null $contextKey 2.6 (audit ZCI-L3): the client API context of the request
+     * @param bool $api 2.6 (audit ZCI-L3): rendered for the client API
      *
      * @return array{html: string, references: list<array<string, mixed>>, pending: bool} The filled HTML, the readable cards and whether slots wait for a viewer
      */
-    public function fill(string $html, string $body, ?ChatUserInterface $viewer, ?ChatConversation $conversation = null): array
+    public function fill(string $html, string $body, ?ChatUserInterface $viewer, ?ChatConversation $conversation = null, ?string $contextKey = null, bool $api = false): array
     {
         if (!str_contains($html, self::SLOT)) {
             return ['html' => $html, 'references' => [], 'pending' => false];
@@ -454,7 +466,7 @@ final class ChatReferences implements ResetInterface
             return ['html' => $html, 'references' => [], 'pending' => true];
         }
         $tokens   = self::parse($body);
-        $cards    = $this->resolveFor($viewer, $tokens, $this->cardScope($viewer, $conversation));
+        $cards    = $this->resolveFor($viewer, $tokens, $this->cardScope($viewer, $conversation, $contextKey, $api));
         $readable = [];
         $index    = 0;
         // Paragraphs holding only cards (and spaces / line breaks): full-width cards; cards within text stay compact chips.
@@ -488,14 +500,16 @@ final class ChatReferences implements ResetInterface
      * @param ChatConversation|null $conversation 2.6: the message's conversation (typed cards: a secret card the reader
      *                                            may see reads "🔑 Shared a secret", never its title; without it every
      *                                            card reads "Content not visible")
+     * @param string|null $contextKey 2.6 (audit ZCI-L3): the client API context of the request
+     * @param bool $api 2.6 (audit ZCI-L3): rendered for the client API
      *
      * @return string The plain text
      */
-    public function plainText(ChatMarkdownRenderer $markdown, string $body, ChatUserInterface $viewer, int $maxLength, ?string $locale = null, ?ChatConversation $conversation = null): string
+    public function plainText(ChatMarkdownRenderer $markdown, string $body, ChatUserInterface $viewer, int $maxLength, ?string $locale = null, ?ChatConversation $conversation = null, ?string $contextKey = null, bool $api = false): string
     {
         $body = self::safeTitles($body);
         if (preg_match(self::TOKEN, $body) === 1) {
-            $cards = $this->resolveFor($viewer, self::parse($body), $this->cardScope($viewer, $conversation));
+            $cards = $this->resolveFor($viewer, self::parse($body), $this->cardScope($viewer, $conversation, $contextKey, $api));
             // 1.37 (audit VA2-2): a token inside a code span or block is text as written, never resolved (as validate() and
             // neutralizeFor() treat it).
             $body = (string) preg_replace_callback(self::CODE_OR_TOKEN, function (array $match) use ($cards, $locale): string {
@@ -795,26 +809,26 @@ final class ChatReferences implements ResetInterface
     /**
      * 2.6: the web card scope of a reader in a conversation (null without a conversation or card provider).
      */
-    private function cardScope(ChatUserInterface $viewer, ?ChatConversation $conversation): ?ChatCardScope
+    private function cardScope(ChatUserInterface $viewer, ?ChatConversation $conversation, ?string $contextKey = null, bool $api = false): ?ChatCardScope
     {
-        return $conversation instanceof ChatConversation && $this->cards?->isEnabled() === true ? ChatCards::scope($viewer, $conversation) : null;
+        return $conversation instanceof ChatConversation && $this->cards?->isEnabled() === true ? ChatCards::scope($viewer, $conversation, $contextKey, $api) : null;
     }
 
     /**
      * 2.6: refuses the message when the author may not share one of its cards here (`card_not_allowed`). Cards already
      * in the stored message (an edit keeps them) are not asked again.
      *
+     * @param ChatCardScope $scope The author, the conversation and where the author writes from
      * @param list<array{title: string, type: string, id: string}> $tokens The body's tokens
      * @param list<string> $alreadyShared `type:id` of the cards the message already holds
      *
      * @throws InvalidArgumentException `card_not_allowed`
      */
-    private function assertShareable(ChatConversation $conversation, ChatUserInterface $author, array $tokens, array $alreadyShared): void
+    private function assertShareable(ChatCardScope $scope, array $tokens, array $alreadyShared): void
     {
         $cards = $this->cards;
         // Only reached for card tokens, which only exist with the card service.
         assert($cards instanceof ChatCards);
-        $scope  = ChatCards::scope($author, $conversation);
         $asked  = [];
         $shared = array_flip($alreadyShared);
         foreach ($tokens as $token) {
@@ -875,7 +889,7 @@ final class ChatReferences implements ResetInterface
         }
         $actions = implode('', array_map(fn (ChatCardAction $action): string => '<a class="nowo-chat-card__action nowo-chat-card__action--' . $action->kind->value . '" href="' . $this->escape($action->url) . '" data-card-action="' . $action->key . '"' . ($action->dialog ? ' data-card-dialog' : '') . '>' . $this->escape($action->label) . '</a>', $card->actions));
 
-        return '<span class="nowo-chat-ref nowo-chat-card nowo-chat-card--' . $card->state->value . ($block ? ' nowo-chat-ref--block' : '') . '" data-ref-type="' . $this->escape($reference->type) . '" data-card-type="' . $this->escape($reference->type) . '" data-card-id="' . $this->escape($reference->id) . '">'
+        return '<span class="nowo-chat-ref nowo-chat-card nowo-chat-card--' . $card->state->value . ($block ? ' nowo-chat-ref--block' : '') . '" data-ref-type="' . $this->escape($reference->type) . '" data-card-type="' . $this->escape($reference->type) . '" data-card-id="' . $this->escape($reference->id) . '" data-card-secret="' . ($type['secret'] ? '1' : '0') . '">'
             . '<span class="nowo-chat-card__head">' . $head . '</span>'
             . ($facts === '' ? '' : '<span class="nowo-chat-card__facts" role="list">' . $facts . '</span>')
             . ($actions === '' ? '' : '<span class="nowo-chat-card__actions">' . $actions . '</span>')

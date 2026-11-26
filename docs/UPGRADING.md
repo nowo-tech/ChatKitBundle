@@ -171,7 +171,8 @@ composer update nowo-tech/chat-kit-bundle
    `dialog.addEventListener('nowo-chat:slot-payload', (e) => e.detail.selection)`; the dialog URL only has
    `?conversation=&message=(&card=type:id)`.
 5. **Secret detector.** Listen to `nowo-chat:before-send` on the dock root (or `document`): call `preventDefault()` to
-   warn, then `event.detail.sendAnyway()` when the person confirms (warn, never block).
+   warn, then `event.detail.sendAnyway()` when the person confirms (warn, never block). It runs for sends, thread
+   replies and edits (`event.detail.kind`: `send`, `thread`, `edit`).
 6. **Push and digest.** Secret cards always read "🔑 Shared a secret", whatever `push_preview` and the organisation's
    "hide text" setting (QB-259-8: one switch through `push_preview`).
 7. **Audit.** Listen to `ChatCardSharedEvent` (ids only) for the vault and secret audit trails.
@@ -179,6 +180,12 @@ composer update nowo-tech/chat-kit-bundle
    `me.features.cards` turns `true` with the providers; BD-3 shows cards read-only from the `card` object of reference
    tokens and lists `composerActions` for later; BD-4 adds the native secret flows.
 9. **CSP.** Nothing new beyond the UiKit dialog runtime (no new script, no external origin).
+10. **Do not remove a card provider while messages hold its cards** (audit ZCI-I6). Without the provider, its card
+    tokens are ordinary references: the forward and edit guards for cards do not apply to them, and a message forwarded
+    meanwhile keeps the tokens without `canShare()` in the target. Retire a card type by keeping a provider whose
+    `canShare()` answers `false` and whose `render()` returns nothing.
+11. **`render()` and unshared ids** (audit ZCI-I4). `render()` may be asked for ids no message holds (the composer
+    chip). Decide from the item's own access rules or its binding to the conversation, never from membership alone.
 
 ## To 2.5.0
 

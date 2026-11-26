@@ -231,6 +231,8 @@ final readonly class ChatService implements ChatServiceInterface
      * @param string $body Raw Markdown text
      * @param (Closure(): bool)|null $before First statement of the unit; false aborts it (ChatIdempotencyConflict)
      * @param (Closure(list<ChatMessage>): void)|null $after Last statement of the unit
+     * @param string|null $cardContext 2.6 (audit ZCI-M1): the client API context of the write (card `canShare()` scope)
+     * @param bool $cardApi 2.6 (audit ZCI-M1): written through the client API (card `canShare()` scope)
      *
      * @throws InvalidArgumentException `empty`, `too_long`, `invalid_link` or (2.6) `card_not_allowed`
      *
@@ -238,9 +240,9 @@ final readonly class ChatService implements ChatServiceInterface
      *
      * @internal
      */
-    public function sendWith(ChatUserInterface $author, ChatConversation $conversation, string $body, ?Closure $before = null, ?Closure $after = null): ChatMessage
+    public function sendWith(ChatUserInterface $author, ChatConversation $conversation, string $body, ?Closure $before = null, ?Closure $after = null, ?string $cardContext = null, bool $cardApi = false): ChatMessage
     {
-        [[$message, $mentioned]] = $this->postAll($author, [new ChatDraft($conversation, $body)], $before, $after);
+        [[$message, $mentioned]] = $this->postAll($author, [new ChatDraft($conversation, $body, null, null, $cardContext, $cardApi)], $before, $after);
         // 1.11: automatic replies of the other person (direct) or of the people mentioned (channels), after the commit.
         try {
             $this->autoReplies?->afterSend($message, array_values($mentioned));
@@ -870,7 +872,7 @@ final readonly class ChatService implements ChatServiceInterface
             $body         = $this->links?->normalizeCards($body) ?? $body;
             // A forward keeps its #reference tokens: they are resolved for each reader of the target (the neutral chip
             // for whoever may not open them), and it mentions nobody.
-            $body                       = $forward ? $body : ($this->references?->validate($conversation, $author, $body) ?? $body);
+            $body                       = $forward ? $body : ($this->references?->validate($conversation, $author, $body, [], $draft->cardContext, $draft->cardApi) ?? $body);
             [$body, $mentioned, $group] = $forward ? [$body, [], null] : ($this->mentions?->resolve($conversation, $author, $body) ?? [$body, [], null]);
             // 1.28 (audit PV-D7): a look-alike refusal of the author's participant row comes before any write.
             $this->checkMember($conversation, $author);

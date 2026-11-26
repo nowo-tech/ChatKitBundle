@@ -7,7 +7,7 @@ import type { ChatConfig, ChatMessage, ConversationSlots, ConversationSummary } 
 import { Templates } from '../src/templates';
 import { templates, templatesRoot } from './support';
 
-const i18n: Record<string, string> = { error: 'Error', card_not_allowed: 'Not allowed here', composer_actions: 'Actions', composer_cards: 'Cards', card_remove: 'Remove', card_unavailable: 'Gone', sending: 'Sending', retry: 'Retry', failed: 'Failed' };
+const i18n: Record<string, string> = { card_secret: '🔑 Shared a secret', quote_wrote: '%name% wrote:', text_copied: 'Copied', error: 'Error', card_not_allowed: 'Not allowed here', composer_actions: 'Actions', composer_cards: 'Cards', card_remove: 'Remove', card_unavailable: 'Gone', sending: 'Sending', retry: 'Retry', failed: 'Failed' };
 const summary = (over: Partial<ConversationSummary> = {}): ConversationSummary => ({
   uuid: 'c1', kind: 'direct', title: 'Luis', subtitle: '', initials: 'LU', peerUuid: 'p', channelKey: null, supportStatus: null,
   canSend: true, peerOnline: false, unread: 0, lastMessageAt: null, lastMessage: null, ...over,
@@ -17,7 +17,8 @@ const msg = (over: Partial<ChatMessage> = {}): ChatMessage => ({
   id: nextId++, uuid: `m${nextId}`, authorUuid: 'p', authorName: 'Luis', authorInitials: 'LU', mine: false, kind: 'text', html: '<p>hola</p>',
   createdAt: '2026-11-26T10:00:00Z', edited: false, deleted: false, moderated: false, ...over,
 });
-const cardHtml = '<p><span class="nowo-chat-ref nowo-chat-card nowo-chat-card--locked nowo-chat-ref--block" data-card-type="vault_item" data-card-id="v1"><span class="nowo-chat-card__head"><span class="nowo-chat-ref__title">Prod root DB</span></span><span class="nowo-chat-card__facts" role="list"><span class="nowo-chat-card__fact">Vault Project X</span></span><span class="nowo-chat-card__actions"><a class="nowo-chat-card__action" href="/vault/v1/request" data-card-action="request_access" data-card-dialog>Request access</a><a class="nowo-chat-card__action" href="/vault/v1">Open</a></span></span></p>';
+const cardHtml = '<p><span class="nowo-chat-ref nowo-chat-card nowo-chat-card--locked nowo-chat-ref--block" data-card-type="vault_item" data-card-id="v1" data-card-secret="1"><span class="nowo-chat-card__head"><span class="nowo-chat-ref__title">Prod root DB</span></span><span class="nowo-chat-card__facts" role="list"><span class="nowo-chat-card__fact">Vault Project X</span></span><span class="nowo-chat-card__actions"><a class="nowo-chat-card__action" href="/vault/v1/request" data-card-action="request_access" data-card-dialog>Request access</a><a class="nowo-chat-card__action" href="/vault/v1">Open</a></span></span></p>';
+const noteHtml = '<p>see <span class="nowo-chat-ref nowo-chat-card nowo-chat-card--open" data-card-type="note" data-card-id="n1" data-card-secret="0"><span class="nowo-chat-card__head"><span class="nowo-chat-ref__title">Release notes</span></span><span class="nowo-chat-card__facts" role="list"><span class="nowo-chat-card__fact">Owner Ana</span></span></span></p>';
 const cardRef = { type: 'vault_item', id: 'v1', title: 'Prod root DB', url: '', subtitle: '', badge: '', tone: 'neutral', card: { state: 'locked' as const, facts: [], actions: [] } };
 const slots: ConversationSlots = {
   cardTypes: [{ key: 'vault_item', label: 'Vault item', icon: 'key', secret: true }],
@@ -30,7 +31,7 @@ const slots: ConversationSlots = {
 };
 const menu = { order: ['reply', 'forward', 'delete'], items: { reply: true, forward: true, delete: true }, quick: [], picker: false, quoteMaxLength: 40, saveDockEntry: false };
 
-function setup(messages: ChatMessage[] = [], slotsAnswer: Promise<ConversationSlots> = Promise.resolve(slots), withSlots = true, bare = false) {
+function setup(messages: ChatMessage[] = [], slotsAnswer: Promise<ConversationSlots> = Promise.resolve(slots), withSlots = true, bare = false, menuConfig: Record<string, unknown> = menu) {
   const api = {
     messages: vi.fn().mockResolvedValue({ messages, hasMore: false, readUpTo: null, readers: [] }),
     send: vi.fn().mockImplementation(async (_uuid: string, body: string) => msg({ mine: true, html: `<p>${body}</p>` })),
@@ -48,8 +49,8 @@ function setup(messages: ChatMessage[] = [], slotsAnswer: Promise<ConversationSl
   root.append(dialog);
   const host: ThreadHost = {
     config: {
-      i18n, endpoints: { page: '/chat/__uuid__', forward: '/f/__uuid__/__message__' }, userUuid: 'me', locale: 'en', maxLength: 200, editWindowSeconds: 900, reactions: [], isAgent: false,
-      prefs: { sound: 'pop', buzz: true, presence: true }, menu,
+      i18n, endpoints: { page: '/chat/__uuid__', forward: '/f/__uuid__/__message__', thread: '/t/__uuid__/__message__' }, userUuid: 'me', locale: 'en', maxLength: 200, editWindowSeconds: 900, reactions: [], isAgent: false,
+      prefs: { sound: 'pop', buzz: true, presence: true }, menu: menuConfig,
       ...(withSlots ? { slots: { endpoint: '/s/__uuid__', card: '/c/__uuid__/__type__/__id__', dialog: 'slot-dialog', dialogRuntime: '/ui/js/nowo-ui-dialog.js' } } : {}),
     } as unknown as ChatConfig,
     api: api as unknown as ChatApi,
@@ -218,15 +219,89 @@ describe('ThreadView cards and slots (2.6)', () => {
     expect(ctx.opened.at(-1)).toEqual({ src: '/vault/v1/request', title: 'Request access' });
     expect(a.querySelector('[data-card-dialog]')?.getAttribute('aria-haspopup')).toBe('dialog');
 
-    // Copy text and the editor never read a card's facts or actions.
-    expect(plainText(a.querySelector('[data-part="bubble"]') as HTMLElement)).toBe('#Prod root DB');
-    expect(plain(cardHtml)).toBe('#Prod root DB');
+    // Copy text and the editor never read a card's facts or actions; a secret card reads the generic line (audit
+    // ZCI-M2 / ZCI-L2), another card `#Title`; a card that does not say it is no secret is one.
+    expect(plainText(a.querySelector('[data-part="bubble"]') as HTMLElement, 'SECRET')).toBe('SECRET');
+    expect(plain(cardHtml)).toBe('🔑');
+    expect(plain(cardHtml.replace(' data-card-secret="1"', ''), false, 'SECRET')).toBe('SECRET');
+    expect(plain(noteHtml)).toBe('see #Release notes');
     expect(plain(`<p>text</p>${cardHtml}`, true)).toBe('text');
 
     // Without a dialog element, a slot says so.
     ctx.dialog.remove();
     slot(a, 'report').click();
     expect(ctx.view.element.querySelector('[data-part="notice"]')?.textContent).toBe('Error');
+  });
+
+  it('never copies a secret card into a reply, a quote, the clipboard or a preview (audit ZCI-M2 / ZCI-L2)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const carded = msg({ uuid: 'carded', html: `<p>look</p>${cardHtml}${noteHtml}`, references: [cardRef], hasCards: true });
+    const full = { ...menu, order: ['reply', 'quote', 'copy_text'], items: { reply: true, quote: true, copy_text: true }, quoteMaxLength: 1000 };
+    const ctx = setup([carded], Promise.resolve(slots), true, false, full);
+    await ctx.view.load();
+    await flush();
+    const article = ctx.view.element.querySelector(`[data-id="${carded.id}"]`) as HTMLElement;
+    const leaks = ['Prod root DB', 'Project X', 'Request access', 'Open', 'Owner Ana'];
+    const clean = (text: string): void => {
+      for (const leak of leaks) {
+        expect(text).not.toContain(leak);
+      }
+    };
+    (article.querySelector('[data-part="menu-reply"]') as HTMLElement).click();
+    expect(ctx.input.value).toContain('🔑 Shared a secret');
+    expect(ctx.input.value).toContain('#Release notes');
+    clean(ctx.input.value);
+    ctx.input.value = '';
+    (article.querySelector('[data-part="menu-quote"]') as HTMLElement).click();
+    expect(ctx.input.value).toContain('🔑 Shared a secret');
+    clean(ctx.input.value);
+    (article.querySelector('[data-part="menu-copy-text"]') as HTMLElement).click();
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalled());
+    const copied = String(writeText.mock.calls[0]?.[0]);
+    expect(copied).toContain('🔑 Shared a secret');
+    clean(copied);
+    // Previews, the pins bar and the live region read the generic line too.
+    expect(plain(carded.html, false, i18n.card_secret)).toBe('look 🔑 Shared a secret see #Release notes');
+  });
+
+  it('asks the host before a thread reply and an edit (audit ZCI-L4)', async () => {
+    const own = msg({ uuid: 'own', mine: true, authorUuid: 'me', html: '<p>old</p>' });
+    const full = { ...menu, order: ['thread', 'edit'], items: { thread: true, edit: true }, threads: true };
+    const ctx = setup([own], Promise.resolve(slots), true, false, full);
+    const edit = vi.fn().mockResolvedValue({ ...own, html: '<p>new</p>', edited: true });
+    Object.assign(ctx.api, { edit });
+    await ctx.view.load();
+    await flush();
+    const seen: { kind: string; text: string; sendAnyway: () => void }[] = [];
+    ctx.root.addEventListener(BEFORE_SEND, (event) => {
+      seen.push((event as CustomEvent).detail);
+      event.preventDefault();
+    });
+    const article = ctx.view.element.querySelector(`[data-id="${own.id}"]`) as HTMLElement;
+    (article.querySelector('[data-part="menu-edit"]') as HTMLElement).click();
+    const editor = ctx.view.element.querySelector('form [data-part="input"]') as HTMLTextAreaElement;
+    editor.value = 'password hunter2';
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await flush();
+    expect(edit).not.toHaveBeenCalled();
+    expect(seen.map((detail) => [detail.kind, detail.text])).toEqual([['edit', 'password hunter2']]);
+    seen[0]?.sendAnyway();
+    await flush();
+    expect(edit).toHaveBeenCalledWith('c1', 'own', 'password hunter2');
+
+    const threadReply = vi.fn().mockResolvedValue({ message: msg({ uuid: 'r1', threadRootUuid: 'own' }), root: { ...own, thread: { count: 1, lastReplyAt: null } } });
+    Object.assign(ctx.api, { threadReply, thread: vi.fn().mockResolvedValue({ root: own, replies: [], hasMore: false, replyCount: 0, readUpTo: null, following: true }), threadRead: vi.fn().mockResolvedValue(undefined) });
+    const current = ctx.view.element.querySelector(`[data-id="${own.id}"]`) as HTMLElement;
+    (current.querySelector('[data-part="menu-thread"]') as HTMLElement).click();
+    await vi.waitFor(() => expect(document.querySelector('[data-part="thread-input"]')).not.toBeNull());
+    (document.querySelector('[data-part="thread-input"]') as HTMLTextAreaElement).value = 'token abc';
+    (document.querySelector('[data-part="thread-send"]') as HTMLButtonElement).click();
+    await flush();
+    expect(threadReply).not.toHaveBeenCalled();
+    expect(seen.map((detail) => [detail.kind, detail.text])).toEqual([['edit', 'password hunter2'], ['thread', 'token abc']]);
+    seen[1]?.sendAnyway();
+    await vi.waitFor(() => expect(threadReply).toHaveBeenCalledWith('c1', 'own', 'token abc', expect.any(String)));
   });
 
   it('fits host templates without the composer tools or the slot model item', async () => {

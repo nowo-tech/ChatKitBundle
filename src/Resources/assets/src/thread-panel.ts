@@ -39,6 +39,8 @@ export interface ThreadPanelOptions {
   rootChanged?: (root: ChatMessage) => void;
   /** The panel closed. */
   closed?: () => void;
+  /** 2.6 (audit ZCI-L4): asks the host before a reply (`nowo-chat:before-send`); true when the host cancelled it. */
+  beforeSend?: (text: string, sendAnyway: () => void) => boolean;
 }
 
 /** The open thread panel of a conversation window. */
@@ -192,10 +194,14 @@ export class ThreadPanel {
     }
   }
 
-  private async submit(): Promise<void> {
+  private async submit(force = false): Promise<void> {
     const { api, conversationUuid, i18n } = this.options;
     const body = this.input.value.trim();
     if (body === '' || this.send.disabled) {
+      return;
+    }
+    // 2.6 (audit ZCI-L4): the host may warn first; sendAnyway() sends the text as it is now.
+    if (!force && this.options.beforeSend?.(body, () => void this.submit(true)) === true) {
       return;
     }
     // The same text keeps its key: a retry after a lost answer is one reply.

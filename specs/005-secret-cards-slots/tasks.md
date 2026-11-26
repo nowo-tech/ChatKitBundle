@@ -12,3 +12,7 @@
 - [x] T007 Tests: unit, integration, functional (SC-001 leak matrix), worker, REQ-RUNTIME-003 races, Vitest
 - [x] T008 Docs: CHANGELOG, UPGRADING (Beacon adoption), USAGE, API.md, SECURITY, CONCURRENCY, CONFIGURATION, worker
       audit, code inventory
+- [x] T009 Audit ZCI: client API `canShare()` scope (M1); Reply / Quote / Copy text and previews read a secret card as
+      the generic line (M2, L2); cap before `canShare()` and `\z` patterns (L1); API-scope list preview, one render
+      (L3); before-send for thread replies and edits (L4); card target cleared on dialog close (I1); payload on UiKit's
+      loaded event (I2); slots route limiter (I3); docs for I4 and I6; edit history scope (I5)

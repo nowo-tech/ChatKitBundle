@@ -519,11 +519,13 @@ final readonly class ChatClientApiController
         $user                 = $call->principal->user;
         $conversation         = $this->find($request, $call, $uuid);
         $this->deny(!$this->voter->decide(ChatVoter::SEND, $conversation, $user), 'read_only', Response::HTTP_FORBIDDEN);
+        $context               = $call->contextKey;
         [$messages, $replayed] = $this->writing(static fn (): array => $idempotency->run(
             $user,
             self::scopedKey($call, $conversation, $key),
             ChatIdempotency::hash(['client:send', $conversation->getUuid(), $text]),
-            static fn (Closure $before, Closure $after): array => [$chat->sendWith($user, $conversation, $text, $before, $after)],
+            // Audit ZCI-M1: the host's canShare() sees the client API flag and the request's context.
+            static fn (Closure $before, Closure $after): array => [$chat->sendWith($user, $conversation, $text, $before, $after, $context, true)],
         ));
         $message = $messages[0] ?? $this->guard->notFound($request, $call);
         $this->guard->written($request, $call, ChatClientApiWriteEvent::SEND, $conversation->getUuid(), $message->getUuid(), $replayed);
@@ -562,7 +564,7 @@ final readonly class ChatClientApiController
         }
         $this->deny(!$this->voter->decide(ChatVoter::SEND, $conversation, $user), 'read_only', Response::HTTP_FORBIDDEN);
         $this->deny(!$this->voter->decide(ChatVoter::THREAD, $message, $user), 'not_threadable', Response::HTTP_UNPROCESSABLE_ENTITY);
-        [$reply, $replayed] = $this->writing(static fn (): array => $threads->reply($user, $message, $text, self::scopedKey($call, $conversation, $key)));
+        [$reply, $replayed] = $this->writing(static fn (): array => $threads->reply($user, $message, $text, self::scopedKey($call, $conversation, $key), $call->contextKey, true));
         $root               = ChatThreads::rootOf($reply);
         $this->guard->written($request, $call, ChatClientApiWriteEvent::THREAD_REPLY, $conversation->getUuid(), $reply->getUuid(), $replayed);
         $rows = $this->presentMessages($user, [$reply, $root], $call->contextKey);
@@ -935,6 +937,9 @@ final readonly class ChatClientApiController
                 $isAgent,
                 $status !== null && $status['status'] !== 'offline',
                 $status,
+                // Audit ZCI-L3: the preview's typed cards with the API scope and the request's context.
+                $call->contextKey,
+                true,
             );
             $ticket = is_array($view['ticket']) ? $view['ticket'] : null;
             $out[]  = [
@@ -979,8 +984,8 @@ final readonly class ChatClientApiController
      */
     private function presentMessages(ChatUserInterface $user, array $page, ?string $contextKey = null): array
     {
-        // 2.6: typed cards of the page rendered in one batch per type and conversation (web view and API tokens).
-        $this->references?->prime($user, $page);
+        // 2.6: typed cards of the page rendered in one batch per type and conversation, once, with the API scope (audit
+        // ZCI-L3: no second render with the web scope).
         $this->references?->prime($user, $page, $contextKey, true);
         $reactions = $this->reactions->summaryFor(array_map(static fn (ChatMessage $message): int => (int) $message->getId(), $page));
         $this->presenter->primeAvatars(array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $page));
@@ -989,7 +994,7 @@ final readonly class ChatClientApiController
         $rows = [];
         $urls = [];
         foreach ($page as $message) {
-            $view = $this->presenter->message($message, $user);
+            $view = $this->presenter->message($message, $user, [], $contextKey, true);
             $body = match (true) {
                 $message->isDeleted()                   => null,
                 $message->isBot(), $message->isSystem() => ChatMessageTokens::plain($this->presenter->botText($message)),
