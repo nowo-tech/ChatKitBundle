@@ -17,6 +17,10 @@ use Nowo\ChatKitBundle\Contract\ChatPushSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatRealtimeTransportInterface;
 use Nowo\ChatKitBundle\Doctrine\ChatKitEntityManager;
 use Nowo\ChatKitBundle\NowoChatKitBundle;
+use Nowo\ChatKitBundle\Tests\Support\Card\TestComposerActionProvider;
+use Nowo\ChatKitBundle\Tests\Support\Card\TestMenuSlotProvider;
+use Nowo\ChatKitBundle\Tests\Support\Card\TestNoteCardProvider;
+use Nowo\ChatKitBundle\Tests\Support\Card\TestVaultCardProvider;
 use Nowo\ChatKitBundle\Tests\Support\Chat\CountingAvatarResolver;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingPushSender;
 use Nowo\ChatKitBundle\Tests\Support\Chat\RecordingRealtime;
@@ -106,6 +110,7 @@ final class TestKernel extends Kernel
         private readonly bool $uiKitContextMenus = false,
         private readonly bool $hostFixtures = false,
         private readonly ?string $removedPortsFixture = null,
+        private readonly bool $cardProviders = false,
     ) {
         // Own environment for the routing.controllers-only host: its container class must not collide with the
         // default one (PHP keeps the first declared class, whose lazy ghosts live in another cache dir). 2.0: likewise
@@ -189,7 +194,7 @@ final class TestKernel extends Kernel
 
     public function getCacheDir(): string
     {
-        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), $this->usesHostFixtures(), $this->authorBadges, $this->scriptedRunner, $this->runtimeSettings, $this->uiKitContextMenus, $this->removedPortsFixture])) . '/cache';
+        return sys_get_temp_dir() . '/nowo-chat-kit-bundle/' . md5(serialize([$this->chatKitConfig, $this->hostControllersRoutesOnly, $this->sidebarProviders, $this->grantReferences, self::databaseUrl(), getenv('CHAT_KIT_RACE_ID_GENERATION'), self::userReference(), $this->usesTwinPorts(), $this->usesHostFixtures(), $this->authorBadges, $this->scriptedRunner, $this->runtimeSettings, $this->uiKitContextMenus, $this->removedPortsFixture, $this->cardProviders])) . '/cache';
     }
 
     public function getLogDir(): string
@@ -272,6 +277,12 @@ final class TestKernel extends Kernel
         if ($this->scriptedRunner) {
             $services->set(HostEntityManagerRunner::class)->args([service('doctrine.orm.entity_manager')]);
             $services->alias(TransactionRunnerInterface::class, HostEntityManagerRunner::class);
+        }
+        // 2.6 (spec 259): card, composer action and message menu slot providers, only for the tests that ask for them.
+        if ($this->cardProviders) {
+            foreach ([TestVaultCardProvider::class, TestNoteCardProvider::class, TestComposerActionProvider::class, TestMenuSlotProvider::class] as $class) {
+                $services->set($class)->autoconfigure();
+            }
         }
         if ($this->sidebarProviders) {
             $services->set(TestSidebarProvider::class)->autoconfigure();

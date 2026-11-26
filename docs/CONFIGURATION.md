@@ -180,7 +180,7 @@ nowo_chat_kit:
 | `profiles.<name>.message_menu.threads.enabled` | bool | `false` | 1.36: **Reply in thread** — one-level threads under a message. Replies stay out of the main timeline and its unread badge. Stores thread read state: off by default. |
 | `profiles.<name>.message_menu.edit_history.enabled` | bool | `false` | 1.36: keep the previous texts of edited messages; the author and moderators read them (`GET …/revisions`), everyone sees the edit times in message info. Stores data: off by default. |
 | `profiles.<name>.message_menu.edit_history.max_revisions` | int 1–200 | `20` | 1.36: previous texts kept per message; older ones are dropped in the same write. |
-| `profiles.<name>.message_menu.order` | list | `reply, thread, quote, forward, copy_text, copy_link, save, mark_unread, pin, info, edit, delete` | 1.35: order of the menu items; a subset hides the others. Separators go between groups (reply/thread/quote/forward · copy_text…pin · info/edit · delete). 1.36 added `thread` and `forward`. |
+| `profiles.<name>.message_menu.order` | list | `reply, thread, quote, forward, copy_text, copy_link, save, mark_unread, pin, info, edit, delete` | 1.35: order of the menu items; a subset hides the others. Separators go between groups (reply/thread/quote/forward · copy_text…pin · info/edit · delete). 1.36 added `thread` and `forward`. 2.6: `slot:<key>` places a host message menu slot (`ChatMessageMenuSlotProviderInterface`); slots not listed come last. |
 | `profiles.<name>.limits.*` | int | see below | Rate limits. |
 
 ## Retention from the application (1.31)

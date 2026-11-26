@@ -111,15 +111,15 @@ All paths are under `<prefix>/chat/v1`. All responses are sent with `Cache-Contr
 |---|---|
 | `GET me` | `{apiVersion, user, scopes, context, contexts, features, limits}` |
 | `GET conversations?archived=&cursor=&limit=` | `{conversations, nextCursor, unreadTotal, unreadTotalCapped}` |
-| `GET conversations/{uuid}` | `{conversation}`, with `membersCount` and `permissions` |
+| `GET conversations/{uuid}` | `{conversation}`, with `membersCount`, `permissions` and (2.6) `composerActions` |
 | `GET conversations/{uuid}/messages?before=&after=&limit=` | `{messages, hasMore, readUpTo}` (oldest first) |
 | `GET conversations/{uuid}/messages/{messageUuid}` | `{message}` |
 | `GET conversations/{uuid}/messages/{messageUuid}/thread?before=&after=` | `{root, replies, hasMore, replyCount, readUpTo, following}`. Needs `message_menu.threads.enabled` (404 otherwise); a reply's uuid opens its root's thread |
 | `POST conversations/{uuid}/read` `{messageId}` | `{ok, readUpTo}` |
 | `GET realtime` | `{enabled, hubUrl, token, topic, expiresAt, events}` |
 | `POST logout` (2.4.1) | `204`, no body. See [Logout](#logout) |
-| `POST conversations/{uuid}/messages` `{text}` (2.5) | `201 {message, replayed}` (`200` for a replay). See [Writes](#writes-25) |
-| `POST conversations/{uuid}/messages/{messageUuid}/thread` `{text}` (2.5) | `201 {message, root, replayed}` (`200` for a replay) |
+| `POST conversations/{uuid}/messages` `{text, cards?}` (2.5; `cards` 2.6) | `201 {message, replayed}` (`200` for a replay). See [Writes](#writes-25) |
+| `POST conversations/{uuid}/messages/{messageUuid}/thread` `{text, cards?}` (2.5; `cards` 2.6) | `201 {message, root, replayed}` (`200` for a replay) |
 | `PUT` / `DELETE conversations/{uuid}/messages/{messageUuid}/reactions/{emoji}` (2.5) | `200 {reactions, replayed}` |
 | `PATCH conversations/{uuid}/messages/{messageUuid}` `{text}` (2.5) | `200 {message, replayed}` |
 | `DELETE conversations/{uuid}/messages/{messageUuid}` (2.5) | `200 {message, replayed}` (the tombstone) |
@@ -158,6 +158,12 @@ Markdown by the dock renderer's own rules. Render every string as a text node.
   - A card the reader may open is `visible: true`, with `refType`, `id`, `typeLabel`, `icon`, `title`, `subtitle`,
     `badge`, `tone` and `url`. `url` is `null` when it is not a safe link.
   - Anything else is `{type: "reference", visible: false, text: "Content not visible"}`, with no type, id or title.
+  - **2.6 typed cards** (spec 259) keep this shape, so a 2.5 client shows a chip. A visible card also has
+    `card: {state, facts, actions}`: `state` is `open` or `locked`; `facts` are at most 4 `{label, value}`; `actions`
+    are at most 3 `{key, label, kind, url, dialog}` with `kind` `open`, `request_access` or `host` and a same-origin
+    path in `url` (a web page of the host: open it in a webview or the browser). `url` of the reference is `null`.
+    Cards are rendered for the reader with the API scope and the request's context. Read `card` only when
+    `me.features.cards` is `true`; unknown keys must be ignored.
   - References inside code are never resolved, and their titles are never shown.
 - Deleted messages have `body: null`. Bot and system lines are one translated paragraph.
 - `mentionAll` is `channel` or `here` when the message carries a group mention, and is absent otherwise.
@@ -208,6 +214,16 @@ client what this server offers (`send`, `threadReply`, `reactions`, `editOwn`, `
 A write body is a JSON object (at most 48 KB: a 4000-character text fits even fully `\uXXXX`-escaped) with **one field, `text`** (a string; Markdown as in the dock; at most
 `limits.textMaxLength` = 4000 characters after trimming). Any other field answers `422 unsupported_field` and nothing is
 written: a field is never silently dropped.
+
+**Typed cards (2.6, spec 259).** When `me.features.cards` is `true`, a send or a thread reply may carry
+`cards: [{type, id}]` (at most 10, each object with exactly `type` and `id`, the reference grammar) next to `text`;
+`text` may then be empty. Each card is appended after the text as its own paragraph (`#[…](type:id)`), and the host is
+asked whether the person may share it here: one refused card refuses the whole write (`422 card_not_allowed`, nothing
+written). A malformed field is `422 invalid_cards`; a type that is not a card type is `422 card_not_allowed`. The
+`Idempotency-Key` covers the cards too (another card list under the same key is `422 idempotency_mismatch`). An edit
+(`PATCH`) takes `text` only (`cards` is `422 unsupported_field`): the message keeps its cards as sent. A message with
+cards is never forwarded. `GET conversations/{uuid}` lists `composerActions` (`key`, `label`, `icon`, `slash`) of the
+host for a person who may write there; their dialogs are web pages, so Desktop builds its own flow (BD-4).
 
 **Forward compatibility with 2.6 (spec 259).** 2.6 adds typed card references (secret cards, later attachments) as a new
 optional field next to `text` (for example `cards: [{type, id}]`), advertised by `me.features.cards: true`. Because 2.5
@@ -344,7 +360,7 @@ Errors have the shape `{ok: false, error: <code>}`.
 | 404 | `not_found` (2.5: also every write route while `client_api.writes` is off) |
 | 405 | a method the route does not take (for example `POST …/reactions/{emoji}`) |
 | 409 | `unavailable` / `conflict` with `code` `CONFLICT_001` / `CONFLICT_002` (lock conflicts, see [CONCURRENCY.md](CONCURRENCY.md)); a write answered `409` wrote nothing: retry with the same key |
-| 422 | `invalid_message_id`; 2.5 writes: `unsupported_field`, `invalid_text`, `empty_text`, `text_too_long`, `invalid_link`, `invalid_reaction`, `not_threadable`, `not_reactable`, `idempotency_mismatch` |
+| 422 | `invalid_message_id`; 2.5 writes: `unsupported_field`, `invalid_text`, `empty_text`, `text_too_long`, `invalid_link`, `invalid_reaction`, `not_threadable`, `not_reactable`, `idempotency_mismatch`; 2.6: `invalid_cards`, `card_not_allowed` |
 | 429 | `rate_limited` (with `Retry-After`) |
 
 Every refusal from the second step onwards, 404s included (reason `not_found`, audit ZBW-I2), dispatches `Nowo\ChatKitBundle\Event\ChatClientApiDeniedEvent` for the host's

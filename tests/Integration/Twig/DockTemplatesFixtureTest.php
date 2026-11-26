@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Integration\Twig;
 
+use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use Nowo\ChatKitBundle\Tests\Support\DatabaseTestCase;
 
 /**
@@ -21,7 +22,14 @@ final class DockTemplatesFixtureTest extends DatabaseTestCase
     protected function chatKitConfig(): array
     {
         // 1.40: search on (without the dock header link) so the window has the search button and the modal template.
-        return ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true], 'message_info' => ['enabled' => true], 'forward' => ['enabled' => true], 'threads' => ['enabled' => true]], 'search' => ['enabled' => true, 'dock_entry' => false]]]];
+        // 2.6: a placed host slot (`slot:report`) and the model item of the others.
+        return ['profiles' => ['default' => ['message_menu' => ['save' => ['enabled' => true], 'message_info' => ['enabled' => true], 'forward' => ['enabled' => true], 'threads' => ['enabled' => true], 'order' => [...Configuration::MESSAGE_MENU_ITEMS, 'slot:report']], 'search' => ['enabled' => true, 'dock_entry' => false]]]];
+    }
+
+    /** 2.6 (spec 259): the test slot providers, so the message menu has its slot items. */
+    protected function cardProviders(): bool
+    {
+        return true;
     }
 
     public function testFixtureMatchesTheTemplates(): void

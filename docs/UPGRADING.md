@@ -113,6 +113,67 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+To **2.6.0** from **2.5.x** (minor, nothing to change unless you opt in):
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+- **No schema change.** Cards are reference tokens in the existing `nowo_chat_message.body`; there is no migration and no
+  SQL for MySQL, MariaDB, PostgreSQL or SQLite. Rebuild the dock assets only if you bundle `nowo-chat.js` yourself.
+- **Typed cards, composer actions and message menu slots (optional).** Nothing appears until you register a provider.
+  Implement and register (autoconfigured by interface) any of:
+  - `Nowo\ChatKitBundle\Contract\ChatCardProviderInterface` (tag `nowo_chat_kit.card_provider`);
+  - `Nowo\ChatKitBundle\Contract\ChatComposerActionProviderInterface` (tag `nowo_chat_kit.composer_action`);
+  - `Nowo\ChatKitBundle\Contract\ChatMessageMenuSlotProviderInterface` (tag `nowo_chat_kit.message_menu_slot`).
+
+  A card type key must not be a reference type key (the container fails loudly). See
+  [USAGE.md, "Typed cards and host slots"](USAGE.md#typed-cards-and-host-slots-26).
+- **Dialog runtime.** Composer actions, menu slots and dialog card actions open in a UiKit remote dialog rendered in
+  `dock.html.twig` (block `nowo_chat_slot_dialog`). Load UiKit's `js/nowo-ui-dialog.js` in your layout, or set
+  `web_ui.dock.dialog_runtime: true`. A host that overrides `dock.html.twig` must keep the block.
+- **Message menu order.** To place a slot, add `slot:<key>` to `message_menu.order`; slots not listed come last.
+- **Template overrides.** An override of `_templates.html.twig` that redefines `nowo_chat_message_menu` should render the
+  `slot` items (`data-part="menu-slot"`, `data-slot-key`); without them the dock shows no slot. An override of the
+  window template without `data-part="composer-tools"` gets the action buttons at the top of the composer.
+- **Constructors.** A custom construction (not the container's) of `ChatReferences`, `ChatApiController`,
+  `ChatClientApiController`, `ChatDockExtension` or `ChatMessageTokens` gains optional last arguments.
+- **Idempotency keys (audit ZCG-v-I1).** The dock and the DDD facade (`ChatMessageMenu::forward()`,
+  `replyInThread()`) now refuse keys starting with `client:` in any letter case (`CLIENT:…`). Host code that generated
+  such keys must use another prefix.
+
+### Beacon adoption (spec 259 block A, v1.180/181)
+
+1. **Card providers.** `vault_item` and `one_time_secret`, both with `isSecret(): true`.
+   - `canShare($authorScope, $id)`: the author may share this vault item (VaultBundle grant) or owns this one-time
+     secret in this conversation. Answer `false` by default; a refused card refuses the whole send (`card_not_allowed`).
+   - `render($readerScope, $ids)`: one query for all ids (at most 50). `Open` for a reader with a grant or a share not
+     yet burnt, `Locked` with a *Request access* action (`ChatCardActionKind::RequestAccess`, `dialog: true`, spec
+     185), and leave out what the reader may not know about. `render()` must never burn a share or release a key.
+   - The scope is scalars only: `viewerPublicId` (resolve it in your directory), `conversationUuid`,
+     `conversationKind`, `channelKey`, `contextKey` (client API context) and `api` (Desktop). Resolve membership live.
+   - Card ids are opaque (`[A-Za-z0-9_-]{1,64}`): the Yopass share id, never the `#decrypt_key=` link.
+2. **One-time secret key (QB-259-1 = A, D-20261126-04).** The Yopass key stays server-side, encrypted with
+   DoctrineEncrypt and bound to the conversation; the *Reveal* page checks live membership and releases the key once per
+   allowed read. YopassBundle 2.2 `create()` is enough; ChatKit never sees the secret or the key.
+3. **Composer actions.** `secret` (`/secret`, the one-time secret dialog) and `vault` (share a vault item). The dialog
+   page gets `?conversation=<uuid>`; when the person confirms, the page dispatches
+   `el.dispatchEvent(new CustomEvent('nowo-chat:insert-card', {detail: {type: 'one_time_secret', id}, bubbles: true}))`
+   from inside the dialog, then closes it. It must never receive or read the draft.
+4. **Message menu slot** *Save to vault*: `ChatMenuSlotTarget::Selection` (and a `Card` slot for `vault_item` if
+   wanted). Read the selection in the dialog with
+   `dialog.addEventListener('nowo-chat:slot-payload', (e) => e.detail.selection)`; the dialog URL only has
+   `?conversation=&message=(&card=type:id)`.
+5. **Secret detector.** Listen to `nowo-chat:before-send` on the dock root (or `document`): call `preventDefault()` to
+   warn, then `event.detail.sendAnyway()` when the person confirms (warn, never block).
+6. **Push and digest.** Secret cards always read "🔑 Shared a secret", whatever `push_preview` and the organisation's
+   "hide text" setting (QB-259-8: one switch through `push_preview`).
+7. **Audit.** Listen to `ChatCardSharedEvent` (ids only) for the vault and secret audit trails.
+8. **Scopes and Desktop (QB-259-4).** No new scope: `cards` in a write body needs `chat:write` like the text.
+   `me.features.cards` turns `true` with the providers; BD-3 shows cards read-only from the `card` object of reference
+   tokens and lists `composerActions` for later; BD-4 adds the native secret flows.
+9. **CSP.** Nothing new beyond the UiKit dialog runtime (no new script, no external origin).
+
 ## To 2.5.0
 
 From **2.4.1**:

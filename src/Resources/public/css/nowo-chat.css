@@ -5343,3 +5343,177 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
     border-radius: 0;
   }
 }
+
+/* 2.6 (spec 259): a typed card (vault item, one-time secret …): the reference card's head, then its facts and actions.
+   Always full width, also within text; it is no link itself (its actions are). */
+.nowo-chat-ref.nowo-chat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  min-width: min(15rem, 100%);
+  margin: 2px 0;
+  padding: 6px 8px;
+  line-height: 1.3;
+  vertical-align: top;
+  white-space: normal;
+}
+
+.nowo-chat-card--locked {
+  border-style: dashed;
+}
+
+.nowo-chat-card__head {
+  display: grid;
+  grid-template-areas: "icon title title badge" "icon type subtitle badge";
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 0 6px;
+  align-items: center;
+}
+
+.nowo-chat-card__head .nowo-chat-ref__icon {
+  grid-area: icon;
+}
+
+.nowo-chat-card__head .nowo-chat-ref__title {
+  grid-area: title;
+}
+
+.nowo-chat-card__head .nowo-chat-ref__type {
+  display: inline;
+  grid-area: type;
+}
+
+.nowo-chat-card__head .nowo-chat-ref__subtitle {
+  display: inline;
+  grid-area: subtitle;
+}
+
+.nowo-chat-card__head .nowo-chat-ref__badge {
+  grid-area: badge;
+}
+
+.nowo-chat-card__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-size: 0.9em;
+}
+
+.nowo-chat-card__fact-label {
+  color: var(--nowo-chat-ref-fg-soft);
+}
+
+.nowo-chat-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.nowo-chat-bubble .nowo-chat-card__action,
+.nowo-chat-msg--mine .nowo-chat-bubble .nowo-chat-card__action {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 28px;
+  padding: 2px 10px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-ref-fg);
+  font-size: 0.9em;
+  text-decoration: none;
+}
+
+.nowo-chat-bubble .nowo-chat-card__action--open {
+  border-color: var(--nowo-chat-accent);
+}
+
+.nowo-chat-bubble .nowo-chat-card__action:hover,
+.nowo-chat-bubble .nowo-chat-card__action:focus-visible {
+  border-color: var(--nowo-chat-accent);
+  box-shadow: 0 0 0 1px var(--nowo-chat-accent);
+}
+
+.nowo-chat-bubble .nowo-chat-card__action:focus-visible {
+  outline: 2px solid var(--nowo-chat-accent);
+  outline-offset: 1px;
+}
+
+/* 2.6: the cards waiting in the composer, as removable chips above the text box. */
+.nowo-chat-cardtray__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.nowo-chat-cardtray__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 2px 2px 8px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+  font-size: 0.85em;
+}
+
+.nowo-chat-cardtray__chip.is-unavailable {
+  border-style: dashed;
+}
+
+.nowo-chat-cardtray__type {
+  color: color-mix(in srgb, var(--nowo-chat-text) 72%, var(--nowo-chat-surface));
+}
+
+.nowo-chat-cardtray__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowo-chat-cardtray__remove {
+  display: inline-grid;
+  place-items: center;
+  /* WCAG 2.5.8: at least 24 × 24 (min sizes, so content can grow it), larger on touch. */
+  min-inline-size: 24px;
+  min-block-size: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.nowo-chat-cardtray__remove:hover,
+.nowo-chat-cardtray__remove:focus-visible {
+  background: color-mix(in srgb, var(--nowo-chat-text) 10%, transparent);
+}
+
+.nowo-chat-cardtray__remove:focus-visible {
+  outline: 2px solid var(--nowo-chat-accent);
+  outline-offset: 1px;
+}
+
+.nowo-chat-composer__actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+@media (pointer: coarse) {
+  .nowo-chat-cardtray__remove {
+    min-inline-size: 44px;
+    min-block-size: 44px;
+  }
+
+  .nowo-chat-bubble .nowo-chat-card__action {
+    min-block-size: 44px;
+  }
+}

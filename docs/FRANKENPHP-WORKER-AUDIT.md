@@ -59,6 +59,7 @@ preview, and kept sending digests to a user who had opted out (memoised `ChatUse
 | Stateful unit | Holds | Cleared by |
 |---------------|-------|------------|
 | `ChatReferences::$resolved` | viewer id => `type:id` => card or "not readable" (access-filtered) | `ChatRequestBoundaryListener` + `kernel.reset` |
+| `ChatReferences::$cardsResolved` (2.6) | card scope (person, conversation, context, API flag) => `type:id` => typed card or "hidden" | `ChatRequestBoundaryListener` + `kernel.reset` (the same `reset()`) |
 | `ChatAvatars::$urls` | public id => sanitised picture URL | `ChatRequestBoundaryListener` + `kernel.reset` |
 | `ChatUserSettingsRepository::$memo` | user id => managed `ChatUserSettings` | `ChatRequestBoundaryListener` + `kernel.reset` |
 | `UserReferenceListener::$resolved` (id mode only) | `WeakMap` of entities whose users are set | `ChatRequestBoundaryListener` + `kernel.reset` |
@@ -170,6 +171,17 @@ and out in turn, each logout revokes only its own token, the other person keeps 
 (`mine`), every count is exact. The race writers (`tests/Database/Support/concurrent-writer.php`, modes `capisend`,
 `capireact`, `capichat`) are worker loops too: 60 client API requests per process, no transaction left open, no closed
 manager. Igor: no new mutable property or static.
+
+## 2.6.0 additions: typed cards and host slots (2026-11-26)
+
+| Service | State | Verdict |
+| --- | --- | --- |
+| `ChatCards` | the tagged card, composer action and slot providers (constructor) and the card provider map built once from them (`$byKey`, like `ChatReferences::$byKey`: container data, not request data) | Safe |
+| `ChatReferences` | new per-request memo `$cardsResolved`, keyed by the full card scope, emptied with `$resolved` by `reset()` at every request boundary | Safe |
+| Card, composer action and slot value objects | `final readonly`, built per call | Safe |
+
+`ChatCardsWorkerTest` grants and revokes a card at every request for 300 rounds on one kernel (no services resetter):
+each request renders the card as the host answers it then, and memory stays flat. Igor: 0 KO, 0 WARN.
 
 ## Rules for future code
 

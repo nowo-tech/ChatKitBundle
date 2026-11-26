@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Twig;
 
 use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Badge\ChatAuthorBadges;
+use Nowo\ChatKitBundle\Card\ChatCards;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Controller\ChatApiController;
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
@@ -62,6 +63,9 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
 
     /** 1.25: ids of the two sidebar dialogs (UiKit remote form dialogs, `dock.html.twig`), by size. */
     public const array SIDEBAR_DIALOGS = ['md' => 'nowo-chat-sidebar-dialog', 'wide' => 'nowo-chat-sidebar-dialog-wide'];
+
+    /** 2.6 (spec 259): id of the dialog of the composer actions, message menu slots and card actions (`dock.html.twig`). */
+    public const string SLOT_DIALOG = 'nowo-chat-slot-dialog';
 
     /** 1.26: UiKit's remote-dialog runtime, in UiKit's asset package (`web_ui.dock.dialog_runtime`). */
     public const string DIALOG_RUNTIME = 'js/nowo-ui-dialog.js';
@@ -158,6 +162,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
         private readonly array $messageMenu = [],
         private readonly bool $searchDockEntry = false,
         private readonly bool $searchConversationEntry = false,
+        private readonly ?ChatCards $cards = null,
     ) {
     }
 
@@ -200,6 +205,8 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'nowo_chat_search_entry' => $this->searchDockEntry,
             // 1.40: the search button of each conversation header and the search modal template.
             'nowo_chat_search_conversation' => $this->searchConversationEntry,
+            // 2.6 (spec 259): the dialog of the host slots (composer actions, menu slots, card actions).
+            'nowo_chat_slot_dialog' => $this->cards?->hasSlots() === true ? self::SLOT_DIALOG : null,
         ];
     }
 
@@ -336,23 +343,32 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'i18n'  => $this->strings($locale),
         ] + ($this->channelsUrl === null || preg_match(Configuration::CHANNELS_URL_PATTERN, $this->channelsUrl) !== 1 ? [] : ['channelsUrl' => $this->channelsUrl])
             + $this->sidebarConfig()
-            + $this->contextMenuConfig();
+            + $this->contextMenuConfig()
+            + $this->slotsConfig();
     }
 
     /**
      * 1.35: what the message template renders: the items offered (in `message_menu.order`, each with its separator group)
      * and the quick reactions.
      *
-     * @return array{items: list<array{name: string, group: string}>, quick: list<string>, picker: bool, saved: bool}
+     * @return array{items: list<array{name: string, group: string, key?: string}>, quick: list<string>, picker: bool, saved: bool}
      */
     private function menuTemplate(): array
     {
         $menu  = $this->menuConfig();
+        $slots = $this->cards?->hasMenuSlots() === true;
         $items = [];
         foreach ($menu['order'] as $name) {
             if ($menu['items'][$name] ?? false) {
                 $items[] = ['name' => $name, 'group' => self::MENU_GROUPS[$name]];
+            } elseif ($slots && str_starts_with($name, 'slot:')) {
+                // 2.6 (spec 259): the place of a host slot; the dock fills it per message (hidden when not offered).
+                $items[] = ['name' => 'slot', 'key' => substr($name, 5), 'group' => 'slots'];
             }
+        }
+        if ($slots) {
+            // The slots not listed in the order come last, cloned by the dock from this hidden item.
+            $items[] = ['name' => 'slot', 'key' => '', 'group' => 'slots'];
         }
 
         return ['items' => $items, 'quick' => $menu['quick'], 'picker' => $menu['picker'], 'saved' => $menu['saveDockEntry']];
@@ -438,6 +454,26 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             'dock'     => $this->dockSidebar,
             'endpoint' => $providers ? $this->urls->generate('nowo_chat_api_sidebar') : null,
             'dialogs'  => self::SIDEBAR_DIALOGS,
+        ] + $this->dialogRuntimeConfig()];
+    }
+
+    /**
+     * 2.6 (spec 259): `slots` (only with a card, composer action or message menu slot provider): the endpoint of a
+     * conversation's slots, the address of one card (composer chips), and the id of the host dialog.
+     *
+     * @return array{slots?: array<string, string>}
+     */
+    private function slotsConfig(): array
+    {
+        if ($this->cards?->hasSlots() !== true) {
+            return [];
+        }
+        $card = str_replace([self::PLACEHOLDER, 'zztypezz', 'zzidzz'], ['__uuid__', '__type__', '__id__'], $this->urls->generate('nowo_chat_api_card', ['uuid' => self::PLACEHOLDER, 'type' => 'zztypezz', 'id' => 'zzidzz']));
+
+        return ['slots' => [
+            'endpoint' => $this->pattern('nowo_chat_api_slots'),
+            'card'     => $card,
+            'dialog'   => self::SLOT_DIALOG,
         ] + $this->dialogRuntimeConfig()];
     }
 

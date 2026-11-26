@@ -111,6 +111,11 @@ export function plainText(root: Element): string {
       line += node.getAttribute('alt') ?? '';
       return;
     }
+    // 2.6: a typed card reads as its title (never its facts or actions).
+    if (node.classList.contains('nowo-chat-card')) {
+      line += `#${node.querySelector('.nowo-chat-ref__title')?.textContent ?? ''}`;
+      return;
+    }
     const block = BLOCKS.has(node.tagName);
     const depth = node.tagName === 'BLOCKQUOTE' ? quote + 1 : quote;
     if (block && line.trim() !== '') {

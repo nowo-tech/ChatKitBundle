@@ -128,7 +128,7 @@ final readonly class ChatDigestDispatcher
                     $last === null, $last->isDeleted(), $last->isBuzz() => '',
                     // 1.24: a system line is its translated text.
                     $last->isSystem() => mb_substr($this->presenter->botText($last), 0, 140),
-                    default           => $this->preview($last->getBody(), $user),
+                    default           => $this->preview($last->getBody(), $user, $conversation),
                 },
                 str_replace('{uuid}', $conversation->getUuid(), $this->urlTemplate),
             );
@@ -141,10 +141,10 @@ final readonly class ChatDigestDispatcher
     }
 
     /** Plain text of the last message in the recipient's locale (#references as the recipient may see them). */
-    private function preview(string $body, ChatUserInterface $user): string
+    private function preview(string $body, ChatUserInterface $user, ChatConversation $conversation): string
     {
         return $this->references instanceof ChatReferences
-            ? $this->references->plainText($this->markdown, $body, $user, 140, $user->getChatLocale())
+            ? $this->references->plainText($this->markdown, $body, $user, 140, $user->getChatLocale(), $conversation)
             : $this->markdown->plainText($body, 140);
     }
 }

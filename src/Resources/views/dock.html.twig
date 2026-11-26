@@ -48,6 +48,13 @@
                     {% endfor %}
                 {% endif %}
             {% endblock %}
+            {% block nowo_chat_slot_dialog %}
+                {# 2.6 (spec 259): the dialog of the host's composer actions, message menu slots and card actions (a UiKit
+                   remote dialog; the host page inserts a card with the `nowo-chat:insert-card` event). #}
+                {% if nowo_chat_slot_dialog|default(null) %}
+                    {{ include(nowo_ui_partial('remote_form_dialog', 'NowoChatKitBundle'), {id: nowo_chat_slot_dialog, size: 'md', attr: {'data-testid': 'chat-slot-dialog', 'data-nowo-chat-slot-dialog': ''}, bundle: 'NowoChatKitBundle'}, false) }}
+                {% endif %}
+            {% endblock %}
         </div>
     {% endblock %}
 {% endif %}

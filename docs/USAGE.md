@@ -17,6 +17,7 @@
 - [Events](#events)
 - [Mentions](#mentions)
 - [References](#references)
+- [Typed cards and host slots (2.6)](#typed-cards-and-host-slots-26)
 - [Link previews](#link-previews)
 - [Profile pictures](#profile-pictures)
 - [Author badges](#author-badges)
@@ -1091,6 +1092,112 @@ cached for the request.
 **Code formatting (1.37).** Text shaped like a reference token inside an inline code span or a fenced block is shown
 as `#[…](type:id)`, never with its title: a reference title never appears inside code, whatever the backticks around
 it. Token titles never contain a backtick (it becomes a space).
+
+## Typed cards and host slots (2.6)
+
+Spec 259 block A. Three optional host ports, autoconfigured by interface; nothing shows until one is registered.
+
+### Typed cards (`ChatCardProviderInterface`)
+
+A typed card is an item the host shares in a message (Beacon: `vault_item`, `one_time_secret`). It is stored as a
+reference token `#[…](type:id)`: the title is always the neutral `…`, the id is an **opaque host id**
+(`[A-Za-z0-9_-]{1,64}`) that must never decrypt or reveal anything on its own.
+
+```php
+use Nowo\ChatKitBundle\Contract\ChatCardProviderInterface;
+use Nowo\ChatKitBundle\Enum\{ChatCardActionKind, ChatCardState};
+use Nowo\ChatKitBundle\Model\{ChatCard, ChatCardAction, ChatCardFact, ChatCardScope};
+
+final class VaultItemCards implements ChatCardProviderInterface
+{
+    public function key(): string { return 'vault_item'; }
+    public function label(): string { return $this->translator->trans('chat.vault_item'); }
+    public function icon(): string { return 'key'; }
+    public function isSecret(): bool { return true; }
+
+    public function canShare(ChatCardScope $authorScope, string $id): bool
+    {
+        return $this->vault->maySharePublicId($authorScope->viewerPublicId, $id, $authorScope->conversationUuid);
+    }
+
+    public function render(ChatCardScope $readerScope, array $ids): array
+    {
+        $cards = [];
+        foreach ($this->vault->visibleTo($readerScope->viewerPublicId, $ids) as $item) {   // one query
+            $cards[$item->publicId] = $item->granted
+                ? new ChatCard(ChatCardState::Open, $item->title, $item->vaultName, facts: [new ChatCardFact('Vault', $item->vaultName)],
+                    actions: [new ChatCardAction('open', 'Open', ChatCardActionKind::Open, '/vault/items/' . $item->publicId)])
+                : new ChatCard(ChatCardState::Locked, $item->title, $item->vaultName,
+                    actions: [new ChatCardAction('request_access', 'Request access', ChatCardActionKind::RequestAccess, '/vault/items/' . $item->publicId . '/request', dialog: true)]);
+        }
+
+        return $cards;   // ids left out: the neutral "Content not visible" chip
+    }
+}
+```
+
+- **Send.** `canShare()` is asked once per card and message, outside any lock or transaction. `false` (or an exception)
+  refuses the whole message: 422 `card_not_allowed`, nothing written. A card never becomes plain text. Cards count
+  towards the 10 references of a message.
+- **Read.** `render()` is asked per reader, at most 50 ids per call, one call per type and conversation for a page,
+  memoised for the request only. It must have no side effect (never burn a one-time secret). The scope is scalars:
+  `viewerPublicId`, `conversationUuid`, `conversationKind`, `channelKey`, `contextKey` (client API context, null on the
+  web) and `api` (true for Beacon Desktop).
+- **Text.** Every string is plain text (control and bidi characters removed, clipped); facts at most 4, actions at most
+  3; action URLs are same-origin paths (`/…`); an action with `dialog: true` opens in the dock's dialog.
+- **Secrets.** With `isSecret(): true` the title never leaves the reader's own card: push, digest, previews and search
+  read "🔑 Shared a secret" (`chat.card_secret`), even with `push_preview: true`; a reader who may not see the card reads
+  "Content not visible".
+- **Edits** change the text only: the message keeps its cards as sent. **Forward** is refused for a message with cards.
+- **Events.** `ChatCardSharedEvent` after the commit, once per card (ids only).
+- The client API shows a card as a `reference` token with a `card` object (see [API.md](API.md#message-bodies)), and
+  takes `cards: [{type, id}]` next to `text` on send and thread reply.
+
+### Composer actions (`ChatComposerActionProviderInterface`)
+
+```php
+public function actions(ChatComposerScope $scope): iterable
+{
+    if ($this->secrets->mayCreate($scope->viewerPublicId, $scope->conversationUuid)) {
+        yield new ChatComposerAction('secret', 'One-time secret', 'lock', '/secrets/chat-dialog', slash: 'secret', order: 10);
+    }
+}
+```
+
+Asked when the person opens a conversation they may write in. The dock shows a button (and `/secret` typed alone opens
+it) that loads the page in its UiKit dialog with `?conversation=<uuid>`. The page inserts a card by dispatching, from
+inside the dialog:
+
+```js
+element.dispatchEvent(new CustomEvent('nowo-chat:insert-card', { detail: { type: 'one_time_secret', id }, bubbles: true }));
+```
+
+The card waits as a chip above the text box (rendered for the writer) and is sent after the text. The dialog never
+receives the draft. Keys are unique (the first wins); a slash that is a reference or card type, or repeated, is dropped.
+
+### Message menu slots (`ChatMessageMenuSlotProviderInterface`)
+
+```php
+public function slots(ChatComposerScope $scope): iterable
+{
+    yield new ChatMenuSlot('save_vault', 'Save to vault', 'key', ChatMenuSlotTarget::Selection, '/vault/chat-save');
+}
+```
+
+Asked once per conversation (not per message). A slot targets the `Message`, a `Selection` (shown only while text of
+the message is selected) or a `Card` of the given card types; `ownOnly` keeps it to one's own messages. Place it with
+`message_menu.order: [reply, slot:save_vault, …]`; unlisted slots come last. The dialog URL gets
+`?conversation=&message=(&card=type:id)`; the **selection** reaches the dialog element in the browser only:
+
+```js
+dialog.addEventListener('nowo-chat:slot-payload', (event) => prefill(event.detail.selection));
+```
+
+### Before send
+
+The dock dispatches `nowo-chat:before-send` on its root (it bubbles) before every send:
+`{conversationUuid, text, sendAnyway()}`, frozen. Call `preventDefault()` to stop the send and warn (for example a
+password pasted as text), then `sendAnyway()` when the person confirms. The text never leaves the browser before that.
 
 ## Link previews
 

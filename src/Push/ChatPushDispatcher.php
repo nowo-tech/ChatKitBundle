@@ -125,7 +125,7 @@ final readonly class ChatPushDispatcher
             $message->isBuzz() => $this->translator->trans('chat.buzz_received', ['%name%' => $authorName], 'NowoChatKitBundle', $locale),
             // `push_preview`: message text on lock screens only when the application opts in and the recipient keeps it.
             $this->preview && $recipientPreview => $this->references instanceof ChatReferences
-                ? $this->references->plainText($this->markdown, $message->getBody(), $recipient, 140, $locale)
+                ? $this->references->plainText($this->markdown, $message->getBody(), $recipient, 140, $locale, $message->getConversation())
                 : $this->markdown->plainText($message->getBody(), 140),
             default => $this->translator->trans('chat.new_message', [], 'NowoChatKitBundle', $locale),
         };

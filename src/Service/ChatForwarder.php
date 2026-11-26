@@ -99,7 +99,7 @@ final readonly class ChatForwarder
      * @param string $key The `Idempotency-Key`
      *
      * @throws InvalidArgumentException `invalid_targets` (none, too many, malformed), `not_found` (an unknown target),
-     *                                  `empty`, `too_long`, `invalid_link`, `idempotency_mismatch`
+     *                                  `empty`, `too_long`, `invalid_link`, `idempotency_mismatch`, (2.6) `card_not_allowed`
      * @throws ChatForwardRefused When a target is refused (nothing is written)
      *
      * @return array{list<ChatMessage>, bool} The forwarded copies (one per target, in order), and whether an earlier
@@ -109,6 +109,11 @@ final readonly class ChatForwarder
     {
         if ($targets === [] || count($targets) > $this->options->maxForwardTargets()) {
             throw new InvalidArgumentException('invalid_targets');
+        }
+        // 2.6 (spec 259, owner decision): no forwarding of a message holding typed cards in v1 (a card is shared once,
+        // by its author, where the provider allowed it).
+        if ($this->references?->hasCards($source->getBody()) === true) {
+            throw new InvalidArgumentException(ChatReferences::CARD_NOT_ALLOWED);
         }
         $comment = $comment === null || trim($comment) === '' ? null : $comment;
         // Each target: an open conversation, or a person (a direct conversation opened once every check passed).

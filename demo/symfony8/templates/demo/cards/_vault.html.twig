@@ -1,0 +1,7 @@
+{# ChatKit 2.6: pick a vault item; demo-cards.js dispatches `nowo-chat:insert-card` and closes the dialog. #}
+<p>{{ 'demo.cards.pick'|trans }}</p>
+<ul class="demo-cards" role="list" data-testid="demo-vault-items">
+    {% for id, item in items %}
+        <li><button type="button" class="nowo-ui-btn nowo-ui-btn--secondary" data-demo-insert-card="vault_item:{{ id }}">{{ item[0] }} · {{ item[1] }}</button></li>
+    {% endfor %}
+</ul>

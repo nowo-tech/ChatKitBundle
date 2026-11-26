@@ -57,6 +57,20 @@ describe('nowo-chat entry', () => {
     expect(destroy).toHaveBeenCalledTimes(1);
   });
 
+  it('listens to inserted cards on roots with slots (2.6), until unmounted', async () => {
+    const { INSERT_CARD, setCardTarget } = await import('../src/slots');
+    const target = vi.fn();
+    setCardTarget(target);
+    const element = root('{"userUuid":"me","slots":{"endpoint":"/s","card":"/c","dialog":"d"}}');
+    mount(element);
+    element.dispatchEvent(new CustomEvent(INSERT_CARD, { detail: { type: 'note', id: 'n1' } }));
+    expect(target).toHaveBeenCalledWith({ type: 'note', id: 'n1' });
+    unmount(element);
+    element.dispatchEvent(new CustomEvent(INSERT_CARD, { detail: { type: 'note', id: 'n2' } }));
+    expect(target).toHaveBeenCalledTimes(1);
+    setCardTarget(null);
+  });
+
   it('starts page mode on the full-page chat, found in the document or given', () => {
     expect(PAGE_SELECTOR).toBe('[data-nowo-chat-page-mode]');
     expect(findChatPage()).toBeNull();

@@ -9,6 +9,7 @@ use DateInterval;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use JsonException;
+use Nowo\ChatKitBundle\Card\ChatCards;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
@@ -74,7 +75,6 @@ use function is_int;
 use function is_string;
 use function max;
 use function min;
-use function str_starts_with;
 use function strlen;
 
 use const DATE_ATOM;
@@ -158,6 +158,7 @@ final class ChatApiController extends AbstractController
         private readonly ?ChatThreads $threads = null,
         private readonly ?ChatEditHistory $history = null,
         private readonly ?ChatIdempotency $idempotency = null,
+        private readonly ?ChatCards $cards = null,
     ) {
     }
 
@@ -788,6 +789,57 @@ final class ChatApiController extends AbstractController
     }
 
     /**
+     * 2.6 (spec 259): what the host adds to this conversation for the caller — the card types (composer chips and the
+     * `nowo-chat:insert-card` check), the composer actions (only to someone who may write here) and the message menu
+     * slots. Same access as reading the conversation (unknown or foreign → 404); 404 without any card or slot provider.
+     *
+     * @param string $uuid Conversation uuid
+     *
+     * @return JsonResponse `{cardTypes: list<{key, label, icon, secret}>, composerActions: list<{key, label, icon, slash, dialogUrl}>, menuSlots: list<{key, label, icon, target, cardTypes, ownOnly, dialogUrl}>}`
+     */
+    #[Route('/conversations/{uuid}/slots', name: 'slots', requirements: ['uuid' => self::UUID], methods: ['GET'])]
+    public function slots(string $uuid): JsonResponse
+    {
+        $user         = $this->reader();
+        $conversation = $this->find($uuid, ChatVoter::VIEW);
+        $cards        = $this->cards;
+        $this->deny(!$cards instanceof ChatCards || !$cards->hasSlots(), 'not_found', Response::HTTP_NOT_FOUND);
+        assert($cards instanceof ChatCards);
+        $scope = ChatCards::composerScope($user, $conversation, $this->isGranted(ChatVoter::SEND, $conversation));
+
+        return $this->json([
+            'cardTypes'       => $cards->types(),
+            'composerActions' => $cards->composerActions($scope, $this->references->typeKeys()),
+            'menuSlots'       => $cards->menuSlots($scope),
+        ]);
+    }
+
+    /**
+     * 2.6 (spec 259): one typed card as the caller sees it in this conversation (the composer chip after the host
+     * dialog inserted it). Rate limited like the reference search (an enumeration surface); a card the caller may not
+     * see, an unknown type or a malformed id all answer 404.
+     *
+     * @param string $uuid Conversation uuid
+     * @param string $type Card type
+     * @param string $id Card id
+     *
+     * @return JsonResponse `{card: {type, id, title, url, subtitle, badge, tone, card: {state, facts, actions}}, typeLabel, icon, secret}`
+     */
+    #[Route('/conversations/{uuid}/cards/{type}/{id}', name: 'card', requirements: ['uuid' => self::UUID, 'type' => '[a-z][a-z0-9_-]{0,31}', 'id' => '[A-Za-z0-9_-]{1,64}'], methods: ['GET'])]
+    public function card(string $uuid, string $type, string $id): JsonResponse
+    {
+        $user         = $this->reader();
+        $conversation = $this->find($uuid, ChatVoter::VIEW);
+        $this->deny(!$this->referenceLimiter->create('nowo_chat_reference_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        $view = $this->cards?->typeView($type);
+        $card = $view === null ? null : ($this->references->cardsFor($user, '#[' . ChatReferences::NEUTRAL_TITLE . '](' . $type . ':' . $id . ')', $conversation, null, false)[$type . ':' . $id] ?? null);
+        $this->deny(!$card instanceof ChatReference || $view === null, 'not_found', Response::HTTP_NOT_FOUND);
+        assert($card instanceof ChatReference && $view !== null);
+
+        return $this->json(['card' => $card->toArray(), 'typeLabel' => $view['label'], 'icon' => $view['icon'], 'secret' => $view['secret']]);
+    }
+
+    /**
      * One message as the caller sees it (its #reference cards resolved for the caller): the dock fetches it after a
      * viewer-neutral realtime payload. Same access as reading the conversation (unknown or foreign → 404).
      *
@@ -822,13 +874,20 @@ final class ChatApiController extends AbstractController
         $conversation = $this->find($uuid, ChatVoter::VIEW);
         $this->deny(!$this->isGranted(ChatVoter::SEND, $conversation), 'read_only', Response::HTTP_FORBIDDEN);
         $this->deny(!$this->sendLimiter->create('nowo_chat_send_' . $user->getChatPublicId())->consume()->isAccepted(), 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
-        $body = (string) ($this->payload($request)['body'] ?? '');
+        $payload = $this->payload($request);
+        $body    = (string) ($payload['body'] ?? '');
+        try {
+            // 2.6 (spec 259): an optional `cards: [{type, id}]` (as the client API), appended as card tokens.
+            $body = $this->references->withCards($body, $payload['cards'] ?? null);
+        } catch (InvalidArgumentException $exception) {
+            throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
+        }
         // 1.36 (Q-B15): an optional `Idempotency-Key` makes a resent message one message (ChatKit's own service only).
         $key = $request->headers->get(ChatIdempotency::HEADER);
         try {
             if ($key !== null && $this->chat instanceof ChatService && $this->idempotency instanceof ChatIdempotency) {
-                // 2.5 (audit ZCG-I5): `client:` is the client API's namespace of stored keys.
-                $this->deny(!ChatIdempotency::isValidKey($key) || str_starts_with($key, ChatIdempotency::CLIENT_PREFIX), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
+                // 2.5 (audit ZCG-I5): `client:` is the client API's namespace of stored keys (2.6, ZCG-v-I1: in any letter case).
+                $this->deny(!ChatIdempotency::isValidKey($key) || ChatIdempotency::isClientKey($key), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
                 $chat                  = $this->chat;
                 [$messages, $replayed] = $this->idempotency->run($user, $key, ChatIdempotency::hash(['send', $conversation->getUuid(), $body]), static fn (Closure $before, Closure $after): array => [$chat->sendWith($user, $conversation, $body, $before, $after)]);
                 $this->deny($messages === [], 'not_found', Response::HTTP_NOT_FOUND);
@@ -1835,7 +1894,7 @@ final class ChatApiController extends AbstractController
     {
         $key = $request->headers->get(ChatIdempotency::HEADER);
         $this->deny($key === null || !$this->idempotency instanceof ChatIdempotency, 'idempotency_key_required', Response::HTTP_BAD_REQUEST);
-        $this->deny(!ChatIdempotency::isValidKey($key) || str_starts_with((string) $key, ChatIdempotency::CLIENT_PREFIX), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
+        $this->deny(!ChatIdempotency::isValidKey($key) || ChatIdempotency::isClientKey((string) $key), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
 
         return (string) $key;
     }

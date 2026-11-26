@@ -18,9 +18,11 @@ import { openForwardDialog } from './forward-dialog';
 import { openSearchDialog } from './search-dialog';
 import { ThreadPanel } from './thread-panel';
 import { SupportPanel } from './support';
+import { loadDialogRuntime } from './sidebar';
+import { beforeSend, CardTray, type CardRef, dialogUrl, openSlotDialog, selectionIn, sendSlotPayload, setCardTarget, slashAction, slotFor, withCards } from './slots';
 import { customStatus, statusLabel } from './status';
 import { part, text, type Templates } from './templates';
-import type { ChatConfig, ChatMessage, ConversationSummary, LinkPreview, PendingMessage, Reader, ThreadSummary } from './types';
+import type { ChatConfig, ChatMessage, ComposerAction, ConversationSlots, ConversationSummary, MenuSlot, LinkPreview, PendingMessage, Reader, ThreadSummary } from './types';
 
 /** What a conversation window needs from the dock that hosts it (ChatDock). */
 export interface ThreadHost {
@@ -235,6 +237,10 @@ export class ThreadView {
   private readonly mention: MentionAutocomplete;
   private readonly reference: ReferenceAutocomplete | null;
   private readonly support: SupportPanel;
+  /** 2.6 (spec 259): the cards waiting in the composer (null without `slots` settings). */
+  private readonly cardTray: CardTray | null = null;
+  /** 2.6: the conversation's card types, composer actions and message menu slots. */
+  private slots: ConversationSlots = { cardTypes: [], composerActions: [], menuSlots: [] };
 
   private readonly host: ThreadHost;
 
@@ -341,6 +347,27 @@ export class ThreadView {
     muteBtn?.addEventListener('click', () => void this.toggleMute(muteBtn));
     this.emojiBtn.addEventListener('click', () => this.toggleEmoji());
     this.bindComposerTools(i18n);
+    // 2.6 (spec 259): the host's cards and slots.
+    const slotSettings = host.config.slots;
+    if (slotSettings !== undefined) {
+      this.cardTray = new CardTray({
+        i18n,
+        icon: (name) => host.templates.icon(name, 14),
+        load: (card) => host.api.card(this.summary.uuid, card.type, card.id),
+        changed: () => this.updateComposerState(),
+        focusAfterRemove: () => this.input.focus(),
+      });
+      const field = this.composer.querySelector('.nowo-chat-composer__field');
+      if (field !== null) {
+        field.before(this.cardTray.element);
+      } else {
+        this.composer.prepend(this.cardTray.element);
+      }
+      if (slotSettings.dialogRuntime !== undefined) {
+        loadDialogRuntime(slotSettings.dialogRuntime);
+      }
+      void this.loadSlots();
+    }
     this.support = new SupportPanel(
       {
         config: host.config,
@@ -1613,7 +1640,7 @@ export class ThreadView {
     editMention.seed(message.mentions ?? []);
     // Cards read as `#Title` in the editor; the references the author may still open turn back into tokens on save.
     const editReference = this.referencePicker(input, `nowo-chat-edit-${message.uuid}`);
-    editReference?.seed(message.references ?? []);
+    editReference?.seed((message.references ?? []).filter((reference) => reference.card === undefined));
     /** Leaves the editor and repaints the line from the current message. */
     const stop = (): void => {
       this.editing = null;
@@ -1727,13 +1754,27 @@ export class ThreadView {
    * Sends the composer text: appended at once as pending, the composer and draft cleared, then delivered.
    * Blank, read-only or too long texts are not sent.
    */
-  private async submit(): Promise<void> {
-    const body = this.encodeComposer().trim();
+  private async submit(force = false): Promise<void> {
+    const text = this.encodeComposer().trim();
+    const cards = this.cardTray?.items ?? [];
+    // 2.6: a composer action's slash alias typed alone (`/secret`) opens its dialog instead of sending.
+    const action = force || cards.length > 0 ? null : slashAction(text, this.slots.composerActions);
+    if (action !== null) {
+      this.input.value = '';
+      this.updateComposerState();
+      this.openAction(action);
+      return;
+    }
+    const body = withCards(text, cards);
     if (body === '' || !this.summary.canSend) {
       return;
     }
     if (body.length > this.host.config.maxLength) {
       this.updateComposerState();
+      return;
+    }
+    // 2.6: the host may warn first (`nowo-chat:before-send`, e.g. a secret in the text); sendAnyway() sends as is.
+    if (!force && beforeSend(this.dockRoot(), this.summary.uuid, text, () => void this.submit(true))) {
       return;
     }
     const pending: PendingMessage = {
@@ -1746,6 +1787,7 @@ export class ThreadView {
     this.input.value = '';
     this.mention.reset();
     this.reference?.reset();
+    this.cardTray?.reset();
     this.host.saveDraft(this.summary.uuid, '');
     this.autoGrow();
     this.updateComposerState();
@@ -1778,6 +1820,8 @@ export class ThreadView {
         pending.error = t(i18n, 'rate_limited');
       } else if (code === 'too_long') {
         pending.error = t(i18n, 'too_long', { max: this.host.config.maxLength });
+      } else if (code === 'card_not_allowed') {
+        pending.error = t(i18n, 'card_not_allowed');
       } else if (code === 'read_only') {
         pending.error = t(i18n, 'read_only');
         this.applySummary({ ...this.summary, canSend: false });
@@ -2033,6 +2077,8 @@ export class ThreadView {
       markOwnMentions(bubble, this.host.config.userUuid);
       // Icons of the #reference cards (data-icon slots of the server render).
       this.host.templates.fillIcons(bubble);
+      // 2.6: card actions marked for the dialog open the host page in the dock's dialog.
+      this.wireCardActions(bubble);
       if (message.kind === 'auto') {
         // 1.11: an automatic reply says so (the icon is decorative; the label is read).
         article.classList.add('nowo-chat-msg--auto');
@@ -2210,7 +2256,8 @@ export class ThreadView {
         info: offered.info === true && (endpoints.info ?? '') !== '' && (message.mine || (config.isAgent && this.summary.kind !== 'direct')),
         // 1.36
         thread: offered.thread === true && (endpoints.thread ?? '') !== '',
-        forward: offered.forward === true && (endpoints.forward ?? '') !== '',
+        // 2.6: a message with typed cards is not forwarded in v1 (the server refuses it too).
+        forward: offered.forward === true && (endpoints.forward ?? '') !== '' && message.hasCards !== true,
       },
       saved,
       reply: message.threadRootUuid !== undefined,
@@ -2255,6 +2302,7 @@ export class ThreadView {
         run();
       });
     }
+    any = this.wireSlots(menu, article, message, state.usable, closeKebab) || any;
     any = this.wireQuickReactions(menu, message, state.usable, closeKebab) || any;
     const panel = menu.querySelector('.nowo-ui-kebab__menu');
     if (panel !== null) {
@@ -2772,10 +2820,178 @@ export class ThreadView {
   }
 
   /** Send button state and remaining-characters counter (announced only when crossing the 100 / 20 / 0 bands). */
+  /**
+   * 2.6 (spec 259): loads the conversation's card types, composer actions and menu slots, and shows the actions.
+   */
+  private async loadSlots(): Promise<void> {
+    try {
+      this.slots = await this.host.api.slots(this.summary.uuid);
+    } catch {
+      return;
+    }
+    this.cardTray?.setTypes(this.slots.cardTypes);
+    this.renderActions();
+    if (this.slots.menuSlots.length > 0) {
+      this.render();
+    }
+  }
+
+  /**
+   * 2.6: the composer action buttons (in the composer tools, a labelled group).
+   */
+  private renderActions(): void {
+    this.composer.querySelector('[data-part="composer-actions"]')?.remove();
+    if (this.slots.composerActions.length === 0) {
+      return;
+    }
+    const group = h('span', { class: 'nowo-chat-composer__actions', role: 'group', 'aria-label': t(this.host.config.i18n, 'composer_actions'), 'data-part': 'composer-actions' });
+    for (const action of this.slots.composerActions) {
+      const label = action.slash === null ? action.label : `${action.label} (/${action.slash})`;
+      const button = h('button', { type: 'button', class: 'nowo-chat-icon-btn nowo-chat-composer__tool nowo-chat-composer__action', 'aria-label': label, title: label, 'aria-haspopup': 'dialog', 'data-action-key': action.key }, this.host.templates.icon(action.icon, 16));
+      button.addEventListener('click', () => this.openAction(action));
+      group.append(button);
+    }
+    const tools = this.composer.querySelector('[data-part="composer-tools"]');
+    if (tools !== null) {
+      tools.append(group);
+    } else {
+      this.composer.prepend(group);
+    }
+  }
+
+  /**
+   * 2.6: opens a composer action's host dialog; a card it inserts goes to this composer.
+   *
+   * @param action The action.
+   */
+  private openAction(action: ComposerAction): void {
+    const settings = this.host.config.slots;
+    const url = dialogUrl(action.dialogUrl, { conversation: this.summary.uuid });
+    setCardTarget((card: CardRef) => {
+      if (this.cardTray?.add(card) === true) {
+        this.input.focus();
+      }
+    });
+    if (settings === undefined || url === null || openSlotDialog(settings, url, action.label, this.element) === null) {
+      setCardTarget(null);
+      this.flashNotice(t(this.host.config.i18n, 'error'));
+    }
+  }
+
+  /**
+   * 2.6: the host's message menu slots of a message: the placed items of `message_menu.order` (`slot:<key>`), then a
+   * copy of the model item for each slot not placed. Shown on the messages each one fits; a selection is read when the
+   * menu opens and handed to the dialog in the browser only.
+   *
+   * @returns Whether a slot is shown.
+   */
+  private wireSlots(menu: HTMLElement, article: HTMLElement, message: ChatMessage, usable: boolean, closeKebab: () => void): boolean {
+    const slots = this.slots.menuSlots;
+    const items = [...menu.querySelectorAll<HTMLElement>('[data-part="menu-slot"]')];
+    const model = items.find((item) => (item.dataset.slotKey ?? '') === '');
+    if (slots.length === 0 || items.length === 0 || this.host.config.slots === undefined) {
+      return false;
+    }
+    const bubble = article.querySelector('[data-part="bubble"]') ?? article;
+    let selection = '';
+    const selectionItems: HTMLElement[] = [];
+    // A selection slot shows only while text of this message is selected (read when the menu opens).
+    const capture = (): void => {
+      selection = selectionIn(bubble);
+      selectionItems.forEach((item) => {
+        item.hidden = !usable || selection.trim() === '';
+      });
+    };
+    article.addEventListener('contextmenu', capture);
+    menu.querySelector('summary')?.addEventListener('pointerdown', capture);
+    let any = false;
+    for (const slot of slots) {
+      let item = items.find((candidate) => candidate.dataset.slotKey === slot.key) ?? null;
+      if (item === null && model !== undefined) {
+        item = model.cloneNode(true) as HTMLElement;
+        item.dataset.slotKey = slot.key;
+        model.before(item);
+      }
+      if (item === null) {
+        continue;
+      }
+      const fit = slotFor(slot, message, '');
+      item.textContent = slot.label;
+      if (slot.target === 'selection') {
+        item.hidden = true;
+        // Offered when the message fits (own-only); its visibility follows the selection.
+        if (usable && (!slot.ownOnly || message.mine)) {
+          selectionItems.push(item);
+          any = true;
+        }
+      } else {
+        item.hidden = !usable || !fit.shown;
+        any ||= !item.hidden;
+      }
+      item.addEventListener('click', (event) => {
+        event.preventDefault();
+        closeKebab();
+        this.openSlot(slot, message, fit.card === null ? null : `${fit.card.type}:${fit.card.id}`, selection);
+      });
+    }
+    return any;
+  }
+
+  /**
+   * 2.6: opens a message menu slot's host dialog.
+   *
+   * @param slot The slot.
+   * @param message The message.
+   * @param card `type:id` of the card it acts on, or null.
+   * @param selection The selected text ('' for none).
+   */
+  private openSlot(slot: MenuSlot, message: ChatMessage, card: string | null, selection: string): void {
+    const settings = this.host.config.slots;
+    const url = dialogUrl(slot.dialogUrl, { conversation: this.summary.uuid, message: message.uuid, ...(card === null ? {} : { card }) });
+    const dialog = settings === undefined || url === null ? null : openSlotDialog(settings, url, slot.label, this.element);
+    if (dialog === null) {
+      this.flashNotice(t(this.host.config.i18n, 'error'));
+      return;
+    }
+    if (slot.target === 'selection') {
+      sendSlotPayload(dialog, selection);
+    }
+  }
+
+  /**
+   * 2.6: card actions the server marked `data-card-dialog` open their same-origin page in the dock's dialog.
+   *
+   * @param bubble The rendered message.
+   */
+  private wireCardActions(bubble: HTMLElement): void {
+    const settings = this.host.config.slots;
+    if (settings === undefined) {
+      return;
+    }
+    bubble.querySelectorAll<HTMLAnchorElement>('.nowo-chat-card a[data-card-dialog]').forEach((link) => {
+      link.setAttribute('aria-haspopup', 'dialog');
+      link.addEventListener('click', (event) => {
+        if (openSlotDialog(settings, link.getAttribute('href') ?? '', link.textContent ?? '', this.element) !== null) {
+          event.preventDefault();
+        }
+      });
+    });
+  }
+
+  /**
+   * 2.6: the dock root (where host events are dispatched and listened to).
+   *
+   * @returns The root element.
+   */
+  private dockRoot(): HTMLElement {
+    return this.element.closest<HTMLElement>('[data-nowo-chat-config]') ?? document.querySelector<HTMLElement>('[data-nowo-chat-config]') ?? this.element;
+  }
+
   private updateComposerState(): void {
     const length = this.input.value.trim().length;
     const max = this.host.config.maxLength;
-    this.sendBtn.disabled = length === 0 || length > max || !this.summary.canSend;
+    const cards = this.cardTray?.items.length ?? 0;
+    this.sendBtn.disabled = (length === 0 && cards === 0) || length > max || !this.summary.canSend;
     const remaining = max - this.input.value.length;
     this.counter.hidden = remaining > 200;
     this.counter.textContent = String(remaining);
@@ -2823,6 +3039,10 @@ export function plain(html: string, lines = false): string {
   const doc = new DOMParser().parseFromString(html.replace(/<br\s*\/?>/g, '\n').replace(/<\/(p|li|pre)>/g, '\n'), 'text/html');
   // Decorative emojis (support assistant lines) are aria-hidden: previews and the live region read only the text.
   doc.body.querySelectorAll('.nowo-chat-deco').forEach((emoji) => emoji.remove());
+  // 2.6: a typed card leaves the editor text (an edit keeps the message's cards on the server); elsewhere `#Title`.
+  doc.body.querySelectorAll('.nowo-chat-card').forEach((card) => {
+    card.replaceWith(lines ? '' : `#${card.querySelector('.nowo-chat-ref__title')?.textContent ?? ''}`);
+  });
   // A #reference card reads `#Title`; the neutral chip of an item the viewer may not open, `[Content not visible]`.
   doc.body.querySelectorAll('.nowo-chat-ref').forEach((chip) => {
     const title = chip.querySelector('.nowo-chat-ref__title')?.textContent ?? '';

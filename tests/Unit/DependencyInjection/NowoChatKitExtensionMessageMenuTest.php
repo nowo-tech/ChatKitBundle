@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Tests\Unit\DependencyInjection;
 
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiGuard;
+use Nowo\ChatKitBundle\Contract\ChatCardProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatComposerActionProviderInterface;
+use Nowo\ChatKitBundle\Contract\ChatMessageMenuSlotProviderInterface;
 use Nowo\ChatKitBundle\DependencyInjection\NowoChatKitExtension;
 use Nowo\ChatKitBundle\Support\ChatEmojiCatalog;
 use Nowo\ChatKitBundle\Tests\Support\Entity\TestUser;
@@ -63,6 +66,26 @@ final class NowoChatKitExtensionMessageMenuTest extends TestCase
         $container = new ContainerBuilder();
         (new NowoChatKitExtension())->load([['profiles' => ['default' => ['user_class' => TestUser::class, 'client_api' => ['principal_resolver' => 'app.tokens', 'token_revoker' => 'app.revoker']]]]], $container);
         self::assertEquals(new Reference('app.revoker'), $container->getDefinition(ChatClientApiGuard::class)->getArgument('$revoker'));
+    }
+
+    public function testSlotsTakeTheirPlaceInTheOrder(): void
+    {
+        // 2.6 (spec 259): `slot:<key>` places a host slot; the card/slot ports are autoconfigured.
+        $container = $this->load(['order' => ['reply', 'slot:save_vault', 'delete']]);
+        $menu      = $container->getParameter('nowo_chat_kit.message_menu');
+        self::assertIsArray($menu);
+        self::assertSame(['reply', 'slot:save_vault', 'delete'], $menu['order']);
+        self::assertArrayHasKey(ChatCardProviderInterface::class, $container->getAutoconfiguredInstanceof());
+        self::assertArrayHasKey(ChatComposerActionProviderInterface::class, $container->getAutoconfiguredInstanceof());
+        self::assertArrayHasKey(ChatMessageMenuSlotProviderInterface::class, $container->getAutoconfiguredInstanceof());
+        foreach ([['slot:Bad'], ['slot:a', 'slot:a'], ['slot:'], [1]] as $order) {
+            try {
+                $this->load(['order' => $order]);
+                self::fail('an invalid order must fail');
+            } catch (InvalidConfigurationException $exception) {
+                self::assertStringContainsString('message_menu.order takes each of', $exception->getMessage());
+            }
+        }
     }
 
     /**

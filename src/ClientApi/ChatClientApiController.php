@@ -8,6 +8,7 @@ use Closure;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use JsonException;
+use Nowo\ChatKitBundle\Card\ChatCards;
 use Nowo\ChatKitBundle\Contract\ChatClientContextPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
@@ -37,6 +38,7 @@ use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatIdempotency;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
+use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatThreads;
 use Psr\Clock\ClockInterface;
@@ -133,7 +135,13 @@ final readonly class ChatClientApiController
         'reaction'             => 'invalid_reaction',
         'not_threadable'       => 'not_threadable',
         'idempotency_mismatch' => 'idempotency_mismatch',
+        // 2.6 (spec 259)
+        ChatReferences::CARD_NOT_ALLOWED => ChatReferences::CARD_NOT_ALLOWED,
+        ChatReferences::INVALID_CARDS    => ChatReferences::INVALID_CARDS,
     ];
+
+    /** 2.6: the extra write field of a send or a thread reply while card providers exist (`me.features.cards`). */
+    public const string CARDS_FIELD = 'cards';
 
     /**
      * @param string $realtimeEvents `full` or `ids` (the profile's `realtime_events`): what hub events carry
@@ -141,6 +149,8 @@ final readonly class ChatClientApiController
      * @param ChatIdempotency|null $idempotency 2.5: the `Idempotency-Key` of the writes; null: no write route
      * @param list<string> $acceptedReactions 2.5: every emoji the server accepts as a reaction (`me.reactions.accepted`)
      * @param list<string> $quickReactions 2.5: the configured `reactions` (`me.reactions.quick`)
+     * @param ChatReferences|null $references 2.6: typed cards of a page rendered in one batch, the `cards` write field
+     * @param ChatCards|null $cards 2.6 (spec 259): typed cards and composer actions
      */
     public function __construct(
         private ChatClientApiGuard $guard,
@@ -165,6 +175,8 @@ final readonly class ChatClientApiController
         private ?ChatIdempotency $idempotency = null,
         private array $acceptedReactions = [],
         private array $quickReactions = [],
+        private ?ChatReferences $references = null,
+        private ?ChatCards $cards = null,
     ) {
     }
 
@@ -211,7 +223,7 @@ final readonly class ChatClientApiController
                 'search'      => false,
                 'attachments' => false,
                 // 2.6 (spec 259): typed card references in a write body. false: a body holds `text` only.
-                'cards' => false,
+                'cards' => $this->cardsEnabled(),
                 // 2.4.1: whether `POST logout` revokes the token on the server (else the client only forgets it).
                 'serverLogout' => $this->guard->revokes(),
             ],
@@ -306,6 +318,8 @@ final readonly class ChatClientApiController
             'membersCount' => count($this->recipients->of($conversation)),
             // What the caller may do here (2.5: the write routes, when the server offers them, follow the same rule).
             'permissions' => ['send' => $row['canSend']],
+            // 2.6 (spec 259): the host's composer actions (Desktop builds its own flow; the dialog URL is web only).
+            'composerActions' => $this->composerActions($user, $conversation, $row['canSend'] === true, $call->contextKey),
         ]]);
     }
 
@@ -337,7 +351,7 @@ final readonly class ChatClientApiController
         }
 
         return $this->json([
-            'messages' => $this->presentMessages($user, $page),
+            'messages' => $this->presentMessages($user, $page, $call->contextKey),
             'hasMore'  => $hasMore,
             'readUpTo' => $this->participants->findOneFor($conversation, $user)?->getLastReadMessageId(),
         ]);
@@ -361,7 +375,7 @@ final readonly class ChatClientApiController
             $this->guard->notFound($request, $call);
         }
 
-        return $this->json(['message' => $this->presentMessages($call->principal->user, [$message])[0]]);
+        return $this->json(['message' => $this->presentMessages($call->principal->user, [$message], $call->contextKey)[0]]);
     }
 
     /**
@@ -501,7 +515,7 @@ final readonly class ChatClientApiController
         $call                 = $this->guard->authenticate($request, ChatClientPrincipal::SCOPE_WRITE, ChatClientApiGuard::BUDGET_SEND);
         [$chat, $idempotency] = $this->writers();
         $key                  = $this->idempotencyKey($request);
-        $text                 = $this->text($request);
+        $text                 = $this->text($request, true);
         $user                 = $call->principal->user;
         $conversation         = $this->find($request, $call, $uuid);
         $this->deny(!$this->voter->decide(ChatVoter::SEND, $conversation, $user), 'read_only', Response::HTTP_FORBIDDEN);
@@ -514,7 +528,7 @@ final readonly class ChatClientApiController
         $message = $messages[0] ?? $this->guard->notFound($request, $call);
         $this->guard->written($request, $call, ChatClientApiWriteEvent::SEND, $conversation->getUuid(), $message->getUuid(), $replayed);
 
-        return $this->json(['message' => $this->presentMessages($user, [$message])[0], 'replayed' => $replayed], $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
+        return $this->json(['message' => $this->presentMessages($user, [$message], $call->contextKey)[0], 'replayed' => $replayed], $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
     }
 
     /**
@@ -538,7 +552,7 @@ final readonly class ChatClientApiController
             throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
         }
         $key          = $this->idempotencyKey($request);
-        $text         = $this->text($request);
+        $text         = $this->text($request, true);
         $user         = $call->principal->user;
         $conversation = $this->find($request, $call, $uuid);
         $message      = $this->findMessage($request, $call, $conversation, $messageUuid);
@@ -551,7 +565,7 @@ final readonly class ChatClientApiController
         [$reply, $replayed] = $this->writing(static fn (): array => $threads->reply($user, $message, $text, self::scopedKey($call, $conversation, $key)));
         $root               = ChatThreads::rootOf($reply);
         $this->guard->written($request, $call, ChatClientApiWriteEvent::THREAD_REPLY, $conversation->getUuid(), $reply->getUuid(), $replayed);
-        $rows = $this->presentMessages($user, [$reply, $root]);
+        $rows = $this->presentMessages($user, [$reply, $root], $call->contextKey);
 
         return $this->json(['message' => $rows[0], 'root' => $rows[1], 'replayed' => $replayed], $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
     }
@@ -635,7 +649,7 @@ final readonly class ChatClientApiController
         // The key promises this message (its uuid is in the request hash): the one read above, as the write left it.
         $this->guard->written($request, $call, ChatClientApiWriteEvent::EDIT, $conversation->getUuid(), $message->getUuid(), $replayed);
 
-        return $this->json(['message' => $this->presentMessages($user, [$message])[0], 'replayed' => $replayed]);
+        return $this->json(['message' => $this->presentMessages($user, [$message], $call->contextKey)[0], 'replayed' => $replayed]);
     }
 
     /**
@@ -672,7 +686,7 @@ final readonly class ChatClientApiController
         ));
         $this->guard->written($request, $call, ChatClientApiWriteEvent::DELETE, $conversation->getUuid(), $message->getUuid(), $replayed);
 
-        return $this->json(['message' => $this->presentMessages($user, [$message])[0], 'replayed' => $replayed]);
+        return $this->json(['message' => $this->presentMessages($user, [$message], $call->contextKey)[0], 'replayed' => $replayed]);
     }
 
     /**
@@ -749,17 +763,47 @@ final readonly class ChatClientApiController
      * silently dropped; `text` must be a string (422 `invalid_text`). Emptiness and length are the service's (422
      * `empty_text`, `text_too_long`).
      */
-    private function text(Request $request): string
+    private function text(Request $request, bool $withCards = false): string
     {
-        $data  = $this->payload($request, self::MAX_WRITE_BODY_BYTES);
-        $extra = array_keys(array_diff_key($data, array_flip(self::WRITE_FIELDS)));
+        $data   = $this->payload($request, self::MAX_WRITE_BODY_BYTES);
+        $fields = $withCards && $this->cardsEnabled() ? [...self::WRITE_FIELDS, self::CARDS_FIELD] : self::WRITE_FIELDS;
+        $extra  = array_keys(array_diff_key($data, array_flip($fields)));
         $this->deny($extra !== [], 'unsupported_field', Response::HTTP_UNPROCESSABLE_ENTITY);
         $text = $data['text'] ?? null;
         if (!is_string($text)) {
             throw new ChatApiException('invalid_text', Response::HTTP_UNPROCESSABLE_ENTITY);
         }
+        if (!array_key_exists(self::CARDS_FIELD, $data) || !$this->references instanceof ChatReferences) {
+            return $text;
+        }
+        // 2.6 (spec 259): `cards: [{type, id}]` become card tokens after the text; canShare() is asked on send.
+        try {
+            return $this->references->withCards($text, $data[self::CARDS_FIELD]);
+        } catch (InvalidArgumentException $refused) {
+            throw new ChatApiException($refused->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $refused);
+        }
+    }
 
-        return $text;
+    /** 2.6: whether typed cards are offered (`me.features.cards`, the `cards` write field). */
+    private function cardsEnabled(): bool
+    {
+        return $this->cards?->isEnabled() === true && $this->references instanceof ChatReferences;
+    }
+
+    /**
+     * 2.6 (spec 259): the host's composer actions for the caller in the conversation (none without write rights or
+     * writes off): key, label, icon and slash alias. The dialog URL is a web page and is not listed.
+     *
+     * @return list<array{key: string, label: string, icon: string, slash: string|null}>
+     */
+    private function composerActions(ChatUserInterface $user, ChatConversation $conversation, bool $canSend, ?string $contextKey): array
+    {
+        if (!$this->cards instanceof ChatCards || !$this->writable()) {
+            return [];
+        }
+        $actions = $this->cards->composerActions(ChatCards::composerScope($user, $conversation, $canSend, $contextKey), $this->references?->typeKeys() ?? []);
+
+        return array_map(static fn (array $action): array => ['key' => $action['key'], 'label' => $action['label'], 'icon' => $action['icon'], 'slash' => $action['slash']], $actions);
     }
 
     /** 2.5: the message of exactly this uuid in the (already visible) conversation; anything else 404 (audited). */
@@ -929,11 +973,15 @@ final readonly class ChatClientApiController
      * Messages as the reader sees them: tokens, reactions (counts), and their link previews.
      *
      * @param list<ChatMessage> $page
+     * @param string|null $contextKey 2.6: the request's context (typed cards are rendered in it)
      *
      * @return list<array<string, mixed>>
      */
-    private function presentMessages(ChatUserInterface $user, array $page): array
+    private function presentMessages(ChatUserInterface $user, array $page, ?string $contextKey = null): array
     {
+        // 2.6: typed cards of the page rendered in one batch per type and conversation (web view and API tokens).
+        $this->references?->prime($user, $page);
+        $this->references?->prime($user, $page, $contextKey, true);
         $reactions = $this->reactions->summaryFor(array_map(static fn (ChatMessage $message): int => (int) $message->getId(), $page));
         $this->presenter->primeAvatars(array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $page));
         $this->presenter->primeAuthorBadges($page);
@@ -945,7 +993,7 @@ final readonly class ChatClientApiController
             $body = match (true) {
                 $message->isDeleted()                   => null,
                 $message->isBot(), $message->isSystem() => ChatMessageTokens::plain($this->presenter->botText($message)),
-                default                                 => $this->tokens->of($message->getBody(), $user),
+                default                                 => $this->tokens->of($message->getBody(), $user, $message->getConversation(), $contextKey),
             };
             $links = $body === null ? [] : array_slice(ChatMessageTokens::previewUrls($body), 0, self::PREVIEWS_PER_MESSAGE);
             foreach ($links as $url) {

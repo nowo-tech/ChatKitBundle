@@ -34,4 +34,6 @@
 {% block nowo_ui_scripts %}
     {{ parent() }}
     {{ vite_entry_script_tags('app') }}
+    {# ChatKit 2.6: the host side of the demo card dialogs. #}
+    <script src="{{ asset('js/demo-cards.js') }}" defer></script>
 {% endblock %}

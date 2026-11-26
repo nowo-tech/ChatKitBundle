@@ -9,6 +9,7 @@
 import { ChatDock, type ChatDockOptions } from './dock';
 import { markPageRead } from './page';
 import { bindSavedPage } from './saved-page';
+import { bindInsertCard } from './slots';
 import type { ChatConfig } from './types';
 
 export { ChatDock } from './dock';
@@ -28,6 +29,9 @@ export const VERSION = '1.13.1';
 export const CSS_TOKEN_PREFIX = '--nowo-chat-';
 
 const mounted = new WeakMap<HTMLElement, ChatDock>();
+
+/** 2.6: stops listening to the inserted cards of a root. */
+const unbinders = new WeakMap<HTMLElement, () => void>();
 
 /** The full-page chat element page mode renders into (page.html.twig, 1.13). */
 export const PAGE_SELECTOR = '[data-nowo-chat-page-mode]';
@@ -64,6 +68,10 @@ export function mount(root: HTMLElement, options: ChatDockOptions = {}): ChatDoc
   }
   const dock = new ChatDock(root, config, { page: options.page === undefined ? findChatPage(root.ownerDocument) : options.page });
   mounted.set(root, dock);
+  // 2.6 (spec 259): cards the host dialogs insert (`nowo-chat:insert-card` bubbles to the root).
+  if (config.slots !== undefined) {
+    unbinders.set(root, bindInsertCard(root));
+  }
   void dock.start();
   return dock;
 }
@@ -88,6 +96,8 @@ export function mountPage(root: HTMLElement, page: HTMLElement): ChatDock | null
 export function unmount(root: HTMLElement): void {
   mounted.get(root)?.destroy();
   mounted.delete(root);
+  unbinders.get(root)?.();
+  unbinders.delete(root);
 }
 
 /**

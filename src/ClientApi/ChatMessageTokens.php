@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\ClientApi;
 
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Link\ChatLinkUrls;
+use Nowo\ChatKitBundle\Model\ChatCard;
 use Nowo\ChatKitBundle\Model\ChatLinkProvider;
 use Nowo\ChatKitBundle\Model\ChatReference;
 use Nowo\ChatKitBundle\Model\ChatUserInterface;
@@ -80,12 +82,14 @@ final readonly class ChatMessageTokens
      *
      * @param string $body Stored Markdown
      * @param ChatUserInterface $viewer The reader
+     * @param ChatConversation|null $conversation 2.6: the message's conversation (typed cards are rendered in it)
+     * @param string|null $contextKey 2.6: the client API context of the request
      *
      * @return array{format: string, blocks: list<array<string, mixed>>}
      */
-    public function of(string $body, ChatUserInterface $viewer): array
+    public function of(string $body, ChatUserInterface $viewer, ?ChatConversation $conversation = null, ?string $contextKey = null): array
     {
-        return ['format' => self::FORMAT, 'blocks' => $this->blocks($body, $this->references?->cardsFor($viewer, $body) ?? [])];
+        return ['format' => self::FORMAT, 'blocks' => $this->blocks($body, $this->references?->cardsFor($viewer, $body, $conversation, $contextKey) ?? [])];
     }
 
     /**
@@ -433,8 +437,10 @@ final readonly class ChatMessageTokens
             return ['type' => 'reference', 'visible' => false, 'text' => $this->references?->restricted() ?? '…'];
         }
         $view = $card->toArray();
+        // 2.6 (spec 259): a typed card keeps the reference shape (a 2.5 client shows a chip) and adds `card`.
+        $typed = $card->card instanceof ChatCard ? ['card' => $card->card->toArray()] : [];
 
-        return [
+        return $typed + [
             'type'      => 'reference',
             'visible'   => true,
             'refType'   => $view['type'],

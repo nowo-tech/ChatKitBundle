@@ -170,7 +170,7 @@ final readonly class ChatPresenter
                 'preview' => match (true) {
                     $last->isDeleted(), $last->isBuzz() => '',
                     $last->isBot(), $last->isSystem()   => mb_substr($this->botText($last), 0, 90),
-                    default                             => $this->plainText($last->getBody(), $viewer, 90),
+                    default                             => $this->plainText($last->getBody(), $viewer, 90, $conversation),
                 },
                 'buzz'       => $last->isBuzz(),
                 'pin'        => $last->isPinLine(),
@@ -252,7 +252,7 @@ final readonly class ChatPresenter
         // #references: cards the viewer may open, the neutral chip for the rest; empty slots without a viewer.
         $filled = $bot || $system || $message->isDeleted() || !$this->references instanceof ChatReferences
             ? ['html' => $this->markdown->htmlOf($message), 'references' => [], 'pending' => false]
-            : $this->references->fill($this->markdown->htmlOf($message), $message->getBody(), $viewer);
+            : $this->references->fill($this->markdown->htmlOf($message), $message->getBody(), $viewer, $message->getConversation());
 
         return [
             'id'              => $message->getId(),
@@ -292,6 +292,8 @@ final readonly class ChatPresenter
             + ($badges === [] ? [] : ['authorBadges' => array_map(static fn (ChatAuthorBadge $badge): array => $badge->toArray(), $badges)])
             // 1.36: only on forwards, thread replies and thread roots, so other messages keep 1.35's shape.
             + ($message->isForwarded() && !$message->isDeleted() ? ['forwarded' => $this->forwardMarker($message, $viewer)] : [])
+            // 2.6 (spec 259): only on messages with typed cards (no forward in v1), so other messages keep 2.5's shape.
+            + (!$message->isDeleted() && !$bot && !$system && $this->references?->hasCards($message->getBody()) === true ? ['hasCards' => true] : [])
             + ($message->getThreadRoot() instanceof ChatMessage ? ['threadRootUuid' => $message->getThreadRoot()->getUuid()] : [])
             + ($message->getThreadReplyCount() > 0 ? ['thread' => [
                 'count'       => $message->getThreadReplyCount(),
@@ -423,10 +425,10 @@ final readonly class ChatPresenter
     /**
      * Plain text of a message for the viewer (#references as the viewer may see them).
      */
-    private function plainText(string $body, ChatUserInterface $viewer, int $maxLength): string
+    private function plainText(string $body, ChatUserInterface $viewer, int $maxLength, ?ChatConversation $conversation = null): string
     {
         return $this->references instanceof ChatReferences
-            ? $this->references->plainText($this->markdown, $body, $viewer, $maxLength)
+            ? $this->references->plainText($this->markdown, $body, $viewer, $maxLength, null, $conversation)
             : $this->markdown->plainText($body, $maxLength);
     }
 

@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSummary, ForwardTarget, LinkPreview, LinksPage, Member, MessageInfo, MessageRevision, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SidebarSection, SupportContext, SupportStatus, SupportTicket, ThreadPage, ThreadSummary } from './types';
+import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSlots, ConversationSummary, ForwardTarget, LinkPreview, LinksPage, Member, MessageInfo, MessageRevision, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SidebarSection, SupportContext, SupportStatus, SupportTicket, ThreadPage, ThreadSummary } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -450,6 +450,43 @@ export class ChatApi {
    */
   async references(uuid: string, type: string, query: string): Promise<{ types: ReferenceType[]; references: Reference[] }> {
     return this.get<{ types: ReferenceType[]; references: Reference[] }>(`${this.url('references', uuid)}?type=${encodeURIComponent(type)}&q=${encodeURIComponent(query)}`);
+  }
+
+  /**
+   * 2.6 (spec 259): the card types, composer actions and message menu slots of a conversation.
+   *
+   * @param uuid Conversation uuid.
+   * @returns The slots (empty lists when the dock has no `slots` settings).
+   */
+  async slots(uuid: string): Promise<ConversationSlots> {
+    const endpoint = this.config.slots?.endpoint;
+    if (endpoint === undefined) {
+      return { cardTypes: [], composerActions: [], menuSlots: [] };
+    }
+    return this.get<ConversationSlots>(endpoint.replace('__uuid__', encodeURIComponent(uuid)));
+  }
+
+  /**
+   * 2.6 (spec 259): one card as the caller sees it in a conversation (the composer chip).
+   *
+   * @param uuid Conversation uuid.
+   * @param type Card type.
+   * @param id Card id.
+   * @returns The card, or null when it is not available to the caller.
+   */
+  async card(uuid: string, type: string, id: string): Promise<Reference | null> {
+    const pattern = this.config.slots?.card;
+    if (pattern === undefined) {
+      return null;
+    }
+    try {
+      return (await this.get<{ card: Reference }>(pattern.replace('__uuid__', encodeURIComponent(uuid)).replace('__type__', encodeURIComponent(type)).replace('__id__', encodeURIComponent(id)))).card;
+    } catch (error) {
+      if (error instanceof ChatApiError && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   /**

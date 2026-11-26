@@ -1,0 +1,7 @@
+{% extends 'base.html.twig' %}
+
+{% block body %}
+    {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'demo.cards.title'|trans, kind: 'form'} %}
+        {% block section_body %}{{ include(fragment) }}{% endblock %}
+    {% endembed %}
+{% endblock %}

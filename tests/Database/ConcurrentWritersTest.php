@@ -261,6 +261,37 @@ final class ConcurrentWritersTest extends LoadDatabaseTestCase
     }
 
     /**
+     * 2.6 (spec 259): messages with typed cards sent while another worker deletes them: every call answers, a deleted
+     * message keeps no card token (its tombstone holds no body), and every live card message is whole.
+     */
+    public function testCardSendsAgainstDeletes(): void
+    {
+        $this->seed();
+        [$a, $b] = $this->race('cardsend', 'carddel');
+        $this->assertClean($a, $b);
+        $sql = $this->connection();
+        self::assertSame(0, (int) $sql->fetchOne("SELECT COUNT(*) FROM nowo_chat_message WHERE deleted_at IS NOT NULL AND body LIKE '%(note:%'"));
+        self::assertSame(self::CALLS, (int) $sql->fetchOne("SELECT COUNT(*) FROM nowo_chat_message WHERE body LIKE 'card %' OR deleted_at IS NOT NULL"));
+        foreach ($sql->fetchFirstColumn("SELECT body FROM nowo_chat_message WHERE deleted_at IS NULL AND body LIKE 'card %'") as $body) {
+            self::assertMatchesRegularExpression('/^card (\d+)\n\n#\[…\]\(note:n\1\)$/u', (string) $body);
+        }
+    }
+
+    /**
+     * 2.6 (spec 259): a reader renders the cards of the newest messages while another worker deletes them (render reads
+     * lock nothing): every read answers, and a deleted message never shows a card.
+     */
+    public function testCardReadsAgainstDeletes(): void
+    {
+        $this->seed();
+        // Readers against the sends first, then against the deletes of what was sent.
+        [$a, $b] = $this->race('cardsend', 'cardread');
+        $this->assertClean($a, $b);
+        [$a, $b] = $this->race('cardread', 'carddel');
+        $this->assertClean($a, $b);
+    }
+
+    /**
      * @param array{ok: int, failures: array<string, int>, poisoned: int, closed: int} ...$writers
      */
     private function assertClean(array ...$writers): void

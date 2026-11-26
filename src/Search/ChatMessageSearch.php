@@ -201,7 +201,7 @@ final readonly class ChatMessageSearch
                     continue; // @codeCoverageIgnore
                 }
                 $lastScanned = $message->getUuid();
-                $text        = $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH);
+                $text        = $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH, null, $message->getConversation());
                 if (!ChatSearchText::containsAll($query->words, $text)) {
                     continue;
                 }
@@ -251,7 +251,7 @@ final readonly class ChatMessageSearch
         $this->references->prime($viewer, [$message]);
         $titles = [];
 
-        return $this->hit($message, $viewer, $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH), [], $this->access->isSupportAgent($viewer), $titles);
+        return $this->hit($message, $viewer, $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH, null, $message->getConversation()), [], $this->access->isSupportAgent($viewer), $titles);
     }
 
     /**
@@ -324,7 +324,7 @@ final readonly class ChatMessageSearch
         $kept = [];
         foreach ($rows as $message) {
             if ($this->access->canView($message->getConversation(), $viewer)
-                && ChatSearchText::containsAll($words, $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH))) {
+                && ChatSearchText::containsAll($words, $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH, null, $message->getConversation()))) {
                 $kept[] = (int) $message->getId();
             }
         }
@@ -363,7 +363,7 @@ final readonly class ChatMessageSearch
         $titles = [];
         $hits   = [];
         foreach ($messages as $id => $message) {
-            $hits[$id] = $this->hit($message, $viewer, $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH), $words, $agent, $titles, $people);
+            $hits[$id] = $this->hit($message, $viewer, $this->references->plainText($this->markdown, $message->getBody(), $viewer, self::PLAIN_LENGTH, null, $message->getConversation()), $words, $agent, $titles, $people);
         }
 
         return $hits;
