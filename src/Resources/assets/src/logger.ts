@@ -106,6 +106,7 @@ export function createBundleLogger(name: string, options: BundleLoggerOptions = 
   return {
     scriptLoaded(): void {
       if (isQuiet()) return;
+      if (alreadyAnnounced(name)) return;
       if (buildTime !== undefined && buildTime !== '') {
         console.log(
           `%c${EMOJI.script} ${prefix} script loaded, build: %c${buildTime}`,
@@ -157,4 +158,26 @@ export function createBundleLogger(name: string, options: BundleLoggerOptions = 
       }
     },
   };
+}
+
+/**
+ * Records `name` in a page-wide `Set` on `globalThis` and tells whether it was announced before (REQ-ASSETS-005): a
+ * script that is evaluated twice (Turbo, a fragment, two copies, two loggers with the same name) prints its
+ * "script loaded" line once per page. Page HTML that clobbers the global (DOM named access) is replaced by a fresh set.
+ *
+ * @param name - Logger name in kebab-case, e.g. `icon-selector` or `ui-kit/dialog`.
+ * @returns True when the line was already printed on this page.
+ */
+function alreadyAnnounced(name: string): boolean {
+  const host = globalThis as { __nowoScriptBannerNames?: unknown };
+  if (!(host.__nowoScriptBannerNames instanceof Set)) {
+    host.__nowoScriptBannerNames = new Set<string>();
+  }
+  const seen = host.__nowoScriptBannerNames as Set<string>;
+  if (seen.has(name)) {
+    return true;
+  }
+  seen.add(name);
+
+  return false;
 }
