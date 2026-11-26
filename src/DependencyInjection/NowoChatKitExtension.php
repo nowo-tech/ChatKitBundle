@@ -5,8 +5,22 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\DependencyInjection;
 
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentCleanup;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentDownloads;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentFileContext;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentObjects;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentOptions;
+use Nowo\ChatKitBundle\Attachment\ChatAttachments;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentScan;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentSigner;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentsSweepCommand;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentTypes;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentViews;
+use Nowo\ChatKitBundle\Attachment\Message\RemoveChatAttachmentObjects;
+use Nowo\ChatKitBundle\Attachment\Message\ScanChatAttachment;
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiGuard;
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiRouteLoader;
+use Nowo\ChatKitBundle\Contract\ChatAttachmentsInterface;
 use Nowo\ChatKitBundle\Contract\ChatCardProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatComposerActionProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatMessageMenuSlotProviderInterface;
@@ -33,6 +47,7 @@ use Nowo\ChatKitBundle\SearchKit\ChatMessageSearchProvider;
 use Nowo\ChatKitBundle\SearchKit\ChatSearchKitViewer;
 use Nowo\ChatKitBundle\Support\ChatEmojiCatalog;
 use Nowo\ChatKitBundle\Support\ChatRetention;
+use Nowo\ChatKitBundle\Transaction\ChatKitTransactionRunner;
 use Nowo\ChatKitBundle\Worker\ChatRequestBoundaryListener;
 use Nowo\RuntimeSettingContract\Bridge\Symfony\DependencyInjection\RuntimeSettingsConfiguration;
 use Nowo\RuntimeSettingContract\Contract\Exception\InvalidRuntimeSettingId;
@@ -45,25 +60,38 @@ use Nowo\SearchKitBundle\Contract\SearchProviderInterface;
 use Nowo\SearchKitBundle\Contract\SearchReferenceResolverInterface;
 use Nowo\SearchKitBundle\Provider\Entity\EntitySearchDefinition;
 use Nowo\SearchKitBundle\Provider\Entity\SearchItemContext;
+use Nowo\StorageKitBundle\Context\FileContextInterface;
+use Nowo\StorageKitBundle\Context\GenericFileContextInterface;
+use Nowo\StorageKitBundle\Download\FileRangeDeliveryInterface;
+use Nowo\TransactionContract\TransactionRunnerInterface;
+use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\FileLocator;
+use Symfony\Component\DependencyInjection\Argument\BoundArgument;
 use Symfony\Component\DependencyInjection\Argument\IteratorArgument;
 use Symfony\Component\DependencyInjection\Argument\ServiceClosureArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
+use Symfony\Component\DependencyInjection\Parameter;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\Messenger\MessageBusInterface;
 
 use function array_key_exists;
+use function array_values;
 use function class_exists;
 use function in_array;
+use function intdiv;
 use function interface_exists;
 use function is_a;
 use function is_array;
 use function is_string;
+use function max;
 use function sprintf;
 
 /**
@@ -89,6 +117,12 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
     /** 2.4 (audit ZBW-L2): the build error of a context policy with `realtime_events: full`. */
     public const string CONTEXTS_NEED_IDS_EVENTS = 'nowo_chat_kit: client_api.context_policy needs "realtime_events: ids". The realtime stream is per person, not per context: with "full", the message bodies of every context would reach the client through the hub. The web dock works with "ids". See docs/API.md, "Realtime".';
 
+    /** 2.7: the build error of attachments without StorageKit 2.2. */
+    public const string ATTACHMENTS_NEED_STORAGE_KIT = 'nowo_chat_kit: attachments.enabled needs nowo-tech/storage-kit-bundle ^2.2 (composer require nowo-tech/storage-kit-bundle:^2.2) with its bundle registered. See docs/UPGRADING.md, "To 2.7.0".';
+
+    /** 2.7: the build error of attachments without Messenger. */
+    public const string ATTACHMENTS_NEED_MESSENGER = 'nowo_chat_kit: attachments.enabled needs symfony/messenger (composer require symfony/messenger) and an asynchronous transport for the scan (Nowo\\ChatKitBundle\\Attachment\\Message\\ScanChatAttachment). See docs/USAGE.md, "Attachments".';
+
     /** 1.32: parameter holding the `runtime.retention_days` setting id of the default profile (null: not configured). */
     public const RUNTIME_RETENTION_PARAMETER = 'nowo_chat_kit.runtime.retention_days';
 
@@ -106,7 +140,7 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
      */
     public function prepend(ContainerBuilder $container): void
     {
-        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>, doctrine: array{user_reference: string}, client_api: array{limits: array{per_ip_per_minute: int, per_token_per_minute: int, writes_per_token_per_minute: int}}}>} $config */
+        /** @var array{default_profile: string, profiles: array<string, array{user_class: ?string, limits: array<string, int>, doctrine: array{user_reference: string}, client_api: array{limits: array{per_ip_per_minute: int, per_token_per_minute: int, writes_per_token_per_minute: int}}, attachments: array{limits: array{uploads_per_minute: int, upload_bytes_per_hour: int, downloads_per_minute: int}}}>} $config */
         $config  = (new Processor())->processConfiguration(new Configuration(), $this->prependableConfigs($container));
         $profile = $config['profiles'][$config['default_profile']];
         $this->prependDoctrine($container, $config['default_profile'], $profile['user_class'], $profile['doctrine']['user_reference']);
@@ -135,6 +169,10 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 'nowo_chat_client_token' => $limiter($profile['client_api']['limits']['per_token_per_minute'], '1 minute'),
                 // 2.5: the client API's write budget per token.
                 'nowo_chat_client_write' => $limiter($profile['client_api']['limits']['writes_per_token_per_minute'], '1 minute'),
+                // 2.7 (spec 259): uploads per person (count and KiB, StorageKit does not limit its generic ports) and downloads.
+                'nowo_chat_attachment_upload'   => $limiter($profile['attachments']['limits']['uploads_per_minute'], '1 minute'),
+                'nowo_chat_attachment_bytes'    => $limiter(max(1, intdiv($profile['attachments']['limits']['upload_bytes_per_hour'], 1024)), '1 hour'),
+                'nowo_chat_attachment_download' => $limiter($profile['attachments']['limits']['downloads_per_minute'], '1 minute'),
             ],
         ]);
 
@@ -298,6 +336,70 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
         // 1.33: the message context menu (null = UiKit's theme flag).
         $container->setParameter(Configuration::ALIAS . '.web_ui.message_context_menu', $profile['web_ui']['message_context_menu']);
         $this->registerClientApi($container, $profile['client_api'], $profile['realtime_events']);
+        $this->registerAttachments($container, $profile['attachments']);
+    }
+
+    /**
+     * 2.7 (spec 259 block B): the attachment services, only with `attachments.enabled` (the `Attachment` namespace is
+     * never autoloaded). The build fails without nowo-tech/storage-kit-bundle ^2.2, symfony/messenger or a scanner.
+     *
+     * @param array{enabled: bool, scanner: string|null, policy: string|null, scope_resolver: string|null, max_bytes: int, max_per_message: int, max_pending_per_user: int, pending_ttl_hours: int, types: list<string>, extra_types: array<string, string>, scan: array{timeout_seconds: int, lease_seconds: int, max_attempts: int, unscannable: string, alert_after_seconds: int}, download: array{url_ttl_seconds: int, bind_session: bool, storage_ttl_seconds: int}, audit_downloads: bool, limits: array<string, int>} $attachments
+     *
+     * @throws InvalidConfigurationException When a requirement is missing
+     */
+    private function registerAttachments(ContainerBuilder $container, array $attachments): void
+    {
+        $container->setParameter(Configuration::ALIAS . '.attachments.enabled', $attachments['enabled']);
+        if (!$attachments['enabled']) {
+            return;
+        }
+        // Both are dev dependencies of the bundle: the refusals cannot run in its own test suite.
+        if (!interface_exists(GenericFileContextInterface::class) || !interface_exists(FileRangeDeliveryInterface::class)) {
+            throw new InvalidConfigurationException(self::ATTACHMENTS_NEED_STORAGE_KIT); // @codeCoverageIgnore
+        }
+        if (!interface_exists(MessageBusInterface::class)) {
+            throw new InvalidConfigurationException(self::ATTACHMENTS_NEED_MESSENGER); // @codeCoverageIgnore
+        }
+        // Fixed bindings of every attachment service (autowired, never autoconfigured).
+        $bindings = [
+            TransactionRunnerInterface::class => new BoundArgument(new Reference(ChatKitTransactionRunner::SERVICE_ID), false),
+            MessageBusInterface::class        => new BoundArgument(new Reference('messenger.default_bus', ContainerInterface::NULL_ON_INVALID_REFERENCE), false),
+            LoggerInterface::class            => new BoundArgument(new Reference('logger', ContainerInterface::NULL_ON_INVALID_REFERENCE), false),
+            EventDispatcherInterface::class   => new BoundArgument(new Reference('event_dispatcher', ContainerInterface::NULL_ON_INVALID_REFERENCE), false),
+        ];
+        $define = static function (string $class) use ($container, $bindings): Definition {
+            return $container->register($class, $class)->setAutowired(true)->setAutoconfigured(false)->setPublic(false)->setBindings($bindings);
+        };
+        $define(ChatAttachmentOptions::class)->setAutowired(false)->setArguments([
+            $attachments['max_bytes'],
+            $attachments['max_per_message'],
+            $attachments['max_pending_per_user'],
+            $attachments['pending_ttl_hours'],
+            $attachments['scan']['timeout_seconds'],
+            $attachments['scan']['lease_seconds'],
+            $attachments['scan']['max_attempts'],
+            $attachments['scan']['unscannable'] === 'allow',
+            $attachments['scan']['alert_after_seconds'],
+            $attachments['download']['url_ttl_seconds'],
+            $attachments['download']['bind_session'],
+            $attachments['download']['storage_ttl_seconds'],
+            $attachments['audit_downloads'],
+        ]);
+        $define(ChatAttachmentTypes::class)->setAutowired(false)->setArguments([array_values($attachments['types']), $attachments['extra_types']]);
+        $define(ChatAttachmentSigner::class)->setAutowired(false)->setArguments([new Parameter('kernel.secret')]);
+        $define(ChatAttachmentViews::class);
+        $define(ChatAttachmentCleanup::class);
+        $define(ChatAttachmentObjects::class)->addTag('messenger.message_handler', ['handles' => RemoveChatAttachmentObjects::class]);
+        $define(ChatAttachmentScan::class)
+            ->setArgument('$scanner', new Reference($attachments['scanner'] ?? ''))
+            ->addTag('messenger.message_handler', ['handles' => ScanChatAttachment::class]);
+        $define(ChatAttachmentFileContext::class)
+            ->setArgument('$scopes', $attachments['scope_resolver'] === null ? null : new Reference($attachments['scope_resolver']))
+            ->addTag(FileContextInterface::TAG);
+        $define(ChatAttachments::class)->setArgument('$policy', $attachments['policy'] === null ? null : new Reference($attachments['policy']));
+        $container->setAlias(ChatAttachmentsInterface::class, ChatAttachments::class)->setPublic(true);
+        $define(ChatAttachmentDownloads::class)->setArgument('$limiter', new Reference('limiter.nowo_chat_attachment_download', ContainerInterface::NULL_ON_INVALID_REFERENCE));
+        $define(ChatAttachmentsSweepCommand::class)->addTag('console.command');
     }
 
     /**
@@ -502,6 +604,11 @@ final class NowoChatKitExtension extends Extension implements PrependExtensionIn
                 $clientApi = is_array($profile) && is_array($profile['client_api'] ?? null) ? $profile['client_api'] : [];
                 if (array_key_exists('limits', $clientApi)) {
                     $kept['client_api'] = ['limits' => $clientApi['limits']];
+                }
+                // 2.7: the attachment budgets (integers) feed their rate limiters.
+                $attachments = is_array($profile) && is_array($profile['attachments'] ?? null) ? $profile['attachments'] : [];
+                if (array_key_exists('limits', $attachments)) {
+                    $kept['attachments'] = ['limits' => $attachments['limits']];
                 }
                 // 1.24: only `doctrine.user_reference` (an enum, never an %env()%) is read here.
                 $doctrine = is_array($profile) && is_array($profile['doctrine'] ?? null) ? $profile['doctrine'] : [];

@@ -385,6 +385,29 @@ chat:
   support_reopen: 'Riapri'
   support_read_only_ticket: 'Questo ticket è chiuso. Apri il supporto per iniziarne uno nuovo.'
   support_ticket_label: 'Ticket %number% · %topic% · %status%'
+  # 2.7 (spec 259): attachments; D-20261126-11: the secret hand-off of the before-send warning.
+  attachment:
+    preview: '📎 Allegato'
+    attach: 'Allega un file'
+    attach_hint: 'Allega file (fino a %max% ciascuno)'
+    scanning: 'Analisi in corso…'
+    uploading: 'Caricamento…'
+    clean: 'Pronto'
+    blocked: 'Bloccato: questo file non è consentito'
+    failed: 'Impossibile verificarlo, riprova o rimuovilo'
+    remove: 'Rimuovi file'
+    download: 'Scarica'
+    too_large: 'Questo file supera %max%.'
+    not_allowed: 'Questo tipo di file non è consentito.'
+    too_many: 'Al massimo %max% file per messaggio.'
+    error: 'Impossibile caricare il file.'
+    waiting: 'Invio appena i file sono verificati…'
+    files: 'File'
+  secret_handoff:
+    send: 'Invia come segreto'
+    send_anyway: 'Invia comunque'
+    warning: 'Sembra un segreto.'
+    label: 'Avviso di segreto'
 support:
   topic:
     incident: 'Incidente / bug'

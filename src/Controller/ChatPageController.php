@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nowo\ChatKitBundle\Controller;
 
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Attachment\ChatAttachments;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentViews;
 use Nowo\ChatKitBundle\Contract\ChatServiceInterface;
 use Nowo\ChatKitBundle\DependencyInjection\Configuration;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
@@ -24,6 +26,7 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatMessageActions;
+use Nowo\ChatKitBundle\Service\ChatNotFoundException;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\View\ChatPage;
@@ -92,6 +95,8 @@ final class ChatPageController extends AbstractController
         private readonly bool $fullHeight = false,
         private readonly ?ChatCurrentUserPort $currentUser = null,
         private readonly ?ChatMessageActions $menu = null,
+        private readonly ?ChatAttachments $attachments = null,
+        private readonly ?ChatAttachmentViews $attachmentViews = null,
     ) {
     }
 
@@ -178,9 +183,11 @@ final class ChatPageController extends AbstractController
         $this->references?->prime($user, $page);
         // 1.16: the list's and the page's pictures in one resolver call (context() primes them before presenting).
         $context = $this->context($user, $conversation, false, $page);
+        // 2.7 (spec 259): the page's files in one query; each with a download URL signed for this reader.
+        $files = $this->attachmentViews?->stubs($page);
 
         return $this->render($this->pageTemplate, [
-            'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $page),
+            'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, [], null, false, $this->filesWithUrls($user, $files, $message)), $page),
             'read'     => $last instanceof ChatMessage ? [
                 'url'       => $this->generateUrl('nowo_chat_api_read', ['uuid' => $uuid]),
                 'messageId' => (int) $last->getId(),
@@ -346,5 +353,31 @@ final class ChatPageController extends AbstractController
         }
 
         return $conversation;
+    }
+
+    /**
+     * 2.7: a message's files with download URLs signed for the reader (no-JS page); null while attachments are off.
+     *
+     * @param array<int, list<array<string, mixed>>>|null $files
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    private function filesWithUrls(ChatUserInterface $user, ?array $files, ChatMessage $message): ?array
+    {
+        if ($files === null || !$this->attachments instanceof ChatAttachments) {
+            return null;
+        }
+        $rows = [];
+        foreach ($files[(int) $message->getId()] ?? [] as $file) {
+            try {
+                $file['url'] = $this->attachments->downloadUrl($user, (string) $file['uuid'])->url;
+            } catch (ChatNotFoundException) { // @codeCoverageIgnore
+                // Defensive: a file blocked between the page query and the signature.
+                continue; // @codeCoverageIgnore
+            }
+            $rows[] = $file;
+        }
+
+        return $rows;
     }
 }

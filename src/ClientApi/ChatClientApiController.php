@@ -8,6 +8,12 @@ use Closure;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use JsonException;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentDownloads;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentOptions;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentRefused;
+use Nowo\ChatKitBundle\Attachment\ChatAttachments;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentTypes;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentViews;
 use Nowo\ChatKitBundle\Card\ChatCards;
 use Nowo\ChatKitBundle\Contract\ChatClientContextPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
@@ -18,6 +24,8 @@ use Nowo\ChatKitBundle\Entity\ChatIdempotencyKey;
 use Nowo\ChatKitBundle\Entity\ChatMessage;
 use Nowo\ChatKitBundle\Event\ChatClientApiWriteEvent;
 use Nowo\ChatKitBundle\Http\ChatApiException;
+use Nowo\ChatKitBundle\Model\ChatAttachmentUrl;
+use Nowo\ChatKitBundle\Model\ChatAttachmentView;
 use Nowo\ChatKitBundle\Model\ChatChannel;
 use Nowo\ChatKitBundle\Model\ChatClientContext;
 use Nowo\ChatKitBundle\Model\ChatClientConversationRef;
@@ -37,15 +45,19 @@ use Nowo\ChatKitBundle\Repository\ChatUserSettingsRepository;
 use Nowo\ChatKitBundle\Security\ChatAccess;
 use Nowo\ChatKitBundle\Security\ChatVoter;
 use Nowo\ChatKitBundle\Service\ChatIdempotency;
+use Nowo\ChatKitBundle\Service\ChatNotFoundException;
 use Nowo\ChatKitBundle\Service\ChatPresenter;
 use Nowo\ChatKitBundle\Service\ChatReferences;
 use Nowo\ChatKitBundle\Service\ChatService;
 use Nowo\ChatKitBundle\Service\ChatThreads;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\Clock;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\Routing\Attribute\Route;
 
 use function array_chunk;
@@ -61,6 +73,7 @@ use function array_slice;
 use function array_sum;
 use function array_unique;
 use function array_values;
+use function assert;
 use function count;
 use function hash;
 use function in_array;
@@ -75,6 +88,8 @@ use function strlen;
 
 use const DATE_ATOM;
 use const JSON_THROW_ON_ERROR;
+use const UPLOAD_ERR_FORM_SIZE;
+use const UPLOAD_ERR_INI_SIZE;
 
 /**
  * 2.4 (client API v1, Beacon Desktop BD-2): the versioned, stateless client API of the chat for native clients, at
@@ -140,6 +155,9 @@ final readonly class ChatClientApiController
         ChatReferences::INVALID_CARDS    => ChatReferences::INVALID_CARDS,
     ];
 
+    /** 2.7 (spec 259): the write field of a send that lists the files (`me.features.attachments`). */
+    public const string ATTACHMENTS_FIELD = 'attachments';
+
     /** 2.6: the extra write field of a send or a thread reply while card providers exist (`me.features.cards`). */
     public const string CARDS_FIELD = 'cards';
 
@@ -151,6 +169,13 @@ final readonly class ChatClientApiController
      * @param list<string> $quickReactions 2.5: the configured `reactions` (`me.reactions.quick`)
      * @param ChatReferences|null $references 2.6: typed cards of a page rendered in one batch, the `cards` write field
      * @param ChatCards|null $cards 2.6 (spec 259): typed cards and composer actions
+     * @param ChatAttachments|null $attachments 2.7 (spec 259): attachments; null while they are off
+     * @param ChatAttachmentViews|null $attachmentViews 2.7: the files of presented messages
+     * @param ChatAttachmentDownloads|null $downloads 2.7: the signed downloads
+     * @param ChatAttachmentOptions|null $attachmentOptions 2.7: the limits (`me.limits.attachments`)
+     * @param ChatAttachmentTypes|null $attachmentTypes 2.7: the allowed kinds and extensions
+     * @param RateLimiterFactoryInterface|null $uploadLimiter 2.7: uploads per person and minute (shared with the dock)
+     * @param RateLimiterFactoryInterface|null $bytesLimiter 2.7: uploaded KiB per person and hour (shared with the dock)
      */
     public function __construct(
         private ChatClientApiGuard $guard,
@@ -177,6 +202,15 @@ final readonly class ChatClientApiController
         private array $quickReactions = [],
         private ?ChatReferences $references = null,
         private ?ChatCards $cards = null,
+        private ?ChatAttachments $attachments = null,
+        private ?ChatAttachmentViews $attachmentViews = null,
+        private ?ChatAttachmentDownloads $downloads = null,
+        private ?ChatAttachmentOptions $attachmentOptions = null,
+        private ?ChatAttachmentTypes $attachmentTypes = null,
+        #[Autowire(service: 'limiter.nowo_chat_attachment_upload')]
+        private ?RateLimiterFactoryInterface $uploadLimiter = null,
+        #[Autowire(service: 'limiter.nowo_chat_attachment_bytes')]
+        private ?RateLimiterFactoryInterface $bytesLimiter = null,
     ) {
     }
 
@@ -221,7 +255,8 @@ final readonly class ChatClientApiController
                 'editOwn'     => $writes,
                 'deleteOwn'   => $writes,
                 'search'      => false,
-                'attachments' => false,
+                // 2.7 (spec 259): uploads (chat:write), files in messages and signed downloads.
+                'attachments' => $this->attachments instanceof ChatAttachments,
                 // 2.6 (spec 259): typed card references in a write body. false: a body holds `text` only.
                 'cards' => $this->cardsEnabled(),
                 // 2.4.1: whether `POST logout` revokes the token on the server (else the client only forgets it).
@@ -234,7 +269,12 @@ final readonly class ChatClientApiController
                 'textMaxLength'           => ChatMessage::MAX_LENGTH,
                 'editWindowSeconds'       => ChatMessage::EDIT_WINDOW_SECONDS,
                 'idempotencyKeyMaxLength' => ChatIdempotencyKey::MAX_KEY_LENGTH,
-            ],
+            ] + ($this->attachmentOptions instanceof ChatAttachmentOptions && $this->attachments instanceof ChatAttachments ? ['attachments' => [
+                'maxBytes'      => $this->attachmentOptions->effectiveMaxBytes(),
+                'maxPerMessage' => $this->attachmentOptions->maxPerMessage,
+                'kinds'         => $this->attachmentTypes?->kinds() ?? [],
+                'extensions'    => $this->attachmentTypes?->extensions() ?? [],
+            ]] : []),
             // 2.5: the reactions a client may set: the quick row and every accepted emoji.
             'reactions' => ['quick' => $this->quickReactions, 'accepted' => $this->acceptedReactions],
         ]);
@@ -351,7 +391,7 @@ final readonly class ChatClientApiController
         }
 
         return $this->json([
-            'messages' => $this->presentMessages($user, $page, $call->contextKey),
+            'messages' => $this->presentMessages($user, $page, $call->contextKey, $call->principal->tokenId),
             'hasMore'  => $hasMore,
             'readUpTo' => $this->participants->findOneFor($conversation, $user)?->getLastReadMessageId(),
         ]);
@@ -375,7 +415,7 @@ final readonly class ChatClientApiController
             $this->guard->notFound($request, $call);
         }
 
-        return $this->json(['message' => $this->presentMessages($call->principal->user, [$message], $call->contextKey)[0]]);
+        return $this->json(['message' => $this->presentMessages($call->principal->user, [$message], $call->contextKey, $call->principal->tokenId)[0]]);
     }
 
     /**
@@ -437,7 +477,7 @@ final readonly class ChatClientApiController
         $root = ChatThreads::rootOf($message);
         $page = $threads->page($user, $root, $before, $after);
         // Audit ZCI-v-L1: typed cards of the thread rendered with the request's context, as in the timeline.
-        $rows = $this->presentMessages($user, [$root, ...$page['replies']], $call->contextKey);
+        $rows = $this->presentMessages($user, [$root, ...$page['replies']], $call->contextKey, $call->principal->tokenId);
 
         return $this->json([
             'root'       => $rows[0],
@@ -517,21 +557,25 @@ final readonly class ChatClientApiController
         [$chat, $idempotency] = $this->writers();
         $key                  = $this->idempotencyKey($request);
         $text                 = $this->text($request, true);
+        $files                = $this->attachmentField($request);
         $user                 = $call->principal->user;
         $conversation         = $this->find($request, $call, $uuid);
         $this->deny(!$this->voter->decide(ChatVoter::SEND, $conversation, $user), 'read_only', Response::HTTP_FORBIDDEN);
         $context               = $call->contextKey;
+        $attachments           = $this->attachments;
         [$messages, $replayed] = $this->writing(static fn (): array => $idempotency->run(
             $user,
             self::scopedKey($call, $conversation, $key),
-            ChatIdempotency::hash(['client:send', $conversation->getUuid(), $text]),
+            ChatIdempotency::hash($files === [] ? ['client:send', $conversation->getUuid(), $text] : ['client:send', $conversation->getUuid(), $text, $files]),
             // Audit ZCI-M1: the host's canShare() sees the client API flag and the request's context.
-            static fn (Closure $before, Closure $after): array => [$chat->sendWith($user, $conversation, $text, $before, $after, $context, true)],
+            static fn (Closure $before, Closure $after): array => [$files === [] || !$attachments instanceof ChatAttachments
+                ? $chat->sendWith($user, $conversation, $text, $before, $after, $context, true)
+                : $attachments->sendWith($user, $conversation, $text, $files, $before, $after, $context, true)],
         ));
         $message = $messages[0] ?? $this->guard->notFound($request, $call);
         $this->guard->written($request, $call, ChatClientApiWriteEvent::SEND, $conversation->getUuid(), $message->getUuid(), $replayed);
 
-        return $this->json(['message' => $this->presentMessages($user, [$message], $call->contextKey)[0], 'replayed' => $replayed], $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
+        return $this->json(['message' => $this->presentMessages($user, [$message], $call->contextKey, $call->principal->tokenId)[0], 'replayed' => $replayed], $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
     }
 
     /**
@@ -568,7 +612,7 @@ final readonly class ChatClientApiController
         [$reply, $replayed] = $this->writing(static fn (): array => $threads->reply($user, $message, $text, self::scopedKey($call, $conversation, $key), $call->contextKey, true));
         $root               = ChatThreads::rootOf($reply);
         $this->guard->written($request, $call, ChatClientApiWriteEvent::THREAD_REPLY, $conversation->getUuid(), $reply->getUuid(), $replayed);
-        $rows = $this->presentMessages($user, [$reply, $root], $call->contextKey);
+        $rows = $this->presentMessages($user, [$reply, $root], $call->contextKey, $call->principal->tokenId);
 
         return $this->json(['message' => $rows[0], 'root' => $rows[1], 'replayed' => $replayed], $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
     }
@@ -652,7 +696,7 @@ final readonly class ChatClientApiController
         // The key promises this message (its uuid is in the request hash): the one read above, as the write left it.
         $this->guard->written($request, $call, ChatClientApiWriteEvent::EDIT, $conversation->getUuid(), $message->getUuid(), $replayed);
 
-        return $this->json(['message' => $this->presentMessages($user, [$message], $call->contextKey)[0], 'replayed' => $replayed]);
+        return $this->json(['message' => $this->presentMessages($user, [$message], $call->contextKey, $call->principal->tokenId)[0], 'replayed' => $replayed]);
     }
 
     /**
@@ -689,7 +733,186 @@ final readonly class ChatClientApiController
         ));
         $this->guard->written($request, $call, ChatClientApiWriteEvent::DELETE, $conversation->getUuid(), $message->getUuid(), $replayed);
 
-        return $this->json(['message' => $this->presentMessages($user, [$message], $call->contextKey)[0], 'replayed' => $replayed]);
+        return $this->json(['message' => $this->presentMessages($user, [$message], $call->contextKey, $call->principal->tokenId)[0], 'replayed' => $replayed]);
+    }
+
+    /**
+     * 2.7 (spec 259): uploads one file (multipart `file`) as a draft of the caller in the conversation; it is scanned
+     * before it can be sent (`state` goes `uploaded` → `clean`, or `blocked` / `failed`; poll `GET attachments/{uuid}`
+     * or listen to the `attachment` realtime event). Needs `chat:write`, `client_api.writes` and an `Idempotency-Key`.
+     *
+     * @return JsonResponse `{attachment}`: 201
+     */
+    #[Route('/conversations/{uuid}/attachments', name: 'attachment_upload', requirements: ['uuid' => self::UUID], methods: ['POST'])]
+    public function uploadAttachment(string $uuid, Request $request): JsonResponse
+    {
+        $call        = $this->guard->authenticate($request, ChatClientPrincipal::SCOPE_WRITE, ChatClientApiGuard::BUDGET_ACTION);
+        $attachments = $this->attachmentsOn();
+        $this->writers();
+        $key          = $this->idempotencyKey($request);
+        $user         = $call->principal->user;
+        $conversation = $this->find($request, $call, $uuid);
+        $this->deny($request->headers->has('Content-Encoding'), ChatAttachmentRefused::CONTENT_ENCODING, Response::HTTP_BAD_REQUEST);
+        $file = $request->files->get('file');
+        if ($file instanceof UploadedFile && in_array($file->getError(), [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
+            throw new ChatApiException(ChatAttachmentRefused::FILE_TOO_LARGE, Response::HTTP_REQUEST_ENTITY_TOO_LARGE);
+        }
+        $this->deny(!$file instanceof UploadedFile || !$file->isValid(), ChatAttachmentRefused::INVALID_FILE, Response::HTTP_BAD_REQUEST);
+        assert($file instanceof UploadedFile);
+        $person = $user->getChatPublicId();
+        $this->deny($this->uploadLimiter?->create('nowo_chat_upload_' . $person)->consume()->isAccepted() === false, 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        $this->deny($this->bytesLimiter?->create('nowo_chat_upload_bytes_' . $person)->consume(max(1, intdiv((int) $file->getSize() + 1023, 1024)))->isAccepted() === false, 'rate_limited', Response::HTTP_TOO_MANY_REQUESTS);
+        try {
+            $view = $attachments->upload($user, $conversation->getUuid(), $file->getPathname(), $file->getClientOriginalName(), self::scopedKey($call, $conversation, $key), $call->contextKey);
+        } catch (ChatAttachmentRefused $refused) {
+            throw new ChatApiException($refused->error, $refused->status, $refused);
+        } catch (ChatNotFoundException) {
+            $this->guard->notFound($request, $call);
+        }
+
+        return $this->json(['attachment' => $view->toArray()], Response::HTTP_CREATED);
+    }
+
+    /**
+     * 2.7: the caller's drafts in the conversation (any state but removed).
+     *
+     * @return JsonResponse `{attachments}`
+     */
+    #[Route('/conversations/{uuid}/attachments/drafts', name: 'attachment_drafts', requirements: ['uuid' => self::UUID], methods: ['GET'])]
+    public function attachmentDrafts(string $uuid, Request $request): JsonResponse
+    {
+        $call         = $this->guard->authenticate($request);
+        $attachments  = $this->attachmentsOn();
+        $conversation = $this->find($request, $call, $uuid);
+        try {
+            $drafts = $attachments->drafts($call->principal->user, $conversation->getUuid());
+        } catch (ChatNotFoundException) { // @codeCoverageIgnore
+            // Defensive: the context policy shows the conversation but the person may no longer read it.
+            $this->guard->notFound($request, $call); // @codeCoverageIgnore
+        }
+
+        return $this->json(['attachments' => array_map(static fn (ChatAttachmentView $view): array => $view->toArray(), $drafts)]);
+    }
+
+    /**
+     * 2.7: one file as the caller may see it, with fresh signed URLs when clean (the client asks again when they expire).
+     *
+     * @return JsonResponse `{attachment}`
+     */
+    #[Route('/attachments/{uuid}', name: 'attachment', requirements: ['uuid' => self::UUID], methods: ['GET'])]
+    public function attachment(string $uuid, Request $request): JsonResponse
+    {
+        $call        = $this->guard->authenticate($request);
+        $attachments = $this->attachmentsOn();
+        $user        = $call->principal->user;
+        try {
+            $view = $attachments->find($user, $uuid);
+        } catch (ChatNotFoundException) {
+            $this->guard->notFound($request, $call);
+        }
+        $this->find($request, $call, $view->conversationUuid);
+        $row = $view->state->value === 'clean' ? $this->signedFiles($user, [$view->toArray()], $call->principal->tokenId, $call->contextKey)[0] ?? null : null;
+
+        return $this->json(['attachment' => $row ?? $view->toArray()]);
+    }
+
+    /**
+     * 2.7: removes a draft, or a file of a message the caller may delete. Idempotent: 204.
+     */
+    #[Route('/attachments/{uuid}', name: 'attachment_remove', requirements: ['uuid' => self::UUID], methods: ['DELETE'])]
+    public function removeAttachment(string $uuid, Request $request): Response
+    {
+        $call        = $this->guard->authenticate($request, ChatClientPrincipal::SCOPE_WRITE, ChatClientApiGuard::BUDGET_ACTION);
+        $attachments = $this->attachmentsOn();
+        $user        = $call->principal->user;
+        try {
+            $view = $attachments->find($user, $uuid);
+            $this->find($request, $call, $view->conversationUuid);
+            // @igor-ignore - a write of the attachment rows (database), not a change of the service's state.
+            $attachments->remove($user, $uuid);
+        } catch (ChatNotFoundException) {
+            $this->guard->notFound($request, $call);
+        }
+
+        return new Response('', Response::HTTP_NO_CONTENT, ['Cache-Control' => 'no-store, private']);
+    }
+
+    /**
+     * 2.7: the download of a file: the URL is signed for this person, token and context (5 minutes) and the request
+     * carries the Bearer token too; access is checked again. 302 to a 60-second bucket URL, or the stream (206 for a
+     * range). Every refusal is an empty 404.
+     */
+    #[Route('/files/{uuid}/{variant}', name: 'file', requirements: ['uuid' => self::UUID, 'variant' => '[a-z]{1,16}'], methods: ['GET', 'HEAD'])]
+    public function file(string $uuid, string $variant, Request $request): Response
+    {
+        $call      = $this->guard->authenticate($request);
+        $downloads = $this->downloads;
+        if (!$downloads instanceof ChatAttachmentDownloads || !$this->attachments instanceof ChatAttachments) {
+            return ChatAttachmentDownloads::notFound();
+        }
+        try {
+            $view = $this->attachments->find($call->principal->user, $uuid);
+        } catch (ChatNotFoundException) {
+            return ChatAttachmentDownloads::notFound();
+        }
+        $conversation = $this->conversations->findOneByUuid($view->conversationUuid);
+        if (!$conversation instanceof ChatConversation || !$this->isVisible($call, $conversation)) {
+            return ChatAttachmentDownloads::notFound();
+        }
+
+        return $downloads->respond($request, $uuid, $variant, $call->principal->user, $call->principal->tokenId, $call->contextKey);
+    }
+
+    /** 2.7: the attachments (404 while they are off). */
+    private function attachmentsOn(): ChatAttachments
+    {
+        return $this->attachments ?? throw new ChatApiException('not_found', Response::HTTP_NOT_FOUND);
+    }
+
+    /**
+     * 2.7: the `attachments` field of a send: at most 20 uuids ([] when absent); 422 `attachment_invalid` otherwise.
+     *
+     * @return list<string>
+     */
+    private function attachmentField(Request $request): array
+    {
+        $value = $this->payload($request, self::MAX_WRITE_BODY_BYTES)[self::ATTACHMENTS_FIELD] ?? null;
+        if ($value === null) {
+            return [];
+        }
+        $this->deny(!is_array($value) || !array_is_list($value) || count($value) > 20, ChatAttachmentRefused::INVALID, Response::HTTP_UNPROCESSABLE_ENTITY);
+        $uuids = [];
+        foreach ($value as $uuid) {
+            $this->deny(!is_string($uuid) || preg_match('/^' . self::UUID . '\z/', $uuid) !== 1, ChatAttachmentRefused::INVALID, Response::HTTP_UNPROCESSABLE_ENTITY);
+            $uuids[$uuid] = $uuid;
+        }
+
+        return array_values($uuids);
+    }
+
+    /**
+     * 2.7: file stubs with their URLs signed for this token and context (`urls.original`, `expiresAt`).
+     *
+     * @param list<array<string, mixed>> $files
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function signedFiles(ChatUserInterface $user, array $files, ?string $tokenId, ?string $contextKey): array
+    {
+        $signed = [];
+        foreach ($files as $file) {
+            try {
+                $url = $this->attachments?->downloadUrl($user, (string) $file['uuid'], $tokenId ?? '', $contextKey);
+            } catch (ChatNotFoundException) { // @codeCoverageIgnore
+                // Defensive: the stubs are clean files of a message the caller reads (a block racing this request).
+                continue; // @codeCoverageIgnore
+            }
+            if ($url instanceof ChatAttachmentUrl) {
+                $signed[] = $file + ['urls' => ['original' => $url->url], 'expiresAt' => $url->expiresAt->format(DATE_ATOM)];
+            }
+        }
+
+        return $signed;
     }
 
     /**
@@ -728,6 +951,9 @@ final readonly class ChatClientApiController
     {
         try {
             return $write();
+        } catch (ChatAttachmentRefused $refused) {
+            // 2.7: the attachment codes as they are (dock and API share them).
+            throw new ChatApiException($refused->error, $refused->status, $refused);
         } catch (InvalidArgumentException $refused) {
             $code = $refused->getMessage();
             if ($code === 'not_found') {
@@ -770,6 +996,8 @@ final readonly class ChatClientApiController
     {
         $data   = $this->payload($request, self::MAX_WRITE_BODY_BYTES);
         $fields = $withCards && $this->cardsEnabled() ? [...self::WRITE_FIELDS, self::CARDS_FIELD] : self::WRITE_FIELDS;
+        // 2.7: `attachments` on a send while attachments are on (read by attachmentField()).
+        $fields = $withCards && $this->attachments instanceof ChatAttachments ? [...$fields, self::ATTACHMENTS_FIELD] : $fields;
         $extra  = array_keys(array_diff_key($data, array_flip($fields)));
         $this->deny($extra !== [], 'unsupported_field', Response::HTTP_UNPROCESSABLE_ENTITY);
         $text = $data['text'] ?? null;
@@ -983,8 +1211,10 @@ final readonly class ChatClientApiController
      *
      * @return list<array<string, mixed>>
      */
-    private function presentMessages(ChatUserInterface $user, array $page, ?string $contextKey = null): array
+    private function presentMessages(ChatUserInterface $user, array $page, ?string $contextKey = null, ?string $tokenId = null): array
     {
+        // 2.7 (spec 259): the page's clean files in one query, each with a URL signed for this token and context.
+        $files = $this->attachmentViews?->stubs($page);
         // 2.6: typed cards of the page rendered in one batch per type and conversation, once, with the API scope (audit
         // ZCI-L3: no second render with the web scope).
         $this->references?->prime($user, $page, $contextKey, true);
@@ -1005,7 +1235,11 @@ final readonly class ChatClientApiController
             foreach ($links as $url) {
                 $urls[$url] = $url;
             }
-            $rows[] = [$this->messageRow($message, $view, $body, $reactions[(int) $message->getId()] ?? [], $user), $links];
+            $row = $this->messageRow($message, $view, $body, $reactions[(int) $message->getId()] ?? [], $user);
+            if ($files !== null) {
+                $row['attachments'] = $this->signedFiles($user, $files[(int) $message->getId()] ?? [], $tokenId, $contextKey);
+            }
+            $rows[] = [$row, $links];
         }
         $previews = $this->previews($user, array_slice(array_values($urls), 0, self::PREVIEWS_MAX));
 

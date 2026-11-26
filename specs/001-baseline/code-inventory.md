@@ -1,8 +1,8 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-11-26 (2.6.0: 342 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
-**Production units**: **330/330** table rows below (2.6.0: +17 typed card and host slot units, see the last section; `ChatReferences`, `ChatReference`, `ChatService`, `ChatForwarder`, `ChatPresenter`, `ChatIdempotency`, `ChatMessageMenu`, `ChatPushDispatcher`, `ChatDigestDispatcher`, `ChatMessageSearch`, `ChatMessageTokens`, `ChatApiController`, `ChatClientApiController`, `ChatDockExtension`, `Configuration`, `NowoChatKitExtension`, the templates, `thread.ts`, `api.ts`, `index.ts`, `types.ts`, `dom.ts`, `message-menu.ts`, `nowo-chat.css` and the translations extended, `specs/005-secret-cards-slots/`; 2.5.0: +1 client API writes unit, `ChatClientApiWriteEvent`; `ChatClientApiController`, `ChatClientApiGuard`, `ChatService`, `ChatClientPrincipal`, `Configuration`, `NowoChatKitExtension` and `services.php` extended, `specs/004-client-api-writes/`; 2.4.1: +2 logout units, `ChatClientTokenRevokerInterface` and `ChatClientLoggedOutEvent`; 2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 342 files** the audit command returns (2026-11-26) are named in this file (some rows group several files or repeat one file under two sections)  
+**Last audited**: 2026-11-26 (2.7.0: 381 production files; 2.6.0: 342 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
+**Production units**: **369/369** table rows below (2.7.0: +39 attachment and secret hand-off units, see the last section; `ChatService`, `ChatPresenter`, `ChatNotifier`, `ChatForwarder`, `ChatConversationPurger`, `ChatPersonalData`, `ChatPurgeCommand`, `ChatMessageRepository`, `ChatDigestDispatcher`, `ChatPushDispatcher`, `ChatApiController`, `ChatPageController`, `ChatClientApiController`, `ChatDockExtension`, `UserReferenceListener`, `TablePrefixListener`, `Configuration`, `NowoChatKitExtension`, `services.php`, the templates, `thread.ts`, `thread-panel.ts`, `slots.ts`, `dock.ts`, `api.ts`, `types.ts`, `dom.ts`, `nowo-chat.css` and the translations extended, `specs/006-attachments/`; 2.6.0: +17 typed card and host slot units, see the last section; `ChatReferences`, `ChatReference`, `ChatService`, `ChatForwarder`, `ChatPresenter`, `ChatIdempotency`, `ChatMessageMenu`, `ChatPushDispatcher`, `ChatDigestDispatcher`, `ChatMessageSearch`, `ChatMessageTokens`, `ChatApiController`, `ChatClientApiController`, `ChatDockExtension`, `Configuration`, `NowoChatKitExtension`, the templates, `thread.ts`, `api.ts`, `index.ts`, `types.ts`, `dom.ts`, `message-menu.ts`, `nowo-chat.css` and the translations extended, `specs/005-secret-cards-slots/`; 2.5.0: +1 client API writes unit, `ChatClientApiWriteEvent`; `ChatClientApiController`, `ChatClientApiGuard`, `ChatService`, `ChatClientPrincipal`, `Configuration`, `NowoChatKitExtension` and `services.php` extended, `specs/004-client-api-writes/`; 2.4.1: +2 logout units, `ChatClientTokenRevokerInterface` and `ChatClientLoggedOutEvent`; 2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 381 files** the audit command returns (2026-11-26) are named in this file (some rows group several files or repeat one file under two sections)  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -46,7 +46,8 @@
 | Sources added 1.34–2.2 (sweep 2026-11-22) | 54 |
 | Client API v1 (2.4, 2.4.1, 2.5) | 16 |
 | Typed cards and host slots (2.6) | 17 |
-| **Total** | **342** |
+| Attachments and the secret hand-off (2.7) | 39 |
+| **Total** | **381** |
 
 ## Bundle, configuration & DI
 
@@ -518,3 +519,47 @@ The 54 files below were added by releases 1.34–2.2 without an inventory row. T
 | `src/Model/ChatComposerScope.php` | 2.6: the scope of composer actions and menu slots (scalars) | FR-SLOT-001, FR-SLOT-002 |
 | `src/Model/ChatMenuSlot.php` | 2.6: a message menu slot (target, card types, own only, dialog path) | FR-SLOT-002 |
 | `src/Resources/assets/src/slots.ts` | 2.6: dock side of cards and slots: card tray, insert-card, slot dialog, selection payload, before-send | FR-SLOT-001..003 |
+
+## Attachments and the secret hand-off (2.7)
+
+| File | Role | Spec |
+| --- | --- | --- |
+| `src/Attachment/ChatAttachments.php` | 2.7: the default `ChatAttachmentsInterface`: upload (bytes before any lock), send with files under the conversation lock, remove, block, signed URLs, visibility | FR-ATT-001..005 |
+| `src/Attachment/ChatAttachmentScan.php` | 2.7: the mandatory scan: CAS claim, bounded stream to the host scanner, CAS verdict, backoff, fail-closed | FR-ATT-002 |
+| `src/Attachment/ChatAttachmentObjects.php` | 2.7: removes the StorageKit objects of deleted and blocked files after the commit (handler of `RemoveChatAttachmentObjects`) | FR-ATT-006 |
+| `src/Attachment/ChatAttachmentCleanup.php` | 2.7: files go with their message (in the caller's unit), GDPR export of uploads, after-commit removal queue | FR-ATT-006, FR-ATT-007 |
+| `src/Attachment/ChatAttachmentDownloads.php` | 2.7: one signed download: signature, live access, clean state, budget; StorageKit range delivery (60 s) | FR-ATT-004 |
+| `src/Attachment/ChatAttachmentFileContext.php` | 2.7: StorageKit context `chat`: `readable()` = [], write access and the host's bucket scope | FR-ATT-001 |
+| `src/Attachment/ChatAttachmentOptions.php` | 2.7: the `attachments` options (limits, scan, download) and the effective size limit | FR-ATT-008 |
+| `src/Attachment/ChatAttachmentRefused.php` | 2.7: a refusal with a stable code and its HTTP status | FR-ATT-001, FR-ATT-003 |
+| `src/Attachment/ChatAttachmentSigner.php` | 2.7: HMAC-SHA256 URL signatures (HKDF key from `kernel.secret`) | FR-ATT-004 |
+| `src/Attachment/ChatAttachmentTypes.php` | 2.7: name sanitizer, sniffing (magic and extension must agree) and the allow-list groups | FR-ATT-001 |
+| `src/Attachment/ChatAttachmentViews.php` | 2.7: the clean files of a page of messages in one query | FR-ATT-005 |
+| `src/Attachment/ChatAttachmentsSweepCommand.php` | 2.7: `nowo:chat:attachments:sweep`: re-queue, fail exhausted, purge stale drafts, remove objects, alert | FR-ATT-002, FR-ATT-006 |
+| `src/Attachment/Message/ScanChatAttachment.php` | 2.7: Messenger message of one scan (id only) | FR-ATT-002 |
+| `src/Attachment/Message/RemoveChatAttachmentObjects.php` | 2.7: Messenger message of an object removal (ids only) | FR-ATT-006 |
+| `src/Contract/ChatAttachmentScannerInterface.php` | 2.7: host port of the mandatory scanner | FR-ATT-002 |
+| `src/Contract/ChatAttachmentPolicyInterface.php` | 2.7: host port "may attach here" (FR-010; deny unless it allows, upload and send) | FR-ATT-011 |
+| `src/Contract/ChatAttachmentScopeResolverInterface.php` | 2.7: host port of the bucket scope and owner of a conversation (QB-259-3) | FR-ATT-001 |
+| `src/Contract/ChatAttachmentsInterface.php` | 2.7: attachments by public uuid for DDD hosts | FR-ATT-001..005 |
+| `src/Controller/ChatAttachmentController.php` | 2.7: dock routes: upload, drafts, one file with a signed URL, remove (404 while off) | FR-ATT-001, FR-ATT-005 |
+| `src/Controller/ChatFileController.php` | 2.7: `GET <prefix>/files/{uuid}/{variant}`: the signed web download | FR-ATT-004 |
+| `src/Entity/ChatAttachment.php` | 2.7: the `nowo_chat_attachment` row (schema and the savepoint insert) | FR-ATT-001 |
+| `src/Enum/ChatAttachmentKind.php` | 2.7: what a file is | FR-ATT-001 |
+| `src/Enum/ChatAttachmentState.php` | 2.7: uploaded, scanning, clean, blocked, failed, deleted | FR-ATT-002 |
+| `src/Enum/ChatScanOutcome.php` | 2.7: the scanner's answer (no fail-open value) | FR-ATT-002 |
+| `src/Event/ChatAttachmentUploadedEvent.php` | 2.7: a draft was stored (ids only) | FR-ATT-009 |
+| `src/Event/ChatAttachmentScannedEvent.php` | 2.7: a scan ended | FR-ATT-009 |
+| `src/Event/ChatAttachmentBlockedEvent.php` | 2.7: a file was blocked (scan or host) | FR-ATT-009 |
+| `src/Event/ChatAttachmentRemovedEvent.php` | 2.7: a person removed a file | FR-ATT-009 |
+| `src/Event/ChatAttachmentDownloadedEvent.php` | 2.7: a download (`audit_downloads`) | FR-ATT-009 |
+| `src/Event/ChatAttachmentScanOverdueEvent.php` | 2.7: the 5-minute scan alert hook (QB-259-2) | FR-ATT-002 |
+| `src/Model/ChatAttachmentUrl.php` | 2.7: a signed URL and its expiry | FR-ATT-004 |
+| `src/Model/ChatAttachmentView.php` | 2.7: a file view (JSON shape shared by dock and API) | FR-ATT-005 |
+| `src/Model/ChatFileStream.php` | 2.7: bounded, non-copyable stream handed to the scanner | FR-ATT-002 |
+| `src/Model/ChatScanSubject.php` | 2.7: one file for the scanner (never its name) | FR-ATT-002 |
+| `src/Model/ChatScanVerdict.php` | 2.7: the scanner's verdict (engine, signature clipped) | FR-ATT-002 |
+| `src/Model/ChatStorageTarget.php` | 2.7: bucket scope and owner of a conversation | FR-ATT-001 |
+| `src/Repository/ChatAttachmentRepository.php` | 2.7: every attachment read and CAS write (DBAL, savepoints) | FR-ATT-002, FR-ATT-003 |
+| `src/Resources/assets/src/attachments.ts` | 2.7: dock tray (upload, states, send when ready), file cards, signed downloads | FR-ATT-005 |
+| `src/Resources/assets/src/secret-handoff.ts` | 2.7: "Send as a secret": probe, hand-off event, inline warning (D-20261126-11) | FR-HANDOFF-001 |

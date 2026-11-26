@@ -5517,3 +5517,96 @@ body.nowo-chat-dock-shown.nowo-chat-dock-reserve {
     min-block-size: 44px;
   }
 }
+
+/* 2.7 (spec 259): attachments — the composer's draft tray and a message's file cards. */
+.nowo-chat-attachtray {
+  margin: 0 0 4px;
+}
+
+.nowo-chat-files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nowo-chat-files--draft {
+  flex-flow: row wrap;
+  margin: 0;
+}
+
+.nowo-chat-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 2px 2px 8px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+  color: var(--nowo-chat-text);
+}
+
+.nowo-chat-file__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowo-chat-file__size,
+.nowo-chat-file__state {
+  color: color-mix(in srgb, var(--nowo-chat-text) 72%, var(--nowo-chat-surface));
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.nowo-chat-file[data-state="blocked"],
+.nowo-chat-file[data-state="failed"],
+.nowo-chat-file[data-state="error"] {
+  border-style: dashed;
+}
+
+.nowo-chat-file__progress {
+  inline-size: 4rem;
+  accent-color: var(--nowo-chat-accent, currentcolor);
+}
+
+.nowo-chat-file__remove,
+.nowo-chat-file__download {
+  /* WCAG 2.5.8: at least 24 × 24. */
+  min-inline-size: 24px;
+  min-block-size: 24px;
+}
+
+.nowo-chat-files__note:empty {
+  display: none;
+}
+
+.nowo-chat-files__note {
+  margin: 2px 0 0;
+  font-size: 0.85em;
+}
+
+/* 2.7 (D-20261126-11): the inline secret warning (primary action first). */
+.nowo-chat-secret-warning {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 8px;
+  border: 1px solid var(--nowo-chat-border);
+  border-radius: var(--nowo-chat-radius-control);
+  background: var(--nowo-chat-surface);
+}
+
+.nowo-chat-secret-warning__text {
+  margin: 0;
+}
+
+.nowo-chat-secret-warning__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

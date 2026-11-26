@@ -183,6 +183,20 @@ manager. Igor: no new mutable property or static.
 `ChatCardsWorkerTest` grants and revokes a card at every request for 300 rounds on one kernel (no services resetter):
 each request renders the card as the host answers it then, and memory stays flat. Igor: 0 KO, 0 WARN.
 
+## 2.7.0 additions: attachments (2026-11-26)
+
+| Service | State | Verdict |
+| --- | --- | --- |
+| `ChatAttachments`, `ChatAttachmentScan`, `ChatAttachmentObjects`, `ChatAttachmentCleanup`, `ChatAttachmentDownloads`, `ChatAttachmentViews`, `ChatAttachmentFileContext` | `final readonly`, collaborators only; rows re-read by id or uuid on every call, never kept | Safe |
+| `ChatAttachmentSigner` | the HMAC key derived from `kernel.secret` once in the constructor (constant container data) | Safe |
+| `ChatAttachmentOptions`, `ChatAttachmentTypes` | configuration built at container build; `effectiveMaxBytes()` reads php.ini on every call | Safe |
+| `ChatFileStream` | per-call value object over StorageKit's `FileStream`, closed in `finally` (and on destruct); not cloneable or serializable | Safe |
+| `ChatAttachmentsSweepCommand` | none | Safe |
+
+Upload bytes stay in PHP's own temporary file (read, never moved); nothing is buffered in a service. The scanner
+contract forbids keeping the stream. `ChatAttachmentsWorkerTest` uploads, scans, sends and downloads for 300 rounds on
+one kernel with a block every other round: access follows the rows on every request and memory stays flat. Igor: 0 KO.
+
 ## Rules for future code
 
 - Keep presence, typing and counters in storage (database / cache pool / Mercure), never in service properties.

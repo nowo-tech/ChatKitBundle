@@ -22,6 +22,7 @@ final readonly class ChatDraft
      * @param ChatMessage|null $forwardOf The message it forwards (its text, mentions already plain); null: the author's own text
      * @param string|null $cardContext 2.6 (audit ZCI-M1): the client API context the author writes from (card `canShare()` scope)
      * @param bool $cardApi 2.6 (audit ZCI-M1): written through the client API (card `canShare()` scope)
+     * @param bool $allowEmpty 2.7 (spec 259): the text may be empty (the message carries files)
      */
     public function __construct(
         public ChatConversation $conversation,
@@ -30,6 +31,7 @@ final readonly class ChatDraft
         public ?ChatMessage $forwardOf = null,
         public ?string $cardContext = null,
         public bool $cardApi = false,
+        public bool $allowEmpty = false,
     ) {
     }
 }

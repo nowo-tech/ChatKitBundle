@@ -41,6 +41,34 @@ function respond(body: unknown, ok = true, status = 200) {
 describe('chat api client', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('uploads, lists, reads and removes attachments; a send names its files (2.7)', async () => {
+    const files = { ...config, attachments: { upload: '/u/__uuid__', drafts: '/d/__uuid__', attachment: '/a/__uuid__', maxBytes: 9, maxPerMessage: 2, extensions: ['md'] } } as unknown as ChatConfig;
+    const api = new ChatApi(files);
+    const draft = { uuid: 'f1', name: 'a.md', extension: 'md', mediaType: 'text/markdown', kind: 'markdown', size: 3, state: 'uploaded' };
+    const fetchMock = respond({ attachment: draft, attachments: [draft], url: '/x', message: { id: 1 } });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await api.uploadAttachment('c 1', new File(['abc'], 'a.md'), 'k1')).toEqual(draft);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit & { headers: Record<string, string> }];
+    expect(url).toBe('/u/c%201');
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(init.headers['Idempotency-Key']).toBe('k1');
+    expect(init.headers['X-CSRF-TOKEN']).toBe('tok');
+    expect(init.headers['Content-Type']).toBeUndefined();
+    expect(await api.attachmentDrafts('c')).toEqual([draft]);
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('/d/c');
+    expect((await api.attachment('f1')).url).toBe('/x');
+    await api.removeAttachment('f1');
+    expect(fetchMock.mock.calls[3]?.[0]).toBe('/a/f1');
+    expect((fetchMock.mock.calls[3]?.[1] as RequestInit).method).toBe('DELETE');
+    await api.send('c', '', ['f1']);
+    expect(JSON.parse(String((fetchMock.mock.calls[4]?.[1] as RequestInit).body))).toEqual({ body: '', attachments: ['f1'] });
+    await api.send('c', 'hi');
+    expect(JSON.parse(String((fetchMock.mock.calls[5]?.[1] as RequestInit).body))).toEqual({ body: 'hi' });
+    // Off: no endpoint.
+    vi.stubGlobal('fetch', respond({ attachments: [] }));
+    await new ChatApi(config).attachmentDrafts('c');
+  });
+
   it('reads the slots of a conversation and one card (2.6)', async () => {
     const off = new ChatApi(config);
     vi.stubGlobal('fetch', vi.fn());

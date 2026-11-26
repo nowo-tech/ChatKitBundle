@@ -385,6 +385,29 @@ chat:
   support_reopen: 'Heropenen'
   support_read_only_ticket: 'Dit ticket is gesloten. Open Support om een nieuw te starten.'
   support_ticket_label: 'Ticket %number% · %topic% · %status%'
+  # 2.7 (spec 259): attachments; D-20261126-11: the secret hand-off of the before-send warning.
+  attachment:
+    preview: '📎 Bijlage'
+    attach: 'Bestand bijvoegen'
+    attach_hint: 'Bestanden bijvoegen (elk tot %max%)'
+    scanning: 'Wordt gecontroleerd…'
+    uploading: 'Wordt geüpload…'
+    clean: 'Klaar'
+    blocked: 'Geblokkeerd: dit bestand is niet toegestaan'
+    failed: 'Kon niet worden gecontroleerd, probeer opnieuw of verwijder het'
+    remove: 'Bestand verwijderen'
+    download: 'Downloaden'
+    too_large: 'Dit bestand is groter dan %max%.'
+    not_allowed: 'Dit bestandstype is niet toegestaan.'
+    too_many: 'Maximaal %max% bestanden per bericht.'
+    error: 'Het bestand kon niet worden geüpload.'
+    waiting: 'Wordt verzonden zodra de bestanden zijn gecontroleerd…'
+    files: 'Bestanden'
+  secret_handoff:
+    send: 'Als geheim verzenden'
+    send_anyway: 'Toch verzenden'
+    warning: 'Dit lijkt op een geheim.'
+    label: 'Geheimwaarschuwing'
 support:
   topic:
     incident: 'Storing / bug'

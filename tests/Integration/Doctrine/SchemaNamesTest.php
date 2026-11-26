@@ -117,6 +117,27 @@ final class SchemaNamesTest extends TestCase
     }
 
     private const array DEFAULT_NAMES = [
+        'nowo_chat_attachment' => [
+            'indexes' => [
+                'IDX_A3D5E65616678C77'             => 'uploader_id',
+                'IDX_A3D5E656537A1329'             => 'message_id',
+                'IDX_A3D5E6569AC0396'              => 'conversation_id',
+                'idx_nowo_chat_attachment_conv'    => 'conversation_id,state,id',
+                'idx_nowo_chat_attachment_created' => 'created_at',
+                'idx_nowo_chat_attachment_drafts'  => 'uploader_id,state,message_id',
+                'idx_nowo_chat_attachment_msg'     => 'message_id,position',
+                'idx_nowo_chat_attachment_pending' => 'state,lease_until',
+            ],
+            'unique' => [
+                'uniq_nowo_chat_attachment_idem' => 'uploader_id,idempotency_key',
+                'uniq_nowo_chat_attachment_uuid' => 'uuid',
+            ],
+            'fk' => [
+                'FK_A3D5E65616678C77' => 'uploader_id -> test_user',
+                'FK_A3D5E656537A1329' => 'message_id -> nowo_chat_message',
+                'FK_A3D5E6569AC0396'  => 'conversation_id -> nowo_chat_conversation',
+            ],
+        ],
         'nowo_chat_conversation' => [
             'indexes' => [
                 'IDX_D7385CFF6713A32B'                => 'resolved_by_id',
@@ -310,6 +331,27 @@ final class SchemaNamesTest extends TestCase
     ];
 
     private const array CHAT_NAMES = [
+        'chat_attachment' => [
+            'indexes' => [
+                'IDX_BEAE9C1D16678C77'        => 'uploader_id',
+                'IDX_BEAE9C1D537A1329'        => 'message_id',
+                'IDX_BEAE9C1D9AC0396'         => 'conversation_id',
+                'idx_chat_attachment_conv'    => 'conversation_id,state,id',
+                'idx_chat_attachment_created' => 'created_at',
+                'idx_chat_attachment_drafts'  => 'uploader_id,state,message_id',
+                'idx_chat_attachment_msg'     => 'message_id,position',
+                'idx_chat_attachment_pending' => 'state,lease_until',
+            ],
+            'unique' => [
+                'uniq_chat_attachment_idem' => 'uploader_id,idempotency_key',
+                'uniq_chat_attachment_uuid' => 'uuid',
+            ],
+            'fk' => [
+                'FK_BEAE9C1D16678C77' => 'uploader_id -> test_user',
+                'FK_BEAE9C1D537A1329' => 'message_id -> chat_message',
+                'FK_BEAE9C1D9AC0396'  => 'conversation_id -> chat_conversation',
+            ],
+        ],
         'chat_conversation' => [
             'indexes' => [
                 'IDX_74654F686713A32B'           => 'resolved_by_id',

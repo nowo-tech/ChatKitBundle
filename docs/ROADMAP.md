@@ -82,7 +82,7 @@ Status: **Yes** shipped · **1.35** merged, release pending · **1.36** planned 
 | Mentions | `@user`, `@channel`, `@here` | Yes |
 | Mentions | Mentions of user groups | No |
 | Mentions | Mentions and activity view | No |
-| Media | File and image attachments | No |
+| Media | File and image attachments | 2.7 (files, scan, signed downloads); previews 2.8 |
 | Media | Voice notes, short recorded clips | No |
 | Media | Link previews | Partial (host provider) |
 | Read state | Read receipts, typing | Yes |
@@ -124,9 +124,9 @@ Highest value for a team or business chat, building on what exists.
 
 ### Attachments and media
 
-- **File and image attachments.** Stored through StorageKit, with size, type and count limits, a mandatory host scan
-  hook that must pass before anyone can see a file, and per-reader access checks; images get thumbnails. It is the largest gap: work chat is often about a document or a
-  screenshot.
+- **File and image attachments.** Done in 2.7 (spec 259 block B): StorageKit, limits, a mandatory fail-closed scan,
+  per-reader signed downloads. Next (2.8): previews (image thumbnails and lightbox, PDF thumbnail and viewer, Markdown /
+  text / code cards), link unfurls and file names in push.
 - **Attachment gallery per conversation.** A "Files" tab next to the link index; people find a shared file without
   scrolling.
 

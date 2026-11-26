@@ -24,6 +24,7 @@ use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Clock\Clock;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 use function is_int;
 
@@ -44,6 +45,7 @@ final readonly class ChatDigestDispatcher
      * @param int $intervalMinutes Minimum minutes between two digests to the same user
      * @param ChatParticipantRepository|null $participants 1.24: the user's participant rows (muted conversations are left out); null: none is
      * @param ClockInterface $clock 1.24: clock of the mute check
+     * @param TranslatorInterface|null $translator 2.7: the generic line of a message of files only
      * @param ChatReferences|null $references Shows #references as the recipient may see them
      */
     public function __construct(
@@ -62,6 +64,7 @@ final readonly class ChatDigestDispatcher
         private ?ChatReferences $references = null,
         private ?ChatParticipantRepository $participants = null,
         private ClockInterface $clock = new Clock(),
+        private ?TranslatorInterface $translator = null,
     ) {
     }
 
@@ -128,7 +131,9 @@ final readonly class ChatDigestDispatcher
                     $last === null, $last->isDeleted(), $last->isBuzz() => '',
                     // 1.24: a system line is its translated text.
                     $last->isSystem() => mb_substr($this->presenter->botText($last), 0, 140),
-                    default           => $this->preview($last->getBody(), $user, $conversation),
+                    // 2.7 (spec 259): a message of files only: the generic line (never a file name).
+                    $last->getBody() === '' => $this->fileLine($user),
+                    default                 => $this->preview($last->getBody(), $user, $conversation),
                 },
                 str_replace('{uuid}', $conversation->getUuid(), $this->urlTemplate),
             );
@@ -141,6 +146,12 @@ final readonly class ChatDigestDispatcher
     }
 
     /** Plain text of the last message in the recipient's locale (#references as the recipient may see them). */
+    /** 2.7: the generic line of a message of files only, in the recipient's locale. */
+    private function fileLine(ChatUserInterface $user): string
+    {
+        return $this->translator?->trans('chat.attachment.preview', [], 'NowoChatKitBundle', $user->getChatLocale()) ?? '📎';
+    }
+
     private function preview(string $body, ChatUserInterface $user, ChatConversation $conversation): string
     {
         return $this->references instanceof ChatReferences

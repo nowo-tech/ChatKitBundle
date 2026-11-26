@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\DependencyInjection;
 
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentOptions;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentTypes;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Doctrine\TablePrefixListener;
 use Nowo\ChatKitBundle\Entity\ChatUserSettings;
@@ -70,34 +72,38 @@ final class Configuration implements ConfigurationInterface
         'tuck'        => 'tabler:arrow-bar-to-right',
         'close'       => 'tabler:x',
         'send'        => 'tabler:send',
-        'back'        => 'tabler:arrow-left',
-        'arrowDown'   => 'tabler:arrow-down',
-        'search'      => 'tabler:search',
-        'hash'        => 'tabler:hash',
-        'lifebuoy'    => 'tabler:lifebuoy',
-        'retry'       => 'tabler:refresh',
-        'buzz'        => 'tabler:bolt',
-        'smile'       => 'tabler:mood-smile',
-        'bookmark'    => 'tabler:bookmark',
-        'check'       => 'tabler:check',
-        'edit'        => 'tabler:pencil',
-        'trash'       => 'tabler:trash',
-        'ban'         => 'tabler:ban',
-        'link'        => 'tabler:link',
-        'external'    => 'tabler:external-link',
-        'archive'     => 'tabler:archive',
-        'unarchive'   => 'tabler:arrow-back-up',
-        'pin'         => 'tabler:pin',
-        'format'      => 'tabler:typography',
-        'quick'       => 'tabler:message-bolt',
-        'bold'        => 'tabler:bold',
-        'italic'      => 'tabler:italic',
-        'strike'      => 'tabler:strikethrough',
-        'code'        => 'tabler:code',
-        'quote'       => 'tabler:quote',
-        'list'        => 'tabler:list',
-        'help'        => 'tabler:help',
-        'auto'        => 'tabler:clock-play',
+        // 2.7 (spec 259): attachments.
+        'paperclip' => 'tabler:paperclip',
+        'file'      => 'tabler:file',
+        'download'  => 'tabler:download',
+        'back'      => 'tabler:arrow-left',
+        'arrowDown' => 'tabler:arrow-down',
+        'search'    => 'tabler:search',
+        'hash'      => 'tabler:hash',
+        'lifebuoy'  => 'tabler:lifebuoy',
+        'retry'     => 'tabler:refresh',
+        'buzz'      => 'tabler:bolt',
+        'smile'     => 'tabler:mood-smile',
+        'bookmark'  => 'tabler:bookmark',
+        'check'     => 'tabler:check',
+        'edit'      => 'tabler:pencil',
+        'trash'     => 'tabler:trash',
+        'ban'       => 'tabler:ban',
+        'link'      => 'tabler:link',
+        'external'  => 'tabler:external-link',
+        'archive'   => 'tabler:archive',
+        'unarchive' => 'tabler:arrow-back-up',
+        'pin'       => 'tabler:pin',
+        'format'    => 'tabler:typography',
+        'quick'     => 'tabler:message-bolt',
+        'bold'      => 'tabler:bold',
+        'italic'    => 'tabler:italic',
+        'strike'    => 'tabler:strikethrough',
+        'code'      => 'tabler:code',
+        'quote'     => 'tabler:quote',
+        'list'      => 'tabler:list',
+        'help'      => 'tabler:help',
+        'auto'      => 'tabler:clock-play',
         // 1.19: the Links panel button; the provider icons (`provider_<key>`) come from `links.providers`.
         'links' => 'tabler:link',
         'video' => 'tabler:video',
@@ -473,8 +479,13 @@ final class Configuration implements ConfigurationInterface
                                         ->info('Also suppress the dock while a modal <dialog> or a visible [aria-modal="true"] element is open outside it (MutationObserver).')
                                         ->defaultFalse()
                                     ->end()
+                                    ->booleanNode('secret_handoff')
+                                        ->info('2.7 (D-20261126-11): the secret warning of nowo-chat:before-send may offer "Send as a secret", handing the draft to the host in the browser (nowo-chat:secret-handoff) when the host also answers the nowo-chat:secret-handoff-probe event. false: as in 2.6.')
+                                        ->defaultFalse()
+                                    ->end()
                                 ->end()
                             ->end()
+                            ->append($this->attachmentsNode())
                             ->append($this->linksNode())
                             ->append($this->clientApiNode())
                             ->append($this->searchNode())
@@ -518,6 +529,93 @@ final class Configuration implements ConfigurationInterface
             ->end();
 
         return $treeBuilder;
+    }
+
+    /**
+     * `attachments` (2.7, spec 259 block B): files in messages through nowo-tech/storage-kit-bundle ^2.2, with a
+     * mandatory host scan. Off by default; on needs a scanner, StorageKit and symfony/messenger (the build fails without).
+     */
+    private function attachmentsNode(): ArrayNodeDefinition
+    {
+        $node = (new TreeBuilder('attachments'))->getRootNode();
+        $node
+            ->info('2.7: file attachments (StorageKit, mandatory scan, quarantine until clean, signed downloads). See docs/USAGE.md, "Attachments".')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->booleanNode('enabled')->defaultFalse()->end()
+                ->scalarNode('scanner')
+                    ->info('Service id of a Nowo\\ChatKitBundle\\Contract\\ChatAttachmentScannerInterface. Required with enabled (fail-closed scan).')
+                    ->defaultNull()
+                ->end()
+                ->scalarNode('policy')
+                    ->info('FR-010: service id of a Nowo\\ChatKitBundle\\Contract\\ChatAttachmentPolicyInterface (may this person attach here; deny unless it allows). null: whoever may write may attach.')
+                    ->defaultNull()
+                ->end()
+                ->scalarNode('scope_resolver')
+                    ->info('Service id of a Nowo\\ChatKitBundle\\Contract\\ChatAttachmentScopeResolverInterface (bucket scope and owner of a conversation). null: the instance bucket.')
+                    ->defaultNull()
+                ->end()
+                ->integerNode('max_bytes')
+                    ->info('Largest file (bytes); also capped by PHP upload_max_filesize / post_max_size and StorageKit upload.files.max_bytes. Per instance: %env(int:…)%.')
+                    ->defaultValue(ChatAttachmentOptions::DEFAULT_MAX_BYTES)->min(1)->max(ChatAttachmentOptions::CEILING)
+                ->end()
+                ->integerNode('max_per_message')->defaultValue(10)->min(1)->max(20)->end()
+                ->integerNode('max_pending_per_user')->info('Drafts (uploaded, not sent) per person.')->defaultValue(20)->min(1)->max(200)->end()
+                ->integerNode('pending_ttl_hours')->info('Unsent drafts are removed by nowo:chat:attachments:sweep after this.')->defaultValue(24)->min(1)->max(720)->end()
+                ->arrayNode('types')
+                    ->info('Groups of allowed files: ' . implode(', ', ChatAttachmentTypes::GROUPS) . ' (archive is opt-in; SVG / HTML pages / executables are never in a group).')
+                    ->scalarPrototype()
+                        ->validate()
+                            ->ifNotInArray(ChatAttachmentTypes::GROUPS)
+                            ->thenInvalid('Unknown attachment type group %s.')
+                        ->end()
+                    ->end()
+                    ->defaultValue(ChatAttachmentTypes::DEFAULT_GROUPS)
+                ->end()
+                ->arrayNode('extra_types')
+                    ->info('Extra extensions (kind "other", always a download): extension => media type; the sniffed type must equal it.')
+                    ->useAttributeAsKey('extension')
+                    ->scalarPrototype()->end()
+                    ->defaultValue([])
+                ->end()
+                ->arrayNode('scan')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->integerNode('timeout_seconds')->info('What the scanner is asked to answer within (it runs in a Messenger worker).')->defaultValue(60)->min(1)->max(600)->end()
+                        ->integerNode('lease_seconds')->info('How long one worker owns a file\'s scan; must exceed timeout_seconds.')->defaultValue(300)->min(30)->max(3600)->end()
+                        ->integerNode('max_attempts')->info('Scan attempts before the file is "failed" (never served).')->defaultValue(5)->min(1)->max(20)->end()
+                        ->enumNode('unscannable')->info('block (default, Q-259-12) or allow files the engine cannot inspect.')->values(['block', 'allow'])->defaultValue('block')->end()
+                        ->integerNode('alert_after_seconds')->info('Waiting time that makes the sweep dispatch ChatAttachmentScanOverdueEvent (QB-259-2: 5 minutes).')->defaultValue(300)->min(60)->end()
+                    ->end()
+                ->end()
+                ->arrayNode('download')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->integerNode('url_ttl_seconds')->info('Lifetime of a signed download URL.')->defaultValue(300)->min(30)->max(3600)->end()
+                        ->booleanNode('bind_session')->info('Web URLs also need the signed-in reader\'s session (Q-259-5 A).')->defaultTrue()->end()
+                        ->integerNode('storage_ttl_seconds')->info('Lifetime of the bucket URL StorageKit pre-signs behind a download.')->defaultValue(60)->min(10)->max(300)->end()
+                    ->end()
+                ->end()
+                ->booleanNode('audit_downloads')->info('Dispatch ChatAttachmentDownloadedEvent on every download.')->defaultFalse()->end()
+                ->arrayNode('limits')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->integerNode('uploads_per_minute')->defaultValue(20)->min(1)->end()
+                        ->integerNode('upload_bytes_per_hour')->defaultValue(524_288_000)->min(1_048_576)->end()
+                        ->integerNode('downloads_per_minute')->defaultValue(600)->min(1)->end()
+                    ->end()
+                ->end()
+            ->end()
+            ->validate()
+                ->ifTrue(static fn (array $config): bool => $config['enabled'] === true && !is_string($config['scanner']))
+                ->thenInvalid('attachments.enabled needs attachments.scanner: the scan is mandatory (fail-closed). See docs/USAGE.md, "Attachments".')
+            ->end()
+            ->validate()
+                ->ifTrue(static fn (array $config): bool => $config['scan']['lease_seconds'] <= $config['scan']['timeout_seconds'])
+                ->thenInvalid('attachments.scan.lease_seconds must be larger than attachments.scan.timeout_seconds.')
+            ->end();
+
+        return $node;
     }
 
     /**

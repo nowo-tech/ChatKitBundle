@@ -10,6 +10,7 @@
 - [Retention from the application (1.31)](#retention-from-the-application-131)
 - [Retention from a runtime setting (1.32)](#retention-from-a-runtime-setting-132)
 - [Rate limits](#rate-limits)
+- [Attachments (2.7)](#attachments-27)
 - [Client API (2.4)](#client-api-24)
 - [Private entity manager](#private-entity-manager)
 - [Container parameters](#container-parameters)
@@ -264,6 +265,49 @@ Prepended as `framework.rate_limiter` limiters (sliding window), keyed by the us
 | `limits.buzz_per_minute` | `nowo_chat_buzz_global` | 10 |
 | `limits.searches_per_minute` | `nowo_chat_search` (1.37, at least 3: message searches of the page and the API, key `nowo_chat_search_page_<public id>`; the SearchKit palette has its own bucket of the same size, key `nowo_chat_search_palette_<public id>`, one token per call since 1.38; 1.38: the SearchKit Conversations group has its own bucket too, key `nowo_chat_search_conversations_<public id>`, one token per call) | 30 |
 | `limits.mention_all_per_hour` | `nowo_chat_mention_all` (1.24: `@channel` / `@here` per writer, when the channel provider allows them; over it the message is sent without the group mention) | 6 |
+
+## Attachments (2.7)
+
+```yaml
+nowo_chat_kit:
+  profiles:
+    default:
+      attachments:
+        enabled: false                 # off by default
+        scanner: ~                     # ChatAttachmentScannerInterface service id; required with enabled
+        policy: ~                      # ChatAttachmentPolicyInterface service id (FR-010): deny unless it allows; null: writers may attach
+        scope_resolver: ~              # ChatAttachmentScopeResolverInterface service id (bucket scope and owner)
+        max_bytes: 26214400            # 25 MiB; ceiling 100 MiB; also capped by PHP and StorageKit
+        max_per_message: 10            # 1..20
+        max_pending_per_user: 20       # drafts per person
+        pending_ttl_hours: 24          # unsent drafts are removed by the sweep after this
+        types: [image, pdf, text, markdown, code, office, audio, video]   # `archive` is opt-in
+        extra_types: {}                # extension: media type (kind "other", always a download)
+        scan:
+          timeout_seconds: 60          # what the scanner is asked to answer within
+          lease_seconds: 300           # one worker owns a file this long (> timeout_seconds)
+          max_attempts: 5              # then `failed`, never served
+          unscannable: block           # block | allow
+          alert_after_seconds: 300     # ChatAttachmentScanOverdueEvent threshold (QB-259-2)
+        download:
+          url_ttl_seconds: 300         # signed URL lifetime
+          bind_session: true           # web URLs need the reader's session (false: 5-minute bearer links with v=<public id>, see below)
+          storage_ttl_seconds: 60      # StorageKit's pre-signed bucket URL
+        audit_downloads: false         # ChatAttachmentDownloadedEvent
+        limits:
+          uploads_per_minute: 20       # limiter nowo_chat_attachment_upload
+          upload_bytes_per_hour: 524288000   # limiter nowo_chat_attachment_bytes (counted in KiB)
+          downloads_per_minute: 600    # limiter nowo_chat_attachment_download
+      web_ui:
+        dock:
+          secret_handoff: false        # 2.7: "Send as a secret" (also needs the host's probe listener)
+```
+
+With `download.bind_session: false` (audit ZCO-L3) a web URL needs no session: it carries the reader's public id in `v=` and, for its lifetime (`url_ttl_seconds`, 5 minutes by default), is a **bearer link** — whoever holds it downloads as that reader (spending that reader's budget), and the public id reaches access and proxy logs. Access is still re-checked live for that reader. Keep it `true` unless a non-session client (a native webview) needs it, and then keep `url_ttl_seconds` short.
+
+The size limit is the smallest of `max_bytes`, PHP `upload_max_filesize` / `post_max_size` and StorageKit
+`upload.files.max_bytes`; keep the web server's request body limit (Caddy / FrankenPHP `request_body max_size`) at or
+above it. Needs nowo-tech/storage-kit-bundle ^2.2 and symfony/messenger (the build fails without them).
 
 ## Client API (2.4)
 

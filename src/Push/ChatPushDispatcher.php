@@ -123,6 +123,8 @@ final readonly class ChatPushDispatcher
         };
         $body = match (true) {
             $message->isBuzz() => $this->translator->trans('chat.buzz_received', ['%name%' => $authorName], 'NowoChatKitBundle', $locale),
+            // 2.7 (spec 259): a message of files only: the generic line (never a file name).
+            $this->preview && $recipientPreview && $message->getBody() === '' => $this->translator->trans('chat.attachment.preview', [], 'NowoChatKitBundle', $locale),
             // `push_preview`: message text on lock screens only when the application opts in and the recipient keeps it.
             $this->preview && $recipientPreview => $this->references instanceof ChatReferences
                 ? $this->references->plainText($this->markdown, $message->getBody(), $recipient, 140, $locale, $message->getConversation())

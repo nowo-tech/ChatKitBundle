@@ -1,6 +1,6 @@
 /** Chat JSON API client. Every call stays on the page (fetch) — nothing navigates or reloads. */
 import { clearChatStorage } from './state';
-import type { AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSlots, ConversationSummary, ForwardTarget, LinkPreview, LinksPage, Member, MessageInfo, MessageRevision, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SidebarSection, SupportContext, SupportStatus, SupportTicket, ThreadPage, ThreadSummary } from './types';
+import type { AttachmentStub, AutoReply, ChatConfig, ChatMessage, ChatPrefs, ChatStatus, Contact, ConversationSlots, ConversationSummary, ForwardTarget, LinkPreview, LinksPage, Member, MessageInfo, MessageRevision, OwnStatus, PeerStatus, PinnedLink, PinnedLinksState, QuickReply, Reactions, Reader, Reference, ReferenceType, SidebarSection, SupportContext, SupportStatus, SupportTicket, ThreadPage, ThreadSummary } from './types';
 
 /** Error of a chat API call that answered with a non-2xx status (the HTTP status and the JSON `error` code). */
 export class ChatApiError extends Error {
@@ -559,8 +559,57 @@ export class ChatApi {
    * @param body Message text (Markdown subset, rendered by the server).
    * @returns The stored message.
    */
-  async send(uuid: string, body: string): Promise<ChatMessage> {
-    return (await this.post<{ message: ChatMessage }>(this.url('messages', uuid), { body })).message;
+  async send(uuid: string, body: string, attachments: string[] = []): Promise<ChatMessage> {
+    // 2.7: `attachments` only when there are files (a 2.6 server keeps its body shape).
+    return (await this.post<{ message: ChatMessage }>(this.url('messages', uuid), attachments.length > 0 ? { body, attachments } : { body })).message;
+  }
+
+  /**
+   * 2.7 (spec 259): uploads one file as a draft of the caller (scanned before it can be sent).
+   *
+   * @param uuid Conversation uuid.
+   * @param file The file.
+   * @param key Idempotency-Key (a retry answers the first upload).
+   * @returns The draft.
+   */
+  async uploadAttachment(uuid: string, file: File, key: string): Promise<AttachmentStub> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return (await this.request<{ attachment: AttachmentStub }>('POST', this.attachmentUrl('upload', uuid), form, { 'Idempotency-Key': key })).attachment;
+  }
+
+  /**
+   * 2.7: the caller's drafts of a conversation (their states).
+   *
+   * @param uuid Conversation uuid.
+   * @returns The drafts.
+   */
+  async attachmentDrafts(uuid: string): Promise<AttachmentStub[]> {
+    return (await this.get<{ attachments: AttachmentStub[] }>(this.attachmentUrl('drafts', uuid))).attachments;
+  }
+
+  /**
+   * 2.7: one file with a fresh download URL signed for the caller (null while it is not clean).
+   *
+   * @param uuid Attachment uuid.
+   * @returns The file and its URL.
+   */
+  async attachment(uuid: string): Promise<{ attachment: AttachmentStub; url: string | null }> {
+    return this.get(this.attachmentUrl('attachment', uuid));
+  }
+
+  /**
+   * 2.7: removes a draft, or a file of a message the caller may delete.
+   *
+   * @param uuid Attachment uuid.
+   */
+  async removeAttachment(uuid: string): Promise<void> {
+    await this.request('DELETE', this.attachmentUrl('attachment', uuid), {});
+  }
+
+  /** 2.7: an attachment endpoint with `__uuid__` replaced ('' while attachments are off). */
+  private attachmentUrl(kind: 'upload' | 'drafts' | 'attachment', uuid: string): string {
+    return (this.config.attachments?.[kind] ?? '').replace('__uuid__', encodeURIComponent(uuid));
   }
 
   /**
@@ -825,8 +874,9 @@ export class ChatApi {
         await fetch(url, {
           method,
           credentials: 'same-origin',
-          headers: { ...extra, 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': used },
-          body: JSON.stringify(body),
+          // 2.7: a FormData body (an upload) sets its own multipart Content-Type.
+          headers: body instanceof FormData ? { ...extra, Accept: 'application/json', 'X-CSRF-TOKEN': used } : { ...extra, 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-TOKEN': used },
+          body: body instanceof FormData ? body : JSON.stringify(body),
         }),
       );
     };

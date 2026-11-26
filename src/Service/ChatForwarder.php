@@ -6,6 +6,7 @@ namespace Nowo\ChatKitBundle\Service;
 
 use Closure;
 use InvalidArgumentException;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentViews;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatForwardPolicyInterface;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -39,10 +40,14 @@ use function trim;
  */
 final readonly class ChatForwarder
 {
+    /** 2.7 (spec 259, Q-259-8 A): the refusal of a forward of a message with files. */
+    public const string HAS_ATTACHMENTS = 'has_attachments';
+
     /**
      * @param ChatForwardPolicyInterface $policy The application's veto (the default allows every forward)
      * @param EventDispatcherInterface|null $events ChatMessageForwardingEvent (before) and ChatMessageForwardedEvent (after the commit)
      * @param ChatReferences|null $references Neutralizes the #references the forwarder may not open (audit UB-2)
+     * @param ChatAttachmentViews|null $attachments 2.7: refuses a message with files (Q-259-8 A); null: attachments off
      */
     public function __construct(
         private ChatService $chat,
@@ -55,6 +60,7 @@ final readonly class ChatForwarder
         private ChatForwardPolicyInterface $policy,
         private ?EventDispatcherInterface $events = null,
         private ?ChatReferences $references = null,
+        private ?ChatAttachmentViews $attachments = null,
     ) {
     }
 
@@ -114,6 +120,10 @@ final readonly class ChatForwarder
         // by its author, where the provider allowed it).
         if ($this->references?->hasCards($source->getBody()) === true) {
             throw new InvalidArgumentException(ChatReferences::CARD_NOT_ALLOWED);
+        }
+        // 2.7 (spec 259, Q-259-8 A): no forwarding of a message with files in v1 (one row, one stored object).
+        if (($this->attachments?->forMessages([$source]) ?? []) !== []) {
+            throw new InvalidArgumentException(self::HAS_ATTACHMENTS);
         }
         $comment = $comment === null || trim($comment) === '' ? null : $comment;
         // Each target: an open conversation, or a person (a direct conversation opened once every check passed).

@@ -13,6 +13,7 @@ use Doctrine\ORM\Event\PostLoadEventArgs;
 use Doctrine\ORM\Event\PrePersistEventArgs;
 use Doctrine\ORM\Events;
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Nowo\ChatKitBundle\Entity\ChatAttachment;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Entity\ChatConversationLink;
 use Nowo\ChatKitBundle\Entity\ChatIdempotencyKey;
@@ -68,6 +69,8 @@ final class UserReferenceListener implements ResetInterface
         ChatThreadRead::class       => ['user' => false],
         ChatIdempotencyKey::class   => ['user' => false],
         ChatUserSettings::class     => ['user' => false],
+        // 2.7 (spec 259): who uploaded an attachment (null after an erasure).
+        ChatAttachment::class => ['uploader' => true],
     ];
 
     /**

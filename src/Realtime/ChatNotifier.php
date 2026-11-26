@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Realtime;
 
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentViews;
 use Nowo\ChatKitBundle\Digest\ChatDigestScheduler;
 use Nowo\ChatKitBundle\Doctrine\ChatUserReferences;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
@@ -30,6 +31,7 @@ final readonly class ChatNotifier
      * @param MessageBusInterface|null $bus Messenger bus for async push; null delivers inline
      * @param ChatDigestScheduler|null $digest Unread-email scheduler; null when the digest is disabled
      * @param string $realtimeEvents 2.4 (Q-BD-13): `full` publishes the presented message; `ids` only its ids
+     * @param ChatAttachmentViews|null $attachmentViews 2.7 (spec 259): the files of a `full` message payload; null: none (attachments off)
      */
     public function __construct(
         private ChatRecipients $recipients,
@@ -40,7 +42,22 @@ final readonly class ChatNotifier
         private ?MessageBusInterface $bus = null,
         private ?ChatDigestScheduler $digest = null,
         private string $realtimeEvents = 'full',
+        private ?ChatAttachmentViews $attachmentViews = null,
     ) {
+    }
+
+    /**
+     * 2.7 (spec 259): the state of one of the person's own attachments changed (scanned, blocked, failed). Published to
+     * the uploader's topic only, ids and the state only (never the name), in both realtime modes.
+     *
+     * @param ChatUserInterface $uploader Who uploaded it
+     * @param string $conversationUuid Its conversation
+     * @param string $attachmentUuid The attachment
+     * @param string $state ChatAttachmentState value
+     */
+    public function attachment(ChatUserInterface $uploader, string $conversationUuid, string $attachmentUuid, string $state): void
+    {
+        $this->publisher->publish('attachment', ['conversationUuid' => $conversationUuid, 'attachmentUuid' => $attachmentUuid, 'state' => $state], [$uploader]);
     }
 
     /**
@@ -313,7 +330,7 @@ final readonly class ChatNotifier
             ? ['messageUuid' => $message->getUuid(), 'messageId' => $message->getId(), 'deleted' => $message->isDeleted()]
                 // A thread reply names its root (an id): clients update the thread, not the timeline.
                 + ($message->getThreadRoot() instanceof ChatMessage ? ['threadRootUuid' => $message->getThreadRoot()->getUuid()] : [])
-            : ['message' => $this->presenter->message($message, null, $reactions)];
+            : ['message' => $this->presenter->message($message, null, $reactions, null, false, $this->attachmentViews?->stubs([$message])[(int) $message->getId()] ?? ($this->attachmentViews instanceof ChatAttachmentViews ? [] : null))];
         $this->publisher->publish($type, ['conversationUuid' => $conversation->getUuid()] + $payload, $this->recipients->of($conversation));
     }
 }

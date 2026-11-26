@@ -9,6 +9,9 @@ use DateInterval;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use JsonException;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentRefused;
+use Nowo\ChatKitBundle\Attachment\ChatAttachments;
+use Nowo\ChatKitBundle\Attachment\ChatAttachmentViews;
 use Nowo\ChatKitBundle\Card\ChatCards;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Contract\ChatLinkPreviewProviderInterface;
@@ -116,6 +119,9 @@ final class ChatApiController extends AbstractController
      * @param ChatThreads|null $threads 1.36: threads; null offers none
      * @param ChatEditHistory|null $history 1.36: edit history; null offers none
      * @param ChatIdempotency|null $idempotency 1.36: `Idempotency-Key` of forwards, thread replies and (optional) sends
+     * @param ChatCards|null $cards 2.6: typed cards
+     * @param ChatAttachments|null $attachments 2.7 (spec 259): sends with files; null while attachments are off
+     * @param ChatAttachmentViews|null $attachmentViews 2.7: the files of presented messages; null while attachments are off
      */
     public function __construct(
         private readonly ChatServiceInterface $chat,
@@ -159,6 +165,8 @@ final class ChatApiController extends AbstractController
         private readonly ?ChatEditHistory $history = null,
         private readonly ?ChatIdempotency $idempotency = null,
         private readonly ?ChatCards $cards = null,
+        private readonly ?ChatAttachments $attachments = null,
+        private readonly ?ChatAttachmentViews $attachmentViews = null,
     ) {
     }
 
@@ -699,9 +707,11 @@ final class ChatApiController extends AbstractController
         $this->presenter->primeAvatars(array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $page));
         // 1.29: and their badges in one provider call.
         $this->presenter->primeAuthorBadges($page);
+        // 2.7: the page's files in one query.
+        $files = $this->files($page);
 
         return $this->json([
-            'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, $reactions[(int) $message->getId()] ?? []), $page),
+            'messages' => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, $reactions[(int) $message->getId()] ?? [], null, false, $this->filesOf($files, $message)), $page),
             'hasMore'  => $hasMore,
             'readUpTo' => $this->participants->findOneFor($conversation, $user)?->getLastReadMessageId(),
             // Other people's read receipts (✓✓ / "Seen by N"; 1.35: never moved back by "Mark unread from here").
@@ -860,7 +870,7 @@ final class ChatApiController extends AbstractController
         $this->deny(!$message instanceof ChatMessage, 'not_found', Response::HTTP_NOT_FOUND);
         assert($message instanceof ChatMessage);
 
-        return $this->json(['message' => $this->presenter->message($message, $user, $this->reactionsOf($message))]);
+        return $this->json(['message' => $this->presenter->message($message, $user, $this->reactionsOf($message), null, false, $this->filesOf($this->files([$message]), $message))]);
     }
 
     /**
@@ -886,6 +896,11 @@ final class ChatApiController extends AbstractController
         } catch (InvalidArgumentException $exception) {
             throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
         }
+        // 2.7 (spec 259): an optional `attachments: [uuid…]` (clean drafts of the caller in this conversation).
+        $files = $this->attachmentUuids($payload['attachments'] ?? null);
+        $this->deny($files === null || ($files !== [] && !$this->attachments instanceof ChatAttachments), ChatAttachmentRefused::INVALID, Response::HTTP_UNPROCESSABLE_ENTITY);
+        assert($files !== null);
+        $attachments = $this->attachments;
         // 1.36 (Q-B15): an optional `Idempotency-Key` makes a resent message one message (ChatKit's own service only).
         $key = $request->headers->get(ChatIdempotency::HEADER);
         try {
@@ -893,17 +908,26 @@ final class ChatApiController extends AbstractController
                 // 2.5 (audit ZCG-I5): `client:` is the client API's namespace of stored keys (2.6, ZCG-v-I1: in any letter case).
                 $this->deny(!ChatIdempotency::isValidKey($key) || ChatIdempotency::isClientKey($key), 'idempotency_key_invalid', Response::HTTP_BAD_REQUEST);
                 $chat                  = $this->chat;
-                [$messages, $replayed] = $this->idempotency->run($user, $key, ChatIdempotency::hash(['send', $conversation->getUuid(), $body]), static fn (Closure $before, Closure $after): array => [$chat->sendWith($user, $conversation, $body, $before, $after)]);
+                [$messages, $replayed] = $this->idempotency->run(
+                    $user,
+                    $key,
+                    ChatIdempotency::hash($files === [] ? ['send', $conversation->getUuid(), $body] : ['send', $conversation->getUuid(), $body, $files]),
+                    static fn (Closure $before, Closure $after): array => [$files === [] || !$attachments instanceof ChatAttachments
+                        ? $chat->sendWith($user, $conversation, $body, $before, $after)
+                        : $attachments->sendWith($user, $conversation, $body, $files, $before, $after)],
+                );
                 $this->deny($messages === [], 'not_found', Response::HTTP_NOT_FOUND);
 
-                return $this->json(['message' => $this->presenter->message($messages[0], $user, $this->reactionsOf($messages[0]))] + ($replayed ? ['replayed' => true] : []), $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
+                return $this->json(['message' => $this->presenter->message($messages[0], $user, $this->reactionsOf($messages[0]), null, false, $this->filesOf($this->files([$messages[0]]), $messages[0]))] + ($replayed ? ['replayed' => true] : []), $replayed ? Response::HTTP_OK : Response::HTTP_CREATED);
             }
-            $message = $this->chat->send($user, $conversation, $body);
+            $message = $files === [] || !$attachments instanceof ChatAttachments ? $this->chat->send($user, $conversation, $body) : $attachments->sendWith($user, $conversation, $body, $files);
+        } catch (ChatAttachmentRefused $refused) {
+            throw new ChatApiException($refused->error, $refused->status, $refused);
         } catch (InvalidArgumentException $exception) {
             throw new ChatApiException($exception->getMessage(), Response::HTTP_UNPROCESSABLE_ENTITY, $exception);
         }
 
-        return $this->json(['message' => $this->presenter->message($message, $user)], Response::HTTP_CREATED);
+        return $this->json(['message' => $this->presenter->message($message, $user, [], null, false, $this->filesOf($this->files([$message]), $message))], Response::HTTP_CREATED);
     }
 
     /**
@@ -1199,7 +1223,7 @@ final class ChatApiController extends AbstractController
         $this->presenter->primeAuthorBadges([$root, ...$replies]);
 
         return $this->json([
-            'root'       => $this->presenter->message($root, $user, $reactions[(int) $root->getId()] ?? []),
+            'root'       => $this->presenter->message($root, $user, $reactions[(int) $root->getId()] ?? [], null, false, $this->filesOf($this->files([$root]), $root)),
             'replies'    => array_map(fn (ChatMessage $reply): array => $this->presenter->message($reply, $user, $reactions[(int) $reply->getId()] ?? []), $replies),
             'hasMore'    => $page['hasMore'],
             'replyCount' => $root->getThreadReplyCount(),
@@ -1712,8 +1736,10 @@ final class ChatApiController extends AbstractController
         $this->presenter->primeAvatars(array_map(static fn (ChatMessage $message): ?ChatUserInterface => $message->getAuthor(), $pinned));
         $this->presenter->primeAuthorBadges($pinned);
 
+        $files = $this->files($pinned);
+
         return [
-            'pins'   => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user), $pinned),
+            'pins'   => array_map(fn (ChatMessage $message): array => $this->presenter->message($message, $user, [], null, false, $this->filesOf($files, $message)), $pinned),
             'canPin' => $this->access->canPin($conversation, $user),
         ];
     }
@@ -1934,6 +1960,52 @@ final class ChatApiController extends AbstractController
         assert($this->menu instanceof ChatMessageActions);
 
         return $this->menu;
+    }
+
+    /**
+     * 2.7: the files of these messages in one query; null while attachments are off (no `attachments` key).
+     *
+     * @param list<ChatMessage> $messages
+     *
+     * @return array<int, list<array<string, mixed>>>|null
+     */
+    private function files(array $messages): ?array
+    {
+        return $this->attachmentViews?->stubs($messages);
+    }
+
+    /**
+     * @param array<int, list<array<string, mixed>>>|null $files
+     *
+     * @return list<array<string, mixed>>|null
+     */
+    private function filesOf(?array $files, ChatMessage $message): ?array
+    {
+        return $files === null ? null : $files[(int) $message->getId()] ?? [];
+    }
+
+    /**
+     * 2.7: the `attachments` field of a send: a list of at most 20 uuids; [] when absent; null when malformed.
+     *
+     * @return list<string>|null
+     */
+    private function attachmentUuids(mixed $value): ?array
+    {
+        if ($value === null) {
+            return [];
+        }
+        if (!is_array($value) || !array_is_list($value) || count($value) > 20) {
+            return null;
+        }
+        $uuids = [];
+        foreach ($value as $uuid) {
+            if (!is_string($uuid) || preg_match('/^' . self::UUID . '\z/', $uuid) !== 1) {
+                return null;
+            }
+            $uuids[$uuid] = $uuid;
+        }
+
+        return array_values($uuids);
     }
 
     private function deny(bool $condition, string $error, int $status): void

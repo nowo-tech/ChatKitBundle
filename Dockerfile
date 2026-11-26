@@ -7,10 +7,14 @@ RUN apk add --no-cache \
     bash \
     libzip-dev \
     icu-dev \
+    libpng-dev \
+    libjpeg-turbo-dev \
+    libwebp-dev \
     nodejs \
     npm \
     && docker-php-ext-configure intl \
-    && docker-php-ext-install -j$(nproc) zip intl pdo_mysql
+    && docker-php-ext-configure gd --with-jpeg --with-webp \
+    && docker-php-ext-install -j$(nproc) zip intl pdo_mysql gd
 
 RUN apk add --no-cache $PHPIZE_DEPS \
     && pecl install pcov \

@@ -174,7 +174,9 @@ final readonly class ChatPresenter
                 'preview' => match (true) {
                     $last->isDeleted(), $last->isBuzz() => '',
                     $last->isBot(), $last->isSystem()   => mb_substr($this->botText($last), 0, 90),
-                    default                             => $this->plainText($last->getBody(), $viewer, 90, $conversation, $cardContext, $cardApi),
+                    // 2.7 (spec 259): a message of files only (its text is empty).
+                    $last->getBody() === '' => $this->trans('chat.attachment.preview'),
+                    default                 => $this->plainText($last->getBody(), $viewer, 90, $conversation, $cardContext, $cardApi),
                 },
                 'buzz'       => $last->isBuzz(),
                 'pin'        => $last->isPinLine(),
@@ -237,10 +239,11 @@ final readonly class ChatPresenter
      * @param array<string, list<string>> $reactions emoji => public ids of the people who reacted
      * @param string|null $cardContext 2.6 (audit ZCI-L3): the client API context (typed cards rendered in it)
      * @param bool $cardApi 2.6 (audit ZCI-L3): presented for the client API
+     * @param list<array<string, mixed>>|null $attachments 2.7 (spec 259): the message's clean files (ChatAttachmentView::toArray()); null: no `attachments` key (attachments off)
      *
      * @return array<string, mixed> The JSON shape
      */
-    public function message(ChatMessage $message, ?ChatUserInterface $viewer, array $reactions = [], ?string $cardContext = null, bool $cardApi = false): array
+    public function message(ChatMessage $message, ?ChatUserInterface $viewer, array $reactions = [], ?string $cardContext = null, bool $cardApi = false, ?array $attachments = null): array
     {
         $author   = $message->getAuthor();
         $system   = $message->isSystem();
@@ -301,6 +304,8 @@ final readonly class ChatPresenter
             // 2.6 (spec 259): only on messages with typed cards (no forward in v1), so other messages keep 2.5's shape.
             + (!$message->isDeleted() && !$bot && !$system && $this->references?->hasCards($message->getBody()) === true ? ['hasCards' => true] : [])
             + ($message->getThreadRoot() instanceof ChatMessage ? ['threadRootUuid' => $message->getThreadRoot()->getUuid()] : [])
+            // 2.7 (spec 259): the files, only while attachments are on (other hosts keep 2.6's shape).
+            + ($attachments === null ? [] : ['attachments' => $message->isDeleted() ? [] : $attachments])
             + ($message->getThreadReplyCount() > 0 ? ['thread' => [
                 'count'       => $message->getThreadReplyCount(),
                 'lastReplyAt' => $message->getThreadLastReplyAt()?->format(DATE_ATOM),

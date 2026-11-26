@@ -43,6 +43,23 @@ export const DIALOG_LOADED = 'nowo-ui:remote-form:loaded';
 /** UiKit's remote dialog: it closed (bubbles, on the dialog). */
 export const DIALOG_CLOSED = 'nowo-ui:remote-form:closed';
 
+/** 2.7: the once-guarded actions shared by `detail` and the dock's own warning. */
+export interface WarningActions {
+  sendAnyway: () => void;
+  handOff?: () => void;
+}
+
+/** 2.7: what a `nowo-chat:before-send` may also offer the host. */
+export interface BeforeSendExtras {
+  /**
+   * Shows the dock's inline secret warning (optional host text). Audit ZCO-I4: it gets the same once-guarded actions as
+   * `detail.sendAnyway()` / `detail.handOff()`, so a warning button and a later host call never both act.
+   */
+  warn?: (message: string | undefined, actions: WarningActions) => void;
+  /** Hands the draft to the host (`nowo-chat:secret-handoff`); only with the host's opt-in. */
+  handOff?: () => void;
+}
+
 /** Where a `nowo-chat:before-send` comes from: the composer, a thread reply or an edit (audit ZCI-L4). */
 export type SendKind = 'send' | 'thread' | 'edit';
 
@@ -258,20 +275,30 @@ export function bindInsertCard(root: HTMLElement): () => void {
  * @param text The text about to be sent.
  * @param sendAnyway Sends the same text without the event.
  * @param kind Where the text is sent from.
+ * @param extra 2.7: the dock's inline warning and (with the host's opt-in) the secret hand-off.
  * @returns True when the host cancelled the send.
  */
-export function beforeSend(root: HTMLElement, conversationUuid: string, text: string, sendAnyway: () => void, kind: SendKind = 'send'): boolean {
+export function beforeSend(root: HTMLElement, conversationUuid: string, text: string, sendAnyway: () => void, kind: SendKind = 'send', extra: BeforeSendExtras = {}): boolean {
   let used = false;
+  const once = (run: () => void): (() => void) => (): void => {
+    if (!used) {
+      used = true;
+      run();
+    }
+  };
+  const guardedSend = once(sendAnyway);
+  const guardedHandOff = extra.handOff === undefined ? undefined : once(extra.handOff);
+  const warn = extra.warn;
   const detail = Object.freeze({
     conversationUuid,
     text,
     kind,
-    sendAnyway: (): void => {
-      if (!used) {
-        used = true;
-        sendAnyway();
-      }
-    },
+    sendAnyway: guardedSend,
+    // 2.7 (D-20261126-11): the dock's own inline warning (Cancel / Send anyway, and "Send as a secret" when offered),
+    // built from the same once-guarded actions (audit ZCO-I4).
+    ...(warn === undefined ? {} : { warn: (message?: string): void => warn(message, { sendAnyway: guardedSend, ...(guardedHandOff === undefined ? {} : { handOff: guardedHandOff }) }) }),
+    // 2.7: present only when the host opted in to the hand-off (flag and probe): hands the draft over in the browser.
+    ...(guardedHandOff === undefined ? {} : { handOff: guardedHandOff }),
   });
   return !root.dispatchEvent(new CustomEvent(BEFORE_SEND, { detail, cancelable: true, bubbles: true }));
 }

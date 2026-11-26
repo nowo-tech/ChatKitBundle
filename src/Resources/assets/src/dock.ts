@@ -1430,6 +1430,11 @@ export class ChatDock implements ThreadHost {
       void this.windows.get(event.conversationUuid)?.loadLinks();
       return;
     }
+    if (event.type === 'attachment') {
+      // 2.7 (spec 259): one of this person's files was scanned (the composer shows its state).
+      this.windows.get(event.conversationUuid)?.attachmentState(event.attachmentUuid, event.state);
+      return;
+    }
     if (event.type === 'list') {
       // Closed or reopened in another tab.
       void this.refreshList(true);

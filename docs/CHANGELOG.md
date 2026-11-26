@@ -267,9 +267,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- **Attachments** (spec 259 block B, Beacon v1.180+, off by default: `attachments.enabled`). Files go through
+  nowo-tech/storage-kit-bundle ^2.2 (context `chat`, context id = the conversation uuid) with a **mandatory, fail-closed
+  scan**: a file is a draft only its uploader sees until the host's `ChatAttachmentScannerInterface` says clean; an
+  infected or unscannable file is blocked, a scanner that keeps failing leaves it `failed`; nothing unscanned is ever
+  served. Only clean drafts can be sent (send when ready), files go with their message (delete, conversation purge
+  and GDPR erasure in the same unit of work; the retention purge just before each batch's message delete) and their
+  StorageKit objects are removed after the commit. See
+  [USAGE.md](USAGE.md#attachments-27).
+  - Ports: `ChatAttachmentScannerInterface` (required with attachments; the build fails without it),
+    `ChatAttachmentScopeResolverInterface` (optional, QB-259-3: the bucket scope and owner of a conversation),
+    `ChatAttachmentPolicyInterface` (optional, FR-010, `attachments.policy`: when set, attaching is denied unless it
+    allows; asked on upload and again on send; `403 attachments_not_allowed`).
+  - API downloads always need the Bearer token besides the signature; moderators hide files with `block()` only.
+  - Audit ZCO: StorageKit's own HTTP upload route refuses the chat context (L1); the dock's remove spends the action
+    budget (L2); `download.bind_session: false` documented as bearer links (L3); send locks files by primary key in id
+    order on every database (I1); the dock's warning shares the once-guarded actions of `detail` (I4); lease and backoff
+    times keep the clock's timezone (I5).
+  - Service: `ChatAttachmentsInterface` (upload, drafts, attachmentsOf, find, downloadUrl, remove, send, block).
+  - Events (ids only, after the commit): `ChatAttachmentUploadedEvent`, `ChatAttachmentScannedEvent`,
+    `ChatAttachmentBlockedEvent`, `ChatAttachmentRemovedEvent`, `ChatAttachmentDownloadedEvent`
+    (`audit_downloads`) and the scan alert hook `ChatAttachmentScanOverdueEvent` (QB-259-2, 5 minutes).
+  - Messenger: `ScanChatAttachment` and `RemoveChatAttachmentObjects` (route them to an asynchronous transport).
+  - Command: `nowo:chat:attachments:sweep` (cron): queues due scans, fails exhausted ones, purges stale drafts,
+    removes the objects of deleted and blocked files, raises the alert; exit 75 on a lock conflict.
+  - Downloads: `GET <chat prefix>/files/{uuid}/original?e&s`, signed for one reader (5 minutes) and bound to the
+    session (`download.bind_session`), checked again on every request, served by StorageKit's
+    `FileRangeDeliveryInterface` (302 to a 60-second bucket URL, or the stream with `Range`), always `nosniff`, a
+    sandbox CSP and `attachment` (audio and video may play inline).
+  - Dock: attach button and draft tray (states, remove), send when ready, file cards with a Download button, a message
+    of files only; the dock routes `POST conversations/{uuid}/attachments`, `GET …/attachments/drafts`,
+    `GET|DELETE attachments/{uuid}`; `attachments: [uuid…]` on a send.
+  - Client API v1 (OpenAPI 1.4.0): `me.features.attachments`, `me.limits.attachments`, `attachments` on messages with
+    URLs signed for the token and context, `attachments` on a send, `POST conversations/{uuid}/attachments`,
+    `GET conversations/{uuid}/attachments/drafts`, `GET|DELETE attachments/{uuid}`, `GET files/{uuid}/{variant}`.
+  - Realtime: an `attachment` event (ids and the state) to the uploader only; `full` message payloads carry the files.
+  - Rate limits: uploads per person and minute, uploaded bytes per hour, downloads per minute (StorageKit does not
+    limit its generic ports).
+  - Push, digest and the conversation list show a message of files only as the generic "📎 Attachment" (never a file
+    name).
+- **"Send as a secret"** (Beacon D-20261126-11): with `web_ui.dock.secret_handoff: true` **and** a host listener that
+  answers `nowo-chat:secret-handoff-probe`, the secret warning offers a third action that hands the draft to the host
+  in the browser (`nowo-chat:secret-handoff`, `{text, conversation, kind}`), clears it and purges its stored copy;
+  nothing is sent. `nowo-chat:before-send` gains `detail.warn()` (the dock's inline warning) and, with the opt-in,
+  `detail.handOff()`. Without the opt-in the dock behaves as in 2.6. See [SECURITY.md](SECURITY.md).
+
+### Changed
+
+- A forward of a message with files is refused (`has_attachments`, Q-259-8 A) and *Forward* is hidden for it.
+- `ChatPresenter::message()`, `ChatService::sendWith()`, `ChatMessageRepository::purgeOlderThan()` and several service
+  constructors gain optional trailing arguments (no BC break).
+- Dev: nowo-tech/storage-kit-bundle ^2.2 (require-dev; `suggest` + `conflict <2.2 || >=3.0`), GD in the dev image.
+
 ### Fixed
 
 - The `📦 [name] script loaded` console banner now prints once per page, even when the script is loaded twice: per-name once-guard (a `Set` on `globalThis`) in `logger.ts`, with a Vitest test and rebuilt assets (REQ-ASSETS-005).
+
+### Tests
+
+- Two-session races on MySQL 8.4, MariaDB 11.4 and PostgreSQL 16 (verdict vs remove, a second worker, a late verdict
+  after a lease takeover, send vs remove, send vs block, the sweep under a held row lock), the worker memory test
+  (300 rounds, one kernel), SC-002 (no reader ever sees a draft or a non-clean file), Vitest for the tray, the file
+  cards, the downloads and the hand-off (event, cleared draft, no autosave, fallback, edit and thread kinds).
 
 ## [2.6.0] - 2026-11-26
 

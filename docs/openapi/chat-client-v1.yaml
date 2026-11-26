@@ -1,13 +1,13 @@
-# ChatKitBundle client API v1 (2.4; 2.5 writes; 2.6 typed cards). Kept in step with the routes by ChatClientApiOpenApiTest. See docs/API.md.
+# ChatKitBundle client API v1 (2.4; 2.5 writes; 2.6 typed cards; 2.7 attachments). Kept in step with the routes by ChatClientApiOpenApiTest. See docs/API.md.
 openapi: 3.1.0
 info:
   title: ChatKitBundle client API
-  version: 1.3.0
+  version: 1.4.0
   description: >-
     Stateless chat API for native clients (Beacon Desktop): reads, the reader's own read marks, (2.4.1) logout and
     (2.5) writes: send, thread reply, reactions, edit and delete of one's own message (scope chat:write, off until
     client_api.writes; me.features tells which) and (2.6, spec 259) typed cards: a `card` object on reference tokens,
-    a `cards` field on send and thread reply, and the host's composer actions on a conversation. Bearer tokens of the host (ChatKit issues none); off until the host configures client_api.principal_resolver. Paths are relative to
+    a `cards` field on send and thread reply, and the host's composer actions on a conversation; (2.7, spec 259) attachments: uploads scanned before they can be sent, `attachments` on messages with short-lived signed URLs, and an `attachments` field on send. Bearer tokens of the host (ChatKit issues none); off until the host configures client_api.principal_resolver. Paths are relative to
     <client_api.prefix>/chat/v1 (default /api/chat/v1). Every request names its context in the context header
     (client_api.context_header; Beacon X-Beacon-Context) when the host has a context policy. Responses are never
     cached. Unknown, foreign or out-of-context uuids answer 404, never 403.
@@ -179,7 +179,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WriteBodyCards' }
+            schema: { $ref: '#/components/schemas/WriteBodySend' }
       responses:
         '201':
           description: Sent
@@ -439,6 +439,150 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Error' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /conversations/{uuid}/attachments:
+    post:
+      operationId: uploadAttachment
+      summary: Uploads one file as a draft of the caller (2.7, scope chat:write)
+      description: >-
+        The file is stored and scanned before it can be sent: `state` is `uploaded` (then `scanning`), and `clean`,
+        `blocked` or `failed` once the scan ended (poll GET attachments/{uuid} or listen to the `attachment` realtime
+        event). Only the uploader ever sees a draft. The type is decided by the server (magic bytes and extension must
+        agree). Idempotency-Key required (per token and conversation). 404 while me.features.attachments is false.
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201':
+          description: Stored as a draft (not yet scanned)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attachment]
+                properties:
+                  attachment: { $ref: '#/components/schemas/Attachment' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/WriteError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Error' }
+  /conversations/{uuid}/attachments/drafts:
+    get:
+      operationId: attachmentDrafts
+      summary: The caller's drafts in the conversation (2.7)
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - $ref: '#/components/parameters/ConversationUuid'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attachments]
+                properties:
+                  attachments: { type: array, items: { $ref: '#/components/schemas/Attachment' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /attachments/{uuid}:
+    get:
+      operationId: attachment
+      summary: One file as the caller may see it, with fresh signed URLs when clean (2.7)
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - name: uuid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [attachment]
+                properties:
+                  attachment: { $ref: '#/components/schemas/Attachment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    delete:
+      operationId: removeAttachment
+      summary: Removes a draft, or a file of a message the caller may delete (2.7, scope chat:write)
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - name: uuid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Removed (idempotent) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /files/{uuid}/{variant}:
+    get:
+      operationId: file
+      summary: Downloads a file through its signed URL (2.7)
+      description: >-
+        The URL (from `urls.original`) is signed for this person, token and context and expires after 5 minutes; the
+        request carries the Bearer token too, and access is checked again. 302 to a bucket URL valid 60 seconds, or the
+        bytes (206 for a single Range). Always nosniff and a sandbox CSP; a download, except audio and video. Every
+        refusal (bad or expired signature, unknown, foreign, removed) is an empty 404.
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - name: uuid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: variant
+          in: path
+          required: true
+          schema: { type: string, enum: [original] }
+        - { name: e, in: query, required: true, schema: { type: string } }
+        - { name: s, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The bytes }
+        '206': { description: One byte range }
+        '302': { description: A bucket URL pre-signed for 60 seconds }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Not found (empty body) }
+        '416': { description: Range not satisfiable }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    head:
+      operationId: fileHead
+      summary: The headers of a download (2.7)
+      parameters:
+        - $ref: '#/components/parameters/Context'
+        - name: uuid
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: variant
+          in: path
+          required: true
+          schema: { type: string, enum: [original] }
+      responses:
+        '200': { description: The headers }
+        '404': { description: Not found }
   /logout:
     post:
       operationId: logout
@@ -600,7 +744,7 @@ components:
             deleteOwn: { type: boolean, description: '2.5: DELETE of one''s own message is offered.' }
             cards: { type: boolean, description: '2.6 (spec 259): true when the host has card providers — reference tokens may carry a `card` object and send / thread reply take `cards`; false in 2.5 (text only).' }
             search: { type: boolean }
-            attachments: { type: boolean }
+            attachments: { type: boolean, description: '2.7 (spec 259): uploads, files in messages and signed downloads are offered.' }
             serverLogout:
               type: boolean
               description: >-
@@ -614,6 +758,14 @@ components:
             textMaxLength: { type: integer, description: '2.5: longest text of a write, in characters.' }
             editWindowSeconds: { type: integer, description: '2.5: one may edit or delete one''s own message this long after sending it.' }
             idempotencyKeyMaxLength: { type: integer }
+            attachments:
+              type: object
+              description: 2.7 — present while me.features.attachments is true.
+              properties:
+                maxBytes: { type: integer, description: The largest file accepted now. }
+                maxPerMessage: { type: integer }
+                kinds: { type: array, items: { type: string } }
+                extensions: { type: array, items: { type: string } }
         reactions:
           type: object
           description: 2.5 — the quick row and every emoji the server accepts as a reaction.
@@ -652,6 +804,42 @@ components:
             properties:
               type: { type: string, pattern: '^[a-z][a-z0-9_-]{0,31}$' }
               id: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
+    WriteBodySend:
+      type: object
+      description: >-
+        2.7 (spec 259): a send. `text` and `cards` as in WriteBodyCards; `attachments` (only when me.features.attachments
+        is true, else 422 unsupported_field) lists clean drafts of the caller in this conversation, in order. `text` may
+        be empty when files are given. One file still scanning refuses the whole send (409 attachment_not_ready); a
+        blocked, failed, removed, foreign or already sent one too (422 attachment_invalid); more than maxPerMessage is
+        422 too_many_attachments.
+      required: [text]
+      additionalProperties: false
+      properties:
+        text: { type: string, maxLength: 4000 }
+        cards: { $ref: '#/components/schemas/WriteBodyCards/properties/cards' }
+        attachments:
+          type: array
+          maxItems: 20
+          items: { type: string, format: uuid }
+    Attachment:
+      type: object
+      description: >-
+        2.7 (spec 259): a file. In a message only clean files appear. `name` is user content (render it as text, never
+        in a URL path). `urls` and `expiresAt` come with clean files only; ask GET attachments/{uuid} again when expired.
+      required: [uuid, name, extension, mediaType, kind, size, state]
+      properties:
+        uuid: { type: string, format: uuid }
+        name: { type: string }
+        extension: { type: string }
+        mediaType: { type: string }
+        kind: { type: string, enum: [image, pdf, text, markdown, code, office, audio, video, archive, other] }
+        size: { type: integer }
+        state: { type: string, enum: [uploaded, scanning, clean, blocked, failed] }
+        urls:
+          type: object
+          properties:
+            original: { type: string }
+        expiresAt: { type: string, format: date-time }
     CardView:
       type: object
       description: 2.6 (spec 259) — what a typed card adds to its reference token. Plain text; same-origin paths.
@@ -803,6 +991,10 @@ components:
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/Body'
+        attachments:
+          type: array
+          description: 2.7 — the message's clean files with URLs signed for this token (present while attachments are on).
+          items: { $ref: '#/components/schemas/Attachment' }
         previews:
           type: array
           description: Link previews of this reader (the host's provider decides what the reader may see).

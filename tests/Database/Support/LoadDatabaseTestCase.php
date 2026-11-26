@@ -52,7 +52,7 @@ abstract class LoadDatabaseTestCase extends TestCase
         if (preg_match('/(?:^|_)(?:test|race|throwaway)(?:_|$)/', $database) !== 1) {
             throw new RuntimeException(sprintf('Refusing to use database "%s": the setup drops everything in it.', $database));
         }
-        $this->kernel = new TestKernel();
+        $this->kernel = $this->createKernel();
         $this->kernel->boot();
         $em = $this->kernel->getContainer()->get(TestKernel::ENTITY_MANAGER_ALIAS);
         assert($em instanceof EntityManagerInterface);
@@ -65,9 +65,17 @@ abstract class LoadDatabaseTestCase extends TestCase
             $connection->executeStatement('CREATE TABLE load_ballast (id INT NOT NULL PRIMARY KEY)');
             self::$schema = true; // @phpstan-ignore frankenphp.worker.noMutableStaticProperty
         }
-        foreach (['load_ballast', 'test_host_ticket_link', 'nowo_chat_ticket_counter', 'nowo_chat_message_link', 'nowo_chat_message_mention', 'nowo_chat_reaction', 'nowo_chat_message', 'nowo_chat_conversation_link', 'nowo_chat_participant', 'nowo_chat_conversation', 'nowo_chat_quick_reply', 'nowo_chat_user_settings', 'test_user', 'test_sti_member'] as $table) {
+        foreach (['nowo_chat_attachment', 'load_ballast', 'test_host_ticket_link', 'nowo_chat_ticket_counter', 'nowo_chat_message_link', 'nowo_chat_message_mention', 'nowo_chat_reaction', 'nowo_chat_message', 'nowo_chat_conversation_link', 'nowo_chat_participant', 'nowo_chat_conversation', 'nowo_chat_quick_reply', 'nowo_chat_user_settings', 'test_user', 'test_sti_member'] as $table) {
             $connection->executeStatement('DELETE FROM ' . $table);
         }
+    }
+
+    /**
+     * 2.7: the kernel of the test (attachment races boot one with attachments on).
+     */
+    protected function createKernel(): TestKernel
+    {
+        return new TestKernel();
     }
 
     protected function tearDown(): void

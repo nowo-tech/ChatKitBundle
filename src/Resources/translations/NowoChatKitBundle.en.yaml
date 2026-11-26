@@ -385,6 +385,29 @@ chat:
   support_reopen: 'Reopen'
   support_read_only_ticket: 'This ticket is closed. Open Support to start a new one.'
   support_ticket_label: 'Ticket %number% · %topic% · %status%'
+  # 2.7 (spec 259): attachments; D-20261126-11: the secret hand-off of the before-send warning.
+  attachment:
+    preview: '📎 Attachment'
+    attach: 'Attach a file'
+    attach_hint: 'Attach files (up to %max% each)'
+    scanning: 'Scanning…'
+    uploading: 'Uploading…'
+    clean: 'Ready'
+    blocked: 'Blocked: this file was not allowed'
+    failed: 'Could not be checked, try again or remove it'
+    remove: 'Remove file'
+    download: 'Download'
+    too_large: 'This file is larger than %max%.'
+    not_allowed: 'This type of file is not allowed.'
+    too_many: 'At most %max% files per message.'
+    error: 'The file could not be uploaded.'
+    waiting: 'Sending when the files are checked…'
+    files: 'Files'
+  secret_handoff:
+    send: 'Send as a secret'
+    send_anyway: 'Send anyway'
+    warning: 'This looks like a secret.'
+    label: 'Secret warning'
 support:
   topic:
     incident: 'Incident / bug'
