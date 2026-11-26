@@ -1,8 +1,8 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-11-26 (2.4.1: 324 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
-**Production units**: **312/312** table rows below (2.4.1: +2 logout units, `ChatClientTokenRevokerInterface` and `ChatClientLoggedOutEvent`; 2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 324 files** the audit command returns (2026-11-26) are named in this file (some rows group several files or repeat one file under two sections)  
+**Last audited**: 2026-11-26 (2.5.0: 325 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
+**Production units**: **313/313** table rows below (2.5.0: +1 client API writes unit, `ChatClientApiWriteEvent`; `ChatClientApiController`, `ChatClientApiGuard`, `ChatService`, `ChatClientPrincipal`, `Configuration`, `NowoChatKitExtension` and `services.php` extended, `specs/004-client-api-writes/`; 2.4.1: +2 logout units, `ChatClientTokenRevokerInterface` and `ChatClientLoggedOutEvent`; 2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 325 files** the audit command returns (2026-11-26) are named in this file (some rows group several files or repeat one file under two sections)  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -44,8 +44,8 @@
 | Browser (TypeScript) — feature modules | 15 |
 | Message search (1.37) | 17 |
 | Sources added 1.34–2.2 (sweep 2026-11-22) | 54 |
-| Client API v1 (2.4, 2.4.1) | 15 |
-| **Total** | **324** |
+| Client API v1 (2.4, 2.4.1, 2.5) | 16 |
+| **Total** | **325** |
 
 ## Bundle, configuration & DI
 
@@ -117,7 +117,7 @@
 | `src/Event/ChatSupportStatusChangedEvent.php` | US-04 | FR-EVT-001 |
 | `src/Service/ChatMarkdownRenderer.php` | US-02 | FR-MSG-002, FR-MENU-001 |
 | `src/Service/ChatPresenter.php` | US-02, US-07 | FR-MSG-003 |
-| `src/Service/ChatService.php` | US-02, US-03, US-04 | FR-MSG-001 |
+| `src/Service/ChatService.php` | US-02, US-03, US-04 | FR-MSG-001, FR-CAPW-004 |
 | `src/Service/ChatMessageActions.php` | US-02 | FR-MENU-002 |
 | `src/Service/ChatReadTimes.php` | US-02 | FR-MENU-002 |
 | `src/Service/ChatMessageMenu.php` | US-02 | FR-MENU-002, FR-PORT-003 |
@@ -479,8 +479,8 @@ The 54 files below were added by releases 1.34–2.2 without an inventory row. T
 
 | File | Role | Spec |
 | --- | --- | --- |
-| `src/ClientApi/ChatClientApiController.php` | 2.4: the client API v1 routes (`<prefix>/chat/v1`): me, conversations, conversation, messages, message, read, realtime | FR-CAPI-001 |
-| `src/ClientApi/ChatClientApiGuard.php` | 2.4: stateless checks of every client API request (budgets, Bearer via the host resolver, reachability, scope, context) | FR-CAPI-001 |
+| `src/ClientApi/ChatClientApiController.php` | 2.4: the client API v1 routes (`<prefix>/chat/v1`): me, conversations, conversation, messages, message, read, realtime; 2.5: send, thread reply, reactions, edit / delete own | FR-CAPI-001, FR-CAPW-001 |
+| `src/ClientApi/ChatClientApiGuard.php` | 2.4: stateless checks of every client API request (budgets, Bearer via the host resolver, reachability, scope, context); 2.5: write scope and budgets, write event | FR-CAPI-001, FR-CAPW-002 |
 | `src/ClientApi/ChatClientApiRouteLoader.php` | 2.4: routing type `nowo_chat_kit_client_api` (no route while the API is off) | FR-CAPI-001 |
 | `src/ClientApi/ChatClientCall.php` | 2.4: principal + context of one request (request attribute only) | FR-CAPI-001 |
 | `src/ClientApi/ChatClientCursor.php` | 2.4: opaque keyset cursor of the conversation list | FR-CAPI-001 |
@@ -490,6 +490,7 @@ The 54 files below were added by releases 1.34–2.2 without an inventory row. T
 | `src/Event/ChatClientApiDeniedEvent.php` | 2.4: a refused client API request (ids and codes only) | FR-CAPI-001 |
 | `src/Contract/ChatClientTokenRevokerInterface.php` | 2.4.1: optional host port revoking the presented token on `POST logout` | FR-CAPI-012 |
 | `src/Event/ChatClientLoggedOutEvent.php` | 2.4.1: a client signed out (token id, user public id, `revoked`; never the token) | FR-CAPI-012 |
+| `src/Event/ChatClientApiWriteEvent.php` | 2.5: a client wrote through the client API (action, token id, conversation / message uuids, `replayed`; never the text or the token) | FR-CAPW-009 |
 | `src/Model/ChatClientPrincipal.php` | 2.4: the caller of the client API | FR-CAPI-001 |
 | `src/Model/ChatClientRequest.php` | 2.4: a client API request as the host ports see it | FR-CAPI-001 |
 | `src/Model/ChatClientContext.php` | 2.4: a tenant a person may use | FR-CAPI-001 |

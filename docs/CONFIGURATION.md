@@ -94,10 +94,12 @@ nowo_chat_kit:
 | `profiles.<name>.client_api.principal_resolver` | ?string | `null` | 2.4: service id of your `ChatClientPrincipalResolverInterface`. `null`: the [client API](API.md) is off (no route). |
 | `profiles.<name>.client_api.context_policy` | ?string | `null` | 2.4: service id of your `ChatClientContextPolicyInterface` (tenant per request). Needs `principal_resolver`. |
 | `profiles.<name>.client_api.token_revoker` | ?string | `null` | 2.4.1: service id of your `ChatClientTokenRevokerInterface`: `POST <prefix>/chat/v1/logout` revokes the presented token (only it). `null`: logout still answers 204 but only the client forgets the token (`me.features.serverLogout: false`). Needs `principal_resolver`. |
+| `profiles.<name>.client_api.writes` | bool | `false` | 2.5: the write routes (send, thread reply, reactions, edit and delete of one's own message) for tokens holding `chat:read` and `chat:write`. `false`: they answer 404 and `me.features.send` is `false`. Needs `principal_resolver`. |
 | `profiles.<name>.client_api.prefix` | string | `/api` | 2.4: the API answers at `<prefix>/chat/v1`. Empty or a lowercase path without a trailing slash. |
 | `profiles.<name>.client_api.context_header` | string | `X-Chat-Context` | 2.4: header naming the tenant (Beacon: `X-Beacon-Context`). |
 | `profiles.<name>.client_api.limits.per_ip_per_minute` | int ≥ 1 | `300` | 2.4: client API requests per IP (IPv6: per /64). |
 | `profiles.<name>.client_api.limits.per_token_per_minute` | int ≥ 1 | `60` | 2.4: client API requests per token. |
+| `profiles.<name>.client_api.limits.writes_per_token_per_minute` | int ≥ 1 | `30` | 2.5: client API writes per token (on top of `per_token_per_minute` and the person's action and send budgets). |
 | `profiles.<name>.push` | bool | `false` | Queue Web Push for new messages (needs a `ChatPushSenderInterface`). |
 | `profiles.<name>.push_url` | string | `/?chat={uuid}` | URL a notification opens; `{uuid}` is the conversation. The dock opens `?chat=<uuid>` itself. |
 | `profiles.<name>.push_icon` | ?string | `null` | Notification icon URL. |
@@ -277,13 +279,15 @@ nowo_chat_kit:
                 principal_resolver: App\Chat\ClientTokens
                 context_policy: App\Chat\ClientContexts
                 token_revoker: App\Chat\ClientTokenRevoker   # 2.4.1: POST logout revokes the token
+                writes: true                         # 2.5: send, thread reply, reactions, edit/delete own (chat:write)
                 prefix: /api                         # → /api/chat/v1
                 context_header: X-Beacon-Context
-                limits: { per_ip_per_minute: 300, per_token_per_minute: 60 }
+                limits: { per_ip_per_minute: 300, per_token_per_minute: 60, writes_per_token_per_minute: 30 }
 ```
 
-It adds two limiters, `nowo_chat_client_ip` and `nowo_chat_client_token`. The client API also uses the person's own
-`nowo_chat_read` (reads) and `nowo_chat_action` (read marks) budgets, shared with the web UI.
+It adds three limiters, `nowo_chat_client_ip`, `nowo_chat_client_token` and (2.5) `nowo_chat_client_write`. The client
+API also uses the person's own `nowo_chat_read` (reads), `nowo_chat_action` (read marks and every write) and (2.5)
+`nowo_chat_send` (messages and thread replies) budgets, shared with the web UI.
 
 ## Table names
 
@@ -424,7 +428,7 @@ is gone with the mode it reported on; its entries on 1.x are your migration list
 `nowo_chat_kit.default_profile`, `nowo_chat_kit.profiles` and, for the default profile, `nowo_chat_kit.<key>` for each
 key above (`user_class`, `retention_days`, `realtime`, `push`, `push_url`, `push_icon`, `push_preview`, `cache_pool`, `web_ui`, `web_ui.layout_template`, `web_ui.templates.page`, `web_ui.assets`, `web_ui.page.full_height`, `web_ui.page.open_recent` and `web_ui.dock.sidebar_sections` (1.25), `web_ui.dock.dialog_runtime` (1.26), `web_ui.message_context_menu` (1.33), `doctrine.table_prefix`, `doctrine.table_name_prefix`, `doctrine.tables`, `doctrine.table.<key>`,
 `reactions`, `icon_set`, `icons`, `presence_ttl`, `auto_away_minutes`, `status_presets`, `max_pins`, `auto_reply_interval_hours`, `limits`, `digest`, `support`, `dock`, and `support.<key>` for each support key).
-Since 2.4: `nowo_chat_kit.realtime_events`, `nowo_chat_kit.client_api.enabled` (a principal resolver is configured), `nowo_chat_kit.client_api.prefix`, `nowo_chat_kit.client_api.v1_path_prefix` (`<prefix>/chat/v1`, for `security.yaml` patterns) and `nowo_chat_kit.client_api.context_header`.
+Since 2.4: `nowo_chat_kit.realtime_events`, `nowo_chat_kit.client_api.enabled` (a principal resolver is configured), `nowo_chat_kit.client_api.prefix`, `nowo_chat_kit.client_api.v1_path_prefix` (`<prefix>/chat/v1`, for `security.yaml` patterns) and `nowo_chat_kit.client_api.context_header`. Since 2.5: `nowo_chat_kit.client_api.writes` (writes on, with the API on).
 Since 1.32, `nowo_chat_kit.runtime.retention_days` holds the `runtime.retention_days` setting id (null when not set).
 
 ## Timeouts

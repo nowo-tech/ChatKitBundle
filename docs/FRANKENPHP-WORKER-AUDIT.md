@@ -156,6 +156,21 @@ manager is cleared (audit MC-C-L1). Stock Symfony, including FrankenPHP worker m
 and out in turn, each logout revokes only its own token, the other person keeps being served, and memory stays flat.
 `ChatClientApiWorkerTest` now signs its token out half-way with `POST logout`.
 
+## 2.5.0 additions: client API writes (2026-11-26)
+
+| Service | State | Verdict |
+| --- | --- | --- |
+| `ChatClientApiController` write routes (send, thread reply, reactions, edit, delete) | readonly; the key, the text, the call and the looked-up rows are locals; the write is `ChatService`'s own unit of work | Safe |
+| `ChatClientApiGuard` (`writes()`, `written()`, write and send budgets) | readonly; the flag is configuration; the budgets live in the rate-limiter pool; `ChatClientApiWriteEvent` is built per call | Safe |
+| `ChatService::editWith()`, `deleteWith()`, `setReaction()` | the claim and completion closures are passed per call and run inside the unit of work; nothing is kept | Safe |
+| Rate limiter `nowo_chat_client_write` | in the framework's rate-limiter pool (share it across workers) | Safe |
+
+`ChatClientApiWritesTest::testOnOneKernelNothingOfAWriteStays` writes 120 times (60 sends, 60 reactions) through
+`http_kernel` on one kernel with no resetter, two people and two tokens in turn: every answer is the caller's own
+(`mine`), every count is exact. The race writers (`tests/Database/Support/concurrent-writer.php`, modes `capisend`,
+`capireact`, `capichat`) are worker loops too: 60 client API requests per process, no transaction left open, no closed
+manager. Igor: no new mutable property or static.
+
 ## Rules for future code
 
 - Keep presence, typing and counters in storage (database / cache pool / Mercure), never in service properties.
