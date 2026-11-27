@@ -45,7 +45,9 @@ use const FILTER_VALIDATE_IP;
  * 1. the API is on (a principal resolver is configured; otherwise 404, as if the routes did not exist);
  * 2. the per-IP budget (`client_api.limits.per_ip_per_minute`; IPv6 by /64) — 429 `rate_limited` + Retry-After;
  * 3. a Bearer token (at most 4096 bytes) the host's resolver accepts — 401 `invalid_token` + `WWW-Authenticate: Bearer`;
- * 4. the token's person can use the chat now (ChatAccessPolicyInterface::isReachable()) — 401 `invalid_token`;
+ * 4. the token's person can use the chat now (ChatAccessPolicyInterface::isReachable()) — 2.9: 403 `module_forbidden`
+ *    (`module: chat`, no `WWW-Authenticate`; the token itself is valid, so a client refreshes what the person may use
+ *    without signing out; before 2.9: 401 `invalid_token`, audit reason `account_inactive`, unchanged);
  * 5. the per-token budget (`per_token_per_minute`, keyed by the principal's token id) — 429;
  * 6. the person's own chat budget, shared with the web UI (reads, or actions for read marks) — 429;
  * 7. the scope (`chat:read`) — 403 `insufficient_scope`;
@@ -67,6 +69,12 @@ use const FILTER_VALIDATE_IP;
  */
 final readonly class ChatClientApiGuard
 {
+    /** 2.9: the module name of a `module_forbidden` refusal. */
+    public const string MODULE = 'chat';
+
+    /** 2.9: the text of a `module_forbidden` refusal. */
+    public const string MODULE_FORBIDDEN_MESSAGE = 'Chat is not available for this account.';
+
     /** Longest Bearer token passed to the resolver (bytes). */
     public const int MAX_TOKEN_LENGTH = 4096;
 
@@ -211,7 +219,9 @@ final readonly class ChatClientApiGuard
             $this->deny('invalid_token', Response::HTTP_UNAUTHORIZED, null, $ipPrefix, ['WWW-Authenticate' => 'Bearer error="invalid_token"']);
         }
         if (!$this->access->isReachable($principal->user)) {
-            $this->deny('invalid_token', Response::HTTP_UNAUTHORIZED, $principal, $ipPrefix, ['WWW-Authenticate' => 'Bearer error="invalid_token"'], 'account_inactive');
+            // 2.9: the token is valid (resolved above), only the chat is closed to this person: 403, never 401 (a 401 signs the
+            // client out). Reached only after token validation, so nothing is revealed about unknown tokens.
+            $this->deny('module_forbidden', Response::HTTP_FORBIDDEN, $principal, $ipPrefix, [], 'account_inactive', self::MODULE_FORBIDDEN_MESSAGE, ['module' => self::MODULE]);
         }
         $this->consume($this->tokenLimiter, 'nowo_chat_client_token_' . hash('sha256', $principal->tokenId), $principal, $ipPrefix);
         if ($write) {
@@ -426,13 +436,14 @@ final readonly class ChatClientApiGuard
      * Dispatches the refusal event and throws the refusal.
      *
      * @param array<string, string> $headers
+     * @param array<string, int|string> $details More fields of the error body (2.9: `module`)
      *
      * @throws ChatApiException Always
      */
-    private function deny(string $error, int $status, ?ChatClientPrincipal $principal, ?string $ipPrefix, array $headers = [], ?string $reason = null): never
+    private function deny(string $error, int $status, ?ChatClientPrincipal $principal, ?string $ipPrefix, array $headers = [], ?string $reason = null, string $message = '', array $details = []): never
     {
         $this->events?->dispatch(new ChatClientApiDeniedEvent($reason ?? $error, $principal?->tokenId, $principal?->user->getChatPublicId(), $ipPrefix));
 
-        throw new ChatApiException($error, $status, null, '', [], $headers);
+        throw new ChatApiException($error, $status, null, $message, $details, $headers);
     }
 }

@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+  - [Changed](#changed-51)
+  - [Tests](#tests-51)
 - [[2.8.0] - 2026-11-27](#280---2026-11-27)
   - [Added](#added)
   - [Tests](#tests)
@@ -274,6 +276,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - [Added](#added-50)
 
 ## [Unreleased]
+
+Target: 2.9.0.
+
+### Changed
+
+- **Client API: a person who lost chat access gets `403 module_forbidden`, not `401 invalid_token`** (Beacon spec 262
+  block B, Desktop permission parity). When the token resolves but `ChatAccessPolicyInterface::isReachable()` is false,
+  `/api/chat/v1/*` answers `403 {ok: false, error: "module_forbidden", message: "Chat is not available for this
+  account.", module: "chat"}` with no `WWW-Authenticate` header (same shape as TimeTrack's `module_forbidden`), so a
+  client refreshes what the person may use and hides the chat instead of signing out. `401 invalid_token` stays for
+  missing, unknown, expired and revoked tokens (the 403 is only reachable after the token validated: no oracle). The
+  audit event `ChatClientApiDeniedEvent` keeps the reason `account_inactive`. OpenAPI 1.5.0 and `docs/API.md` updated.
+  **Upgrade note:** clients that treated 401 as "no chat access" must now handle 403 `module_forbidden` (see UPGRADING).
+
+### Tests
+
+- Reachability refusal: 403 body, no `WWW-Authenticate`, `no-store`, and an unknown token still 401.
 
 ## [2.8.0] - 2026-11-27
 

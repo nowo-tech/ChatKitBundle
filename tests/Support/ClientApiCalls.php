@@ -112,9 +112,12 @@ trait ClientApiCalls
         return $data;
     }
 
-    protected static function assertError(Response $response, int $status, string $error): void
+    /**
+     * @param array<string, string> $extra More fields of the body (`message`, `module` of a `module_forbidden`)
+     */
+    protected static function assertError(Response $response, int $status, string $error, array $extra = []): void
     {
         self::assertSame($status, $response->getStatusCode(), (string) $response->getContent());
-        self::assertSame(['ok' => false, 'error' => $error], self::decode($response));
+        self::assertSame(['ok' => false, 'error' => $error] + $extra, self::decode($response));
     }
 }

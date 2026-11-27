@@ -130,7 +130,13 @@ final class ChatClientApiTest extends DatabaseTestCase
 
         // An account that cannot use the chat any more.
         $this->get(TestAccessPolicy::class)->unreachable[$this->luis->getChatPublicId()] = true;
-        self::assertError($this->call('GET', self::API . '/me', 'luis-token'), 401, 'invalid_token');
+        $closed                                                                          = $this->call('GET', self::API . '/me', 'luis-token');
+        self::assertError($closed, 403, 'module_forbidden', ['message' => 'Chat is not available for this account.', 'module' => 'chat']);
+        self::assertNull($closed->headers->get('WWW-Authenticate'));
+        self::assertSame('no-store, private', $closed->headers->get('Cache-Control'));
+        self::assertSame(['ok' => false, 'error' => 'module_forbidden', 'message' => 'Chat is not available for this account.', 'module' => 'chat'], json_decode((string) $closed->getContent(), true));
+        // No oracle: an unknown token for the same person still answers 401, never the module refusal.
+        self::assertError($this->call('GET', self::API . '/me', 'luis-token-x'), 401, 'invalid_token');
 
         // Contexts.
         self::assertError($this->call('GET', self::API . '/me', 'ana-token', null), 400, 'context_required');
@@ -142,7 +148,7 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertError($this->call('GET', self::API . '/me', 'luis-token', 'org:unknown'), 403, 'context_forbidden');
 
         self::assertSame(
-            ['invalid_token', 'invalid_token', 'invalid_token', 'invalid_token', 'insufficient_scope', 'account_inactive', 'context_required', 'invalid_context', 'invalid_context', 'invalid_token', 'context_forbidden', 'context_forbidden'],
+            ['invalid_token', 'invalid_token', 'invalid_token', 'invalid_token', 'insufficient_scope', 'account_inactive', 'invalid_token', 'context_required', 'invalid_context', 'invalid_context', 'invalid_token', 'context_forbidden', 'context_forbidden'],
             array_map(static fn ($event): string => $event->reason, $this->denied),
         );
         self::assertNull($this->denied[0]->tokenId);

@@ -207,7 +207,7 @@ final class ChatClientApiWritesTest extends DatabaseTestCase
         self::assertError($this->write('POST', $this->messages($blocked), 'ana', ['text' => 'x'], 'r-6'), 403, 'read_only');
         // An account that cannot use the chat any more.
         $this->tokens()->grant('disabled', $this->user('Disabled Dan'), self::RW, null, 'tok-dis');
-        self::assertError($this->write('POST', $this->messages($blocked), 'disabled', ['text' => 'x'], 'r-7'), 401, 'invalid_token');
+        self::assertError($this->write('POST', $this->messages($blocked), 'disabled', ['text' => 'x'], 'r-7'), 403, 'module_forbidden', ['message' => 'Chat is not available for this account.', 'module' => 'chat']);
     }
 
     public function testThreadReplies(): void
