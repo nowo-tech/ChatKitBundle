@@ -53,6 +53,17 @@ final readonly class ChatCardUpdates implements ChatCardUpdatesInterface
     ) {
     }
 
+    /**
+     * Sends `message_updated` for the messages of the conversation that hold the card (see the interface).
+     *
+     * @param string $type The card type key
+     * @param string $id The opaque card id, matched byte for byte
+     * @param string $conversationUuid Public uuid of the conversation, matched byte for byte
+     *
+     * @throws InvalidArgumentException `invalid_card` when the type or the id does not have the card token's shape
+     *
+     * @return int How many messages were signalled (0 to MAX_MESSAGES)
+     */
     public function changed(string $type, string $id, string $conversationUuid): int
     {
         if (preg_match(ChatCardText::KEY_PATTERN, $type) !== 1 || preg_match(ChatCardText::ID_PATTERN, $id) !== 1) {
