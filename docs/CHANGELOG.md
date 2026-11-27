@@ -278,6 +278,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- **The conversation search modal loads when it opens** (owner rule 2026-11-23, every dialog loads its content on demand). Its
+  markup is no longer a `<template data-nowo-chat-template="search-dialog">` printed in every dock page (block
+  `nowo_chat_template_search_dialog` removed): the new route `GET /chat/search/dialog` (`nowo_chat_search_dialog`, `_search_dialog.html.twig`)
+  answers it, with the same gates as the results (404 while `search.enabled` or `search.conversation_entry` is off, 401 without a
+  participant, no CSRF token: it reads only) and the header `X-Nowo-Chat-Fragment: search-dialog`. The dock config gets
+  `endpoints.searchDialog`; the script fetches the markup when the header button is clicked and falls back to the search page when it
+  cannot (signed out, search off, offline). `openSearchDialog()` now takes the `dialog` element instead of the templates.
+
 ## [2.9.0] - 2026-11-27
 
 Target: 2.9.0.

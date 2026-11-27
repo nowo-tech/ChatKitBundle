@@ -42,8 +42,10 @@ final class DockTemplatesFixtureTest extends DatabaseTestCase
 
         self::assertFileExists(self::FIXTURE);
         self::assertSame($html, file_get_contents(self::FIXTURE), 'Run UPDATE_FIXTURES=1 vendor/bin/phpunit --filter DockTemplatesFixtureTest');
-        foreach (['dock', 'row', 'list-state', 'picker-section', 'picker-row', 'picker-state', 'overflow-item', 'window', 'message', 'edit-form', 'delete-confirm', 'pending', 'buzz-line', 'day', 'unseen', 'seen', 'thread-state', 'thread-empty', 'search-dialog'] as $name) {
+        foreach (['dock', 'row', 'list-state', 'picker-section', 'picker-row', 'picker-state', 'overflow-item', 'window', 'message', 'edit-form', 'delete-confirm', 'pending', 'buzz-line', 'day', 'unseen', 'seen', 'thread-state', 'thread-empty'] as $name) {
             self::assertStringContainsString('data-nowo-chat-template="' . $name . '"', $html);
         }
+        // Since 2.10.0 the search modal is fetched when it opens (GET /chat/search/dialog), not printed in the dock.
+        self::assertStringNotContainsString('data-nowo-chat-template="search-dialog"', $html);
     }
 }

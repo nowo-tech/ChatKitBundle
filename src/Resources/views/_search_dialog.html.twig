@@ -1,0 +1,50 @@
+{#
+    The search modal of the conversation header (`search.conversation_entry`), 1.40; since 2.10.0 (owner rule 2026-11-23, every dialog
+    loads its content on demand) the answer of `GET /chat/search/dialog`, fetched when the modal opens: UiKit's confirm_dialog
+    anatomy (header with the title and ×, a body of sections — the form, then the results — that alone scrolls, a footer with Close
+    then the one primary "Search"), wide size, a full-screen sheet on phones (CSS). The form is the FormKit ChatMessageSearchType
+    (scope "this conversation / all my conversations", the words, the rare filters folded under "More filters"); the dock script
+    sends it to GET /chat/search/results and puts the HTML fragment in the results section. Variable: form.
+#}
+{% set nowo_chat_locale = nowo_chat_locale|default(app.request.locale|default(null)) %}
+{% embed nowo_ui_partial('confirm_dialog', 'NowoChatKitBundle') with {
+    only_dialog: true,
+    anatomy: true,
+    size: 'wide',
+    title: 'chat_search.modal.title'|trans({}, 'NowoChatKitBundle', nowo_chat_locale),
+    title_id: 'nowo-chat-msearch-title',
+    close_label: 'chat_search.modal.close'|trans({}, 'NowoChatKitBundle', nowo_chat_locale),
+    dialog_testid: 'chat-search-dialog',
+    dialog_modifier: 'nowo-chat-msearch',
+    bundle: 'NowoChatKitBundle',
+} %}
+    {% block body %}
+        {% set _f = form %}
+        <div class="nowo-chat-msearch__section nowo-chat-msearch__section--form">
+            {{ form_start(_f, {attr: {class: 'nowo-chat-msearch__form', role: 'search', 'data-part': 'search-form'}}) }}
+                {{ form_row(_f.scope) }}
+                {{ form_row(_f.q) }}
+                <details class="nowo-chat-msearch__filters" data-part="search-filters" data-testid="chat-msearch-filters">
+                    <summary class="nowo-chat-msearch__filters-toggle">{{ 'chat_search.modal.more_filters'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</summary>
+                    <div class="nowo-chat-msearch__filters-body">
+                        {{ form_row(_f.from) }}
+                        {{ form_row(_f.after) }}
+                        {{ form_row(_f.before) }}
+                        {{ form_row(_f.link) }}
+                    </div>
+                </details>
+                {% do _f.search.setRendered() %}
+                {{ form_rest(_f) }}
+            {{ form_end(_f, {render_rest: false}) }}
+        </div>
+        <div class="nowo-chat-msearch__section nowo-chat-msearch__section--results" data-part="search-results" aria-live="polite" aria-busy="false" data-loading="{{ 'chat_search.modal.loading'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-failed="{{ 'chat_search.modal.failed'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-expired="{{ 'chat_search.modal.expired'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-reload="{{ 'chat_search.modal.reload'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}" data-notice-class="{{ nowo_ui_class('flash_error', 'NowoChatKitBundle') }}" data-reload-class="{{ nowo_ui_class('btn_secondary', 'NowoChatKitBundle') }}" data-testid="chat-msearch-area">
+            <div class="nowo-chat-msearch__empty" data-testid="chat-msearch-start">
+                {{ include(nowo_ui_partial('empty', 'NowoChatKitBundle'), {empty: {title: 'chat_search.modal.start_title'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), message: 'chat_search.modal.start'|trans({}, 'NowoChatKitBundle', nowo_chat_locale), action: null}, bundle: 'NowoChatKitBundle'}, false) }}
+            </div>
+        </div>
+    {% endblock %}
+    {% block footer %}
+        <button type="button" class="{{ nowo_ui_class('btn_secondary', 'NowoChatKitBundle') }}" data-part="search-close" data-testid="chat-msearch-close">{{ 'chat_search.modal.close'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+        <button type="submit" form="{{ form.vars.attr.id }}" class="{{ nowo_ui_class('btn_primary', 'NowoChatKitBundle') }}" data-part="search-submit" data-testid="chat-msearch-submit">{{ 'chat_search.submit'|trans({}, 'NowoChatKitBundle', nowo_chat_locale) }}</button>
+    {% endblock %}
+{% endembed %}

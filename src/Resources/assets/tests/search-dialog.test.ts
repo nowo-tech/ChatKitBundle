@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FRAGMENT_HEADER, fragment, openSearchDialog, sameOriginUrl, searchParams } from '../src/search-dialog';
+import { DIALOG_MARKER, FRAGMENT_HEADER, fragment, loadSearchDialog, openSearchDialog, sameOriginUrl, searchParams } from '../src/search-dialog';
 import { Templates } from '../src/templates';
 
 /** The `search-dialog` template as `_templates.html.twig` renders it (UiKit confirm_dialog anatomy, trimmed). */
@@ -45,7 +45,7 @@ describe('search modal (1.40)', () => {
     document.body.replaceChildren();
   });
 
-  const open = (fetcher: typeof fetch, pick = vi.fn()) => ({ pick, modal: openSearchDialog({ templates, endpoint: '/chat/search/results', conversationUuid: 'conv-1', returnTo: opener, pick, fetcher }) });
+  const open = (fetcher: typeof fetch, pick = vi.fn()) => ({ pick, modal: openSearchDialog({ dialog: templates.clone<HTMLDialogElement>('search-dialog'), endpoint: '/chat/search/results', conversationUuid: 'conv-1', returnTo: opener, pick, fetcher }) });
   const field = (dialog: HTMLElement, name: string): HTMLInputElement => dialog.querySelector(`[name="nowo_chat_msearch[${name}]"]`) as HTMLInputElement;
 
   it('builds unprefixed parameters: this conversation by default, never a conversation for "all"', () => {
@@ -172,8 +172,31 @@ describe('search modal (1.40)', () => {
   });
 
   it('needs the form, the results section and the text field', () => {
-    document.body.innerHTML = '<template data-nowo-chat-template="search-dialog"><dialog></dialog></template>';
-    expect(() => openSearchDialog({ templates: new Templates(document), endpoint: '/x', conversationUuid: 'c', returnTo: null, pick: vi.fn() })).toThrow(/search-dialog template/);
+    expect(() => openSearchDialog({ dialog: document.createElement('dialog'), endpoint: '/x', conversationUuid: 'c', returnTo: null, pick: vi.fn() })).toThrow(/search modal needs/);
+  });
+
+  describe('loadSearchDialog (the markup is fetched when the modal opens)', () => {
+    const markup = (document_: string, status = 200, marked = true): Response => new Response(document_, { status, headers: { ...(marked ? { [FRAGMENT_HEADER]: DIALOG_MARKER } : {}) } });
+
+    it('returns the <dialog> of the answer, without scripts, with unique control ids', async () => {
+      const html = '<script>window.pwned = true</script><dialog data-testid="chat-search-dialog"><form id="f"><input id="q" name="q"><label for="q">Q</label></form><span data-icon="search"></span></dialog>';
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(markup(html));
+      const dialog = await loadSearchDialog('/chat/search/dialog', templates, fetcher);
+      expect(fetcher).toHaveBeenCalledWith('/chat/search/dialog', expect.objectContaining({ credentials: 'same-origin' }));
+      expect(dialog.querySelector('script')).toBeNull();
+      expect(dialog.isConnected).toBe(false);
+      expect(dialog.querySelector('input')?.id).toMatch(/^q-\d+$/);
+      expect(dialog.querySelector('label')?.htmlFor).toBe(dialog.querySelector('input')?.id);
+      expect(dialog.querySelector('[data-icon]')?.childElementCount).toBeGreaterThan(0);
+    });
+
+    it('refuses an answer that is not the dialog: an error status, a redirect, no marker, no <dialog>', async () => {
+      const redirected = markup('<dialog></dialog>');
+      Object.defineProperty(redirected, 'redirected', { value: true });
+      for (const response of [markup('', 401), markup('', 404), redirected, markup('<dialog></dialog>', 200, false), markup('<p>no dialog</p>')]) {
+        await expect(loadSearchDialog('/x', templates, vi.fn<typeof fetch>().mockResolvedValue(response))).rejects.toThrow(/search modal/);
+      }
+    });
   });
 
   it('shows "session expired, reload" instead of a login page (401, a redirect, or an answer without the fragment header)', async () => {

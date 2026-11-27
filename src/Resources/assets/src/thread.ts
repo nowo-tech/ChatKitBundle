@@ -15,7 +15,7 @@ import { ConversationLinks, copyText, decodeLinkTokens, linksSettings, linkToken
 import { cardText, plainText, quoteBlock, quoteOf, SECRET_CARD_FALLBACK, stripReservedAttributes, tidySeparators, visibleItems, type MessageMenuItem } from './message-menu';
 import { openMessageInfo } from './message-info';
 import { openForwardDialog } from './forward-dialog';
-import { openSearchDialog } from './search-dialog';
+import { loadSearchDialog, openSearchDialog } from './search-dialog';
 import { ThreadPanel } from './thread-panel';
 import { SupportPanel } from './support';
 import { loadDialogRuntime } from './sidebar';
@@ -904,8 +904,8 @@ export class ThreadView {
     if (link === null) {
       return;
     }
-    const { searchResults, searchPage } = this.host.config.endpoints;
-    if (searchResults === undefined || searchPage === undefined) {
+    const { searchResults, searchPage, searchDialog } = this.host.config.endpoints;
+    if (searchResults === undefined || searchPage === undefined || searchDialog === undefined) {
       link.remove();
       return;
     }
@@ -915,24 +915,27 @@ export class ThreadView {
         return;
       }
       event.preventDefault();
-      try {
-        openSearchDialog({
-          templates: this.host.templates,
-          endpoint: searchResults,
-          conversationUuid: this.summary.uuid,
-          returnTo: link,
-          pick: (conversationUuid, messageUuid, href) => {
-            if (conversationUuid === this.summary.uuid) {
-              this.jumpWhenLoaded(messageUuid);
-            } else {
-              window.location.assign(href);
-            }
-          },
+      // Owner rule 2026-11-23: the modal's markup is fetched when it opens.
+      loadSearchDialog(searchDialog, this.host.templates)
+        .then((dialog) => {
+          openSearchDialog({
+            dialog,
+            endpoint: searchResults,
+            conversationUuid: this.summary.uuid,
+            returnTo: link,
+            pick: (conversationUuid, messageUuid, href) => {
+              if (conversationUuid === this.summary.uuid) {
+                this.jumpWhenLoaded(messageUuid);
+              } else {
+                window.location.assign(href);
+              }
+            },
+          });
+        })
+        .catch(() => {
+          // The modal could not be loaded (signed out, search off, offline): the search page.
+          window.location.assign(link.href);
         });
-      } catch {
-        // A host template without the modal: the search page.
-        window.location.assign(link.href);
-      }
     });
   }
 
