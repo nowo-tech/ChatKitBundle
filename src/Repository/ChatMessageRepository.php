@@ -66,15 +66,18 @@ class ChatMessageRepository extends ServiceEntityRepository
 
     /**
      * 2.8 (spec 260): the newest messages of a conversation whose body holds the token tail `](type:id)` of a card,
-     * thread replies included and deleted messages left out, searched among the newest `$window` messages only. Two
-     * queries on the conversation's index (the window's lowest id, then the page); the bodies are refreshed from the
-     * database (a worker's manager may hold an older copy). The caller checks the exact token (outside code).
+     * thread replies included and deleted messages left out, searched from the oldest of the newest `$window` top-level
+     * messages on (the replies posted since then, also to older roots, included). Two queries on the conversation's
+     * index (audit ZCW-L1: the window's floor filters `threadRoot IS NULL`, so MySQL / MariaDB walk the index order
+     * instead of sorting the whole conversation), then the page. The rows are refreshed from the database
+     * (`HINT_REFRESH`: a worker's manager may hold an older copy; unflushed ChatKit changes to those messages are
+     * discarded, audit ZCW-I3). The LIKE is a pre-filter only: the caller checks the exact token (outside code).
      *
      * @param ChatConversation $conversation The conversation
      * @param string $type The card type (KEY_PATTERN)
      * @param string $id The card id (ID_PATTERN)
-     * @param int $window Newest messages searched (at least 1)
-     * @param int $limit Messages returned at most
+     * @param int $window Newest top-level messages that set the floor (at least 1)
+     * @param int $limit Candidate messages returned at most
      *
      * @return list<ChatMessage> Newest first
      */
@@ -83,7 +86,7 @@ class ChatMessageRepository extends ServiceEntityRepository
         /** @var list<int|string> $floor */
         $floor = $this->createQueryBuilder('m')
             ->select('m.id')
-            ->where('m.conversation = :conversation')
+            ->where('m.conversation = :conversation AND m.threadRoot IS NULL')
             ->setParameter('conversation', $conversation)
             ->orderBy('m.id', 'DESC')
             ->setFirstResult($window - 1)

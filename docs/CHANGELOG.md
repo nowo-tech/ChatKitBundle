@@ -283,8 +283,8 @@ Target: 2.8.0.
   `message_updated` event for the messages of that conversation that hold the card `#[…](type:id)` (thread replies
   included, deleted messages left out), so every open client renders it again with its own permissions: the dock
   re-resolves the card for the viewer, Beacon Desktop re-reads the message through the client API. The event carries
-  no card content. Bounded: the newest 1,000 messages of the conversation are searched and at most 20 are signalled
-  per call (`SCAN_WINDOW`, `MAX_MESSAGES`). Call it after your transaction commits. A malformed type or id throws
+  no card content. Bounded: the newest 1,000 top-level messages of the conversation (with the thread replies posted
+  since) are searched, at most 80 candidates are read and 20 holders signalled per call (`SCAN_WINDOW`, `MAX_MESSAGES`). Call it after your transaction commits. A malformed type or id throws
   `InvalidArgumentException('invalid_card')`; an unknown conversation or card type sends nothing; a database or hub
   failure is logged, never thrown.
 - `ChatMessageRepository::findCardHolders()` (internal): the bounded query behind it.

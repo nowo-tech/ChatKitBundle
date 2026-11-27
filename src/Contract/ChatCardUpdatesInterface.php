@@ -18,9 +18,12 @@ use InvalidArgumentException;
  * - **Call it after the host's transaction commits.** ChatKit runs on its own connection and cannot see the host's
  *   transaction: a hint sent before the commit makes clients render the old state. Calling it inside ChatKit's own
  *   transaction is harmless (it only reads), but the same rule applies to the host data render() reads.
- * - Bounded: only the newest {@see self::SCAN_WINDOW} messages of the conversation are searched, and at most
- *   {@see self::MAX_MESSAGES} messages (the newest) are refreshed per call. Older messages render the new state on the
- *   next load.
+ * - Bounded: only the newest {@see self::SCAN_WINDOW} top-level messages of the conversation (and the thread replies
+ *   posted since the oldest of them) are searched, and at most {@see self::MAX_MESSAGES} messages (the newest holders)
+ *   are refreshed per call. Older messages render the new state on the next load.
+ * - Do not call it while ChatKit's own unit of work holds unflushed changes to a message that holds the card: the
+ *   holders are re-read from the database (`HINT_REFRESH`) and such changes would be discarded. ChatKit's services
+ *   flush at once, so "after the commit" is enough.
  * - Scoped to one conversation: the host names the conversation the card was shared in (a card id is never looked up
  *   across conversations). An unknown conversation, an unregistered card type or a card no message holds sends nothing.
  * - Idempotent and stateless (FrankenPHP worker mode): calling it twice sends the hint twice, nothing else changes.
@@ -31,7 +34,7 @@ interface ChatCardUpdatesInterface
     /** Messages refreshed per call at most (the newest). */
     public const int MAX_MESSAGES = 20;
 
-    /** Newest messages of the conversation searched per call. */
+    /** Newest top-level messages of the conversation searched per call (with the thread replies posted since). */
     public const int SCAN_WINDOW = 1000;
 
     /**

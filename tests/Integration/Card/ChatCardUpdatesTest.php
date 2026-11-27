@@ -87,6 +87,7 @@ final class ChatCardUpdatesTest extends DatabaseTestCase
         self::assertSame(2, $updates->changed('note', 'n1', $dm->getUuid()));
         self::assertSame(1, $updates->changed('note', 'n12', $dm->getUuid()));
         self::assertSame(0, $updates->changed('note', 'n_1', $dm->getUuid()), '`_` is no wildcard');
+        self::assertSame([], $this->get(ChatMessageRepository::class)->findCardHolders($dm, 'note', 'n_1', 1000, 20), 'escaped in the query, not only filtered (audit ZCW-I2)');
         self::assertSame(0, $updates->changed('note', 'N1', $dm->getUuid()), 'ids are matched byte for byte');
         self::assertSame(0, $updates->changed('note', 'n1', strtoupper($dm->getUuid())), 'the uuid byte for byte');
         self::assertSame(0, $updates->changed('note', 'n1', '00000000-0000-4000-8000-000000000000'));
@@ -111,15 +112,19 @@ final class ChatCardUpdatesTest extends DatabaseTestCase
     public function testBoundsTheScanAndTheMessagesSignalled(): void
     {
         $this->get(TestNoteCardProvider::class);
-        $ana  = $this->user('Ana');
-        $luis = $this->user('Luis');
-        $chat = $this->get(ChatService::class);
-        $dm   = $chat->openDirect($ana, $luis);
+        $ana   = $this->user('Ana');
+        $luis  = $this->user('Luis');
+        $chat  = $this->get(ChatService::class);
+        $dm    = $chat->openDirect($ana, $luis);
+        $first = null;
         for ($i = 0; $i < ChatCardUpdatesInterface::MAX_MESSAGES + 2; ++$i) {
-            $this->em->persist(new ChatMessage($dm, $ana, '#[…](note:n1)', '<p>card</p>'));
+            $this->em->persist($card = new ChatMessage($dm, $ana, '#[…](note:n1)', '<p>card</p>'));
+            $first ??= $card;
         }
         $this->em->persist($newest = new ChatMessage($dm, $ana, 'after', '<p>after</p>'));
         $this->em->flush();
+        // A reply to the oldest root, posted after the newest top-level message (audit ZCW-L1: still found).
+        [$reply] = $this->get(ChatThreads::class)->reply($luis, $first, 'joined #[…](note:n1)', 'reply-bounds');
 
         $realtime            = $this->get(RecordingRealtime::class);
         $realtime->published = [];
@@ -127,10 +132,30 @@ final class ChatCardUpdatesTest extends DatabaseTestCase
         self::assertCount(ChatCardUpdatesInterface::MAX_MESSAGES, $realtime->published);
 
         $messages = $this->get(ChatMessageRepository::class);
-        self::assertSame([], $messages->findCardHolders($dm, 'note', 'n1', 1, 5), 'the window holds the newest message only');
-        self::assertCount(1, $messages->findCardHolders($dm, 'note', 'n1', 2, 5));
+        self::assertSame([$reply], $messages->findCardHolders($dm, 'note', 'n1', 1, 5), 'the window holds the newest top-level message and the replies since');
+        self::assertCount(2, $messages->findCardHolders($dm, 'note', 'n1', 2, 5));
         self::assertCount(3, $messages->findCardHolders($dm, 'note', 'n1', 10_000, 3), 'a window wider than the conversation');
         self::assertNotNull($newest->getId());
+    }
+
+    /** Audit ZCW-I1: newer decoys (the token in code) cannot push the real holder out of the 20. */
+    public function testDecoysDoNotStarveTheHolders(): void
+    {
+        $this->get(TestNoteCardProvider::class);
+        $ana    = $this->user('Ana');
+        $luis   = $this->user('Luis');
+        $dm     = $this->get(ChatService::class)->openDirect($ana, $luis);
+        $holder = new ChatMessage($dm, $ana, '#[…](note:n1)', '<p>card</p>');
+        $this->em->persist($holder);
+        for ($i = 0; $i < ChatCardUpdatesInterface::MAX_MESSAGES + 5; ++$i) {
+            $this->em->persist(new ChatMessage($dm, $luis, '`#[…](note:n1)`', '<p>code</p>'));
+        }
+        $this->em->flush();
+
+        $realtime            = $this->get(RecordingRealtime::class);
+        $realtime->published = [];
+        self::assertSame(1, $this->get(ChatCardUpdatesInterface::class)->changed('note', 'n1', $dm->getUuid()));
+        self::assertSame($holder->getUuid(), $this->get(RecordingRealtime::class)->published[0]['payload']['message']['uuid']);
     }
 
     public function testADatabaseFailureIsLoggedNeverThrown(): void

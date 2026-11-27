@@ -19,6 +19,7 @@ use Throwable;
 
 use function array_filter;
 use function array_map;
+use function array_slice;
 use function array_values;
 use function count;
 use function in_array;
@@ -32,6 +33,9 @@ use function preg_match;
  */
 final readonly class ChatCardUpdates implements ChatCardUpdatesInterface
 {
+    /** LIKE candidates read per call (bounded), cut to MAX_MESSAGES after the exact-token filter (audit ZCW-I1). */
+    public const int CANDIDATES = self::MAX_MESSAGES * 4;
+
     /** Error code of a malformed type or id. */
     public const string INVALID_CARD = 'invalid_card';
 
@@ -80,9 +84,12 @@ final readonly class ChatCardUpdates implements ChatCardUpdatesInterface
             }
             $card    = ['type' => $type, 'id' => $id];
             $holders = array_values(array_filter(
-                $this->messages->findCardHolders($conversation, $type, $id, self::SCAN_WINDOW, self::MAX_MESSAGES),
+                $this->messages->findCardHolders($conversation, $type, $id, self::SCAN_WINDOW, self::CANDIDATES),
                 fn (ChatMessage $message): bool => in_array($card, $this->references->cardTokens($message->getBody()), true),
             ));
+            // Audit ZCW-I1: cut after the exact-token filter, so newer decoys (a token in code, another letter case on a
+            // case-insensitive collation) cannot push the real holders out of the 20.
+            $holders = array_slice($holders, 0, self::MAX_MESSAGES);
             if ($holders === []) {
                 return 0;
             }

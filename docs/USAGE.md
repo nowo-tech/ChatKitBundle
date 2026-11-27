@@ -1239,9 +1239,12 @@ public function endCall(Call $call): void
   hint sent before the commit makes the clients render the old state again.
 - Scope: one conversation, by public uuid; type, id and uuid are matched byte for byte. An unknown conversation, a type
   that is not a registered card type, or a card no message holds sends nothing (`0`).
-- Bounds: the newest `ChatCardUpdatesInterface::SCAN_WINDOW` (1,000) messages of the conversation are searched (two
-  indexed queries) and at most `MAX_MESSAGES` (20, the newest) are signalled per call. Older messages show the new
-  state on their next load. It returns how many messages were signalled.
+- Bounds: the newest `ChatCardUpdatesInterface::SCAN_WINDOW` (1,000) top-level messages of the conversation are
+  searched, with the thread replies posted since the oldest of them (two indexed queries); at most 80 candidates are
+  read and `MAX_MESSAGES` (20, the newest holders) are signalled per call. Older messages show the new state on their
+  next load. It returns how many messages were signalled.
+- Do not call it while ChatKit's own unit of work holds unflushed changes to one of those messages: the holders are
+  re-read from the database and such changes would be discarded (ChatKit's services flush at once).
 - A malformed type or id throws `InvalidArgumentException('invalid_card')`. A database or hub failure is logged (class
   name only) and never thrown; the clients' catch-up covers a lost hint. Stateless (FrankenPHP worker mode) and
   idempotent: a second call only sends the hint again.

@@ -29,8 +29,10 @@ renders the card again with its own permissions.
 - **FR-CARDUP-002**: scope and matching: one conversation by public uuid, uuid, type and id compared byte for byte; an
   unknown conversation, a type that is not a registered card type or a card no message holds sends nothing (0); a
   malformed type or id throws `InvalidArgumentException('invalid_card')`.
-- **FR-CARDUP-003**: bounds: the newest `SCAN_WINDOW` (1000) messages of the conversation are searched with two
-  indexed queries (`LIKE` with escaped `_`, then the exact token), and at most `MAX_MESSAGES` (20) are signalled.
+- **FR-CARDUP-003**: bounds: the newest `SCAN_WINDOW` (1000) top-level messages of the conversation, with the thread
+  replies posted since, are searched with two indexed queries (the floor filters `threadRoot IS NULL`, audit ZCW-L1;
+  `LIKE` with escaped `_`), at most `CANDIDATES` (80) rows are read, the exact token is checked, and at most
+  `MAX_MESSAGES` (20) holders are signalled (cut after the filter, audit ZCW-I1).
 - **FR-CARDUP-004**: the hint carries no card content (`full`: the message presented without a viewer, card slots
   pending; `ids`: ids only); the client API answers the re-read message with the card rendered for the caller. A
   database or hub failure is logged by class name and never thrown; the call is stateless (worker mode) and
