@@ -109,7 +109,7 @@ export class Templates {
    *
    * @param scope Cloned element.
    */
-  private static uniqueIds(scope: Element): void {
+  static uniqueIds(scope: Element): void {
     scope.querySelectorAll<HTMLElement>('input[id], textarea[id], select[id]').forEach((control) => {
       serial += 1;
       const unique = `${control.id}-${serial}`;

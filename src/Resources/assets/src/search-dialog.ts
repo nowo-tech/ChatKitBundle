@@ -9,11 +9,12 @@
  * pending request; focus stays in the modal (Tab cycles) and returns to the header button. No inline style (CSP).
  */
 import { closeDialog, presentDialog } from './message-info';
-import type { Templates } from './templates';
+import { Templates } from './templates';
 
 /** What the modal needs from the dock. */
 export interface SearchDialogOptions {
-  templates: Templates;
+  /** The modal's `<dialog>`, as {@link loadSearchDialog} fetched it. */
+  dialog: HTMLDialogElement;
   /** `GET /chat/search/results`. */
   endpoint: string;
   /** The open conversation (the default scope). */
@@ -132,6 +133,36 @@ function expiredNotice(results: HTMLElement): HTMLElement {
   return notice;
 }
 
+/** Header value of the dialog markup answer (`GET /chat/search/dialog`). */
+export const DIALOG_MARKER = 'search-dialog';
+
+/**
+ * Fetches the modal's markup when it is about to open (owner rule 2026-11-23, every dialog loads its content on demand).
+ *
+ * @param url `GET /chat/search/dialog`.
+ * @param templates Fills the icons and makes the form control ids unique.
+ * @param fetcher `fetch` (tests).
+ * @returns The `<dialog>`, not yet in the page.
+ * @throws Error When the answer is not the dialog (signed out, search off, a login page) or has no `<dialog>`.
+ */
+export async function loadSearchDialog(url: string, templates: Templates, fetcher: typeof fetch = window.fetch.bind(window)): Promise<HTMLDialogElement> {
+  const response = await fetcher(url, { headers: { Accept: 'text/html' }, credentials: 'same-origin' });
+  if (!response.ok || response.redirected || response.headers.get(FRAGMENT_HEADER) !== DIALOG_MARKER) {
+    throw new Error(`NowoChat: the search modal could not be loaded (HTTP ${response.status}).`);
+  }
+  const parsed = new DOMParser().parseFromString(await response.text(), 'text/html');
+  parsed.querySelectorAll('script, style, iframe, frame, object, embed, base, meta, link, template').forEach((node) => node.remove());
+  const dialog = parsed.querySelector('dialog');
+  if (dialog === null) {
+    throw new Error('NowoChat: the search modal answer has no <dialog>.');
+  }
+  const element = document.importNode(dialog, true);
+  templates.fillIcons(element);
+  Templates.uniqueIds(element);
+
+  return element;
+}
+
 /**
  * Builds and opens the modal.
  *
@@ -139,12 +170,12 @@ function expiredNotice(results: HTMLElement): HTMLElement {
  * @returns The open modal.
  */
 export function openSearchDialog(options: SearchDialogOptions): SearchDialog {
-  const dialog = options.templates.clone<HTMLDialogElement>('search-dialog');
+  const dialog = options.dialog;
   const form = dialog.querySelector<HTMLFormElement>('[data-part="search-form"]');
   const results = dialog.querySelector<HTMLElement>('[data-part="search-results"]');
   const input = dialog.querySelector<HTMLInputElement>('input[type="search"]');
   if (form === null || results === null || input === null) {
-    throw new Error('NowoChat: the search-dialog template needs the form, the results section and the text field.');
+    throw new Error('NowoChat: the search modal needs the form, the results section and the text field.');
   }
   const fetcher = options.fetcher ?? window.fetch.bind(window);
   let controller: AbortController | null = null;
