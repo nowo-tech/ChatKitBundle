@@ -101,7 +101,7 @@ Full guide: [docs/INSTALLATION.md](docs/INSTALLATION.md) · options: [docs/CONFI
 
 ## Requirements
 
-- PHP `>=8.3 <8.6` (8.3 floor: the code uses typed class constants, a PHP 8.3 feature)
+- PHP `>=8.3 <8.7` (8.3 floor: the code uses typed class constants, a PHP 8.3 feature)
 - Symfony 7.4, 8.0, and 8.1+
 - Doctrine ORM, SecurityBundle, TwigBundle, Form, Asset, Symfony UX Icons
 - Optional: `symfony/mercure-bundle` (realtime), Symfony Messenger (async push), a Web Push library behind `ChatPushSenderInterface`
