@@ -45,8 +45,14 @@ use const FILTER_VALIDATE_IP;
  * 1. the API is on (a principal resolver is configured; otherwise 404, as if the routes did not exist);
  * 2. the per-IP budget (`client_api.limits.per_ip_per_minute`; IPv6 by /64) — 429 `rate_limited` + Retry-After;
  * 3. a Bearer token (at most 4096 bytes) the host's resolver accepts — 401 `invalid_token` + `WWW-Authenticate: Bearer`;
- * 4. the token's person can use the chat now (ChatAccessPolicyInterface::isReachable()) — 401 `invalid_token`;
- * 5. the per-token budget (`per_token_per_minute`, keyed by the principal's token id) — 429;
+ *    2.9 (audit ZDF-M1): a resolver that validated the token but knows the chat is closed to its person (a permission
+ *    removed after pairing) throws ChatModuleForbiddenException instead: the token's per-token budget is spent (when the
+ *    exception names the token) and the API answers 403 `module_forbidden` (`message`, `module: chat`, no
+ *    `WWW-Authenticate`; the client keeps its token), audit reason `module_forbidden`;
+ * 4. the per-token budget (`per_token_per_minute`, keyed by the principal's token id) — 429 (2.9, audit ZDF-L1: before
+ *    the account check, as TimeTrack, so a client retrying a refusal is bounded by its token's budget);
+ * 5. the token's person can use the chat now (ChatAccessPolicyInterface::isReachable(): a disabled or anonymised
+ *    account) — 401 `invalid_token`, audit reason `account_inactive` (the client signs out);
  * 6. the person's own chat budget, shared with the web UI (reads, or actions for read marks) — 429;
  * 7. the scope (`chat:read`) — 403 `insufficient_scope`;
  * 8. the context: the context header, or the token's own context, checked by ChatClientContextPolicyInterface on every
@@ -56,17 +62,26 @@ use const FILTER_VALIDATE_IP;
  * Never reads or writes the session, never trusts a cookie, never changes the person's web context. Every refusal
  * after step 1 dispatches ChatClientApiDeniedEvent (ids and codes only). Stateless: nothing of a request is kept.
  *
- * 2.4.1: logout ({@see self::logout()}) runs steps 1–3 and 5 only, and answers the same way for an unknown, expired or
+ * 2.4.1: logout ({@see self::logout()}) runs steps 1–3 and a per-token budget of its own only, and answers the same way for an unknown, expired or
  * revoked token as for a revoked one (not an oracle).
  *
  * 2.5: the write routes (scope `chat:write`) answer 404 while `client_api.writes` is off (as if they did not exist), and
- * otherwise run the same steps, with the scopes checked right after the per-token budget (audit ZCG-L2: before any write,
- * action or send budget is spent) and, at step 5, the token's write budget too (`writes_per_token_per_minute`, own key)
+ * otherwise run the same steps, with the scopes checked right after the account check (audit ZCG-L2: before any write,
+ * action or send budget is spent), then the token's write budget (`writes_per_token_per_minute`, own key)
  * and, at step 6, the person's action budget (plus the send budget for new messages, as the web UI). A write token must
  * hold `chat:read` as well (it reads back what it wrote).
  */
 final readonly class ChatClientApiGuard
 {
+    /** 2.9: the module name of a `module_forbidden` refusal. */
+    public const string MODULE = 'chat';
+
+    /** 2.9: the error code of a permission lost after pairing ({@see ChatModuleForbiddenException}). */
+    public const string MODULE_FORBIDDEN = 'module_forbidden';
+
+    /** 2.9: the text of a `module_forbidden` refusal. */
+    public const string MODULE_FORBIDDEN_MESSAGE = 'Chat is not available for this account.';
+
     /** Longest Bearer token passed to the resolver (bytes). */
     public const int MAX_TOKEN_LENGTH = 4096;
 
@@ -206,14 +221,25 @@ final readonly class ChatClientApiGuard
         if ($bearer === null) {
             $this->deny('invalid_token', Response::HTTP_UNAUTHORIZED, null, $ipPrefix, ['WWW-Authenticate' => 'Bearer']);
         }
-        $principal = $resolver->resolve($bearer, $this->clientRequest($request, $ip, $header));
+        try {
+            $principal = $resolver->resolve($bearer, $this->clientRequest($request, $ip, $header));
+        } catch (ChatModuleForbiddenException $forbidden) {
+            // 2.9 (audit ZDF-M1): the host validated the token, only the chat is closed to its person: 403, never 401
+            // (a 401 signs the client out). The token's budget first (ZDF-L1): a client retrying the 403 is throttled.
+            if ($forbidden->tokenId !== null) {
+                $this->consume($this->tokenLimiter, $this->tokenKey($forbidden->tokenId), $forbidden, $ipPrefix);
+            }
+            $this->deny(self::MODULE_FORBIDDEN, Response::HTTP_FORBIDDEN, $forbidden, $ipPrefix, [], null, self::MODULE_FORBIDDEN_MESSAGE, ['module' => self::MODULE]);
+        }
         if (!$principal instanceof ChatClientPrincipal) {
             $this->deny('invalid_token', Response::HTTP_UNAUTHORIZED, null, $ipPrefix, ['WWW-Authenticate' => 'Bearer error="invalid_token"']);
         }
+        // Audit ZDF-L1: the token's budget before the account check (as TimeTrack's client API).
+        $this->consume($this->tokenLimiter, $this->tokenKey($principal->tokenId), $principal, $ipPrefix);
         if (!$this->access->isReachable($principal->user)) {
+            // A disabled or anonymised account: 401, the client signs out (unchanged since 2.4; audit ZDF-M1).
             $this->deny('invalid_token', Response::HTTP_UNAUTHORIZED, $principal, $ipPrefix, ['WWW-Authenticate' => 'Bearer error="invalid_token"'], 'account_inactive');
         }
-        $this->consume($this->tokenLimiter, 'nowo_chat_client_token_' . hash('sha256', $principal->tokenId), $principal, $ipPrefix);
         if ($write) {
             // Audit ZCG-L2: a token without the write scopes is refused before it spends any write, action or send
             // budget (the send budget is the person's dock budget). The IP and token budgets above still throttle probing.
@@ -249,7 +275,10 @@ final readonly class ChatClientApiGuard
      * (`per_token_per_minute`, separate from the token's read budget: audit ZCB-L1; 429 + Retry-After); no usable Bearer
      * token (absent, blank or longer than 4096 bytes) answers 401 as on every route. A token the resolver does not accept
      * now (unknown, expired, revoked, another client family) returns silently: the caller answers the same 204 (no
-     * oracle), nothing is revoked and no event is dispatched. Reachability, scope and context are not checked: a
+     * oracle), nothing is revoked and no event is dispatched. 2.9: a token the resolver answers with
+     * ChatModuleForbiddenException (valid, chat closed) is signed out like an accepted one: revoked through the revoker,
+     * its logout budget spent when the signal names the token, ChatClientLoggedOutEvent dispatched when it names the
+     * token and the person; logout never answers `module_forbidden`. Reachability, scope and context are not checked: a
      * person whose account is inactive, whose token lacks `chat:read` or whose membership is gone may always give
      * up their own token. A failure of the revoker propagates (never reported as a success).
      *
@@ -271,7 +300,21 @@ final readonly class ChatClientApiGuard
             $this->deny('invalid_token', Response::HTTP_UNAUTHORIZED, null, $ipPrefix, ['WWW-Authenticate' => 'Bearer']);
         }
         $clientRequest = $this->clientRequest($request, $ip, $request->headers->get($this->contextHeader));
-        $principal     = $resolver->resolve($bearer, $clientRequest);
+        try {
+            $principal = $resolver->resolve($bearer, $clientRequest);
+        } catch (ChatModuleForbiddenException $forbidden) {
+            // 2.9: the host validated the token, only the chat is closed: the person may still give it up, so it is revoked
+            // (it must not work again when the chat reopens). Its logout budget and the event need the ids the signal names.
+            if ($forbidden->tokenId !== null) {
+                $this->consume($this->tokenLimiter, 'nowo_chat_client_logout_' . hash('sha256', $forbidden->tokenId), $forbidden, $ipPrefix);
+            }
+            $this->revoker?->revoke($bearer, $clientRequest);
+            if ($forbidden->tokenId !== null && $forbidden->userPublicId !== null) {
+                $this->events?->dispatch(new ChatClientLoggedOutEvent($forbidden->tokenId, $forbidden->userPublicId, $this->revokes(), $ipPrefix));
+            }
+
+            return;
+        }
         if (!$principal instanceof ChatClientPrincipal) {
             return;
         }
@@ -342,6 +385,14 @@ final readonly class ChatClientApiGuard
     }
 
     /**
+     * The per-token budget key of a token id (the id is hashed: the key never carries it).
+     */
+    private function tokenKey(string $tokenId): string
+    {
+        return 'nowo_chat_client_token_' . hash('sha256', $tokenId);
+    }
+
+    /**
      * The rate-limit key of an IP: the address for IPv4, its /64 for IPv6 (one host holds a whole /64).
      */
     private function ipKey(?string $ip): string
@@ -408,7 +459,7 @@ final readonly class ChatClientApiGuard
     /**
      * Consumes one token of a budget; 429 + Retry-After when it is spent.
      */
-    private function consume(RateLimiterFactoryInterface $factory, string $key, ?ChatClientPrincipal $principal, ?string $ipPrefix): void
+    private function consume(RateLimiterFactoryInterface $factory, string $key, ChatClientPrincipal|ChatModuleForbiddenException|null $principal, ?string $ipPrefix): void
     {
         $limit = $factory->create($key)->consume();
         if (!$limit->isAccepted()) {
@@ -426,13 +477,16 @@ final readonly class ChatClientApiGuard
      * Dispatches the refusal event and throws the refusal.
      *
      * @param array<string, string> $headers
+     * @param ChatClientPrincipal|ChatModuleForbiddenException|null $principal Who was refused (2.9: the ids a module refusal carries)
+     * @param array<string, int|string> $details More fields of the error body (2.9: `module`)
      *
      * @throws ChatApiException Always
      */
-    private function deny(string $error, int $status, ?ChatClientPrincipal $principal, ?string $ipPrefix, array $headers = [], ?string $reason = null): never
+    private function deny(string $error, int $status, ChatClientPrincipal|ChatModuleForbiddenException|null $principal, ?string $ipPrefix, array $headers = [], ?string $reason = null, string $message = '', array $details = []): never
     {
-        $this->events?->dispatch(new ChatClientApiDeniedEvent($reason ?? $error, $principal?->tokenId, $principal?->user->getChatPublicId(), $ipPrefix));
+        $person = $principal instanceof ChatClientPrincipal ? $principal->user->getChatPublicId() : $principal?->userPublicId;
+        $this->events?->dispatch(new ChatClientApiDeniedEvent($reason ?? $error, $principal?->tokenId, $person, $ipPrefix));
 
-        throw new ChatApiException($error, $status, null, '', [], $headers);
+        throw new ChatApiException($error, $status, null, $message, $details, $headers);
     }
 }

@@ -13,7 +13,9 @@ use Nowo\ChatKitBundle\Model\ChatUserInterface;
 interface ChatAccessPolicyInterface
 {
     /**
-     * Active account that can use the chat at all (disabled / anonymised accounts: false).
+     * Active account that can use the chat at all (disabled / anonymised accounts: false). The client API answers false
+     * with 401 `invalid_token` (audit reason `account_inactive`): the client signs out. A permission lost by an active
+     * account is the principal resolver's ChatModuleForbiddenException (2.9: 403 `module_forbidden`), not this.
      *
      * @param ChatUserInterface $user The account to check
      *

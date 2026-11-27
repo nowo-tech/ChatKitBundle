@@ -2,7 +2,7 @@
 openapi: 3.1.0
 info:
   title: ChatKitBundle client API
-  version: 1.4.0
+  version: 1.5.0
   description: >-
     Stateless chat API for native clients (Beacon Desktop): reads, the reader's own read marks, (2.4.1) logout and
     (2.5) writes: send, thread reply, reactions, edit and delete of one's own message (scope chat:write, off until
@@ -671,7 +671,9 @@ components:
       description: >-
         A refusal with a stable code: invalid_context, context_required, invalid_cursor, invalid_limit, invalid_json
         (400), idempotency_key_required, idempotency_key_invalid (400, writes); insufficient_scope,
-        context_forbidden (403; also a token bound to a context with no context policy), read_only, edit_forbidden,
+        context_forbidden (403; also a token bound to a context with no context policy), 2.9 module_forbidden (403, valid
+        token and active account, but the host's resolver says the chat is closed to the person, a permission lost after
+        pairing: message and module=chat, no WWW-Authenticate; the client hides the chat and keeps its token), read_only, edit_forbidden,
         delete_forbidden (403, writes); not_found (404, audited; also every write route while client_api.writes is
         off); invalid_message_id (422).
       content:
@@ -687,7 +689,7 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     Unauthorized:
       description: >-
-        invalid_token (missing, unknown, expired or revoked token, or an account that cannot use the chat). POST /logout
+        invalid_token (missing, unknown, expired or revoked token, or a disabled or anonymised account: the client signs out; a permission lost after pairing is 403 module_forbidden since 2.9). POST /logout
         answers 401 only when there is no usable Bearer token (header absent, blank, or a token over 4096 bytes).
       headers:
         WWW-Authenticate: { schema: { type: string } }
@@ -716,6 +718,8 @@ components:
         ok: { type: boolean, const: false }
         error: { type: string }
         code: { type: string }
+        message: { type: string, description: '2.9: module_forbidden only.' }
+        module: { type: string, description: '2.9: module_forbidden only: chat.' }
     Me:
       type: object
       required: [apiVersion, user, scopes, context, contexts, features, limits, reactions]

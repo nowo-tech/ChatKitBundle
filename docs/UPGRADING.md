@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 2.9.0](#to-290)
 - [To 2.8.0](#to-280)
 - [To 2.7.0](#to-270)
   - [Beacon adoption (spec 259 block B, after 2.7.0)](#beacon-adoption-spec-259-block-b-after-270)
@@ -117,6 +118,41 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 2.9.0
+
+From **2.8.x**, no code change is required: a resolver that never throws behaves as in 2.8 (a disabled or anonymised
+account, `null` from the resolver or `ChatAccessPolicyInterface::isReachable()` false, still answers
+`401 invalid_token`, and the client signs out).
+
+New, optional: a **permission lost after pairing** (valid token, active account, but the person may not use the chat
+now) can be answered `403 module_forbidden` instead of `401`. Throw
+`Nowo\ChatKitBundle\ClientApi\ChatModuleForbiddenException` from `ChatClientPrincipalResolverInterface::resolve()`
+(only after the token validated):
+
+```php
+use Nowo\ChatKitBundle\ClientApi\ChatModuleForbiddenException;
+
+// The token id (never the token) keys ChatKit's per-token budget and the audit event; both arguments are optional.
+throw new ChatModuleForbiddenException($tokenId, $user->getChatPublicId());
+```
+
+The client API then answers `403 {"ok": false, "error": "module_forbidden", "message": "Chat is not available for this
+account.", "module": "chat"}` (no `WWW-Authenticate`, `Cache-Control: no-store, private`) on every route, realtime
+included, and dispatches `ChatClientApiDeniedEvent` with reason `module_forbidden`. Clients must handle it: refresh
+what the person may use, hide the chat, keep the token. `POST logout` still revokes such a token (204), so it does not work again when the chat reopens; pass the ids to get
+the logout budget and `ChatClientLoggedOutEvent`.
+
+**Beacon (TimeTrack `ClientFamilyTokenAuthenticator` as the resolver, audit ZDF-I1):** map TimeTrack's
+`module_forbidden` refusal for the `chat` family (`ClientFamilyAuthentication::$error === 'module_forbidden'`, the
+capabilities provider denies `chat`) to this exception instead of returning `null`, as `rate_limited` is already mapped
+to a 429. TimeTrack's refusal carries no principal, so throw it without ids (`new ChatModuleForbiddenException()`);
+TimeTrack already spent its own per-token budget. Keep returning `null` for every other refusal (unknown, expired,
+revoked, another family, inactive account). Add a functional test "chat token, provider says chat false → 403
+`module_forbidden`, token kept".
+
+The per-token budget now runs before the account check (audit ZDF-L1): a valid token refused as `account_inactive`
+spends one request of `per_token_per_minute`.
 
 ## To 2.8.0
 

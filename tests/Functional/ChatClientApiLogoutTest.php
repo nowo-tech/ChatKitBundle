@@ -142,6 +142,34 @@ final class ChatClientApiLogoutTest extends DatabaseTestCase
         self::assertSame([], $this->denied);
     }
 
+    public function testATokenWhoseChatIsClosedIsRevokedOnLogout(): void
+    {
+        // 2.9 (coordinator review of ZDF): the resolver's ChatModuleForbiddenException on logout still revokes the token,
+        // so it does not work again when the chat reopens.
+        $ana = $this->user('Ana');
+        $bea = $this->user('Bea');
+        $this->tokens()->grant('ana-closed', $ana, id: 'tok-ana-closed');
+        $this->tokens()->grant('bea-closed', $bea, id: 'tok-bea-closed');
+        $this->tokens()->moduleForbidden = ['ana-closed' => true, 'bea-closed' => false];
+        self::assertError($this->call('GET', '/api/chat/v1/me', 'ana-closed'), 403, 'module_forbidden', ['message' => 'Chat is not available for this account.', 'module' => 'chat']);
+
+        self::assertNoContent($this->call('POST', self::LOGOUT, 'ana-closed', null, null, [], '198.51.100.40'));
+        // Without ids (Beacon's TimeTrack mapping): revoked as well, no event (it needs the token and the person).
+        self::assertNoContent($this->call('POST', self::LOGOUT, 'bea-closed', null));
+        self::assertSame(['ana-closed', 'bea-closed'], array_column($this->get(TestClientTokenRevoker::class)->calls, 'bearer'));
+        self::assertSame([], $this->tokens()->tokens);
+        self::assertCount(1, $this->loggedOut);
+        self::assertSame('tok-ana-closed', $this->loggedOut[0]->tokenId);
+        self::assertSame($ana->getChatPublicId(), $this->loggedOut[0]->userPublicId);
+        self::assertTrue($this->loggedOut[0]->revoked);
+        self::assertSame('198.51.100.0/24', $this->loggedOut[0]->ipPrefix);
+
+        // The chat reopens: the revoked tokens stay refused.
+        $this->tokens()->moduleForbidden = [];
+        self::assertError($this->call('GET', '/api/chat/v1/me', 'ana-closed'), 401, 'invalid_token');
+        self::assertError($this->call('GET', '/api/chat/v1/me', 'bea-closed'), 401, 'invalid_token');
+    }
+
     public function testOnlyPostWithABearerToken(): void
     {
         $this->tokens()->grant('ana-token', $this->user('Ana'));
