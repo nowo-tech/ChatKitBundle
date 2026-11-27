@@ -275,8 +275,10 @@ final readonly class ChatClientApiGuard
      * (`per_token_per_minute`, separate from the token's read budget: audit ZCB-L1; 429 + Retry-After); no usable Bearer
      * token (absent, blank or longer than 4096 bytes) answers 401 as on every route. A token the resolver does not accept
      * now (unknown, expired, revoked, another client family) returns silently: the caller answers the same 204 (no
-     * oracle), nothing is revoked and no event is dispatched; 2.9: so does a token the resolver answers with
-     * ChatModuleForbiddenException (logout never answers `module_forbidden`). Reachability, scope and context are not checked: a
+     * oracle), nothing is revoked and no event is dispatched. 2.9: a token the resolver answers with
+     * ChatModuleForbiddenException (valid, chat closed) is signed out like an accepted one: revoked through the revoker,
+     * its logout budget spent when the signal names the token, ChatClientLoggedOutEvent dispatched when it names the
+     * token and the person; logout never answers `module_forbidden`. Reachability, scope and context are not checked: a
      * person whose account is inactive, whose token lacks `chat:read` or whose membership is gone may always give
      * up their own token. A failure of the revoker propagates (never reported as a success).
      *
@@ -300,8 +302,17 @@ final readonly class ChatClientApiGuard
         $clientRequest = $this->clientRequest($request, $ip, $request->headers->get($this->contextHeader));
         try {
             $principal = $resolver->resolve($bearer, $clientRequest);
-        } catch (ChatModuleForbiddenException) {
-            // 2.9: the token is valid but the chat is closed: the client forgets it; nothing revoked, no event (as a refused token).
+        } catch (ChatModuleForbiddenException $forbidden) {
+            // 2.9: the host validated the token, only the chat is closed: the person may still give it up, so it is revoked
+            // (it must not work again when the chat reopens). Its logout budget and the event need the ids the signal names.
+            if ($forbidden->tokenId !== null) {
+                $this->consume($this->tokenLimiter, 'nowo_chat_client_logout_' . hash('sha256', $forbidden->tokenId), $forbidden, $ipPrefix);
+            }
+            $this->revoker?->revoke($bearer, $clientRequest);
+            if ($forbidden->tokenId !== null && $forbidden->userPublicId !== null) {
+                $this->events?->dispatch(new ChatClientLoggedOutEvent($forbidden->tokenId, $forbidden->userPublicId, $this->revokes(), $ipPrefix));
+            }
+
             return;
         }
         if (!$principal instanceof ChatClientPrincipal) {

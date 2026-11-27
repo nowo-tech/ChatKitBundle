@@ -289,7 +289,8 @@ Target: 2.9.0.
   `403 {ok: false, error: "module_forbidden", message: "Chat is not available for this account.", module: "chat"}`
   with `Cache-Control: no-store, private` and no `WWW-Authenticate` (same keys as TimeTrack's `module_forbidden`), so
   a client hides the chat and keeps its token. `ChatClientApiDeniedEvent` reason `module_forbidden` (ZDF-I2).
-  `POST logout` treats it as a refused token (silent 204). `ChatClientApiGuard::MODULE_FORBIDDEN`, `MODULE` and
+  `POST logout` still signs such a token out (revoked, 204; logout budget and `ChatClientLoggedOutEvent`
+  when the exception names the ids). `ChatClientApiGuard::MODULE_FORBIDDEN`, `MODULE` and
   `MODULE_FORBIDDEN_MESSAGE` constants. Unchanged: a disabled or anonymised account (`null` from the resolver, or
   `ChatAccessPolicyInterface::isReachable()` false) still answers `401 invalid_token` (reason `account_inactive`), so
   the client signs out; unknown, expired and revoked tokens still answer 401 (no oracle). Port docs, `docs/API.md`,
@@ -301,8 +302,8 @@ Target: 2.9.0.
 ### Tests
 
 - `module_forbidden` from the resolver on a read route (`/me`), a write route (`POST …/messages`) and `/realtime`
-  (exact body, no `WWW-Authenticate`, `no-store`, audit reason and ids, no subscriber token); logout with it is a silent
-  204; the exception rejects a malformed token id.
+  (exact body, no `WWW-Authenticate`, `no-store`, audit reason and ids, no subscriber token); logout with it revokes
+  the token (with and without ids); the exception rejects a malformed token id.
 - Unreachable account still `401 invalid_token` (`account_inactive`); an unknown token still 401.
 - The per-token budget is spent before an `account_inactive` or `module_forbidden` refusal (429 once spent).
 

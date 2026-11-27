@@ -24,7 +24,8 @@ use function preg_match;
  * `module_forbidden`). A disabled or anonymised account is not this: the resolver returns null, or
  * ChatAccessPolicyInterface::isReachable() is false, and the API answers 401 `invalid_token` (reason `account_inactive`).
  *
- * Logout ignores it: a person may always give up their own token, so the guard answers logout as for a refused token.
+ * Logout accepts it: a person may always give up their own token, so the guard revokes it (ChatClientTokenRevokerInterface),
+ * spends its logout budget when the token id is given and dispatches ChatClientLoggedOutEvent when both ids are given.
  *
  * Carries ids only (never the token): with `tokenId`, the guard spends the token's per-token budget first (429 once spent)
  * and names the token in the audit event.

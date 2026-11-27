@@ -140,7 +140,8 @@ throw new ChatModuleForbiddenException($tokenId, $user->getChatPublicId());
 The client API then answers `403 {"ok": false, "error": "module_forbidden", "message": "Chat is not available for this
 account.", "module": "chat"}` (no `WWW-Authenticate`, `Cache-Control: no-store, private`) on every route, realtime
 included, and dispatches `ChatClientApiDeniedEvent` with reason `module_forbidden`. Clients must handle it: refresh
-what the person may use, hide the chat, keep the token. `POST logout` treats it as a refused token (silent 204).
+what the person may use, hide the chat, keep the token. `POST logout` still revokes such a token (204), so it does not work again when the chat reopens; pass the ids to get
+the logout budget and `ChatClientLoggedOutEvent`.
 
 **Beacon (TimeTrack `ClientFamilyTokenAuthenticator` as the resolver, audit ZDF-I1):** map TimeTrack's
 `module_forbidden` refusal for the `chat` family (`ClientFamilyAuthentication::$error === 'module_forbidden'`, the

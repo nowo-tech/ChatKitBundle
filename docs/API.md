@@ -88,7 +88,9 @@ Do not enable credentialed CORS on this path. Native clients do not need CORS.
   `Cache-Control: no-store, private` and no `WWW-Authenticate`. The client keeps its token, refreshes what the person may
   use and hides the chat. The token's per-token budget is spent first (429 once spent), and the refusal is audited with
   reason `module_forbidden`. A resolver throws it only after it validated the token, so an unknown or revoked token is
-  still `401` (no oracle). `POST logout` treats it as a refused token (silent `204`). The `ok` key is ChatKit's house
+  still `401` (no oracle). `POST logout` still signs such a token out: `204`, the token is revoked through the revoker
+  (and `ChatClientLoggedOutEvent` dispatched when the exception names the token and the person), so it does not work
+  again when the chat reopens. The `ok` key is ChatKit's house
   shape; `error`, `message` and `module` match TimeTrack's `module_forbidden`.
 
 ## Tenant (context)

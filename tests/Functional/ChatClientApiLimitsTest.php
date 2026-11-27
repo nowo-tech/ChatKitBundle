@@ -210,21 +210,28 @@ final class ChatClientApiLimitsTest extends DatabaseTestCase
         self::assertSame('192.0.2.0/24', $this->denied[8]->ipPrefix);
     }
 
-    public function testLogoutOfATokenWhoseChatIsClosedIsSilent(): void
+    public function testLogoutOfATokenWhoseChatIsClosedSpendsItsLogoutBudget(): void
     {
-        // 2.9: logout treats the resolver's ChatModuleForbiddenException as a refused token: 204, no event, no refusal.
+        // 2.9: logout signs out a token the resolver answers with ChatModuleForbiddenException; without a revoker the
+        // event says nothing was revoked, and the token's logout budget (2 a minute) applies.
         $events     = [];
         $dispatcher = $this->kernel->getContainer()->get('event_dispatcher');
         assert($dispatcher instanceof EventDispatcherInterface);
         $dispatcher->addListener(ChatClientLoggedOutEvent::class, static function (ChatClientLoggedOutEvent $event) use (&$events): void {
             $events[] = $event;
         });
-        $this->tokens()->grant('closed', $this->user('Cleo'), [ChatClientPrincipal::SCOPE_READ], null, 'tok-closed-logout');
+        $cleo = $this->user('Cleo');
+        $this->tokens()->grant('closed', $cleo, [ChatClientPrincipal::SCOPE_READ], null, 'tok-closed-logout');
         $this->tokens()->moduleForbidden['closed'] = true;
-        $logout                                    = $this->call('POST', '/chat/v1/logout', 'closed', null, null, [], '192.0.2.170');
-        self::assertSame(204, $logout->getStatusCode());
-        self::assertSame([], $events);
-        self::assertSame([], $this->denied);
+        self::assertSame(204, $this->call('POST', '/chat/v1/logout', 'closed', null, null, [], '192.0.2.170')->getStatusCode());
+        self::assertSame(204, $this->call('POST', '/chat/v1/logout', 'closed', null, null, [], '192.0.2.171')->getStatusCode());
+        self::assertError($this->call('POST', '/chat/v1/logout', 'closed', null, null, [], '192.0.2.172'), 429, 'rate_limited');
+        self::assertCount(2, $events);
+        self::assertSame('tok-closed-logout', $events[0]->tokenId);
+        self::assertSame($cleo->getChatPublicId(), $events[0]->userPublicId);
+        self::assertFalse($events[0]->revoked);
+        self::assertSame(['rate_limited'], array_map(static fn ($event): string => $event->reason, $this->denied));
+        self::assertSame('tok-closed-logout', $this->denied[0]->tokenId);
     }
 
     public function testThePerIpBudgetAlsoCoversLogout(): void

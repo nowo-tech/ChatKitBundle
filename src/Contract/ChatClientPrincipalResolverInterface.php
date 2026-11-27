@@ -26,7 +26,7 @@ use Nowo\ChatKitBundle\Model\ChatClientRequest;
  * throw {@see ChatModuleForbiddenException} (with the token id, and the person's chat public id when known). The API
  * answers `403 module_forbidden` (`module: chat`, no `WWW-Authenticate`), so the client hides the chat and keeps its token
  * (it is not signed out), and audits it with reason `module_forbidden`. Throw it only after the token validated, never
- * for an unknown, expired or revoked token (that would be an oracle). Logout treats it as a refused token (silent 204).
+ * for an unknown, expired or revoked token (that would be an oracle). Logout signs such a token out (revoked, 204).
  *
  * 2.4.1 (logout, audit ZCB-I2): `POST logout` asks this resolver too, and only a token it accepts reaches
  * ChatClientTokenRevokerInterface. Refuse only for reasons of the token itself, or revoke a person's client tokens when
