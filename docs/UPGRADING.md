@@ -121,6 +121,12 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## To 2.9.0
 
+From **2.8.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
 From **2.8.x**, no code change is required: a resolver that never throws behaves as in 2.8 (a disabled or anonymised
 account, `null` from the resolver or `ChatAccessPolicyInterface::isReachable()` false, still answers
 `401 invalid_token`, and the client signs out).
