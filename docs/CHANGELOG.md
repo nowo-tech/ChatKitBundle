@@ -281,18 +281,30 @@ Target: 2.9.0.
 
 ### Changed
 
-- **Client API: a person who lost chat access gets `403 module_forbidden`, not `401 invalid_token`** (Beacon spec 262
-  block B, Desktop permission parity). When the token resolves but `ChatAccessPolicyInterface::isReachable()` is false,
-  `/api/chat/v1/*` answers `403 {ok: false, error: "module_forbidden", message: "Chat is not available for this
-  account.", module: "chat"}` with no `WWW-Authenticate` header (same shape as TimeTrack's `module_forbidden`), so a
-  client refreshes what the person may use and hides the chat instead of signing out. `401 invalid_token` stays for
-  missing, unknown, expired and revoked tokens (the 403 is only reachable after the token validated: no oracle). The
-  audit event `ChatClientApiDeniedEvent` keeps the reason `account_inactive`. OpenAPI 1.5.0 and `docs/API.md` updated.
-  **Upgrade note:** clients that treated 401 as "no chat access" must now handle 403 `module_forbidden` (see UPGRADING).
+- **Client API: `403 module_forbidden` for a permission lost after pairing** (Beacon spec 262 block B, Desktop
+  permission parity; audit ZDF-M1). A host's `ChatClientPrincipalResolverInterface::resolve()` may now throw the new
+  `Nowo\ChatKitBundle\ClientApi\ChatModuleForbiddenException` (token id and person's public id, both optional) when
+  the token is valid and the account active but the person may not use the chat now (a plan without the chat, a
+  capabilities provider that denies the `chat` module). Every `/api/chat/v1/*` route, realtime included, then answers
+  `403 {ok: false, error: "module_forbidden", message: "Chat is not available for this account.", module: "chat"}`
+  with `Cache-Control: no-store, private` and no `WWW-Authenticate` (same keys as TimeTrack's `module_forbidden`), so
+  a client hides the chat and keeps its token. `ChatClientApiDeniedEvent` reason `module_forbidden` (ZDF-I2).
+  `POST logout` treats it as a refused token (silent 204). `ChatClientApiGuard::MODULE_FORBIDDEN`, `MODULE` and
+  `MODULE_FORBIDDEN_MESSAGE` constants. Unchanged: a disabled or anonymised account (`null` from the resolver, or
+  `ChatAccessPolicyInterface::isReachable()` false) still answers `401 invalid_token` (reason `account_inactive`), so
+  the client signs out; unknown, expired and revoked tokens still answer 401 (no oracle). Port docs, `docs/API.md`,
+  OpenAPI 1.5.0 and UPGRADING updated. Additive for hosts: a resolver that never throws behaves as in 2.8.
+- **Client API: the per-token budget runs before the account check** (audit ZDF-L1, as TimeTrack's client API): a
+  client retrying a refusal of its valid token (`account_inactive`, `module_forbidden`) spends its token's budget and
+  gets `429` with `Retry-After` once it is spent, not only the per-IP budget.
 
 ### Tests
 
-- Reachability refusal: 403 body, no `WWW-Authenticate`, `no-store`, and an unknown token still 401.
+- `module_forbidden` from the resolver on a read route (`/me`), a write route (`POST …/messages`) and `/realtime`
+  (exact body, no `WWW-Authenticate`, `no-store`, audit reason and ids, no subscriber token); logout with it is a silent
+  204; the exception rejects a malformed token id.
+- Unreachable account still `401 invalid_token` (`account_inactive`); an unknown token still 401.
+- The per-token budget is spent before an `account_inactive` or `module_forbidden` refusal (429 once spent).
 
 ## [2.8.0] - 2026-11-27
 

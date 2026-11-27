@@ -78,10 +78,18 @@ Do not enable credentialed CORS on this path. Native clients do not need CORS.
 - Scope `chat:write` (2.5) opens the [write routes](#writes-25), together with `chat:read`, and only while the host turned
   them on (`client_api.writes: true`). ChatKit grants no scope: a token holds `chat:write` only when the host's resolver
   says so, so tokens approved for reading stay read-only.
-- A person the access policy no longer considers reachable (`ChatAccessPolicyInterface::isReachable()`) gets `403 module_forbidden` (2.9; `401 invalid_token` before): the token is valid, only the chat is closed to the
-  person, so a client refreshes what the person may use and hides the chat without signing out. Body:
-  `{ok: false, error: "module_forbidden", message: "Chat is not available for this account.", module: "chat"}`, no
-  `WWW-Authenticate`. It is answered only after the token resolved, so an unknown or revoked token is still `401`.
+- A disabled or anonymised account (the resolver returns `null`, or `ChatAccessPolicyInterface::isReachable()` is
+  false) gets `401 invalid_token`: the client signs out (audit reason `account_inactive`).
+- 2.9: a **permission lost after pairing** (valid token, active account, but the person may not use the chat now: a plan
+  without the chat, a capabilities provider that denies the `chat` module) is not `null`: the resolver throws
+  `Nowo\ChatKitBundle\ClientApi\ChatModuleForbiddenException` (with the token id, and the person's chat public id when
+  known). Every route then answers `403` with
+  `{ok: false, error: "module_forbidden", message: "Chat is not available for this account.", module: "chat"}`,
+  `Cache-Control: no-store, private` and no `WWW-Authenticate`. The client keeps its token, refreshes what the person may
+  use and hides the chat. The token's per-token budget is spent first (429 once spent), and the refusal is audited with
+  reason `module_forbidden`. A resolver throws it only after it validated the token, so an unknown or revoked token is
+  still `401` (no oracle). `POST logout` treats it as a refused token (silent `204`). The `ok` key is ChatKit's house
+  shape; `error`, `message` and `module` match TimeTrack's `module_forbidden`.
 
 ## Tenant (context)
 
@@ -362,7 +370,7 @@ Errors have the shape `{ok: false, error: <code>}`.
 |---|---|
 | 400 | `invalid_context`, `context_required`, `invalid_cursor`, `invalid_limit`, `invalid_json`; 2.5 writes: `idempotency_key_required`, `idempotency_key_invalid` |
 | 401 | `invalid_token` (with `WWW-Authenticate`) |
-| 403 | `insufficient_scope` (with `WWW-Authenticate`; writes name `chat:read chat:write`), `context_forbidden`; 2.9: `module_forbidden` (valid token, chat closed to the person; `module: chat`, no `WWW-Authenticate`); 2.5 writes: `read_only`, `edit_forbidden`, `delete_forbidden` |
+| 403 | `insufficient_scope` (with `WWW-Authenticate`; writes name `chat:read chat:write`), `context_forbidden`; 2.9: `module_forbidden` (the resolver threw `ChatModuleForbiddenException`: valid token, chat closed to the person; `message`, `module: chat`, no `WWW-Authenticate`); 2.5 writes: `read_only`, `edit_forbidden`, `delete_forbidden` |
 | 404 | `not_found` (2.5: also every write route while `client_api.writes` is off) |
 | 405 | a method the route does not take (for example `POST …/reactions/{emoji}`) |
 | 409 | `unavailable` / `conflict` with `code` `CONFLICT_001` / `CONFLICT_002` (lock conflicts, see [CONCURRENCY.md](CONCURRENCY.md)); a write answered `409` wrote nothing: retry with the same key |
@@ -370,7 +378,8 @@ Errors have the shape `{ok: false, error: <code>}`.
 | 429 | `rate_limited` (with `Retry-After`) |
 
 Every refusal from the second step onwards, 404s included (reason `not_found`, audit ZBW-I2), dispatches `Nowo\ChatKitBundle\Event\ChatClientApiDeniedEvent` for the host's
-audit log. The event carries the `reason` (the code; `account_inactive` for an unreachable person), the `tokenId`, the
+audit log. The event carries the `reason` (the code; `account_inactive` for a disabled or anonymised account, answered 401;
+2.9: `module_forbidden` for a permission lost after pairing, answered 403), the `tokenId`, the
 `userPublicId` and the client's `/24` or `/64` `ipPrefix`. The reason `context_unverifiable` marks a bound token
 refused for lack of a context policy. It never carries the token, the raw header or a full IP.
 

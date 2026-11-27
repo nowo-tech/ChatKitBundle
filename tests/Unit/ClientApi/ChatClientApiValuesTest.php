@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiGuard;
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiRouteLoader;
 use Nowo\ChatKitBundle\ClientApi\ChatClientCursor;
+use Nowo\ChatKitBundle\ClientApi\ChatModuleForbiddenException;
 use Nowo\ChatKitBundle\Entity\ChatConversation;
 use Nowo\ChatKitBundle\Event\ChatClientApiDeniedEvent;
 use Nowo\ChatKitBundle\Model\ChatClientContext;
@@ -72,6 +73,20 @@ final class ChatClientApiValuesTest extends TestCase
         self::assertNull($event->tokenId);
         self::assertNull($event->userPublicId);
         self::assertNull($event->ipPrefix);
+    }
+
+    public function testTheModuleForbiddenSignalCarriesIdsOnly(): void
+    {
+        $forbidden = new ChatModuleForbiddenException('tok-1', 'person-1');
+        self::assertSame('tok-1', $forbidden->tokenId);
+        self::assertSame('person-1', $forbidden->userPublicId);
+        self::assertSame(ChatClientApiGuard::MODULE_FORBIDDEN, $forbidden->getMessage());
+        $anonymous = new ChatModuleForbiddenException();
+        self::assertNull($anonymous->tokenId);
+        self::assertNull($anonymous->userPublicId);
+
+        $this->expectException(InvalidArgumentException::class);
+        new ChatModuleForbiddenException('bad id');
     }
 
     public function testTheCursorRoundTrips(): void

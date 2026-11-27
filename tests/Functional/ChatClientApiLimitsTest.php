@@ -177,6 +177,56 @@ final class ChatClientApiLimitsTest extends DatabaseTestCase
         self::assertCount(2, $events);
     }
 
+    public function testThePerTokenBudgetIsSpentBeforeAnAccountOrModuleRefusal(): void
+    {
+        // Audit ZDF-L1: a client retrying a refusal of its valid token is throttled by the token's budget (2 a minute).
+        $this->tokens()->grant('inactive', $this->user('Disabled Dora'), [ChatClientPrincipal::SCOPE_READ], null, 'tok-inactive');
+        self::assertError($this->call('GET', '/chat/v1/me', 'inactive', null, null, [], '192.0.2.160'), 401, 'invalid_token');
+        self::assertError($this->call('GET', '/chat/v1/me', 'inactive', null, null, [], '192.0.2.161'), 401, 'invalid_token');
+        self::assertError($this->call('GET', '/chat/v1/me', 'inactive', null, null, [], '192.0.2.162'), 429, 'rate_limited');
+
+        // 2.9: the resolver's ChatModuleForbiddenException with the token id spends that token's budget first too.
+        $this->tokens()->grant('closed', $this->user('Cleo'), [ChatClientPrincipal::SCOPE_READ], null, 'tok-closed');
+        $this->tokens()->moduleForbidden['closed'] = true;
+        self::assertError($this->call('GET', '/chat/v1/me', 'closed', null, null, [], '192.0.2.163'), 403, 'module_forbidden', ['message' => 'Chat is not available for this account.', 'module' => 'chat']);
+        self::assertError($this->call('GET', '/chat/v1/me', 'closed', null, null, [], '192.0.2.164'), 403, 'module_forbidden', ['message' => 'Chat is not available for this account.', 'module' => 'chat']);
+        $limited = $this->call('GET', '/chat/v1/me', 'closed', null, null, [], '192.0.2.165');
+        self::assertError($limited, 429, 'rate_limited');
+        self::assertGreaterThanOrEqual(1, (int) $limited->headers->get('Retry-After'));
+
+        // Without a token id (Beacon's TimeTrack mapping: TimeTrack spent its own budget), only the per-IP budget applies.
+        $this->tokens()->grant('anon', $this->user('Abel'), [ChatClientPrincipal::SCOPE_READ], null, 'tok-anon');
+        $this->tokens()->moduleForbidden['anon'] = false;
+        foreach (['192.0.2.166', '192.0.2.167', '192.0.2.168'] as $ip) {
+            self::assertError($this->call('GET', '/chat/v1/me', 'anon', null, null, [], $ip), 403, 'module_forbidden', ['message' => 'Chat is not available for this account.', 'module' => 'chat']);
+        }
+
+        self::assertSame(
+            ['account_inactive', 'account_inactive', 'rate_limited', 'module_forbidden', 'module_forbidden', 'rate_limited', 'module_forbidden', 'module_forbidden', 'module_forbidden'],
+            array_map(static fn ($event): string => $event->reason, $this->denied),
+        );
+        self::assertSame(['tok-inactive', 'tok-inactive', 'tok-inactive', 'tok-closed', 'tok-closed', 'tok-closed', null, null, null], array_map(static fn ($event): ?string => $event->tokenId, $this->denied));
+        self::assertNull($this->denied[8]->userPublicId);
+        self::assertSame('192.0.2.0/24', $this->denied[8]->ipPrefix);
+    }
+
+    public function testLogoutOfATokenWhoseChatIsClosedIsSilent(): void
+    {
+        // 2.9: logout treats the resolver's ChatModuleForbiddenException as a refused token: 204, no event, no refusal.
+        $events     = [];
+        $dispatcher = $this->kernel->getContainer()->get('event_dispatcher');
+        assert($dispatcher instanceof EventDispatcherInterface);
+        $dispatcher->addListener(ChatClientLoggedOutEvent::class, static function (ChatClientLoggedOutEvent $event) use (&$events): void {
+            $events[] = $event;
+        });
+        $this->tokens()->grant('closed', $this->user('Cleo'), [ChatClientPrincipal::SCOPE_READ], null, 'tok-closed-logout');
+        $this->tokens()->moduleForbidden['closed'] = true;
+        $logout                                    = $this->call('POST', '/chat/v1/logout', 'closed', null, null, [], '192.0.2.170');
+        self::assertSame(204, $logout->getStatusCode());
+        self::assertSame([], $events);
+        self::assertSame([], $this->denied);
+    }
+
     public function testThePerIpBudgetAlsoCoversLogout(): void
     {
         // Unknown tokens answer 204 but still spend the network's budget (4 a minute): guessing is throttled.

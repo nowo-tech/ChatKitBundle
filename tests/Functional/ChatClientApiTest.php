@@ -130,7 +130,15 @@ final class ChatClientApiTest extends DatabaseTestCase
 
         // An account that cannot use the chat any more.
         $this->get(TestAccessPolicy::class)->unreachable[$this->luis->getChatPublicId()] = true;
-        $closed                                                                          = $this->call('GET', self::API . '/me', 'luis-token');
+        // Audit ZDF-M1: a disabled or anonymised account keeps 401 (the client signs out), audit reason account_inactive.
+        $inactive = $this->call('GET', self::API . '/me', 'luis-token');
+        self::assertError($inactive, 401, 'invalid_token');
+        self::assertSame('Bearer error="invalid_token"', $inactive->headers->get('WWW-Authenticate'));
+
+        // 2.9: a permission lost after pairing (the resolver's ChatModuleForbiddenException): 403, the token is kept.
+        $this->tokens()->grant('bea-closed', $this->bea, [ChatClientPrincipal::SCOPE_READ], null, 'tok-bea-closed');
+        $this->tokens()->moduleForbidden['bea-closed'] = true;
+        $closed                                        = $this->call('GET', self::API . '/me', 'bea-closed');
         self::assertError($closed, 403, 'module_forbidden', ['message' => 'Chat is not available for this account.', 'module' => 'chat']);
         self::assertNull($closed->headers->get('WWW-Authenticate'));
         self::assertSame('no-store, private', $closed->headers->get('Cache-Control'));
@@ -148,13 +156,16 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertError($this->call('GET', self::API . '/me', 'luis-token', 'org:unknown'), 403, 'context_forbidden');
 
         self::assertSame(
-            ['invalid_token', 'invalid_token', 'invalid_token', 'invalid_token', 'insufficient_scope', 'account_inactive', 'invalid_token', 'context_required', 'invalid_context', 'invalid_context', 'invalid_token', 'context_forbidden', 'context_forbidden'],
+            ['invalid_token', 'invalid_token', 'invalid_token', 'invalid_token', 'insufficient_scope', 'account_inactive', 'module_forbidden', 'invalid_token', 'context_required', 'invalid_context', 'invalid_context', 'invalid_token', 'context_forbidden', 'context_forbidden'],
             array_map(static fn ($event): string => $event->reason, $this->denied),
         );
         self::assertNull($this->denied[0]->tokenId);
         self::assertSame('203.0.113.0/24', $this->denied[0]->ipPrefix);
         self::assertSame('tok-w', $this->denied[4]->tokenId);
         self::assertSame($this->ana->getChatPublicId(), $this->denied[4]->userPublicId);
+        self::assertSame('tok-' . $this->luis->getChatPublicId(), $this->denied[5]->tokenId);
+        self::assertSame('tok-bea-closed', $this->denied[6]->tokenId);
+        self::assertSame($this->bea->getChatPublicId(), $this->denied[6]->userPublicId);
     }
 
     public function testATokenBoundToAContextNeverOpensAnotherOne(): void
@@ -477,6 +488,14 @@ final class ChatClientApiTest extends DatabaseTestCase
         self::assertNull($off['token']);
         self::assertSame($topic, $off['topic']);
         self::assertFalse($this->ok('GET', self::API . '/me', 'ana-token')['features']['realtime']);
+
+        // 2.9: a permission lost after pairing: 403 module_forbidden, no subscriber token.
+        $this->get(RecordingRealtime::class)->disabled = false;
+        $this->tokens()->moduleForbidden['ana-token']  = false;
+        $closed                                        = $this->call('GET', self::API . '/realtime', 'ana-token');
+        self::assertError($closed, 403, 'module_forbidden', ['message' => 'Chat is not available for this account.', 'module' => 'chat']);
+        self::assertNull($closed->headers->get('WWW-Authenticate'));
+        self::assertStringNotContainsString('token:', (string) $closed->getContent());
     }
 
     public function testTheCallLivesInTheRequestAttributesOnly(): void

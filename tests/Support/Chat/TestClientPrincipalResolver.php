@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\ChatKitBundle\Tests\Support\Chat;
 
+use Nowo\ChatKitBundle\ClientApi\ChatModuleForbiddenException;
 use Nowo\ChatKitBundle\Contract\ChatClientPrincipalResolverInterface;
 use Nowo\ChatKitBundle\Contract\ChatDirectoryInterface;
 use Nowo\ChatKitBundle\Model\ChatClientPrincipal;
@@ -21,6 +22,14 @@ final class TestClientPrincipalResolver implements ChatClientPrincipalResolverIn
 
     /** @var list<ChatClientRequest> */
     public array $requests = [];
+
+    /**
+     * 2.9: tokens whose person lost the chat after pairing (the resolver throws ChatModuleForbiddenException): true with
+     * the token and person ids, false without (as Beacon's TimeTrack mapping).
+     *
+     * @var array<string, bool>
+     */
+    public array $moduleForbidden = [];
 
     public function __construct(private readonly ChatDirectoryInterface $directory)
     {
@@ -44,6 +53,9 @@ final class TestClientPrincipalResolver implements ChatClientPrincipalResolverIn
         $this->requests[] = $request;
         $row              = $this->tokens[$bearer] ?? null;
         $user             = $row === null ? null : $this->directory->findByPublicId($row['user']);
+        if ($row !== null && isset($this->moduleForbidden[$bearer])) {
+            throw $this->moduleForbidden[$bearer] ? new ChatModuleForbiddenException($row['id'], $row['user']) : new ChatModuleForbiddenException();
+        }
 
         return $row === null || $user === null ? null : new ChatClientPrincipal($user, $row['scopes'], $row['id'], $row['context']);
     }

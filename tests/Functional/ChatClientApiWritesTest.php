@@ -30,6 +30,7 @@ use function array_column;
 use function array_filter;
 use function array_keys;
 use function array_map;
+use function array_slice;
 use function array_values;
 use function assert;
 use function count;
@@ -205,9 +206,17 @@ final class ChatClientApiWritesTest extends DatabaseTestCase
         $stranger = $this->user('Stranger Sam');
         $blocked  = $this->dm($this->ana, $stranger);
         self::assertError($this->write('POST', $this->messages($blocked), 'ana', ['text' => 'x'], 'r-6'), 403, 'read_only');
-        // An account that cannot use the chat any more.
+        // A disabled account: 401, the client signs out (audit ZDF-M1).
         $this->tokens()->grant('disabled', $this->user('Disabled Dan'), self::RW, null, 'tok-dis');
-        self::assertError($this->write('POST', $this->messages($blocked), 'disabled', ['text' => 'x'], 'r-7'), 403, 'module_forbidden', ['message' => 'Chat is not available for this account.', 'module' => 'chat']);
+        self::assertError($this->write('POST', $this->messages($blocked), 'disabled', ['text' => 'x'], 'r-7'), 401, 'invalid_token');
+        // 2.9: a permission lost after pairing (the resolver's ChatModuleForbiddenException): 403, nothing written.
+        $written                                = $this->rows(ChatMessage::class);
+        $this->tokens()->moduleForbidden['ana'] = true;
+        $closed                                 = $this->write('POST', $this->messages($acme), 'ana', ['text' => 'x'], 'r-8', 'org:acme');
+        self::assertError($closed, 403, 'module_forbidden', ['message' => 'Chat is not available for this account.', 'module' => 'chat']);
+        self::assertNull($closed->headers->get('WWW-Authenticate'));
+        self::assertSame($written, $this->rows(ChatMessage::class));
+        self::assertSame(['account_inactive', 'module_forbidden'], array_slice(array_map(static fn ($e): string => $e->reason, $this->denied), -2));
     }
 
     public function testThreadReplies(): void
