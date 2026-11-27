@@ -8,6 +8,7 @@ use Nowo\ChatKitBundle\Avatar\ChatAvatars;
 use Nowo\ChatKitBundle\Avatar\NullChatAvatarUrlResolver;
 use Nowo\ChatKitBundle\Badge\ChatAuthorBadges;
 use Nowo\ChatKitBundle\Badge\NoChatAuthorBadges;
+use Nowo\ChatKitBundle\Card\ChatCardUpdates;
 use Nowo\ChatKitBundle\Channel\NullChannelProvider;
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiController;
 use Nowo\ChatKitBundle\ClientApi\ChatClientApiGuard;
@@ -16,6 +17,7 @@ use Nowo\ChatKitBundle\Command\ChatPurgeCommand;
 use Nowo\ChatKitBundle\Contract\ChatAccessInterface;
 use Nowo\ChatKitBundle\Contract\ChatAuthorBadgeProviderInterface;
 use Nowo\ChatKitBundle\Contract\ChatAvatarUrlResolverInterface;
+use Nowo\ChatKitBundle\Contract\ChatCardUpdatesInterface;
 use Nowo\ChatKitBundle\Contract\ChatDigestSenderInterface;
 use Nowo\ChatKitBundle\Contract\ChatForwardPolicyInterface;
 use Nowo\ChatKitBundle\Contract\ChatHistoryPolicyInterface;
@@ -238,6 +240,10 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ChatMentionInboxInterface::class, ChatMentionInbox::class);
     // 1.35: the message menu by public uuid (DDD hosts).
     $services->alias(ChatMessageActionsInterface::class, ChatMessageMenu::class);
+    // 2.8 (spec 260): the host tells open clients that a typed card changed (`message_updated`, after its commit).
+    $services->alias(ChatCardUpdatesInterface::class, ChatCardUpdates::class);
+    $services->get(ChatCardUpdates::class)
+        ->arg('$logger', service('logger')->nullOnInvalid());
     // 1.24: who the signed-in user is in the chat (default: the security user when it implements ChatUserInterface).
     $services->alias(ChatCurrentUserPort::class, SecurityChatUserResolver::class);
     $services->alias(ChatPushSenderInterface::class, NullChatPushSender::class);

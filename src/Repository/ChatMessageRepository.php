@@ -9,6 +9,7 @@ use DateTimeImmutable;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Platforms\AbstractMySQLPlatform;
+use Doctrine\ORM\Query;
 use Doctrine\Persistence\ManagerRegistry;
 use Nowo\ChatKitBundle\Doctrine\ChatKitManagedRows;
 use Nowo\ChatKitBundle\Doctrine\ChatKitSavepoint;
@@ -29,6 +30,7 @@ use function array_reverse;
 use function array_unique;
 use function array_values;
 use function count;
+use function strtr;
 
 /**
  * Queries for messages: cursor pages, latest message per conversation, unread counts and the retention purge.
@@ -60,6 +62,52 @@ class ChatMessageRepository extends ServiceEntityRepository
     public function findOneInConversation(ChatConversation $conversation, string $uuid): ?ChatMessage
     {
         return $this->findOneBy(['conversation' => $conversation, 'uuid' => $uuid]);
+    }
+
+    /**
+     * 2.8 (spec 260): the newest messages of a conversation whose body holds the token tail `](type:id)` of a card,
+     * thread replies included and deleted messages left out, searched from the oldest of the newest `$window` top-level
+     * messages on (the replies posted since then, also to older roots, included). Two queries on the conversation's
+     * index (audit ZCW-L1: the window's floor filters `threadRoot IS NULL`, so MySQL / MariaDB walk the index order
+     * instead of sorting the whole conversation), then the page. The rows are refreshed from the database
+     * (`HINT_REFRESH`: a worker's manager may hold an older copy; unflushed ChatKit changes to those messages are
+     * discarded, audit ZCW-I3). The LIKE is a pre-filter only: the caller checks the exact token (outside code).
+     *
+     * @param ChatConversation $conversation The conversation
+     * @param string $type The card type (KEY_PATTERN)
+     * @param string $id The card id (ID_PATTERN)
+     * @param int $window Newest top-level messages that set the floor (at least 1)
+     * @param int $limit Candidate messages returned at most
+     *
+     * @return list<ChatMessage> Newest first
+     */
+    public function findCardHolders(ChatConversation $conversation, string $type, string $id, int $window, int $limit): array
+    {
+        /** @var list<int|string> $floor */
+        $floor = $this->createQueryBuilder('m')
+            ->select('m.id')
+            ->where('m.conversation = :conversation AND m.threadRoot IS NULL')
+            ->setParameter('conversation', $conversation)
+            ->orderBy('m.id', 'DESC')
+            ->setFirstResult($window - 1)
+            ->setMaxResults(1)
+            ->getQuery()
+            ->getSingleColumnResult();
+        $qb = $this->createQueryBuilder('m');
+        $this->refs->join($qb, 'm.author', 'a');
+        /** @var list<ChatMessage> $rows */
+        $rows = $qb->where('m.conversation = :conversation AND m.id >= :floor AND m.deletedAt IS NULL')
+            ->andWhere("m.body LIKE :token ESCAPE '!'")
+            ->setParameter('conversation', $conversation)
+            ->setParameter('floor', (int) ($floor[0] ?? 0))
+            ->setParameter('token', '%' . strtr('](' . $type . ':' . $id . ')', ['!' => '!!', '%' => '!%', '_' => '!_']) . '%')
+            ->orderBy('m.id', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->setHint(Query::HINT_REFRESH, true)
+            ->getResult();
+
+        return $rows;
     }
 
     /**

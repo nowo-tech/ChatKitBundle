@@ -64,6 +64,7 @@ Every user action that writes runs as **one unit of work** through ChatKit's own
 | 2.6 send with typed cards | `canShare()` of every card is asked **before** the unit (REQ-RUNTIME-003 rule 9: no host call under a lock); the send unit is then the plain send's (conversation row lock first). A refusal writes nothing. `ChatCardSharedEvent` after the commit | the client resends (with its `Idempotency-Key`: a replay) |
 | 2.6 edit of a message with cards | as edit: the cards are the stored message's (read before the unit), never asked again; the text is compared under the conversation lock | the same text again is no edit |
 | 2.6 card render | read-only, per request: no lock, no write; a card deleted, revoked or burnt between two requests is rendered as the host answers on the next one | — |
+| 2.8 card update hint | read-only, no transaction or lock: the holders are read with `HINT_REFRESH` (a worker never sends a stale body), then `message_updated` per holder; a message deleted or edited meanwhile gets its own event. Called after the host's commit | the clients' next load (a failure is logged, never thrown) |
 
 2.6 typed cards (spec 259): a message with cards is written by the same unit as any send, so a card send racing the
 deletion of its conversation or of earlier messages queues on the conversation's row lock. `ConcurrentWritersTest`
