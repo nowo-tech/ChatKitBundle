@@ -5,6 +5,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 2.8.0](#to-280)
 - [To 2.7.0](#to-270)
   - [Beacon adoption (spec 259 block B, after 2.7.0)](#beacon-adoption-spec-259-block-b-after-270)
 - [To 2.6.0](#to-260)
@@ -116,6 +117,14 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
 ## Unreleased
+
+## To 2.8.0
+
+From **2.7.0**:
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
 
 Target **2.8.0** (minor, nothing to change):
 
