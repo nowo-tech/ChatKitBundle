@@ -117,6 +117,21 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Unreleased
 
+Target **2.8.0** (minor, nothing to change):
+
+```bash
+composer update nowo-tech/chat-kit-bundle
+```
+
+- No schema change, no configuration change, no API change.
+- New: `Nowo\ChatKitBundle\Contract\ChatCardUpdatesInterface::changed(string $type, string $id, string
+  $conversationUuid): int`. Call it **after your commit** when the item behind a typed card changes, so open clients
+  render the card again (see [USAGE](USAGE.md#card-updates-28)). Stop calling the private `ChatNotifier` service or
+  `ChatMessageRepository` for that: they carry no BC promise.
+- **Beacon (spec 260 T002 / T005):** after the call aggregate commits *Call ended*, call
+  `changed('<call card type>', $callPublicId, $conversationUuid)`; the call card provider's `render()` answers the new
+  state. Beacon Desktop needs nothing new: it already re-reads a message on `message_updated`.
+
 ## To 2.7.0
 
 From **2.6.x** (minor, nothing to change unless you opt in):

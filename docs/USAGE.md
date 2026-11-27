@@ -1212,6 +1212,40 @@ confirms. The text never leaves the browser before that.
   as the generic "🔑 Shared a secret" line, and another card as `#Title`: never facts, badges or actions.
 - An inserted card goes to the composer only while the dialog its action opened is open.
 
+### Card updates (2.8)
+
+When the item behind a card changes after the message was posted (Beacon: a Teams call that ended), tell the open
+clients through `Nowo\ChatKitBundle\Contract\ChatCardUpdatesInterface` (autowired, BC-promised):
+
+```php
+use Nowo\ChatKitBundle\Contract\ChatCardUpdatesInterface;
+
+public function __construct(private ChatCardUpdatesInterface $cardUpdates) {}
+
+public function endCall(Call $call): void
+{
+    $this->entityManager->wrapInTransaction(static fn () => $call->end());
+    // After the commit: render() must already read the new state.
+    $this->cardUpdates->changed('teams_call', $call->publicId(), $call->conversationUuid());
+}
+```
+
+- It sends the existing `message_updated` event for every message of that conversation that holds `#[…](type:id)`
+  outside code: thread replies included, deleted messages left out, with the message's reactions. Your
+  `render()` then runs for each viewer again: the dock re-resolves the card (`refsPending`), Beacon Desktop re-reads the
+  message (`GET conversations/{uuid}/messages/{messageUuid}`). The event carries **no card content** in either
+  `realtime_events` mode, so a viewer who may not see the card keeps the neutral chip.
+- **Call it after your transaction commits.** ChatKit runs on its own connection and cannot see your transaction; a
+  hint sent before the commit makes the clients render the old state again.
+- Scope: one conversation, by public uuid; type, id and uuid are matched byte for byte. An unknown conversation, a type
+  that is not a registered card type, or a card no message holds sends nothing (`0`).
+- Bounds: the newest `ChatCardUpdatesInterface::SCAN_WINDOW` (1,000) messages of the conversation are searched (two
+  indexed queries) and at most `MAX_MESSAGES` (20, the newest) are signalled per call. Older messages show the new
+  state on their next load. It returns how many messages were signalled.
+- A malformed type or id throws `InvalidArgumentException('invalid_card')`. A database or hub failure is logged (class
+  name only) and never thrown; the clients' catch-up covers a lost hint. Stateless (FrankenPHP worker mode) and
+  idempotent: a second call only sends the hint again.
+
 ## Attachments (2.7)
 
 Spec 259 block B. Off by default (`attachments.enabled`). Files are stored through nowo-tech/storage-kit-bundle ^2.2 in

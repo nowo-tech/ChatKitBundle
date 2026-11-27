@@ -47,7 +47,8 @@
 | Client API v1 (2.4, 2.4.1, 2.5) | 16 |
 | Typed cards and host slots (2.6) | 17 |
 | Attachments and the secret hand-off (2.7) | 39 |
-| **Total** | **381** |
+| Typed card updates (2.8) | 2 |
+| **Total** | **383** |
 
 ## Bundle, configuration & DI
 
@@ -519,6 +520,13 @@ The 54 files below were added by releases 1.34–2.2 without an inventory row. T
 | `src/Model/ChatComposerScope.php` | 2.6: the scope of composer actions and menu slots (scalars) | FR-SLOT-001, FR-SLOT-002 |
 | `src/Model/ChatMenuSlot.php` | 2.6: a message menu slot (target, card types, own only, dialog path) | FR-SLOT-002 |
 | `src/Resources/assets/src/slots.ts` | 2.6: dock side of cards and slots: card tray, insert-card, slot dialog, selection payload, before-send | FR-SLOT-001..003 |
+
+## Typed card updates (2.8)
+
+| File | Role | Spec |
+| --- | --- | --- |
+| `src/Contract/ChatCardUpdatesInterface.php` | 2.8: BC-promised host port: a typed card changed, open clients render it again (`changed(type, id, conversationUuid)`) | FR-CARDUP-001..004 |
+| `src/Card/ChatCardUpdates.php` | 2.8: default implementation: bounded holder query in one conversation, exact token outside code, `message_updated` with reactions, never throws on database or hub failure | FR-CARDUP-001..004 |
 
 ## Attachments and the secret hand-off (2.7)
 

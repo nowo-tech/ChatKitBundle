@@ -313,7 +313,8 @@ Since 2.4.1, `POST <prefix>/chat/v1/logout` signs the client out. Only `POST` is
   set it**: a `context_policy` with `full` fails the container build (audit ZBW-L2). The web dock works with both
   settings. In `ids` mode the hub carries:
   - `message` / `message_updated`: `{conversationUuid, messageUuid, messageId, deleted}`, plus `threadRootUuid` for a
-    thread reply. A reaction change is a `message_updated` hint.
+    thread reply. A reaction change is a `message_updated` hint, and so (2.8) is a typed card the host changed after it
+    was posted (a call that ended): re-read the message and its `card` is rendered for the caller.
   - `thread`: `{conversationUuid, rootUuid, replyCount, lastReplyAt}`.
   - `read`: `{conversationUuid, userUuid, messageId}`; `typing`: `{conversationUuid, userUuid}` (no display name).
   - `status`: `{userUuid, status}` (no status text or emoji).
