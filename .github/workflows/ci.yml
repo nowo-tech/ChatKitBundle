@@ -57,7 +57,7 @@ jobs:
       - name: Translation key parity (REQ-I18N-002)
         run: python3 .scripts/check-translation-key-parity.py
 
-  # REQ-SF-002: Symfony 7.4+ and 8.x (7.4, 8.1, 8.2). 8.2 is 8.2.x-dev until the Nov 2026 stable.
+  # REQ-SF-002: Symfony 7.4+ and 8.x (7.4, 8.1, 8.2).
   test:
     name: PHP ${{ matrix.php }} - Symfony ${{ matrix.symfony }}
     runs-on: ubuntu-latest
@@ -122,19 +122,11 @@ jobs:
         if: env.HEAVY == 'true' && (startsWith(matrix.symfony, '8.'))
         run: composer config platform.php 8.4.1
 
-      # Symfony 8.2 is under development (8.2.x-dev) until November 2026.
-      - name: Allow Symfony 8.2 development packages
+      # symfony/mercure (dev only) does not allow symfony/web-link 8.x yet: test 8.2 without it
+      # (MercureChatRealtime tests are skipped; the null transport is used).
+      - name: Symfony 8.2 - drop symfony/mercure
         if: env.HEAVY == 'true' && (matrix.symfony == '8.2')
-        run: |
-          composer config minimum-stability dev
-          composer config prefer-stable true
-          # symfony/mercure (dev only) does not allow symfony/web-link 8.x yet: test 8.2 without it
-          # (MercureChatRealtime tests are skipped; the null transport is used).
-          composer remove --dev symfony/mercure --no-update
-          # symfony/event-dispatcher-contracts v3.8.0 was tagged without ListenerIntrospectionInterface, which
-          # symfony/event-dispatcher 8.2.x-dev already uses ("Interface ... ListenerIntrospectionInterface not found").
-          # Take the contracts from main, aliased into the ^3 range, until a release ships the interface.
-          composer require --dev --no-update "symfony/event-dispatcher-contracts:dev-main as 3.8.99"
+        run: composer remove --dev symfony/mercure --no-update
 
       - name: Override Composer platform PHP (composer.json pins the minimum PHP for the lock)
         if: env.HEAVY == 'true'

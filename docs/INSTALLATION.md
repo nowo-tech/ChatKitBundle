@@ -19,7 +19,7 @@
 
 ## Requirements
 
-- PHP `>=8.3 <8.6`. The floor is **8.3**, above the Nowo minimum of 8.2 (REQ-SF-001), because the bundle uses
+- PHP `>=8.3 <8.7`. The floor is **8.3**, above the Nowo minimum of 8.2 (REQ-SF-001), because the bundle uses
   **typed class constants** (`public const int MAX_LENGTH = 4000;`, `private const int PAGE_SIZE = 30;`, …), a PHP 8.3
   feature that is a parse error on 8.2. Rector (`withPhpVersion(PHP_83)`) targets the same floor.
 - Symfony 7.4, 8.0 or 8.1+: FrameworkBundle, SecurityBundle (CSRF), TwigBundle, Doctrine ORM, Symfony UX Icons

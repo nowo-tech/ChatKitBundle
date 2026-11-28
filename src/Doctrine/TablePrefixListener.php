@@ -70,7 +70,7 @@ final readonly class TablePrefixListener
     /** Longest named index without `DEFAULT_TABLE_NAME_PREFIX` (only `table_prefix` lengthens it): every named index contains `nowo_chat_`. */
     private const int LONGEST_FIXED_NAME = 0;
 
-    private const string NAMESPACE = 'Nowo\\ChatKitBundle\\Entity\\';
+    private const string ENTITY_NAMESPACE = 'Nowo\\ChatKitBundle\\Entity\\';
 
     /**
      * Builds the listener from the configured prefixes.
@@ -117,7 +117,7 @@ final readonly class TablePrefixListener
     {
         $metadata = $event->getClassMetadata();
         if (($this->prefix === '' && $this->tableNamePrefix === self::DEFAULT_TABLE_NAME_PREFIX)
-            || !str_starts_with($metadata->getName(), self::NAMESPACE)
+            || !str_starts_with($metadata->getName(), self::ENTITY_NAMESPACE)
             || $metadata->isMappedSuperclass) {
             return;
         }
