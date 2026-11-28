@@ -280,6 +280,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Documentation
+
+- Spec Kit code inventory (`specs/001-baseline/code-inventory.md`) covers the two `src/` files added in 2.9.0 and 2.10.0 (`ChatModuleForbiddenException`, `_search_dialog.html.twig`): 385/385 production units.
+
 ## [2.10.0] - 2026-11-27
 
 ### Changed
