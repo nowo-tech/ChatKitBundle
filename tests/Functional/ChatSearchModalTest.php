@@ -17,8 +17,10 @@ use Symfony\Component\HttpFoundation\Request;
 use function array_map;
 use function assert;
 use function http_build_query;
+use function mb_substr;
 use function preg_match;
 use function sort;
+use function strip_tags;
 use function strtolower;
 use function trim;
 
@@ -113,9 +115,13 @@ final class ChatSearchModalTest extends DatabaseTestCase
     {
         $this->client->request(Request::METHOD_GET, '/chat/search/results?q=hello');
         self::assertSame(401, $this->client->getResponse()->getStatusCode());
+        $this->client->request(Request::METHOD_GET, '/chat/search/dialog');
+        self::assertSame(401, $this->client->getResponse()->getStatusCode(), 'the modal markup needs a participant too');
 
         $this->login($this->user('Ana'));
         $this->client->request(Request::METHOD_POST, '/chat/search/results?q=hello');
+        self::assertSame(405, $this->client->getResponse()->getStatusCode());
+        $this->client->request(Request::METHOD_POST, '/chat/search/dialog');
         self::assertSame(405, $this->client->getResponse()->getStatusCode());
     }
 
@@ -127,6 +133,8 @@ final class ChatSearchModalTest extends DatabaseTestCase
         $html = $this->renderDockTemplates();
         self::assertStringNotContainsString('nowo-chat-window__search', $this->window($html));
         self::assertStringNotContainsString('data-nowo-chat-template="search-dialog"', $html);
+        $this->client->request(Request::METHOD_GET, '/chat/search/dialog');
+        self::assertSame(404, $this->client->getResponse()->getStatusCode());
     }
 
     public function testConversationEntryOff(): void
@@ -137,6 +145,8 @@ final class ChatSearchModalTest extends DatabaseTestCase
         self::assertStringNotContainsString('data-nowo-chat-template="search-dialog"', $html);
         $this->client->request(Request::METHOD_GET, '/chat/search/results?q=hello');
         self::assertSame(200, $this->client->getResponse()->getStatusCode(), 'the fragment follows search.enabled');
+        $this->client->request(Request::METHOD_GET, '/chat/search/dialog');
+        self::assertSame(404, $this->client->getResponse()->getStatusCode(), 'the modal follows search.conversation_entry');
     }
 
     public function testDockMarkup(): void
@@ -150,7 +160,15 @@ final class ChatSearchModalTest extends DatabaseTestCase
         self::assertSame('/chat/search', $button->attr('href'));
         self::assertSame('Search in this conversation', $button->attr('aria-label'));
 
-        $dialog = new Crawler($this->template($html, 'search-dialog'));
+        // Owner rule 2026-11-23: the modal is not in the dock pages any more, it is fetched when it opens.
+        self::assertStringNotContainsString('data-nowo-chat-template="search-dialog"', $html);
+        self::assertStringNotContainsString('nowo_chat_msearch', $html);
+        $this->client->catchExceptions(false);
+        $this->client->request(Request::METHOD_GET, '/chat/search/dialog');
+        self::assertSame(200, $this->client->getResponse()->getStatusCode(), mb_substr(strip_tags((string) $this->client->getResponse()->getContent()), 0, 600));
+        self::assertSame('search-dialog', $this->client->getResponse()->headers->get(ChatSearchController::FRAGMENT_HEADER));
+        self::assertStringContainsString('private', (string) $this->client->getResponse()->headers->get('Cache-Control'));
+        $dialog = new Crawler((string) $this->client->getResponse()->getContent());
         $box    = $dialog->filter('dialog[data-testid="chat-search-dialog"]');
         self::assertStringContainsString('nowo-ui-confirm-dialog--anatomy', (string) $box->attr('class'));
         self::assertStringContainsString('nowo-ui-confirm-dialog--wide', (string) $box->attr('class'));

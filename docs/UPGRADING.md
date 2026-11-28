@@ -4,7 +4,7 @@ This guide lists the changes integrators must apply when upgrading between versi
 
 ## Table of contents
 
-- [Unreleased](#unreleased)
+- [To 2.10.0](#to-2100)
 - [To 2.9.0](#to-290)
 - [To 2.8.0](#to-280)
 - [To 2.7.0](#to-270)
@@ -117,7 +117,12 @@ This guide lists the changes integrators must apply when upgrading between versi
 - [1.1.0 (2026-10-16)](#110-2026-10-16)
 - [1.0.0 (2026-10-16)](#100-2026-10-16)
 
-## Unreleased
+## To 2.10.0
+
+**Search modal.** The `search-dialog` template is gone from the dock markup: a host that overrides the block `nowo_chat_template_search_dialog`
+overrides `_search_dialog.html.twig` instead (variable `form`, the FormKit `ChatMessageSearchType` view); a host that builds its own dock
+config adds `endpoints.searchDialog` (`/chat/search/dialog`) next to `searchResults` and `searchPage`, or the header button opens the search page.
+Rebuild `nowo-chat.js` if you build your own copy.
 
 ## To 2.9.0
 

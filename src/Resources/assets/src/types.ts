@@ -507,6 +507,8 @@ export interface ChatConfig {
     savedPage?: string;
     /** 1.40: the search modal of the conversation header — its results fragment and the no-script page (absent while off). */
     searchResults?: string;
+    /** 2.10.0: the search modal's markup, fetched when it opens (`GET /chat/search/dialog`). */
+    searchDialog?: string;
     searchPage?: string;
     /** 1.36: the forward picker (`GET ?q=`). */
     forwardTargets?: string;

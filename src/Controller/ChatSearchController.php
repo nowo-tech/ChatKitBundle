@@ -76,6 +76,8 @@ final class ChatSearchController extends AbstractController
         #[Autowire(param: 'nowo_chat_kit.search.max_query_length')]
         private readonly int $maxQueryLength = 200,
         private readonly ?ChatCurrentUserPort $currentUser = null,
+        #[Autowire(param: 'nowo_chat_kit.search.conversation_link')]
+        private readonly bool $conversationEntry = false,
     ) {
     }
 
@@ -117,6 +119,33 @@ final class ChatSearchController extends AbstractController
             'nowo_chat_assets'      => $this->assets,
             'nowo_chat_full_height' => $this->fullHeight,
         ], new Response(null, $status));
+    }
+
+    /**
+     * Since 2.10.0 (owner rule 2026-11-23, every dialog loads its content on demand): the search modal of the conversation
+     * header, fetched when it opens instead of printed in every dock page. The HTML of its `<dialog>` (UiKit confirm_dialog
+     * anatomy, the FormKit {@see ChatMessageSearchType} form, the results section), marked with {@see self::FRAGMENT_HEADER}
+     * `search-dialog`; the script opens it. Same gates as the results: 404 while search or `search.conversation_entry` is off,
+     * 401 without a participant. GET only, reads nothing but the form definition.
+     *
+     * @return Response The dialog markup
+     */
+    #[Route('/search/dialog', name: 'nowo_chat_search_dialog', methods: ['GET'])]
+    public function dialog(): Response
+    {
+        if (!$this->search->enabled() || !$this->conversationEntry) {
+            throw $this->createNotFoundException();
+        }
+        if (!$this->participant() instanceof ChatUserInterface) {
+            return new Response('', Response::HTTP_UNAUTHORIZED);
+        }
+        $form = $this->container->get('form.factory')->createNamed('nowo_chat_msearch', ChatMessageSearchType::class, null, [
+            'scope'  => true,
+            'action' => $this->generateUrl('nowo_chat_page_search'),
+            'attr'   => ['id' => 'nowo_chat_msearch_form'],
+        ]);
+
+        return $this->render('@NowoChatKitBundle/_search_dialog.html.twig', ['form' => $form->createView()], new Response(null, Response::HTTP_OK, ['Cache-Control' => 'no-store, private', 'X-Robots-Tag' => 'noindex', self::FRAGMENT_HEADER => 'search-dialog']));
     }
 
     /**

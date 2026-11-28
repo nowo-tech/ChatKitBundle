@@ -319,6 +319,7 @@ final class ChatDockExtension extends AbstractExtension implements GlobalsInterf
             ] + ($this->searchConversationEntry ? [
                 // 1.40: the search modal of the conversation header (absent while it is off).
                 'searchResults' => $this->urls->generate('nowo_chat_search_results'),
+                'searchDialog'  => $this->urls->generate('nowo_chat_search_dialog'),
                 'searchPage'    => $this->urls->generate('nowo_chat_page_search'),
             ] : []) + [
                 // 1.26: the session's current CSRF token (asked for once when the page's token is refused).
