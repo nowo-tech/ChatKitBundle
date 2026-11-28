@@ -1,8 +1,8 @@
 # Chat Kit Bundle — baseline code inventory
 
 **Package**: `nowo-tech/chat-kit-bundle`  
-**Last audited**: 2026-11-26 (2.7.0: 381 production files; 2.6.0: 342 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
-**Production units**: **369/369** table rows below (2.7.0: +39 attachment and secret hand-off units, see the last section; `ChatService`, `ChatPresenter`, `ChatNotifier`, `ChatForwarder`, `ChatConversationPurger`, `ChatPersonalData`, `ChatPurgeCommand`, `ChatMessageRepository`, `ChatDigestDispatcher`, `ChatPushDispatcher`, `ChatApiController`, `ChatPageController`, `ChatClientApiController`, `ChatDockExtension`, `UserReferenceListener`, `TablePrefixListener`, `Configuration`, `NowoChatKitExtension`, `services.php`, the templates, `thread.ts`, `thread-panel.ts`, `slots.ts`, `dock.ts`, `api.ts`, `types.ts`, `dom.ts`, `nowo-chat.css` and the translations extended, `specs/006-attachments/`; 2.6.0: +17 typed card and host slot units, see the last section; `ChatReferences`, `ChatReference`, `ChatService`, `ChatForwarder`, `ChatPresenter`, `ChatIdempotency`, `ChatMessageMenu`, `ChatPushDispatcher`, `ChatDigestDispatcher`, `ChatMessageSearch`, `ChatMessageTokens`, `ChatApiController`, `ChatClientApiController`, `ChatDockExtension`, `Configuration`, `NowoChatKitExtension`, the templates, `thread.ts`, `api.ts`, `index.ts`, `types.ts`, `dom.ts`, `message-menu.ts`, `nowo-chat.css` and the translations extended, `specs/005-secret-cards-slots/`; 2.5.0: +1 client API writes unit, `ChatClientApiWriteEvent`; `ChatClientApiController`, `ChatClientApiGuard`, `ChatService`, `ChatClientPrincipal`, `Configuration`, `NowoChatKitExtension` and `services.php` extended, `specs/004-client-api-writes/`; 2.4.1: +2 logout units, `ChatClientTokenRevokerInterface` and `ChatClientLoggedOutEvent`; 2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 381 files** the audit command returns (2026-11-26) are named in this file (some rows group several files or repeat one file under two sections)  
+**Last audited**: 2026-11-28 (2.10.0: 385 production files, +2 units of 2.9.0 and 2.10.0, see the last section; 2.7.0: 381 production files; 2.6.0: 342 production files, `git ls-files src` minus the Vitest suite, `assets/README.md` and the build output `nowo-chat.js`; the 5 rows of files removed in 2.0.0 are gone)  
+**Production units**: **385/385** units below (2.7.0: +39 attachment and secret hand-off units, see the last section; `ChatService`, `ChatPresenter`, `ChatNotifier`, `ChatForwarder`, `ChatConversationPurger`, `ChatPersonalData`, `ChatPurgeCommand`, `ChatMessageRepository`, `ChatDigestDispatcher`, `ChatPushDispatcher`, `ChatApiController`, `ChatPageController`, `ChatClientApiController`, `ChatDockExtension`, `UserReferenceListener`, `TablePrefixListener`, `Configuration`, `NowoChatKitExtension`, `services.php`, the templates, `thread.ts`, `thread-panel.ts`, `slots.ts`, `dock.ts`, `api.ts`, `types.ts`, `dom.ts`, `nowo-chat.css` and the translations extended, `specs/006-attachments/`; 2.6.0: +17 typed card and host slot units, see the last section; `ChatReferences`, `ChatReference`, `ChatService`, `ChatForwarder`, `ChatPresenter`, `ChatIdempotency`, `ChatMessageMenu`, `ChatPushDispatcher`, `ChatDigestDispatcher`, `ChatMessageSearch`, `ChatMessageTokens`, `ChatApiController`, `ChatClientApiController`, `ChatDockExtension`, `Configuration`, `NowoChatKitExtension`, the templates, `thread.ts`, `api.ts`, `index.ts`, `types.ts`, `dom.ts`, `message-menu.ts`, `nowo-chat.css` and the translations extended, `specs/005-secret-cards-slots/`; 2.5.0: +1 client API writes unit, `ChatClientApiWriteEvent`; `ChatClientApiController`, `ChatClientApiGuard`, `ChatService`, `ChatClientPrincipal`, `Configuration`, `NowoChatKitExtension` and `services.php` extended, `specs/004-client-api-writes/`; 2.4.1: +2 logout units, `ChatClientTokenRevokerInterface` and `ChatClientLoggedOutEvent`; 2.4: +13 client API units; `ChatNotifier`, `ChatReferences`, `ChatConversationRepository`, `ChatApiException`, `Configuration`, `NowoChatKitExtension`, `services.php`, `dock.ts` and `types.ts` extended); **all 385 files** the audit command returns (2026-11-28) are named in this file (some rows group several files or repeat one file under two sections)  
 **Audit command**: `find src -type f \( -name '*.php' -o -name '*.twig' -o -name '*.yaml' -o -name '*.ts' -o -name '*.css' \) -not -path 'src/Resources/assets/tests/*' | wc -l`
 
 ## Scope notes
@@ -48,7 +48,8 @@
 | Typed cards and host slots (2.6) | 17 |
 | Attachments and the secret hand-off (2.7) | 39 |
 | Typed card updates (2.8) | 2 |
-| **Total** | **383** |
+| Client API module gate and on-demand dialog (2.9, 2.10) | 2 |
+| **Total** | **385** |
 
 ## Bundle, configuration & DI
 
@@ -571,3 +572,10 @@ The 54 files below were added by releases 1.34–2.2 without an inventory row. T
 | `src/Repository/ChatAttachmentRepository.php` | 2.7: every attachment read and CAS write (DBAL, savepoints) | FR-ATT-002, FR-ATT-003 |
 | `src/Resources/assets/src/attachments.ts` | 2.7: dock tray (upload, states, send when ready), file cards, signed downloads | FR-ATT-005 |
 | `src/Resources/assets/src/secret-handoff.ts` | 2.7: "Send as a secret": probe, hand-off event, inline warning (D-20261126-11) | FR-HANDOFF-001 |
+
+## Client API module gate and on-demand dialog (2.9, 2.10)
+
+| File | Role | Spec |
+| --- | --- | --- |
+| `src/ClientApi/ChatModuleForbiddenException.php` | 2.9: thrown by the host's `ChatClientPrincipalResolverInterface::resolve()` for a valid token whose person lost chat access; `ChatClientApiGuard` answers `403 module_forbidden` (no oracle for unknown tokens) and still accepts logout | FR-CAPI-001 (003-client-api-v1) |
+| `src/Resources/views/_search_dialog.html.twig` | 2.10: the conversation search modal markup, answered by `GET /chat/search/dialog` when the modal opens (same gates as the results, no CSRF: read only) | FR-001, FR-008 (002-message-search) |

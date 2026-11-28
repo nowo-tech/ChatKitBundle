@@ -255,7 +255,7 @@ A floating chat dock for Symfony applications. Installing the bundle gives integ
 
 ## Success criteria
 
-- **SC-01** — `code-inventory.md` maps **227/227** production units (see its audit command).
+- **SC-01** — `code-inventory.md` maps **385/385** production units (see its audit command).
 - **SC-02** — PHPUnit: 100% line coverage of `src/`.
 - **SC-03** — Vitest: 100% line coverage of `Resources/assets/src`.
 - **SC-04** — PHPStan level 8 (with the FrankenPHP rulesets), Rector and PHP-CS-Fixer report nothing; Igor passes.
